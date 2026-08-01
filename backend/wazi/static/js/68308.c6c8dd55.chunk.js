@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[68308],{68308:(e,n,r)=>{r.r(n),r.d(n,{default:()=>d});r(65043);var t=r(70579);const d=function(){return(0,t.jsx)("div",{children:"ProSidebar"})}}}]);
+//# sourceMappingURL=68308.c6c8dd55.chunk.js.map

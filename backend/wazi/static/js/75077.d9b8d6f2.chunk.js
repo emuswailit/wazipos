@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[75077],{97458:(e,n,r)=>{r.r(n),r.d(n,{default:()=>s});r(65043);var t=r(70579);function s(){return(0,t.jsx)("div",{children:"WholesalerInventory"})}}}]);
+//# sourceMappingURL=75077.d9b8d6f2.chunk.js.map

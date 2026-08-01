@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[79510],{79510:(e,n,r)=>{r.r(n),r.d(n,{default:()=>s});r(65043);var u=r(70579);function s(){return(0,u.jsx)("div",{children:"DischargeSummary"})}}}]);
+//# sourceMappingURL=79510.57646c3c.chunk.js.map

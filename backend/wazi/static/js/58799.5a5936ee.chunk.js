@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[58799],{58799:(t,s,e)=>{e.r(s),e.d(s,{default:()=>n});const n=class{constructor(t,s,e,n,i){this.id=t,this.draft_id=s,this.source_entity=e,this.source_entity_name=n,this.invoice_number=i}}}}]);
+//# sourceMappingURL=58799.5a5936ee.chunk.js.map

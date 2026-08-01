@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[39655],{39655:(e,n,t)=>{e.exports=t.p+"static/media/mobiticket_banner.5f6eff85a1e76293bfc0.png"}}]);

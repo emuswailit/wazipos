@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[4272],{4272:(n,e,r)=>{r.r(e),r.d(e,{default:()=>s});r(65043);var u=r(70579);function s(){return(0,u.jsx)("div",{children:"NursingCarePlan"})}}}]);
+//# sourceMappingURL=4272.f5c34320.chunk.js.map

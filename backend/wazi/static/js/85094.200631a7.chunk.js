@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[85094],{85094:(e,n,r)=>{r.r(n),r.d(n,{default:()=>u});r(65043);var i=r(70579);function u(){return(0,i.jsx)("div",{children:"Your email is verified"})}}}]);
+//# sourceMappingURL=85094.200631a7.chunk.js.map

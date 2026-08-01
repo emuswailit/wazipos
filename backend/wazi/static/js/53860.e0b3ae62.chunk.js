@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[53860],{53860:(e,s,n)=>{n.r(s),n.d(s,{default:()=>t});var c=n(73216),r=n(70579);const t=()=>{const e=(0,c.Zp)();return(0,r.jsxs)("section",{children:[(0,r.jsx)("h1",{children:"Unauthorized"}),(0,r.jsx)("br",{}),(0,r.jsx)("p",{children:"You do not have access to the requested page."}),(0,r.jsx)("div",{className:"flexGrow",children:(0,r.jsx)("button",{onClick:()=>e(-1),children:"Go Back"})})]})}}}]);
+//# sourceMappingURL=53860.e0b3ae62.chunk.js.map

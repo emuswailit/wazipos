@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[39186],{39186:(e,t,o)=>{o.r(t),o.d(t,{default:()=>a});const s=(0,o(74685).vt)({baseURL:"https://api.wazipos.com/api/v1/",headers:{"Content-Type":"multipart/form-data",Accept:"*/*"}});s.addAsyncRequestTransform((async e=>{let t=null;const o=localStorage.getItem("tokens");if(o){t=(o?"object"==typeof o?o:JSON.parse(o):null).tokens.access,console.log("token",t)}t&&(e.headers.Authorization="Bearer ".concat(t))}));const a=s}}]);
+//# sourceMappingURL=39186.62597ab8.chunk.js.map

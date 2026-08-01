@@ -1,0 +1,572 @@
+[
+  {
+    "model": "authentication.Counties",
+    "pk": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"001",
+        "title":"Mombasa",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"002",
+        "title":"Kwale",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+    "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"003",
+        "title":"Kilifi",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"004",
+        "title":"Tana River",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "5b4484dc-1ebf-4ce6-a5c4-605127011778",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"005",
+        "title":"Lamu",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "54089583-ed2b-4dea-b3f8-3daf6748a037",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"006",
+        "title":"Taita-Taveta",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "c120593a-528c-4b88-929d-95bfa548b0cb",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"007",
+        "title":"Garissa",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "25226343-91dc-4090-b16a-6aebfdf3364c",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"008",
+        "title":"Wajir",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"009",
+        "title":"Mandera",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"010",
+        "title":"Marsabit",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "7822576a-322f-4a79-89f8-0c98b0dc97ba",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"011",
+        "title":"Isiolo",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"012",
+        "title":"Meru",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+ 
+  {
+    "model": "authentication.Counties",
+    "pk": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"013",
+        "title":"Tharaka-Nithi",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "849840bd-f62b-4a13-916f-143a3577a453",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"014",
+        "title":"Embu",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"015",
+        "title":"Kitui",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"016",
+        "title":"Machakos",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "8b147896-50db-46c2-a487-f8a9654ae52f",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"017",
+        "title":"Makueni",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "a9d61a90-e7dc-4931-815e-cb1951ddca92",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"018",
+        "title":"Nyandarua",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"019",
+        "title":"Nyeri",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"020",
+        "title":"Kirinyaga",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"021",
+        "title":"Murang'a",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "dc64638a-3ee7-4a81-84e1-62d689e06796",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"022",
+        "title":"Kiambu",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"023",
+        "title":"Turkana",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "c52b27a3-9c81-459f-a08d-073194417ed8",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"024",
+        "title":"West Pokot",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  
+  {
+    "model": "authentication.Counties",
+    "pk": "7a85e99f-bf45-4ddd-8b0d-0fa08717f7f3",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"025",
+        "title":"Samburu",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"026",
+        "title":"Trans Nzoia",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"027",
+        "title":"Uasin Gishu",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "a941ae5e-b8b6-4663-9aeb-b0ca9899e4e4",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"028",
+        "title":"Elgeyo-Marakwet",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"029",
+        "title":"Nandi",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"030",
+        "title":"Baringo",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  
+  {
+    "model": "authentication.Counties",
+    "pk": "2db599b0-7bb9-4160-9665-2f3c16daa890",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"031",
+        "title":"Laikipia",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "d3243cbb-2375-4e41-a190-8d636691506d",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"032",
+        "title":"Nakuru",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  
+  {
+    "model": "authentication.Counties",
+    "pk": "21553394-7e87-406c-b49f-abbb7eec5509",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"033",
+        "title":"Narok",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "bdcfce0f-311d-4eba-ba3e-201faf540788",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"034",
+        "title":"Kajiado",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"035",
+        "title":"Kericho",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+    "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "e8d8655e-77d9-4771-a74c-cf990c567ed9",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"036",
+        "title":"Bomet",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "c11afe90-1f48-4107-918c-31574167cd53",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"037",
+        "title":"Kakamega",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "a17ee622-e633-49e5-a8c1-f557e431f019",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"038",
+        "title":"Vihiga",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  
+  {
+    "model": "authentication.Counties",
+    "pk": "a02057bb-40a3-4041-b5fc-618dacd97858",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"039",
+        "title":"Bungoma",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "6920023d-4f77-457f-9445-dba4bb292071",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"040",
+        "title":"Busia",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"041",
+        "title":"Siaya",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "cf07a928-f8ac-452e-a199-3a2399b619d5",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"042",
+        "title":"Kisumu",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "a3fc75c9-4559-4cff-9bfa-22642863db5d",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"043",
+        "title":"Homa Bay",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "7b331d27-0879-4de2-a460-6fce6dcdf775",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"044",
+        "title":"Migori",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "c4cd893f-5416-420a-89a1-50cbe13c1681",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"045",
+        "title":"Kisii",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"046",
+        "title":"Nyamira",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  }, 
+  {
+    "model": "authentication.Counties",
+    "pk": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+    "fields": {
+      "country_id":"b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+        "county_code":"047",
+        "title":"Nairobi City",
+        "description":"",
+        "created":"2021-11-15 00:00:00",
+        "updated":"2021-11-15 00:00:00"
+    }
+  } 
+  
+]

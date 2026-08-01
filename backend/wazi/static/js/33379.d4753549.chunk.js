@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[33379],{33379:(e,n,f)=>{e.exports=f.p+"static/media/not-found.bf09bb34f4c22dd52f47.png"}}]);

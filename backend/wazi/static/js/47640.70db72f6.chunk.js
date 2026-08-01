@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[47640],{47640:(n,e,r)=>{r.r(e),r.d(e,{default:()=>s});r(65043);var t=r(70579);function s(){return(0,t.jsx)("div",{children:"MaternityAdmissionForm"})}}}]);
+//# sourceMappingURL=47640.70db72f6.chunk.js.map

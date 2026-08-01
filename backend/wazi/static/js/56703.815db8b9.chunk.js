@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[56703],{56703:(e,r,n)=>{n.r(r),n.d(r,{default:()=>t});n(65043);var s=n(70579);function t(){return(0,s.jsx)("div",{children:"BloodPressureChart"})}}}]);
+//# sourceMappingURL=56703.815db8b9.chunk.js.map

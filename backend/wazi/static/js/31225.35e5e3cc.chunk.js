@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[31225],{31225:(e,s,t)=>{e.exports=t.p+"static/media/quotes.c8bb1da8320f056e0e1c.svg"}}]);

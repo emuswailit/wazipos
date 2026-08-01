@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[97459],{97459:(e,o,t)=>{t.r(o),t.d(o,{default:()=>s});t(65043);var l=t(94818),n=t(73237),r=t(70579);const s=function(e){let{openPDFModal:o,setopenPDFModal:t,contractUrl:s}=e;return(0,r.jsx)(l.A,{className:"overflow-y-scroll max-h-lvh",open:o,title:"View Contract PDF",footer:null,width:800,style:{height:600,top:20,padding:0,position:"relative"},destroyOnClose:!0,onClose:()=>t(!1),onCancel:()=>t(!1),children:(0,r.jsx)(n.Viewer,{fileUrl:s})})}}}]);
+//# sourceMappingURL=97459.dc3da4d2.chunk.js.map

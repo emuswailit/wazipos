@@ -1,0 +1,123 @@
+[
+    {
+        "model": "drugs.BodySystem",
+        "pk": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-INFECTIONS AND ANTI-INFESTATIONS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ALIMENTARY SYSTEM",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "CARDIOVASCULAR SYSTEM",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "CENTRAL NERVOUS SYSTEM",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "7a62b1b1-15a3-4431-94ff-1b6e16ba5c15",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "EAR, NOSE AND THROAT",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "d3113b1c-703e-4411-a03b-793db493cabb",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ENDOCRINE",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "68986bc6-dd2d-4f79-ac25-ad8bc62ef24b",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "GENITO-URINARY SYSTEM",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "b98a8fb5-570b-4fce-9325-73cd23ed2218",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "NUTRITION AND METABOLISM",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "211c011c-1db1-4328-8a4e-ad5e6bad7919",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "RENAL AND ONCOLOGY",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "1b96454c-48ee-4997-968b-e3d2b078fccd",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ALLERGY AND ANAPHYLAXIS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.BodySystem",
+        "pk": "778a53d9-bb2a-4420-bb5f-14eb5b319ec6",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "RESPIRATORY",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    }
+]

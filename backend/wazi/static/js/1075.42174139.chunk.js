@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[1075],{1075:(e,s,d)=>{e.exports=d.p+"static/media/menu.773d1f3d335d2a46203d.svg"}}]);

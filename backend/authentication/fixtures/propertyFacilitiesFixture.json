@@ -1,0 +1,88 @@
+[
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "9046d0dd-f090-4612-81c8-00e1e78e281d",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "CAR PARKING",
+        "icon": "carPark",
+        "description": "Car parking",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+}
+,
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "55c389c5-6d7a-4dd6-9af1-4e7451f21bcf",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "CUTLERY",
+        "icon":"cutlery",
+        "description": "Cutlery",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+},
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "bfb46359-69b8-4075-95fb-78be9d861e71",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "GYM",
+        "icon":"dumbell",
+        "description": "Cutlery",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+},
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "227f56b7-935f-4349-b38a-f1ec3d0ed687",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "PET CENTER",
+        "icon":"dog",
+        "description": "Exclusive pet center available",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+},
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "c5b727c5-ffbf-46f9-9513-cfcbf0d38a0d",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "SPORTS CENTER",
+        "icon":"run",
+        "description": "Sports center available",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+},
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "761f1bc5-2ff6-41ad-89e2-a8ac3cf7865a",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "SWIMMING POOL",
+        "icon":"swim",
+        "description": "Swimming pool available",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+},
+{
+    "model": "properties.PropertyFacilities",
+    "pk": "de2980af-2107-42b6-ade5-bdd8f54676ad",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "WIFI",
+        "icon":"wifi",
+        "description": "Wifi availble",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+}
+
+]

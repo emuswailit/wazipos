@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[35381],{35381:(e,n,s)=>{e.exports=s.p+"static/media/cyber-bg.44527257ee32d74ae878.png"}}]);

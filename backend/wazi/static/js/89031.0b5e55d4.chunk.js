@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[89031],{89031:(e,t,n)=>{n.r(t),n.d(t,{default:()=>s});const s=e=>{e&&e instanceof Function&&n.e(46453).then(n.bind(n,46453)).then((t=>{let{getCLS:n,getFID:s,getFCP:c,getLCP:f,getTTFB:u}=t;n(e),s(e),c(e),f(e),u(e)}))}}}]);
+//# sourceMappingURL=89031.0b5e55d4.chunk.js.map

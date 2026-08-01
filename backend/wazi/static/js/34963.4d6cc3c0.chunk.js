@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[34963],{34963:(A,e,I)=>{I.r(e),I.d(e,{default:()=>l});const l=[{id:1,value:"NATIONAL IDENTITY CARD",label:"NATIONAL IDENTITY CARD"},{id:2,value:"NATIONAL PASSPORT",label:"NATIONAL PASSPORT"},{id:3,value:"IMMIGRANT VISA",label:"IMMIGRANT VISA"}]}}]);
+//# sourceMappingURL=34963.4d6cc3c0.chunk.js.map

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wazi Wifi - Authorizing Network Access</title>
+    <style>
+        body { background-color: #0056b3; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 12px; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box; }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #0f172a; }
+            .card { background-color: #1e293b !important; border-color: rgba(255, 255, 255, 0.1) !important; }
+            .btn-connect { background-color: #3b82f6 !important; color: #ffffff !important; }
+        }
+        .card { width: 100%; max-width: 400px; background-color: #0056b3; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); padding: 24px 16px; box-sizing: border-box; text-align: center; }
+        .success-checkmark { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); display: flex; justify-content: center; align-items: center; font-size: 28px; margin: 0 auto 16px auto; color: #ffffff; animation: pulse 1.8s infinite ease-in-out; }
+        @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); } 70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); } }
+        .header h1 { font-size: 22px; font-weight: 900; letter-spacing: 1px; margin: 0 0 8px 0; }
+        .header p { font-size: 13px; font-weight: 500; margin: 0 0 24px 0; opacity: 0.9; line-height: 1.4; }
+        .btn-connect { display: inline-block; width: 100%; background-color: #ffffff; color: #0056b3; border: none; border-radius: 8px; padding: 14px; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); text-decoration: none; box-sizing: border-box; margin-bottom: 8px; }
+        .btn-connect:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-retry { display: inline-block; width: 100%; background-color: rgba(255, 255, 255, 0.15); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; cursor: pointer; text-decoration: none; box-sizing: border-box; margin-top: 10px; }
+        .loading-text { font-size: 11px; opacity: 0.7; margin-top: 16px; letter-spacing: 0.5px; text-transform: uppercase; }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-top: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="success-checkmark">✓</div>
+        <div class="header">
+            <h1 id="statusHeader">Access Approved!</h1>
+            <p id="statusDesc">{{ message|default:"Activating your access session. Please keep this screen open while we connect your device..." }}</p>
+        </div>
+
+        <form id="routerAuthForm" action="{{ login_url }}" method="POST" style="display:none;">
+            <input type="hidden" name="username" value="{{ username }}">
+            <input type="hidden" name="password" value="{{ password }}">
+            <input type="hidden" name="dst" value="https://google.com">
+        </form>
+
+        <button type="button" id="connectBtn" onclick="triggerManualSubmit()" class="btn-connect">Connect Now</button>
+        
+        <button type="button" id="retryVerificationBtn" onclick="forceVerificationCheck()" class="btn-retry" style="display: none;">Verify Payment Manually 🔁</button>
+        
+        <div class="loading-text">Handshaking with Router Node...</div>
+        <div id="loaderSpinner" class="spinner" style="display: none;"></div>
+    </div>
+
+    <script type="text/javascript">
+        var pspRef = "{{ psp_ref|default:'' }}";
+        var maxAttempts = 60; 
+        var attemptCount = 0; 
+        var pollingTimer = null;
+
+        function triggerManualSubmit() {
+            var form = document.getElementById('routerAuthForm');
+            if (form) {
+                document.querySelector('.loading-text').innerText = "Routing Internet Session Tickets...";
+                form.submit();
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            if (!pspRef || pspRef.trim() === "") {
+                // User has an active subscription layout: wait 1.5 seconds to settle database locks, then authorize
+                setTimeout(function () {
+                    triggerManualSubmit();
+                }, 1500);
+            } else {
+                document.getElementById('statusHeader').innerText = "Verifying Payment...";
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('loaderSpinner').style.display = "inline-block";
+                
+                setTimeout(function() {
+                    document.getElementById('retryVerificationBtn').style.display = "inline-block";
+                }, 15000);
+
+                pollPaymentStatus();
+            }
+        });
+
+        function pollPaymentStatus() {
+            if (attemptCount >= maxAttempts) {
+                document.querySelector('.loading-text').innerText = "Verification timed out. Check your phone prompt.";
+                document.getElementById('loaderSpinner').style.display = "none";
+                return;
+            }
+            attemptCount++;
+            
+            var statusUrl = '/hotspots/check-payment/?ref=' + pspRef + '&nas_id={{ nas_id }}&mac={{ username }}&tariff_id={{ tariff_id }}';
+            
+            fetch(statusUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === "SUCCESS") {
+                        if (pollingTimer) clearTimeout(pollingTimer);
+                        document.querySelector('.loading-text').innerText = "Payment confirmed! Allocating bandwidth profiles...";
+                        
+                        // 🛠️ THE FIX: Introduce a 1500ms (1.5 second) safety delay.
+                        // This prevents the router from hitting FreeRADIUS before the background transaction commits.
+                        setTimeout(function() {
+                            triggerManualSubmit();
+                        }, 1500);
+                        
+                    } else if (data.status === "FAILED") {
+                        window.location.href = "/hotspots/payment-failed/?message=Payment transaction was rejected or failed.";
+                    } else {
+                        pollingTimer = setTimeout(pollPaymentStatus, 1500);
+                    }
+                })
+                .catch(err => {
+                    pollingTimer = setTimeout(pollPaymentStatus, 2000);
+                });
+        }
+
+        function forceVerificationCheck() {
+            var retryBtn = document.getElementById('retryVerificationBtn');
+            retryBtn.innerText = "Checking Status...";
+            retryBtn.disabled = true;
+            
+            var checkUrl = '/hotspots/check-payment/?ref=' + pspRef + '&nas_id={{ nas_id }}&mac={{ username }}&tariff_id={{ tariff_id }}';
+            
+            fetch(checkUrl)
+                .then(response => response.json())
+                .then(data => {
+                    retryBtn.innerText = "Verify Payment Manually 🔁";
+                    retryBtn.disabled = false;
+                    if (data.status === "SUCCESS") {
+                        document.querySelector('.loading-text').innerText = "Payment found! Allocating bandwidth profiles...";
+                        
+                        // 🛠️ THE FIX: Apply the same 1.5-second safety delay to the manual override button
+                        setTimeout(function() {
+                            triggerManualSubmit();
+                        }, 1500);
+                    } else {
+                        document.querySelector('.loading-text').innerText = "Status still tracking as PENDING. Try entering your PIN.";
+                    }
+                })
+                .catch(err => {
+                    retryBtn.innerText = "Verify Payment Manually 🔁";
+                    retryBtn.disabled = false;
+                });
+        }
+    </script>
+</body>
+</html>

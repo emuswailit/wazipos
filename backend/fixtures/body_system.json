@@ -1,0 +1,171 @@
+[
+{
+    "model": "drugs.bodysystem",
+    "pk": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "ANTI-INFECTIONS AND ANTI-INFESTATIONS",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "1b96454c-48ee-4997-968b-e3d2b078fccd",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "ALLERGY AND ANAPHYLAXIS",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "211c011c-1db1-4328-8a4e-ad5e6bad7919",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "RENAL AND ONCOLOGY",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "36a3883c-8da4-4d72-8653-ca2883009354",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "CARDIOVASCULAR",
+        "description": "Heart and blood conduits including arteries, veins",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-09-25T21:56:29.004Z",
+        "updated": "2023-09-25T21:56:59.389Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "CARDIOVASCULAR SYSTEM",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "68986bc6-dd2d-4f79-ac25-ad8bc62ef24b",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "GENITO-URINARY SYSTEM",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "778a53d9-bb2a-4420-bb5f-14eb5b319ec6",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "RESPIRATORY",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "7a409230-26cc-4f58-9713-2acf46ff2609",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "DRUGS AFFECTING NUTRITION AND METABOLISM",
+        "description": "DRUGS AFFECTING NUTRITION AND METABOLISM",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-12-15T15:05:34.903Z",
+        "updated": "2023-12-15T15:05:34.903Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "7a62b1b1-15a3-4431-94ff-1b6e16ba5c15",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "EAR, NOSE AND THROAT",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "ALIMENTARY SYSTEM",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "b98a8fb5-570b-4fce-9325-73cd23ed2218",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "NUTRITION AND METABOLISM",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "CENTRAL NERVOUS SYSTEM",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+},
+{
+    "model": "drugs.bodysystem",
+    "pk": "d3113b1c-703e-4411-a03b-793db493cabb",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "ENDOCRINE",
+        "description": "",
+        "owner": null,
+        "created": "2023-12-06T00:00:00Z",
+        "updated": "2023-12-06T00:00:00Z",
+        "images": []
+    }
+}
+]

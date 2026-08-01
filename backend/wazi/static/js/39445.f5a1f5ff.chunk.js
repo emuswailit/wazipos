@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[39445,56060],{56060:(t,e,n)=>{n.r(e),n.d(e,{default:()=>a});const a=(0,n(74685).vt)({baseURL:"https://api.wazipos.com/api/v1/",headers:{"Content-Type":"application/json",Accept:"application/json"}})},39445:(t,e,n)=>{n.r(e),n.d(e,{default:()=>o});var a=n(56060);const o={countiesAction:t=>a.default.post("/authentication/counties",t)}}}]);
+//# sourceMappingURL=39445.f5a1f5ff.chunk.js.map

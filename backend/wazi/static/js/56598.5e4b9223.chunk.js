@@ -1,0 +1,2 @@
+(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[56598],{55653:(e,t,n)=>{"use strict";n.r(t);var r=n(26004),s=n(8654),a=n(70579);test("renders learn react link",(()=>{(0,r.XX)((0,a.jsx)(s.default,{}));const e=r.nj.getByText(/learn react/i);expect(e).toBeInTheDocument()}))},42634:()=>{}}]);
+//# sourceMappingURL=56598.5e4b9223.chunk.js.map

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[64265],{64265:(e,n,t)=>{t.r(n),t.d(n,{default:()=>r});var i=t(65043);const r=()=>{const[e,n]=(0,i.useState)({width:window.innerWidth,height:window.innerHeight});return(0,i.useEffect)((()=>{const e=()=>{n({width:window.innerWidth,height:window.innerHeight})};return window.addEventListener("resize",e),()=>{window.removeEventListener("resize",e)}}),[]),e}}}]);
+//# sourceMappingURL=64265.7b32cbc0.chunk.js.map

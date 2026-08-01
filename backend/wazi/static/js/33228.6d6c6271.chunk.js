@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[33228,14377],{33228:(t,e,a)=>{a.r(e),a.d(e,{default:()=>r});var n=a(14377);const r={registerAction:t=>n.default.post("/authentication/register",t)}},14377:(t,e,a)=>{a.r(e),a.d(e,{default:()=>n});const n=(0,a(74685).vt)({baseURL:"http://127.0.0.1:8000/api/v1/",headers:{"Content-Type":"multipart/form-data",Accept:"*/*"}})}}]);
+//# sourceMappingURL=33228.6d6c6271.chunk.js.map

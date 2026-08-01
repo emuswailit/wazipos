@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[53821],{53821:(e,t,c)=>{e.exports=c.p+"static/media/white-cap-bottle.67705cd2c25dfd1325bc.png"}}]);

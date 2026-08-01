@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[994],{994:(e,s,t)=>{e.exports=t.p+"static/media/instagram.f9d228c1cbb5edc0706a.svg"}}]);

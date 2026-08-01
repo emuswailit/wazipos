@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[89573],{89573:(n,t,e)=>{e.r(t),e.d(t,{default:()=>u});e(65043);var r=e(70579);function u(){return(0,r.jsx)("div",{children:"OutPatientConsultationForm"})}}}]);
+//# sourceMappingURL=89573.344507fa.chunk.js.map

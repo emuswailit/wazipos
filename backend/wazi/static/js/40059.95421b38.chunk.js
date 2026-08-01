@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[40059],{40059:(e,n,t)=>{e.exports=t.p+"static/media/button_green.d307640b6d91e58323c4.png"}}]);

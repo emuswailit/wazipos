@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[69894],{69894:(e,s,n)=>{n.r(s),n.d(s,{default:()=>l});var t=n(70579);function l(e){let{entityName:s,address:n}=e;return(0,t.jsx)(t.Fragment,{children:(0,t.jsxs)("section",{className:"flex flex-col items-end justify-end",children:[(0,t.jsx)("h2",{className:"font-bold text-xl uppercase mb-1",children:s}),(0,t.jsx)("p",{children:n})]})})}}}]);
+//# sourceMappingURL=69894.06cdd353.chunk.js.map

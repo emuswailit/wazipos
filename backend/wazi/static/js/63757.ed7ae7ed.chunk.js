@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[63757],{63757:(e,t,n)=>{n.r(t),n.d(t,{default:()=>p});const p=(0,n(74685).vt)({baseURL:"https://api.mobiticket.co.ke/v1/payments",headers:{"Content-Type":"application/json","Api-Key":"8Benp9qSzxD6MxDDXPpOkEUtk5CHivUzfHZsrecEAJbt7a5CnO57teepjMoafIFPfhACu6i4bQ8Ku9OEoXLWFIiV7t02R5TaqwNXKL7MvGWKhLwFvi9xF5FyBXtA9iRoA",Accept:"application/json"}})}}]);
+//# sourceMappingURL=63757.ed7ae7ed.chunk.js.map

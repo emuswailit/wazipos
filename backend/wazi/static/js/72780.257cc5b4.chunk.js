@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[72780],{72780:(n,e,r)=>{r.r(e),r.d(e,{default:()=>a});r(65043);var t=r(70579);function a(){return(0,t.jsx)("div",{children:"HospitalPharmacyInventory"})}}}]);
+//# sourceMappingURL=72780.257cc5b4.chunk.js.map

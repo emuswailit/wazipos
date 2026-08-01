@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[42244],{42244:(e,n,s)=>{e.exports=s.p+"static/media/linkedin.e1d176e65b3271b94f63.svg"}}]);

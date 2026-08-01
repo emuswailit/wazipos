@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[45415],{45415:(e,n,r)=>{r.r(n),r.d(n,{default:()=>u});r(65043);var t=r(70579);function u(){return(0,t.jsx)("div",{children:"ChargeSheet"})}}}]);
+//# sourceMappingURL=45415.6cc5a476.chunk.js.map

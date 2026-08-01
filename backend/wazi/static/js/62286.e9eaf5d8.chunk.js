@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[62286],{62286:(e,t,r)=>{r.r(t),r.d(t,{default:()=>a});var n=r(70579);function a(){return(0,n.jsx)(n.Fragment,{children:(0,n.jsx)("button",{onClick:null,className:"bg-white py-2 px-6 rounded text-base hover:bg-transparent border-2 border-white text-gray-800 transition-all duration-500 hover:opacity-75 shadow-lg hover:text-white",children:"Log In"})})}}}]);
+//# sourceMappingURL=62286.e9eaf5d8.chunk.js.map

@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[62643],{62643:(e,t,s)=>{e.exports=s.p+"static/media/twitter.f573afd4ee70524f8c18.svg"}}]);

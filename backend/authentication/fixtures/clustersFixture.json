@@ -1,0 +1,120 @@
+[
+  {
+    "model": "authentication.Clusters",
+    "pk": "a9f79a9e-ca45-4bf7-b3be-c580823b0ef0",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"ACCOUNTS",
+        "value":"ACCOUNTS"
+    }
+  },
+
+  {
+    "model": "authentication.Clusters",
+    "pk": "d2e225a5-f152-4d05-826c-b35d120b400d",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"ADMIN",
+        "value":"ADMIN"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "6f78062f-8d04-4b1b-99b0-18de1bc0a0e6",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"COURIER",
+        "value":"COURIER"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "f0f2563f-659f-4916-b9d0-3d13fdc96f69",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"DISPATCH",
+        "value":"DISPATCH"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "927d6c6d-2566-406d-8971-84129b89a26d",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"DEFAULT",
+        "value":"DEFAULT"
+       
+      
+    }
+  },
+  
+  {
+    "model": "authentication.Clusters",
+    "pk": "edd72573-be67-4f0e-b3a6-e2ba75009412",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"INVENTORY",
+        "value":"INVENTORY"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "b023885f-521c-4559-864c-846f77409fbf",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"MEDICINE",
+        "value":"MEDICINE"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "982db108-dcbe-4bef-83a4-c04e573ffb66",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"NURSING",
+        "value":"NURSING"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "d5c4736c-9f36-4e4e-8136-d6fc7bfd080c",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"PHARMACY",
+        "value":"PHARMACY"
+       
+      
+    }
+  },  {
+    "model": "authentication.Clusters",
+    "pk": "86128356-c186-4632-92d6-6bd4c5d8c090",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"SALES",
+        "value":"SALES"
+       
+      
+    }
+  },
+  {
+    "model": "authentication.Clusters",
+    "pk": "a240ccba-a6dd-4db4-98b1-c1fddd695b67",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title":"SUPPORT",
+        "value":"SUPPORT"  
+    }
+  }
+]

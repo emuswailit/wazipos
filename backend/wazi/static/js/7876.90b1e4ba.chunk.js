@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[7876],{7876:(e,n,r)=>{r.r(n),r.d(n,{default:()=>u});r(65043);var t=r(70579);function u(){return(0,t.jsx)("div",{children:"Partograph"})}}}]);
+//# sourceMappingURL=7876.90b1e4ba.chunk.js.map

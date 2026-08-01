@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[4094],{4094:(n,e,t)=>{t.r(e),t.d(e,{default:()=>s});t(65043);var r=t(70579);const s=function(){return(0,r.jsx)("div",{children:"EntityInventory"})}}}]);
+//# sourceMappingURL=4094.99a113e4.chunk.js.map

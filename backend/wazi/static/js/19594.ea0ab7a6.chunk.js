@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[19594],{19594:(e,t,a)=>{e.exports=a.p+"static/media/white-cap.4b425b0847924ac9058a.png"}}]);

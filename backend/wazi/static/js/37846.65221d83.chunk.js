@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[37846],{37846:(e,s,n)=>{n.r(s),n.d(s,{default:()=>l});var t=n(70579);function l(e){let{clientName:s,clientAddress:n}=e;return(0,t.jsx)(t.Fragment,{children:(0,t.jsxs)("section",{className:"mt-10",children:[(0,t.jsx)("h2",{children:"Customer Details"}),(0,t.jsx)("h2",{className:"text-xl uppercase font-bold mb-1",children:s}),(0,t.jsx)("p",{children:n})]})})}}}]);
+//# sourceMappingURL=37846.65221d83.chunk.js.map

@@ -1,0 +1,77 @@
+[
+  {
+    "model": "authentication.Categories",
+    "pk": "4cadab9a-a116-44b4-b25a-3aea006119f9",
+    "fields": {
+      "title":"DRUGS",
+        "description":"Registered pharmacists",
+        "category_class":"PHARMACEUTICALS",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  }, {
+    "model": "authentication.Categories",
+    "pk": "a5e4e134-e665-456b-bf25-5c3016b63691",
+    "fields": {
+      "title":"DEFAULT",
+        "description":"Mobi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  },
+
+  {
+    "model": "authentication.Categories",
+    "pk": "ba886ba9-e726-4518-aa25-ca5d9fc36ebd",
+    "fields": {
+        "title":"WINES AND SPIRITS",
+        "category_class":"ALCOHOL",
+        "description":"Dealers in wines and spirits",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "8c9fb75d-b617-4036-bf99-8c291970331e",
+    "fields": {
+        "title":"Mobile Phone & Accesories",
+        "category_class":"TELECOMMUNICATION",
+        "description":"Dealers in wines and spirits",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  },{
+    "model": "authentication.Categories",
+    "pk": "51fef43b-c4dd-40ff-a322-dd81221ff42f",
+    "fields": {
+        "title":"Food and beverages",
+        "category_class":"FMCG",
+        "description":"Food and beverages",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  },{
+    "model": "authentication.Categories",
+    "pk": "aa755d80-157e-4967-bcd6-7da17c33d354",
+    "fields": {
+        "title":"Personal care and hygiene products",
+        "category_class":"HYGIENE",
+        "description":"Personal care and hygiene products",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  },{
+    "model": "authentication.Categories",
+    "pk": "0b076092-449a-4441-b996-b94436f79f74",
+    "fields": {
+        "title":"Household cleaning and care",
+        "category_class":"FMCG",
+        "description":"Household cleaning and care",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  }
+
+  
+]

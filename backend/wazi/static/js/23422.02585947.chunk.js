@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[23422],{23422:(e,s,p)=>{e.exports=p.p+"static/media/apple.fcf3c88ab06d5964255b.svg"}}]);

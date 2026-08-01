@@ -1,0 +1,740 @@
+[
+{
+    "model": "drugs.preparation",
+    "pk": "0b3cc99b-21f1-4d63-8f42-5b4bfe927d18",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "NORFLOXACIN 400MG/TINIDAZOLE 600MG TABLETS",
+        "formulation": "cf1053b0-8b38-4078-afee-5567a49973b8",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T12:32:26.620Z",
+        "updated": "2023-12-17T12:38:20.119Z",
+        "generics": [
+            "9bb8f887-c466-40e2-ae50-15eb37776d98",
+            "b045face-1ded-430e-85e4-c6d7f1e0a8da"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "10b8f321-f059-489e-b187-848a5e3f6a85",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "NALIDIXIC ACID 500MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T11:33:09.189Z",
+        "updated": "2023-12-17T11:33:09.189Z",
+        "generics": [
+            "da4dcee6-8ad5-41fc-8859-745befd57bc2"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "12f214cb-0e35-4bd0-904b-8fb5479f2572",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 250MG/5ML  SUSPENSION",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:51:12.335Z",
+        "updated": "2023-12-19T07:51:12.335Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "19614c59-a3db-4d97-94ac-db7ed27c58b3",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "GENTAMICIN 20MG/2ML INJECTION",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-18T12:07:38.346Z",
+        "updated": "2023-12-18T12:07:38.346Z",
+        "generics": [
+            "52dd0f93-1988-4b12-b56e-62bada07804b"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "1aba21ea-b930-4c7a-adbc-f409c9265a86",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "SPARFLOXACIN 200MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T12:53:00.671Z",
+        "updated": "2023-12-17T12:53:00.671Z",
+        "generics": [
+            "5e3f78d6-c526-4955-974f-4752552a02a7"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "2750f212-5e1e-4afd-8cea-ee5b3b97982f",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 500MG CAPSULES",
+        "formulation": "cf1053b0-8b38-4078-afee-5567a49973b8",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:47:21.419Z",
+        "updated": "2023-12-19T07:47:21.419Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "27ad3ae3-ca69-4e3f-9d89-1e6a4590893e",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMIKACIN 500MG/2ML INJECTION",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T12:59:14.117Z",
+        "updated": "2023-12-17T12:59:14.117Z",
+        "generics": [
+            "d10ecc41-03ee-40f3-bdba-e896411aca6e"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "2a7f1e45-6db1-4fb0-b6ac-8c744a95fc67",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXICILLIN 500MG / CLAVULANIC ACID 62.5MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T15:12:36.156Z",
+        "updated": "2023-12-22T05:44:36.993Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "c22bfd74-81bb-464b-ba2e-737f9a07361a"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "2c603703-57bd-4c36-a3f8-6da62e25c519",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "GENTANICIN 40MG/2M INJECTION",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-18T13:24:18.118Z",
+        "updated": "2023-12-18T13:24:18.118Z",
+        "generics": [
+            "52dd0f93-1988-4b12-b56e-62bada07804b"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "38a324e2-1888-4656-980b-cc7ec69a56c3",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 125MG/5ML SYRUP",
+        "formulation": "fe223ff6-a17f-41cd-97d8-8c00d467ffb1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T08:01:35.443Z",
+        "updated": "2023-12-19T08:01:35.443Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "3ed21b48-ac85-4fa5-81a2-26130a9cb194",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 250MG CAPSULES",
+        "formulation": "cf1053b0-8b38-4078-afee-5567a49973b8",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:46:55.091Z",
+        "updated": "2023-12-19T07:46:55.091Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "41bfd5cc-5c8c-4ee9-b7f5-7c6631ba5e75",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 125MG/5ML SUSPENSION",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T08:02:02.302Z",
+        "updated": "2023-12-19T08:02:02.302Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "4a83bd44-9bcd-423b-8fcd-b734207f05f3",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXICILLIN 250MG/5ML FORTE SYRUP",
+        "formulation": "fe223ff6-a17f-41cd-97d8-8c00d467ffb1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T08:43:02.254Z",
+        "updated": "2023-12-19T08:43:02.254Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "51fa5ca7-300a-4d22-8d25-4718d1a6c478",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "BENZYLPENICIILIN 1MU",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:42:10.356Z",
+        "updated": "2023-12-19T07:42:10.356Z",
+        "generics": [
+            "51556eea-fda2-47e5-b876-2179032a0835"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "542ec523-f5ed-4a3e-980d-af07e297f2c2",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 125MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T14:46:27.525Z",
+        "updated": "2023-12-19T14:46:27.525Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "548bf34d-0d17-4217-91ba-0c9758264a9d",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "OFLOXACIN 200MG/ORNIDAZOLE 500MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T11:26:42.508Z",
+        "updated": "2023-12-17T11:26:42.508Z",
+        "generics": [
+            "8281855b-f590-4d72-85f0-59edc304836d",
+            "d13e2566-4e96-465c-94cf-1c0b61014060"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "5a67e3cb-3ea3-4058-9fe7-33444ed28238",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN / CLAVULANATE 1.2G",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:11:46.240Z",
+        "updated": "2023-12-22T07:11:46.240Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "61c87b99-69fb-4871-a58f-0a585ce974a8",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN / CLAVULANATE 228MG/5ML 100ML",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:09:39.641Z",
+        "updated": "2023-12-22T07:09:39.641Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "6e9f2bc7-dfe4-45dc-9290-c7403b017694",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN / CLAVULANATE 375MG",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:06:24.279Z",
+        "updated": "2023-12-22T07:06:24.280Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "7341192b-0c54-49a2-bc1f-926f4e90d65f",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "OFLXACIN 0.2% INJECTION 100ML",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T10:49:19.489Z",
+        "updated": "2023-12-17T10:49:19.489Z",
+        "generics": [
+            "d13e2566-4e96-465c-94cf-1c0b61014060"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "76bfde9d-1b0b-46c9-94d5-094ced010888",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "GENTAMICIN 80MG/2M INJECTION",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-18T12:07:00.974Z",
+        "updated": "2023-12-18T12:07:00.975Z",
+        "generics": [
+            "52dd0f93-1988-4b12-b56e-62bada07804b"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "77c5dd10-8380-48cb-b289-cb62ccdaee09",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "KANAMYCIN 1G INJECTION",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:38:47.097Z",
+        "updated": "2023-12-19T07:38:47.097Z",
+        "generics": [
+            "6efb09cd-836c-4b28-b6aa-6b7cdfa2fac7"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "7b4f35e1-0684-4236-98f4-42405b12d4b6",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 50MG / CLOXACILLIN 250MG / LACTIC ACID 60,000,000 SPORES",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T05:02:43.787Z",
+        "updated": "2023-12-22T05:02:43.787Z",
+        "generics": [
+            "0ff1423c-f2e6-4a8c-9373-03c47368e5a7",
+            "1d02922e-befb-4b14-adee-1131226dce35",
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "7cb9d454-958e-4179-9560-1d99acede3bf",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN / CLAVULANATE 1G  ",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:07:22.569Z",
+        "updated": "2023-12-22T07:07:22.569Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "7dd16a10-028a-49b9-be27-26bcfa80d65f",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 250MG/ CLAVULANIC ACID 125MG DRY SUSPENSION",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T14:42:09.359Z",
+        "updated": "2023-12-22T05:45:02.975Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "c22bfd74-81bb-464b-ba2e-737f9a07361a"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "8228b925-eee1-46fa-acd8-ecbb3230b3a4",
+    "fields": {
+        "entity": "5d1a952f-4477-4b3c-8267-3eead5468e92",
+        "title": "OFLOXACIN 400MG TABLETS",
+        "formulation": "cf1053b0-8b38-4078-afee-5567a49973b8",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "DESCRIPTION OF PREPARATION 1",
+        "created": "2023-09-28T04:26:07.533Z",
+        "updated": "2023-12-17T09:30:47.124Z",
+        "generics": [
+            "d13e2566-4e96-465c-94cf-1c0b61014060"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "839054de-6bb9-4dc2-9032-373877190065",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "ORNIDAZOLE 500MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T11:15:12.387Z",
+        "updated": "2023-12-17T11:15:12.387Z",
+        "generics": [
+            "8281855b-f590-4d72-85f0-59edc304836d"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "8cecbaad-0083-4763-b828-e5b1d684cb04",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "PEFLOXACIN 400MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T12:46:09.902Z",
+        "updated": "2023-12-17T12:46:09.902Z",
+        "generics": [
+            "693bcd3d-751b-4de8-b3f0-0b67986e6c1a"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "8ddf44ce-f894-40b1-817d-52191c6b481f",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN NEONATAL DROPS 125MG/1.25ML 15ML",
+        "formulation": "28c1a727-d8a3-4568-92f6-c26f9d355091",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T16:29:48.292Z",
+        "updated": "2023-12-19T16:29:48.292Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "9244dca4-48ad-4ed8-a542-4511f948297a",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 500MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T08:40:07.197Z",
+        "updated": "2023-12-19T08:40:07.197Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "97f83750-3596-4435-8b2a-72f34838fa45",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN / CLAVULANATE 457MG/5ML",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:14:28.305Z",
+        "updated": "2023-12-22T07:14:28.305Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "9d9a3b75-218c-41c4-b6f3-3a6d97c4fcbe",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "NORFLOXACIN 400MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T11:45:31.064Z",
+        "updated": "2023-12-17T11:45:31.064Z",
+        "generics": [
+            "b045face-1ded-430e-85e4-c6d7f1e0a8da"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "9fc8bf7b-7fa5-48fd-8c01-0265d35db95c",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLING 500MG / CLAVULANIC ACID 125MG",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T14:30:35.396Z",
+        "updated": "2023-12-22T05:43:26.977Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "c22bfd74-81bb-464b-ba2e-737f9a07361a"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "aa186d4f-dcd9-452c-a54d-e1fdc30ac7b2",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "BENZYLPENICILLLIN 5MU",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:41:16.941Z",
+        "updated": "2023-12-19T07:41:16.941Z",
+        "generics": [
+            "51556eea-fda2-47e5-b876-2179032a0835"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "ad63e0ee-6164-4b3e-90fb-ce3bde587325",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 15M/ BROMHEXINE 4MG PER 5ML SYRUP",
+        "formulation": "fe223ff6-a17f-41cd-97d8-8c00d467ffb1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:04:11.762Z",
+        "updated": "2023-12-22T07:04:11.762Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "d074159c-12ed-4496-8b47-d4213d165db0"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "b0d9e998-f148-45df-b4ad-d593d8337a6c",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 250MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T11:15:42.011Z",
+        "updated": "2023-12-19T11:15:42.011Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "b85760a5-a0d7-422f-9fb8-c26fad9c2be8",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 200MG/ CLAVULANIC ACID 28.5MG DRY SUSPENSION",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T14:41:19.936Z",
+        "updated": "2023-12-22T05:45:30.320Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "c22bfd74-81bb-464b-ba2e-737f9a07361a"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "baf6fcb8-c023-4688-83b5-105228e4b8e5",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "OFLOXACIN 3MG/5ML",
+        "formulation": "a6805ba6-6a98-4810-884d-1c87e0f87510",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T09:18:38.818Z",
+        "updated": "2023-12-17T09:18:38.819Z",
+        "generics": [
+            "d13e2566-4e96-465c-94cf-1c0b61014060"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "bbfd801d-98d6-45fc-a612-0253ce0dd0c4",
+    "fields": {
+        "entity": "5d1a952f-4477-4b3c-8267-3eead5468e92",
+        "title": "OFLOXACIN 200MG",
+        "formulation": "cf1053b0-8b38-4078-afee-5567a49973b8",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "Description of preparation 2",
+        "created": "2023-09-28T06:33:59.473Z",
+        "updated": "2023-12-17T09:15:08.592Z",
+        "generics": [
+            "d13e2566-4e96-465c-94cf-1c0b61014060"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "bc991324-1f0c-4e41-aae0-2ccd3a286392",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN / CLAVULANATE 600MG ",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:11:08.156Z",
+        "updated": "2023-12-22T07:11:08.156Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "bdcfd49b-2f27-4e4e-91cd-01e980f39497",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 250MG / BROMHEXINE 8MG ",
+        "formulation": "cf1053b0-8b38-4078-afee-5567a49973b8",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T06:16:47.960Z",
+        "updated": "2023-12-22T06:16:47.960Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "d074159c-12ed-4496-8b47-d4213d165db0"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "d115ffab-83d4-47f8-9680-fc0e3d4c97ac",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN /CLAVULANATE 156MG PER 5ML 100ML",
+        "formulation": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-22T07:08:41.044Z",
+        "updated": "2023-12-22T07:08:41.044Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "e187a223-0362-4e54-9c88-ed108f87c707"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "db8a519b-2715-4e62-a7ee-8a5904f4e87c",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMIKACIN 100MG/2ML INJECTION",
+        "formulation": "88bf168d-6af1-4fcb-a9c6-550652653326",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-17T12:57:12.905Z",
+        "updated": "2023-12-17T12:57:12.906Z",
+        "generics": [
+            "d10ecc41-03ee-40f3-bdba-e896411aca6e"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "e9405157-4eea-4953-b879-26e905dbcdbf",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 1000MG / CLAVULANIC ACID 125MG TABLETS",
+        "formulation": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T15:13:08.257Z",
+        "updated": "2023-12-22T05:44:08.059Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397",
+            "c22bfd74-81bb-464b-ba2e-737f9a07361a"
+        ]
+    }
+},
+{
+    "model": "drugs.preparation",
+    "pk": "f21bbcb8-8c69-4421-84d2-2f0a702c0430",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "AMOXYCILLIN 250MG/5ML  SYRUP",
+        "formulation": "fe223ff6-a17f-41cd-97d8-8c00d467ffb1",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "description": "",
+        "created": "2023-12-19T07:50:51.676Z",
+        "updated": "2023-12-19T07:50:51.676Z",
+        "generics": [
+            "570632ae-7000-4b47-83b6-35e144746397"
+        ]
+    }
+}
+]

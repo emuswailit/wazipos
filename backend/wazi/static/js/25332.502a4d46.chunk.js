@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[25332],{25332:(t,i,s)=>{s.r(i),s.d(i,{default:()=>e});const e=class{constructor(t,i,s,e,u,c,n,h,a,r,_,p){this.id=t,this.product=i,this.product_title=s,this.purchased_unit_quantity=e,this.bonus_unit_quantity=u,this.pack_buying_price=c,this.pack_selling_price=n,this.percent_discount=h,this.manufacture_date=a,this.item_total_value=r,this.expiry_date=_,this.batch=p}}}}]);
+//# sourceMappingURL=25332.502a4d46.chunk.js.map

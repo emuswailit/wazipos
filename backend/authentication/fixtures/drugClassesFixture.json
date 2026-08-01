@@ -1,0 +1,696 @@
+[
+    {
+        "model": "drugs.DrugClass",
+        "pk": "8820e56e-affd-43cd-b632-3ea691619fb1",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTIBIOTICS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTIBIOTICS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "SULPHONAMIDES",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "SULPHONAMIDES",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "d53e2067-e125-4205-938d-9b8d53903b14",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "SULPHONAMIDES + TRIMETHOPRIM",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "SULPHONAMIDES + TRIMETHOPRIM",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "f1e33377-ec21-409c-8c68-027600741454",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-TUBERCULOUS DRUGS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTI-TUBERCULOUS DRUGS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "3922c1cc-f8e6-426a-af31-b8c048dddbd6",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-AMOEBICS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTI-AMOEBICS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "fe8ce553-b6cf-4b76-a4ee-99afcf037d77",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-LEPROTICS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTI-LEPROTICS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "1b6cf2a4-05cc-4298-83d6-530ee0a6eb3a",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-MALARIALS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTI-MALARIALS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "7c866817-5362-4528-bf8f-967659cee98d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-VIRALS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTI-VIRALS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "6bc3193a-113c-4aa8-b3ea-f2d67734123d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "HIV CHEMORETAPEUTICS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "HIV CHEMORETAPEUTICS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "6bc3193a-113c-4aa8-b3ea-f2d67734123d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "SCHISTOSOMICIDES",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "SCHISTOSOMICIDES",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "af0fcbb2-230e-4bc3-a66f-b6ace830c398",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTIFUNGALS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "ANTIFUNGALS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "b931da1e-5d95-4177-874e-76440aa6db3d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "OTHER ANTIINFECTIVES",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "OTHER ANTIINFECTIVES",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "74cf128a-64d0-460e-b553-e9143a6ca71e",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "VACCINES, SERA AND IMMUNOGLOBULINS",
+            "body_system": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+            "description": "VACCINES, SERA AND IMMUNOGLOBULINS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "DRUGS FOR DYSPEPSIA, REFLUX AND PEPTIC ULCERS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "ANTISPASMODICS AND MOTILITY STIMULANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "7a62b1b1-15a3-4431-94ff-1b6e16ba5c15",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "LAXATIVES, PURGATIVES AND LUBRICANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "7d066c16-6836-4d5a-9390-424ca170e567",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "DRUGS ACTING LOCALLY ON RECTUM",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "c59400cc-fee4-4f60-a217-8d65a41d2e07",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "ANTIOBESITY",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "d3113b1c-703e-4411-a03b-793db493cabb",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "ANTI-EMETICS AND ANTINAUSEANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "68986bc6-dd2d-4f79-ac25-ad8bc62ef24b",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "DRUGS FOR INFLAMMATORY BOWEL DISEASE",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "211c011c-1db1-4328-8a4e-ad5e6bad7919",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+            "title": "APPETITE STIMULANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "060487b9-40ce-466d-bc3e-31aab154d57a",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "CARDIAC GLYCOSIDES",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "00a58b6e-e907-4997-ba53-87d2fb52c1f6",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "CARDIAC ANTI-ARRYTHMIC DRUGS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "26361912-ef3f-4587-a0d4-24178f4af75c",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "BETA BLOCKERS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "ac052099-bf3f-41a0-83bd-e6478eb77b1a",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "VASODILATOR ANTIHYPERTENSIVES",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "913f36a3-672e-4dcc-9be9-5016eb8431a7",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "CENTRALLY ACTING ANTIHYPERTENSIVES",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "8383db3d-9e95-47fc-8db9-929b0fce9207",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "ALPHA-ADRENOCEPTOR BLOCKING AGENTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "56f46b66-c8e6-412a-b437-01edfee21618",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "ANGIOTENSIN-CONVERTING ENZYME INHIBITOR",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "f6836e33-a2db-440b-9f91-42b514b32972",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "NITRATES",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "e76487e9-ad7b-4598-8ce5-7dc5c147f432",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "CALCIUM CHANNEL BLOCKERS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "bc1f937c-eb60-4c04-be4c-0bbe53f8ddf3",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "RAUWOLFIA ALKALOIDS CONTAINING DRUGS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "3838e9ff-28d8-4947-a4d2-8241c1fb7888",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "INOTROPIC SYMPATHOMIMETICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "cf5bad78-297d-4385-8531-45b1fb2fe06c",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "VASOCONSTRICTOR SYMPATHOMIMETICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "73a95051-db41-46d3-aae7-546334d26aae",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "PARENTERAL ANTICOAGULANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "e97fdfd6-13b6-4da9-a7ca-5fb56efc38df",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "ORAL ANTICOAGULANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "fd6d8f71-4050-4643-8ed8-fbd2c6d7b427",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "DIURETICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "10beb98c-7b55-422c-8d39-550d73727916",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "PERIPHERAL VASODILATORS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "5ea0eccd-9591-4e01-95fa-678c8f11d5ee",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "CEREBRAL VASODILATORS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "c39ed583-f3e8-4e71-972e-5880a304f3a1",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "LOCAL SCLEROSANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "bede02a9-8090-4952-b603-d9d60846bbcb",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "FIBRINOLYTICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "a1c71f6f-9aec-40b0-b3cc-24e8456667a2",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "PLATELET-AGGREGATION INHIBITORS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "d38b49db-67fc-43a2-9f7e-98ed3d6c0bd6",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "POTASSIUM-CHANNEL ACTIVATORS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "1d8fd539-2796-4d06-9041-e0f564ec10e6",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "ANTIFIBRINOLYTIC HAEMOSTATICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "98d4c66b-e8c1-4156-8263-1df2efc771ed",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "PHLEBOTROPIC AGENTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "a4e5286c-a8fe-4326-83db-230b4871f2df",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "METABOLIC ANTI-ISCHAEMIC AGENTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "42ffb326-e7e8-4feb-b9ad-b75a0f8e92f9",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
+            "title": "DRUGS FOR DYSLIPIDAEMIA",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "b2d22586-7828-4e02-bffd-3a377b4eb388",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "ANALGESICS, ANTIPYRETICS AND NSAIDS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "d3113b1c-703e-4411-a03b-793db493cabb",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "HYPNOTICS, SEDATIVES AND TRANQUILISERS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "7a62b1b1-15a3-4431-94ff-1b6e16ba5c15",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "ANTICONVULSANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "68986bc6-dd2d-4f79-ac25-ad8bc62ef24b",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "ANTIDEPRESSTS AND ANXIOLYTICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "b98a8fb5-570b-4fce-9325-73cd23ed2218",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "CNS STIMULANTS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "211c011c-1db1-4328-8a4e-ad5e6bad7919",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "RIGIDITY AND TREMOR CONTROLLERS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "778a53d9-bb2a-4420-bb5f-14eb5b319ec6",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "ANTICHOLINESTERASES",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "1b96454c-48ee-4997-968b-e3d2b078fccd",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "ANTI-MIGRAINE DRUGS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "8820e56e-affd-43cd-b632-3ea691619fb1",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "DRUGS FOR TREATMENT OF GOUT",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "873f6152-0935-4930-9c7e-027f4b4116f2",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "DISEASE MODIFYING ANTI-RHEUMATICS",
+            "description": "",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "9bd06e5a-8361-45f6-b02c-576a258aecda",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "ANTI-ASTHENIC AGENTS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.DrugClass",
+        "pk": "cb770013-f430-4763-a735-55a8e3073816",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "body_system": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
+            "title": "DRUGS FOR MANAGEMENT OF MULTIPLE SCLEROSIS",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    }
+]

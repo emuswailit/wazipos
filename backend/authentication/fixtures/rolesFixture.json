@@ -1,0 +1,31 @@
+[
+  {
+    "model": "authentication.Roles",
+    "pk": "a9f79a9e-ca45-4bf7-b3be-c580823b0ef0",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "level":"DEFAULT",
+        "title":"ADMIN",
+        "value":"ADMIN",
+        "cluster_id":"927d6c6d-2566-406d-8971-84129b89a26d",
+        "description":"System admin",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  }, {
+    "model": "authentication.Roles",
+    "pk": "3d33467b-8ea8-4af5-b1ff-eb0df2de6005",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "level":"DEFAULT",
+        "title":"CLIENT",
+        "value":"CLIENT",
+        "cluster_id":"927d6c6d-2566-406d-8971-84129b89a26d",
+        "description":"System default user",
+        "created":"2021-11-28",
+        "updated":"2021-11-28" 
+    }
+  }
+
+  
+]

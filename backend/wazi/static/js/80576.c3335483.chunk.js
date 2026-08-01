@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[80576],{80576:(e,l,n)=>{n.r(l),n.d(l,{default:()=>d});n(65043);var s=n(70579);function d(e){let{count:l,value:n}=e;return(0,s.jsxs)("div",{className:"flex flex-row w-full font-bold text-3xl justify-around",children:[(0,s.jsx)("div",{children:(0,s.jsxs)("p",{children:["TICKETS: ",l]})}),(0,s.jsx)("div",{children:(0,s.jsxs)("p",{children:["TOTAL AMOUNT: KES ",n]})})]})}}}]);
+//# sourceMappingURL=80576.c3335483.chunk.js.map

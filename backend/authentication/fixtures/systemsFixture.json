@@ -1,0 +1,38 @@
+[
+    
+    {
+        "model": "drugs.BodySystem",
+        "pk": "21edb82d-e1fc-413c-bfe6-88af60919aa2",
+        "fields": {
+            "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title":"Circulatory System",   
+            "description":"",   
+            "owner":"fcc3909b-8914-4057-8954-947a55ac4ebb",
+            "created":"2022-10-15 00:00:00",
+            "updated":"2022-10-15 00:00:00"
+        }
+      }  ,
+      {
+        "model": "drugs.BodySystem",
+        "pk": "690ff3ad-20ed-4041-93cc-e155e3228c33",
+        "fields": {
+            "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title":"Digestive System",   
+            "description":"",   
+            "owner":"fcc3909b-8914-4057-8954-947a55ac4ebb",
+            "created":"2022-10-15 00:00:00",
+            "updated":"2022-10-15 00:00:00"
+        }
+      } ,   {
+        "model": "drugs.BodySystem",
+        "pk": "690ff3ad-20ed-4041-93cc-e155e3228c33",
+        "fields": {
+            "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title":"Endocrine System",   
+            "description":"",   
+            "owner":"fcc3909b-8914-4057-8954-947a55ac4ebb",
+            "created":"2022-10-15 00:00:00",
+            "updated":"2022-10-15 00:00:00"
+        }
+      } 
+]

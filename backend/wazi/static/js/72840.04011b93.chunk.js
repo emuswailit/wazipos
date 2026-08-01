@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[72840],{72840:(e,r,t)=>{t.r(r),t.d(r,{default:()=>o});var n=t(70579);function o(){return(0,n.jsx)(n.Fragment,{children:(0,n.jsx)("button",{onClick:null,className:"bg-blue-500 py-2 px-6 rounded text-base hover:bg-transparent border-2 border-blue-500 text-white transition-all duration-500 hover:opacity-75 hover:bg-blue-800 hover:border-blue-800 shadow-lg",children:"Create Account"})})}}}]);
+//# sourceMappingURL=72840.04011b93.chunk.js.map

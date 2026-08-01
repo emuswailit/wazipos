@@ -1,0 +1,41 @@
+[
+  {
+    "model": "authentication.Actions",
+    "pk": "a9f79a9e-ca45-4bf7-b3be-c580823b0ef0",
+    "fields": {
+        "title":"Login",
+        "label":"LOGIN",
+        "clusters":[
+          "a9f79a9e-ca45-4bf7-b3be-c580823b0ef0",
+          "d2e225a5-f152-4d05-826c-b35d120b400d",
+          "6f78062f-8d04-4b1b-99b0-18de1bc0a0e6",
+          "f0f2563f-659f-4916-b9d0-3d13fdc96f69",
+          "927d6c6d-2566-406d-8971-84129b89a26d",
+          "edd72573-be67-4f0e-b3a6-e2ba75009412",
+          "b023885f-521c-4559-864c-846f77409fbf",
+          "982db108-dcbe-4bef-83a4-c04e573ffb66",
+          "d5c4736c-9f36-4e4e-8136-d6fc7bfd080c",
+          "86128356-c186-4632-92d6-6bd4c5d8c090",
+          "a240ccba-a6dd-4db4-98b1-c1fddd695b67"
+        ],
+        "icon":"lock",
+        "endpoint":"login",
+        "description":"Login any user",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  }, {
+    "model": "authentication.Actions",
+    "pk": "3d33467b-8ea8-4af5-b1ff-eb0df2de6005",
+    "fields": {
+        "title":"Register",
+        "label":"REGISTER",
+        "icon":"edit",
+        "endpoint":"register",
+        "description":"Register any user",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  }
+  
+]

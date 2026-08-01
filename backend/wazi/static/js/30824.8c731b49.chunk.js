@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[30824],{30824:(e,s,t)=>{e.exports=t.p+"static/media/gilbeys-1-litre.ea10717fa2c985f8e868.png"}}]);

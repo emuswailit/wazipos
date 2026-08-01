@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[25129],{25129:(e,n,r)=>{r.r(n),r.d(n,{default:()=>s});r(65043);var t=r(70579);function s(){return(0,t.jsx)("div",{children:"TheatreOperationNotes"})}}}]);
+//# sourceMappingURL=25129.b6f5548a.chunk.js.map

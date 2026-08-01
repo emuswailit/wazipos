@@ -1,0 +1,23 @@
+[
+  {
+    "model": "authentication.Clusters",
+    "pk": "a9f79a9e-ca45-4bf7-b3be-c580823b0ef0",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "label":"ACCOUNTS",
+        "value":"ACCOUNTS"
+    }
+  },
+
+  {
+    "model": "authentication.Clusters",
+    "pk": "d2e225a5-f152-4d05-826c-b35d120b400d",
+    "fields": {
+      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "label":"ADMIN",
+        "value":"ADMIN"
+       
+      
+    }
+  }
+]

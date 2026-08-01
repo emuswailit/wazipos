@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[6378],{6378:(e,s,t)=>{e.exports=t.p+"static/media/tusker.8267c79c5350a860f05e.png"}}]);

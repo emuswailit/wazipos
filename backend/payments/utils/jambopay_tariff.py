@@ -1,0 +1,166 @@
+def get_tariff(amount,payout_channel):
+    if amount>=1 and amount<=100:
+        if payout_channel=="JambopayWalletUser":
+            return 0.00
+        elif payout_channel=="UnregisteredUser":
+            return 0.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 12.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 10.00
+    elif amount>=101 and amount<=499:
+        if payout_channel=="JambopayWalletUser":
+            return 7.00
+        elif payout_channel=="UnregisteredUser":
+            return 49.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 19.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 12.00
+    elif amount>=500 and amount<=999:
+        if payout_channel=="JambopayWalletUser":
+            return 19.00
+        elif payout_channel=="UnregisteredUser":
+            return 49.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 26.20
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 22.00
+    elif amount>=1000 and amount<=1499:
+        if payout_channel=="JambopayWalletUser":
+            return 19.00
+        elif payout_channel=="UnregisteredUser":
+            return 49.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 26.20
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 33.00
+    elif amount>=1500 and amount<=2499:
+        if payout_channel=="JambopayWalletUser":
+            return 25.00
+        elif payout_channel=="UnregisteredUser":
+            return 74.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 37.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 33.00
+    elif amount>=2500 and amount<=3499:
+        if payout_channel=="JambopayWalletUser":
+            return 27.40
+        elif payout_channel=="UnregisteredUser":
+            return 112.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 55.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 55.00
+    elif amount>=3500 and amount<=4999:
+        if payout_channel=="JambopayWalletUser":
+            return 37.00
+        elif payout_channel=="UnregisteredUser":
+            return 135.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 55.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 55.00
+    elif amount>=5000 and amount<=7499:
+        if payout_channel=="JambopayWalletUser":
+            return 37.00
+        elif payout_channel=="UnregisteredUser":
+            return 166.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 85.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 84.00
+    elif amount>=7500 and amount<=9999:
+        if payout_channel=="JambopayWalletUser":
+            return 37.00
+        elif payout_channel=="UnregisteredUser":
+            return 205.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 114.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 112.00
+    elif amount>=10000 and amount<=14999:
+        if payout_channel=="JambopayWalletUser":
+            return 37.00
+        elif payout_channel=="UnregisteredUser":
+            return 265.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 163.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 112.00
+    elif amount>=15000 and amount<=19999:
+        if payout_channel=="JambopayWalletUser":
+            return 37.00
+        elif payout_channel=="UnregisteredUser":
+            return 288.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 182.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 112.00
+    elif amount>=20000 and amount<=34999:
+        if payout_channel=="JambopayWalletUser":
+            return 69.40
+        elif payout_channel=="UnregisteredUser":
+            return 309.00  
+        elif payout_channel=="WithdrawAtAgent":
+            return 192.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 112.00  
+    elif amount>=35000 and amount<=49999:
+        if payout_channel=="JambopayWalletUser":
+            return 80.00
+        elif payout_channel=="UnregisteredUser":
+            return 272.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 350.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 202.00
+    elif amount>=50000 and amount<=69999:
+        if payout_channel=="JambopayWalletUser":
+            return 100.00
+        elif payout_channel=="UnregisteredUser":
+            return 400.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 305.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 210.00
+    elif amount>=70000 and amount<=150000:
+        if payout_channel=="JambopayWalletUser":
+            return 120.00
+        elif payout_channel=="UnregisteredUser":
+            return 430.00
+        elif payout_channel=="WithdrawAtAgent":
+            return 325.00
+        elif payout_channel=="TransferToBank":
+            return 0.00
+        elif payout_channel=="TillBusinessPayments":
+            return 230.00

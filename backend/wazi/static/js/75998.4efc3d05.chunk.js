@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[75998],{75998:(e,s,n)=>{e.exports=n.p+"static/media/gilbeys-350-ml.596a42283b58ffb8e92e.png"}}]);

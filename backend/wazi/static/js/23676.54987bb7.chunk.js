@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[23676],{23676:(e,f,s)=>{e.exports=s.p+"static/media/Send.b7f09b0fd9a29ffad13e.svg"}}]);

@@ -1,0 +1,86 @@
+[
+{
+    "model": "drugs.formulations",
+    "pk": "28c1a727-d8a3-4568-92f6-c26f9d355091",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "ORAL DROPS",
+        "description": "ORAL DROPS",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-12-19T16:28:35.397Z",
+        "updated": "2023-12-19T16:28:35.397Z"
+    }
+},
+{
+    "model": "drugs.formulations",
+    "pk": "88bf168d-6af1-4fcb-a9c6-550652653326",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "INJECTION",
+        "description": "",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-12-17T09:36:52.378Z",
+        "updated": "2023-12-17T09:36:52.378Z"
+    }
+},
+{
+    "model": "drugs.formulations",
+    "pk": "a6805ba6-6a98-4810-884d-1c87e0f87510",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "EYE DROPS",
+        "description": "",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-12-17T09:16:44.969Z",
+        "updated": "2023-12-17T09:16:44.969Z"
+    }
+},
+{
+    "model": "drugs.formulations",
+    "pk": "c75b30de-a5bc-43cc-9850-c96badb8eef9",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "TABLETS",
+        "description": "Compacted powder formulations",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-10-05T23:54:49.699Z",
+        "updated": "2023-12-13T02:22:05.972Z"
+    }
+},
+{
+    "model": "drugs.formulations",
+    "pk": "cf1053b0-8b38-4078-afee-5567a49973b8",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "CAPSULES",
+        "description": "Gelatin covered drug formulations to mask bad taste of some drugs - updated",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-09-26T05:58:03.417Z",
+        "updated": "2023-09-26T06:04:37.782Z"
+    }
+},
+{
+    "model": "drugs.formulations",
+    "pk": "f5237bd0-46c5-4ff5-b23f-fc6cfcfa9ba1",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "SUSPENSION",
+        "description": "SUSPENSION",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-12-19T07:49:03.028Z",
+        "updated": "2023-12-19T07:49:03.028Z"
+    }
+},
+{
+    "model": "drugs.formulations",
+    "pk": "fe223ff6-a17f-41cd-97d8-8c00d467ffb1",
+    "fields": {
+        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+        "title": "SYRUP",
+        "description": "SYRUP",
+        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
+        "created": "2023-12-19T07:48:48.356Z",
+        "updated": "2023-12-19T07:48:48.356Z"
+    }
+}
+]

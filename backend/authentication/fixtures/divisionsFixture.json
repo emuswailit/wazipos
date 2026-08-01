@@ -1,0 +1,4053 @@
+[
+  {
+    "model": "authentication.Divisions",
+    "pk": "bc8ffce8-5860-4c63-9f4c-0dba01eabd17",
+    "fields": {
+      "counties_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "division_code":"",
+        "title":"Changamwe",
+        "description":"Changamwe",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "cb5c2096-a926-4810-8a39-5e7e246ee843",
+    "fields": {
+      "counties_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "division_code":"",
+        "title":"Jomvu",
+        "description":"Jomvu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+    "fields": {
+      "counties_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "division_code":"",
+        "title":"Kisauni",
+        "description":"Kisauni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  }
+  ,
+  {
+    "model": "authentication.Divisions",
+    "pk": "c987be13-152d-4b72-aa87-8c018bbeb63e",
+    "fields": {
+      "counties_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "division_code":"",
+        "title":"Likoni",
+        "description":"Likoni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "19a70304-3aff-46e4-bb85-f8940f3413e5",
+    "fields": {
+      "counties_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "division_code":"",
+        "title":"Mvita",
+        "description":"Mvita",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "24a50b0b-eae1-4fa5-987b-cdfcf7be75da",
+    "fields": {
+      "counties_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "division_code":"",
+        "title":"Nyali",
+        "description":"Nyali",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "5a9c258c-5af9-4c65-9d94-25d31489ca02",
+    "fields": {
+      "counties_id":"9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+        "division_code":"",
+        "title":"Kinango",
+        "description":"Kinango",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d4190e8b-77be-43bb-94a4-c89135f86a2b",
+    "fields": {
+      "counties_id":"9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+        "division_code":"",
+        "title":"Lungalunga",
+        "description":"Lungalunga",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "eb89e09f-b713-4771-9723-e79e1cb1ecfc",
+    "fields": {
+      "counties_id":"9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+        "division_code":"",
+        "title":"Matuga",
+        "description":"Matuga",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "30a2ec26-6f94-47c7-8a69-6b8c4aff0ad5",
+    "fields": {
+      "counties_id":"9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+        "division_code":"",
+        "title":"Msambweni",
+        "description":"Msambweni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e457a2db-8baa-4557-a942-6d2faa4405ea",
+    "fields": {
+      "counties_id":"9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+        "division_code":"",
+        "title":"Samburu-Kwale",
+        "description":"Samburu-Kwale",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "97893c97-77d7-40eb-a69e-3e87efb17344",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Chonyi",
+        "description":"Chonyi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "523c667a-3e7a-4d8b-bf37-3fa3d18ece00",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Ganze",
+        "description":"Ganze",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "17f5bfcc-260b-42cf-a68b-68a321b5863b",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Kaloleni",
+        "description":"Kaloleni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "24cf0af6-e0ed-4347-b20c-2e4ecbc77c73",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Kauma",
+        "description":"Kauma",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "30683b64-7105-4e51-a1b2-41d8c867a542",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Kilifi North",
+        "description":"Kilifi North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "fdc31a39-70da-4ff0-a97f-d39c16f9e70e",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Kilifi South",
+        "description":"Kilifi South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "70d868ba-ef04-431c-8df4-f5db96f33dae",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Magarini",
+        "description":"Magarini",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f2c5233e-e7dd-40fe-8a87-a21af69e16d5",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Malindi",
+        "description":"Malindi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b9d70c74-ce46-4def-8437-e8fcc1aafdc5",
+    "fields": {
+      "counties_id":"4e1ce52f-8231-4537-bf7c-78432781a0ab",
+        "division_code":"",
+        "title":"Rabai",
+        "description":"Rabai",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "657f72ca-0634-40fd-8e04-ab4fd2d28b33",
+    "fields": {
+      "counties_id":"42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+        "division_code":"",
+        "title":"Tana North",
+        "description":"Tana North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0bf7e987-db68-4b89-8aa9-eb2d0c3d2ba3",
+    "fields": {
+      "counties_id":"42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+        "division_code":"",
+        "title":"Tana Delta",
+        "description":"Tana Delta",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3693e284-e434-4b4e-bf5f-78ac716bea04",
+    "fields": {
+      "counties_id":"42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+        "division_code":"",
+        "title":"Tana River",
+        "description":"Tana River",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "359cd922-71aa-4674-b37c-f17984a961df",
+    "fields": {
+      "counties_id":"5b4484dc-1ebf-4ce6-a5c4-605127011778",
+        "division_code":"",
+        "title":"Lamu East",
+        "description":"Lamu East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "31d85c58-ad30-455a-871f-ccb0436297ba",
+    "fields": {
+      "counties_id":"5b4484dc-1ebf-4ce6-a5c4-605127011778",
+        "division_code":"",
+        "title":"Lamu West",
+        "description":"Lamu West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "61b1796d-d267-463d-b3e3-081d048a6a50",
+    "fields": {
+      "counties_id":"54089583-ed2b-4dea-b3f8-3daf6748a037",
+        "division_code":"",
+        "title":"Mwatate",
+        "description":"Mwatate",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "fffb9efb-64ee-470b-9989-243b00e34d1b",
+    "fields": {
+      "counties_id":"54089583-ed2b-4dea-b3f8-3daf6748a037",
+        "division_code":"",
+        "title":"Taita",
+        "description":"Taita",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "546b81e2-ce6a-49a0-bf25-5f462b9551ad",
+    "fields": {
+      "counties_id":"54089583-ed2b-4dea-b3f8-3daf6748a037",
+        "division_code":"",
+        "title":"Taveta",
+        "description":"Taveta",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "78950ab7-e697-490f-abc7-2a485c2610c6",
+    "fields": {
+      "counties_id":"54089583-ed2b-4dea-b3f8-3daf6748a037",
+        "division_code":"",
+        "title":"Voi",
+        "description":"Voi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "f647bb98-411a-40e9-bde5-68063f2d687e",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Balambala",
+        "description":"Balambala",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Dadaab",
+        "description":"Dadaab",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4839fdbe-5ce7-489b-a779-6b877f47c7c5",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Fafi",
+        "description":"Fafi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2eeaf256-26d8-4231-8750-b14f77addd16",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Garissa",
+        "description":"Garissa",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "05e6d9a5-bce6-41b4-92ce-1dafc392cefc",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Hulugho",
+        "description":"Hulugho",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a02f7c2a-a423-431b-b268-45dd60c4b4ad",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Ijara",
+        "description":"Ijara",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "7a5a1fb8-f581-44fa-b278-391228bd886e",
+    "fields": {
+      "counties_id":"c120593a-528c-4b88-929d-95bfa548b0cb",
+        "division_code":"",
+        "title":"Lagdera",
+        "description":"Lagdera",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "500aebaa-a524-404c-a41a-53c9c7610b21",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Buna",
+        "description":"Buna",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b0eedb13-5860-480f-9fb3-024425b2b03a",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Eldas",
+        "description":"Eldas",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "df76d4fe-eebd-4ac3-a5a8-1d1794387f11",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Habaswein",
+        "description":"Habaswein",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d69dd169-e5b1-479c-874e-d47e86a482ae",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Tarbaj",
+        "description":"Tarbaj",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a040e99b-9e56-477e-b527-6f978cd6682d",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Wajir East",
+        "description":"Wajir East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6bbebdb3-db81-4019-9da7-a559d25d22e4",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Wajir North",
+        "description":"Wajir North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Wajir South",
+        "description":"Wajir South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "031bdb5b-c5a4-4b5a-9ae3-50a68d75a627",
+    "fields": {
+      "counties_id":"25226343-91dc-4090-b16a-6aebfdf3364c",
+        "division_code":"",
+        "title":"Wajir West",
+        "description":"Wajir West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "b80ef36e-eacd-4225-8ebb-6b7c16958758",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Mandera West",
+        "description":"Mandera West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "08ac4659-4587-4afd-b031-d702c99f66e7",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Banisa",
+        "description":"Banisa",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "761a04d4-ef8c-4d5a-be7c-fb077952af84",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Kutulo",
+        "description":"Kutulo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4906d266-60f3-4d1d-b890-fb8e4031281c",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Lafey",
+        "description":"Lafey",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "aa2a4bb8-f2d7-45b1-848a-cdef9a09063e",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Mandera Central",
+        "description":"Mandera Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Mandera East",
+        "description":"Mandera East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f8cf216a-a793-4b4f-a738-9a927c0cdd4e",
+    "fields": {
+      "counties_id":"24a1c463-c790-4eba-9f5a-0e5c8746033a",
+        "division_code":"",
+        "title":"Mandera North",
+        "description":"Mandera North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0051c2ee-2310-4b59-ba53-0ff3b036c2c7",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"Loiyangalani",
+        "description":"Loiyangalani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5f9bc02d-f7e5-4271-a6dc-8c41e6185c36",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"Marsabit Central",
+        "description":"Marsabit Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d501f167-1c72-4b7d-a650-f5bb38debe85",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"Marsabit North",
+        "description":"Marsabit North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d18f2380-0207-4ccf-a871-dda36622c3a4",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"Marsabit South",
+        "description":"Marsabit South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5cfe7271-0c34-4006-b280-2f992e2e538d",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"Moyale",
+        "description":"Moyale",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "25aa2658-b706-4e7c-9820-142aa149493d",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"North Horr",
+        "description":"North Horr",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f0c06656-3428-4d6a-98c1-e69056813a5a",
+    "fields": {
+      "counties_id":"d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+        "division_code":"",
+        "title":"Sololo",
+        "description":"Sololo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "dbfc5298-56dc-42f0-bcd4-28731e5fea6c",
+    "fields": {
+      "counties_id":"7822576a-322f-4a79-89f8-0c98b0dc97ba",
+        "division_code":"Garbatulla",
+        "title":"Garbatulla",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9419c542-ae79-48b9-a77e-d1fe79505f58",
+    "fields": {
+      "counties_id":"7822576a-322f-4a79-89f8-0c98b0dc97ba",
+        "division_code":"",
+        "title":"Isiolo",
+        "description":"Isiolo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "47bba74c-e81d-4bea-849e-43d8e984aa3d",
+    "fields": {
+      "counties_id":"7822576a-322f-4a79-89f8-0c98b0dc97ba",
+        "division_code":"",
+        "title":"Merti",
+        "description":"Merti",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "55e51ee5-ec99-4049-85bf-b6509c8853af",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Buuri East",
+        "description":"Buuri East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "83b18834-5788-48aa-aa72-a595afb58bce",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Buuri West",
+        "description":"Buuri West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+    {
+    "model": "authentication.Divisions",
+    "pk": "a90f5aa1-e110-4434-8278-9d42abfd6a57",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Igembe Central",
+        "description":"Igembe Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9b2c3bc7-b089-45bb-a333-d0da141f9919",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Igembe North",
+        "description":"Igembe North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "30e7cb6d-d8a6-42fd-8690-e271fadb9d9d",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Igembe South",
+        "description":"Igembe South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "885338e6-b1a3-40a9-9629-e1acd18743ef",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Imenti North",
+        "description":"Imenti North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "09cfd38a-5daa-4fe4-a3a6-99e44ad72d5a",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Imenti South",
+        "description":"Imenti South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "29fd83d8-947e-48a3-8d84-21a738d7c069",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Meru Central",
+        "description":"Meru Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6a3fc898-5598-40c2-a967-e7a90422047a",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Tigania Central",
+        "description":"Tigania Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8547b7af-9f47-451e-bad6-dac598ed22e5",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Tigania East",
+        "description":"Tigania East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "80db67a4-58a7-40cb-ba8e-2cc0fee66846",
+    "fields": {
+      "counties_id":"033664bf-a6ce-41c7-9bda-da0c99e8954f",
+        "division_code":"",
+        "title":"Tigania West",
+        "description":"Tigania West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "10e052da-c7ba-47c2-96da-8deda3cd4945",
+    "fields": {
+      "counties_id":"c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+        "division_code":"",
+        "title":"Igambang'ombe",
+        "description":"Igambang'ombe",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8f574380-1d71-4c05-964f-fa85f00ca818",
+    "fields": {
+      "counties_id":"c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+        "division_code":"",
+        "title":"Maara",
+        "description":"Maara",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f19e4024-b910-4e2c-b099-5ebca644182e",
+    "fields": {
+      "counties_id":"c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+        "division_code":"",
+        "title":"Meru South",
+        "description":"Meru South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3df5b1ac-75d3-4240-84d2-fab5145c4cae",
+    "fields": {
+      "counties_id":"c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+        "division_code":"",
+        "title":"Tharaka North",
+        "description":"Tharaka North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "229a8001-d606-48f9-8bd6-ab2ea461fa1a",
+    "fields": {
+      "counties_id":"c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+        "division_code":"",
+        "title":"Tharaka South",
+        "description":"Tharaka South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "da8cacc8-1369-4a9e-8bc3-70efe33fa0fd",
+    "fields": {
+      "counties_id":"849840bd-f62b-4a13-916f-143a3577a453",
+        "division_code":"",
+        "title":"Embu East",
+        "description":"Embu East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "42742a1a-ce33-4ca4-89bb-60bdbef9fd07",
+    "fields": {
+      "counties_id":"849840bd-f62b-4a13-916f-143a3577a453",
+        "division_code":"",
+        "title":"Embu North",
+        "description":"Embu North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "bb11d396-de2c-47aa-9c58-ac4ad2868c72",
+    "fields": {
+      "counties_id":"849840bd-f62b-4a13-916f-143a3577a453",
+        "division_code":"",
+        "title":"Embu West",
+        "description":"Embu West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5ea79d5b-e5b7-4660-bb1f-07ce1ea7324f",
+    "fields": {
+      "counties_id":"849840bd-f62b-4a13-916f-143a3577a453",
+        "division_code":"",
+        "title":"Mbeere South",
+        "description":"Mbeere South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8fe854e9-a445-480a-820d-538a5bc185e8",
+    "fields": {
+      "counties_id":"849840bd-f62b-4a13-916f-143a3577a453",
+        "division_code":"",
+        "title":"Mbeere North",
+        "description":"Mbeere North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b338d55b-33fc-4711-a82e-b30eff641643",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Ikutha",
+        "description":"Ikutha",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e4d4070f-bc5d-4eee-aaa5-0e27e14c8b94",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Katulani",
+        "description":"Katulani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5ce1c813-ddb0-4b93-84aa-cb8ec4de5fb2",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Kisasi",
+        "description":"Kisasi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "165e2286-5ca0-4e1a-aa1a-82abf667d72a",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Kitui Central",
+        "description":"Kitui Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "30922c64-3595-42ac-8783-f8e79f13dfc0",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Kitui West",
+        "description":"Kitui West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "73e2a75d-0e63-4264-9acd-4a2faa76f80b",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Kyuso",
+        "description":"Kyuso",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4a63ef8f-9137-4ce3-b699-9befa2f61f12",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Lower Yatta",
+        "description":"Lower Yatta",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b0f7dc46-a0c2-4115-aa89-bc0998dfdd8e",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Matinyani",
+        "description":"Matinyani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a8ca6499-dd3a-45f2-920f-6f760cda84ca",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Migwani",
+        "description":"Migwani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "1cf53b41-4133-40ff-a5ba-4d8da52c9b99",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Mumoni",
+        "description":"Mumoni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "36c21484-dca9-47ea-8abb-e9b8774899be",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Mutitu",
+        "description":"Mutitu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "602e95a2-eb7e-4bc4-be41-20c254e8d1c4",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Mutitu North",
+        "description":"Mutitu North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "cc752e0a-6883-4f9a-b1d8-2e356d3e026b",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Mutomo",
+        "description":"Mutomo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "30ca0f06-970e-4d4e-9dfd-c58300054080",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Mwingi Central",
+        "description":"Mwingi Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "50af09d0-a6d9-40bd-8864-8a3dc793160d",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Mwingi East",
+        "description":"Mwingi East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "705995ce-8caa-445e-ada4-7ba7fb92d3ff",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Nzambani",
+        "description":"Nzambani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ebf9c58e-cea6-49ef-8e3e-b646cf625e1c",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Thagicu",
+        "description":"Thagicu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0aa6522d-ddc7-4d39-88bb-c7abc839f641",
+    "fields": {
+      "counties_id":"b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+        "division_code":"",
+        "title":"Tseikuru",
+        "description":"Tseikuru",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c647ab87-334e-44b3-88c8-a0cb673d536a",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Athi River",
+        "description":"Athi River",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b3a85943-3212-471a-8b7e-bdbaf0b31b8a",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Kalama",
+        "description":"Kalama",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8f73b938-8dad-4fdf-8339-09b41e37c01e",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Kangundo",
+        "description":"Kangundo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "05945bf4-7ac8-460c-992f-607338dfd6a1",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Kathiani",
+        "description":"Kathiani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "48f39cba-4942-4f8d-af78-36ff49afbdc2",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Machakos",
+        "description":"Machakos",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e119f75c-1688-4ba4-a48a-940b81ba8c3c",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Masinga",
+        "description":"Masinga",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "bd155471-dde8-4efe-a6e9-855d0d2135fc",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Matungulu",
+        "description":"Matungulu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8c65551a-2ba1-477e-9b10-887afd500f5b",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Mwala",
+        "description":"Mwala",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5ca0dc19-d23f-484b-b43d-063dc39a9645",
+    "fields": {
+      "counties_id":"233a1db0-d194-47f6-bdf2-4f84aef050df",
+        "division_code":"",
+        "title":"Yatta",
+        "description":"Yatta",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "d47f5202-826d-4f44-8b0b-3490737efc86",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Kathonzweni",
+        "description":"Kathonzweni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ab756b0e-2323-4391-8e16-66c6ee6f79c9",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Kibwezi",
+        "description":"Kibwezi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3776a411-c166-4333-a691-b0d20277eb1d",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Kilungu",
+        "description":"Kilungu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "aaa8d0c4-937d-4b3e-be2c-dc879d9c10ed",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Makindu",
+        "description":"makindu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "36dbc11c-ddb9-4118-99da-23ffa3162aa2",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Makueni",
+        "description":"Makueni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "da5b01c6-6d3c-443d-85c3-1bfb520b18d5",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Mbooni East",
+        "description":"Mbooni East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5ccf8d60-e706-452e-b025-fc54b705b00e",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Mbooni West",
+        "description":"Mbooni West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3c56fdf8-010b-435f-90cf-21a2884645e0",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Mukaa",
+        "description":"Mukaa",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ffb21f65-2179-4855-b182-335ab69ed285",
+    "fields": {
+      "counties_id":"8b147896-50db-46c2-a487-f8a9654ae52f",
+        "division_code":"",
+        "title":"Nzaui",
+        "description":"Nzaui",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "5dfd5e6d-54fb-49b1-b43c-59eda9f560f5",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Kinangop",
+        "description":"Kinangop",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b85a169b-9060-4c23-a4d3-967cdd809d01",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Nyandarua South",
+        "description":"Nyandarua South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4a83438c-b5a0-49a3-afef-23b38dc84895",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Mirangine",
+        "description":"Mirangine",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f7182949-d357-4019-bd17-37e15ebe7bdd",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Kipipiri",
+        "description":"Kipipiri",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b668a091-1f7d-47a0-9689-e0f200a37e39",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Nyandarua Central",
+        "description":"Nyandarua Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f68ec4a6-449a-48ca-aff1-3b539bfd8315",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Nyandarua West",
+        "description":"Nyandarua West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ad31bfe5-44b6-483f-9df2-c83175724abf",
+    "fields": {
+      "counties_id":"a9d61a90-e7dc-4931-815e-cb1951ddca92",
+        "division_code":"",
+        "title":"Nyandarua North",
+        "description":"Nyandarua North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "78d345bd-3262-4b3c-bfa9-6c88703c0240",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Kieni East",
+        "description":"Kieni East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "91cfa905-f9ab-45f7-9891-d5771397d06a",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Kieni West",
+        "description":"Kieni West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6e99df2c-460b-4532-a43d-5fc0ee9fd2e5",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Mathira East",
+        "description":"Mathira East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "15784899-e734-4023-9b96-0ea6cb212b06",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Mathira West",
+        "description":"Mathira West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9dca7866-e077-4a4e-a09a-fb725d427f24",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Nyeri South",
+        "description":"Nyeri South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9bdd9de5-1706-425b-a300-a433296eb227",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Mukurwe-ini",
+        "description":"Mukurwe-ini",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6636f577-f59c-49a7-9b06-4e222a3d2729",
+    "fields": {
+      "counties_id":"1300dfd4-8b37-489d-82d5-cf97ff25125a",
+        "division_code":"",
+        "title":"Nyeri Central",
+        "description":"Nyeri Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a9b57c2e-e97c-406f-8e20-09f8122a9f05",
+    "fields": {
+      "counties_id":"55b7e10a-da30-446c-a2be-e6c92f86bc89",
+        "division_code":"",
+        "title":"Kirinyaga Central",
+        "description":"Kirinyaga Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6a2311ab-8011-4daf-9fb6-26297e932ab8",
+    "fields": {
+      "counties_id":"55b7e10a-da30-446c-a2be-e6c92f86bc89",
+        "division_code":"",
+        "title":"Kirinyaga East",
+        "description":"Kirinyaga East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d3a9f06c-bea0-4a53-8c0d-f6996d2b869d",
+    "fields": {
+      "counties_id":"55b7e10a-da30-446c-a2be-e6c92f86bc89",
+        "division_code":"",
+        "title":"Kirinyaga West",
+        "description":"Kirinyaga West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2bedc46c-729e-4129-97eb-58a0bbd0b3f2",
+    "fields": {
+      "counties_id":"55b7e10a-da30-446c-a2be-e6c92f86bc89",
+        "division_code":"",
+        "title":"Mwea East",
+        "description":"Mwea East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c71a9e60-07c0-4b8d-9c06-5b720150cd11",
+    "fields": {
+      "counties_id":"55b7e10a-da30-446c-a2be-e6c92f86bc89",
+        "division_code":"",
+        "title":"Mwea West",
+        "description":"Mwea West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "7fb7e91b-ca3d-4831-86d4-e894c62a8ff0",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Murang'a East",
+        "description":"Murang'a East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "eb7c5da4-5cc4-4b64-95bb-80de6ba463b2",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Kangema",
+        "description":"Kangema",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "242eeba3-d911-4ee8-9d73-77ef742934be",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Mathioya",
+        "description":"Mathioya",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "63ece84f-f460-48a4-b0c4-fd1c0f9f0f67",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Kahuro",
+        "description":"Kahuro",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e93d1290-0576-4be9-afe3-3331d4399431",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Murang'a South",
+        "description":"Murang'a South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ef7dcad6-59da-409c-9b5c-521080609402",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Gatanga",
+        "description":"Gatanga",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Kigumo",
+        "description":"Kigumo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f2dbadaf-7e36-4245-8593-6f400f245153",
+    "fields": {
+      "counties_id":"d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+        "division_code":"",
+        "title":"Kandara",
+        "description":"Kandara",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "ea8b64d5-25c7-4211-8d7d-d5b9eba96c38",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Gatundu North",
+        "description":"Gatundu North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "08a982fb-71f3-430d-8c49-182a7dcf970a",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Gatundu South",
+        "description":"Gatundu South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b2ab6f50-292b-4eaa-bb8b-f0f09c2b1838",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Githunguri",
+        "description":"Githunguri",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "609afff1-d25e-4568-9246-e00842cc6b03",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Juja",
+        "description":"Juja",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a733d6e9-0c62-48e5-bfdf-6fdf343a5919",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Kabete",
+        "description":"Kabete",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3103e863-25df-4ab8-b5b7-148fa9496a7d",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Kiambaa",
+        "description":"Kiambaa",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2aa17b1b-be7f-4abd-8d86-9dd386e74a92",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Kiambu",
+        "description":"Kiambu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "245f8f3c-870d-47e4-a3ea-a7989855f600",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Kikuyu",
+        "description":"Kikuyu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4e002fe6-535b-461d-8886-582c31981f81",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Lari",
+        "description":"Lari",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f09e98ed-094a-4b75-9fa1-3f01931cc6b0",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Limuru",
+        "description":"Limuru",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "51c0f129-1cb6-46ed-b0eb-8783200e93c1",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Ruiru",
+        "description":"Ruiru",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "77053cc6-9c60-4a73-adf4-6a58796652e9",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Thika East",
+        "description":"Thika East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "a65d8a70-63c8-40c2-85fc-0a5499ae6769",
+    "fields": {
+      "counties_id":"dc64638a-3ee7-4a81-84e1-62d689e06796",
+        "division_code":"",
+        "title":"Thika West",
+        "description":"Thika West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "27f775e7-9976-4a43-8b3d-3d9f8d04782f",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Kibish",
+        "description":"Kibish",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a98ae9bc-b680-44a1-8236-9d9558fbb8dc",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Loima",
+        "description":"Loima",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Turkana Central",
+        "description":"Turkana Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d6b715a4-8161-4761-8689-1e791484aa2b",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Turkana East",
+        "description":"Turkana East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Turkana North",
+        "description":"Turkana North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "bdf4e21a-ddd7-4938-9b93-8c64b09f9a49",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Turkana South",
+        "description":"Turkana South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5d5fdd30-f06b-4b03-b7e6-a6f63af5395b",
+    "fields": {
+      "counties_id":"846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+        "division_code":"",
+        "title":"Turkana West",
+        "description":"Turkana West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "7e98f427-758e-4a3f-8158-27b35ec67c36",
+    "fields": {
+      "counties_id":"c52b27a3-9c81-459f-a08d-073194417ed8",
+        "division_code":"",
+        "title":"Kipkomo",
+        "description":"Kipkomo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4291a607-3731-4c22-aa57-3e7e99631969",
+    "fields": {
+      "counties_id":"c52b27a3-9c81-459f-a08d-073194417ed8",
+        "division_code":"",
+        "title":"Pokot Central",
+        "description":"Pokot Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a1c78cda-f0c4-4cd7-9554-fa2b048d3315",
+    "fields": {
+      "counties_id":"c52b27a3-9c81-459f-a08d-073194417ed8",
+        "division_code":"",
+        "title":"Pokot North",
+        "description":"Pokot North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "92c479e2-8b1d-45af-84e5-9f6befbb92aa",
+    "fields": {
+      "counties_id":"c52b27a3-9c81-459f-a08d-073194417ed8",
+        "division_code":"",
+        "title":"Pokot South",
+        "description":"Pokot South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a46bea3c-a5bc-4c81-aece-f4ce821b3644",
+    "fields": {
+      "counties_id":"c52b27a3-9c81-459f-a08d-073194417ed8",
+        "division_code":"",
+        "title":"West Pokot",
+        "description":"West Pokot",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "b6f0afff-f32a-4d48-9753-899090b6a520",
+    "fields": {
+      "counties_id":"7a85e99f-bf45-4ddd-8b0d-0fa08717f7f3",
+        "division_code":"",
+        "title":"Samburu Central",
+        "description":"Samburu Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "bf8992b7-c734-4cf6-a5e9-ce5285cd2911",
+    "fields": {
+      "counties_id":"7a85e99f-bf45-4ddd-8b0d-0fa08717f7f3",
+        "division_code":"",
+        "title":"Samburu East",
+        "description":"Samburu East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c7090ac9-3733-45fa-8d4d-ca7c125aabf7",
+    "fields": {
+      "counties_id":"7a85e99f-bf45-4ddd-8b0d-0fa08717f7f3",
+        "division_code":"",
+        "title":"Samburu North",
+        "description":"Samburu North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "cd6a9087-b994-4139-89f0-054d8d5f45c1",
+    "fields": {
+      "counties_id":"f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+        "division_code":"",
+        "title":"Trans Nzoia West",
+        "description":"Trans Nzoia West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2b699c7b-d469-48cc-9829-6ac3c40cf17c",
+    "fields": {
+      "counties_id":"f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+        "division_code":"",
+        "title":"Trans Nzoia East",
+        "description":"Trans Nzoia East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3910c5a5-8502-4bf8-8362-081319dda184",
+    "fields": {
+      "counties_id":"f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+        "division_code":"",
+        "title":"Kwanza",
+        "description":"Kwanza",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "80acf681-6275-446d-b957-942e281c6bbc",
+    "fields": {
+      "counties_id":"f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+        "division_code":"",
+        "title":"Endebess",
+        "description":"Endebess",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "22f7cdbf-37a1-4d77-a0ae-4e74227fa3f5",
+    "fields": {
+      "counties_id":"f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+        "division_code":"",
+        "title":"Kiminini",
+        "description":"Kiminini",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "6d50dc4a-65fc-4bd7-989d-b4d6451e908b",
+    "fields": {
+      "counties_id":"2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+        "division_code":"",
+        "title":"Ainabkoi",
+        "description":"Ainabkoi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "cbea320d-e009-49a6-a455-75830d8da09e",
+    "fields": {
+      "counties_id":"2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+        "division_code":"",
+        "title":"Kapseret",
+        "description":"Kapseret",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "31360b87-8f44-42a8-8a13-ff84caea3472",
+    "fields": {
+      "counties_id":"2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+        "division_code":"",
+        "title":"Kesses",
+        "description":"Kesses",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0b5a6c9c-f5a3-44b9-9bda-bbc1b99a38a5",
+    "fields": {
+      "counties_id":"2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+        "division_code":"",
+        "title":"Moiben",
+        "description":"Moiben",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "effb6b8b-361f-4a02-beec-e84ad99980b1",
+    "fields": {
+      "counties_id":"2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+        "division_code":"",
+        "title":"Soy",
+        "description":"Soy",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+        "division_code":"",
+        "title":"Turbo",
+        "description":"Turbo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"a941ae5e-b8b6-4663-9aeb-b0ca9899e4e4",
+        "division_code":"",
+        "title":"Keiyo North",
+        "description":"Keiyo North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"a941ae5e-b8b6-4663-9aeb-b0ca9899e4e4",
+        "division_code":"",
+        "title":"Keiyo South",
+        "description":"Keiyo South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "800bfe4f-9aa8-4853-ba7a-6b62846242f5",
+    "fields": {
+      "counties_id":"a941ae5e-b8b6-4663-9aeb-b0ca9899e4e4",
+        "division_code":"",
+        "title":"Marakwet East",
+        "description":"Marakwet East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "304ab869-33ce-4456-ba01-091b77ae35d2",
+    "fields": {
+      "counties_id":"a941ae5e-b8b6-4663-9aeb-b0ca9899e4e4",
+        "division_code":"",
+        "title":"Marakwet West",
+        "description":"Marakwet West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "caa63865-f8dc-4775-8907-26b478e9abb3",
+    "fields": {
+      "counties_id":"9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+        "division_code":"",
+        "title":"Chesumei",
+        "description":"Chesumei",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e7072989-ce9e-4913-914f-cfd99210f9cd",
+    "fields": {
+      "counties_id":"9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+        "division_code":"",
+        "title":"Nandi Central",
+        "description":"Nandi Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "40b23a18-1196-4d60-a2de-f79743abbd59",
+    "fields": {
+      "counties_id":"9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+        "division_code":"",
+        "title":"Nandi East",
+        "description":"Nondi East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9d9d6537-a3ad-40cf-a1c9-fa78f49340d3",
+    "fields": {
+      "counties_id":"9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+        "division_code":"",
+        "title":"Nandi North",
+        "description":"nandi North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "457bae50-b0e1-47ab-a9a0-980fc035c7c5",
+    "fields": {
+      "counties_id":"9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+        "division_code":"",
+        "title":"Nandi South",
+        "description":"Nandi South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "81ff4998-61f9-451b-8038-93240421d0bc",
+    "fields": {
+      "counties_id":"9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+        "division_code":"",
+        "title":"Tinderet",
+        "description":"Tinderet",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "dd0af6d9-2749-4dcc-9c84-624f4b424f61",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"Baringo Central",
+        "description":"Baringo Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "ba29999c-061a-4ffc-8317-7525cca5c4bc",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"Baringo North",
+        "description":"Baringo North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "202922cf-c718-4a94-93aa-5acf038bdd65",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"East Pokot",
+        "description":"East Pokot",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "464deac0-08ca-4af6-84dd-aa149ef31113",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"Koibatek",
+        "description":"Koibatek",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "002aa98a-6a13-41ea-99ab-718988c14f91",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"Marigat",
+        "description":"Marigat",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "50bb3e1a-665e-4f19-916e-9d2c898ea6e7",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"Mogotio",
+        "description":"Mogotio",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "70078a66-5e01-4fbd-99ca-476891a7a9e3",
+    "fields": {
+      "counties_id":"2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+        "division_code":"",
+        "title":"Tiaty East",
+        "description":"Tiaty East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "74a07c4f-f3c9-45da-932e-b3612327a050",
+    "fields": {
+      "counties_id":"2db599b0-7bb9-4160-9665-2f3c16daa890",
+        "division_code":"",
+        "title":"Laikipia Central",
+        "description":"Laikipia Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e5162c1e-614d-468e-9b72-2c815eb492f5",
+    "fields": {
+      "counties_id":"2db599b0-7bb9-4160-9665-2f3c16daa890",
+        "division_code":"",
+        "title":"Laikipia East",
+        "description":"Laikipia East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "99b43fa2-f412-4b91-aec2-fd0d45e427d6",
+    "fields": {
+      "counties_id":"2db599b0-7bb9-4160-9665-2f3c16daa890",
+        "division_code":"",
+        "title":"Laikipia North",
+        "description":"Laikipia North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8e35e41a-7ef6-4e51-8bbf-d32179b74a7d",
+    "fields": {
+      "counties_id":"2db599b0-7bb9-4160-9665-2f3c16daa890",
+        "division_code":"",
+        "title":"Laikipia West",
+        "description":"Laikipia West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "27b11f17-b723-442e-8cff-28da40346d61",
+    "fields": {
+      "counties_id":"2db599b0-7bb9-4160-9665-2f3c16daa890",
+        "division_code":"",
+        "title":"Nyahururu",
+        "description":"Nyahururu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "b109b17c-994b-428a-bc3d-3d7358aef8c9",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Gilgil",
+        "description":"Gilgil",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "10bd0bf3-8203-46fa-b8ba-4e6473448f0b",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Kuresoi North",
+        "description":"Kuresoi North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "9f1d1e25-423e-4fe1-8895-e6b8d5a9b413",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Kuresoi South",
+        "description":"Kuresoi South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "a8f2c9bf-04a2-430c-8598-d70a83f7b138",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Molo",
+        "description":"Molo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "fd973c0e-bef6-432e-ac74-6cb86e4a66be",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Naivasha",
+        "description":"Naivasha",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "793dbd65-bccc-4d38-8e12-67d94f06bceb",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Nakuru East",
+        "description":"Nakuru East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "5bb7cd52-f0b8-40b9-83d7-50edcf5387bb",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Nakuru North",
+        "description":"Nakuru North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "6201f700-6fc2-4aab-92a0-657ff4c129e3",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Nakuru West",
+        "description":"Nakuru West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "e3df257c-7337-4f18-b795-d4b9e71c05fa",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Njoro",
+        "description":"Njoro",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "84647e49-2117-4dae-aaf6-38cc37322ec4",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Rongai",
+        "description":"Rongai",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "5010152a-8137-46c3-ae61-2b3183d51304",
+    "fields": {
+      "counties_id":"d3243cbb-2375-4e41-a190-8d636691506d",
+        "division_code":"",
+        "title":"Subukia",
+        "description":"Subukia",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "f9f0ee08-4c4f-44a3-9c5d-2e040b781825",
+    "fields": {
+      "counties_id":"21553394-7e87-406c-b49f-abbb7eec5509",
+        "division_code":"",
+        "title":"",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "a0b79d86-e79d-4e51-b4e4-a16ea3851e04",
+    "fields": {
+      "counties_id":"21553394-7e87-406c-b49f-abbb7eec5509",
+        "division_code":"",
+        "title":"Narok East",
+        "description":"Narok East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "90a8c65f-5599-46e4-82c5-e09396f82eca",
+    "fields": {
+      "counties_id":"21553394-7e87-406c-b49f-abbb7eec5509",
+        "division_code":"",
+        "title":"Narok North",
+        "description":"Narok North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d8419f32-6eca-4392-8f7f-fc29762c84bb",
+    "fields": {
+      "counties_id":"21553394-7e87-406c-b49f-abbb7eec5509",
+        "division_code":"",
+        "title":"Narok West",
+        "description":"Narok West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "07cb1a9c-5fd7-44f2-b2c9-a8362a06855d",
+    "fields": {
+      "counties_id":"21553394-7e87-406c-b49f-abbb7eec5509",
+        "division_code":"",
+        "title":"Trans Mara East",
+        "description":"Trans Mara East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4c8fd09e-fe53-4ebc-ae37-a508a1236cce",
+    "fields": {
+      "counties_id":"21553394-7e87-406c-b49f-abbb7eec5509",
+        "division_code":"",
+        "title":"Trans Mara West",
+        "description":"Trans Mara West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b0378aad-876b-4ae1-8608-e8d59b096f54",
+    "fields": {
+      "counties_id":"bdcfce0f-311d-4eba-ba3e-201faf540788",
+        "division_code":"",
+        "title":"Kajiado Central",
+        "description":"Kajiado Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "def1a7ed-7ac9-4564-a1d2-2a9ae2180f39",
+    "fields": {
+      "counties_id":"bdcfce0f-311d-4eba-ba3e-201faf540788",
+        "division_code":"",
+        "title":"Kajiado North",
+        "description":"Kajiado North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ddeb6f08-1acd-4b99-9337-d01940186adf",
+    "fields": {
+      "counties_id":"bdcfce0f-311d-4eba-ba3e-201faf540788",
+        "division_code":"",
+        "title":"Kajiado West",
+        "description":"Kajiado West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "8913d1b0-5bd2-465e-a814-75eb02ebdabd",
+    "fields": {
+      "counties_id":"bdcfce0f-311d-4eba-ba3e-201faf540788",
+        "division_code":"",
+        "title":"Isinya",
+        "description":"Isinya",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2fac7c59-635f-4a13-8fb4-f646f48c25d2",
+    "fields": {
+      "counties_id":"bdcfce0f-311d-4eba-ba3e-201faf540788",
+        "division_code":"",
+        "title":"Loitokitok",
+        "description":"Loitokitok",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e60478f5-82ef-4f0e-8ea2-abadce2cd451",
+    "fields": {
+      "counties_id":"bdcfce0f-311d-4eba-ba3e-201faf540788",
+        "division_code":"",
+        "title":"Mashuuru",
+        "description":"Mashuuru",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "21b4ddcd-3267-4d29-af2c-e4ce7d064ab0",
+    "fields": {
+      "counties_id":"16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+        "division_code":"",
+        "title":"Belgut",
+        "description":"Belgut",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "daeadb70-6c74-4659-a1c9-ced8a6335c03",
+    "fields": {
+      "counties_id":"16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+        "division_code":"",
+        "title":"Bureti",
+        "description":"Bureti",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "80940a95-8802-4eac-9418-f8b0fd2fab08",
+    "fields": {
+      "counties_id":"16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+        "division_code":"",
+        "title":"Kericho East",
+        "description":"Kericho East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3b8df490-fb92-46f8-a0d8-390c2084d606",
+    "fields": {
+      "counties_id":"16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+        "division_code":"",
+        "title":"Kipkelion",
+        "description":"Kipkelion",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "564c961f-9ec3-461a-bfd9-f5f99c9e532d",
+    "fields": {
+      "counties_id":"16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+        "division_code":"",
+        "title":"Londiani",
+        "description":"Londiani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5279a133-acec-4ddb-b0a0-444aca31dd37",
+    "fields": {
+      "counties_id":"16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+        "division_code":"",
+        "title":" Soin Sigowet",
+        "description":" Soin Sigowet",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "1bf47f77-4ace-4c63-ba95-4fed7b5bc8d6",
+    "fields": {
+      "counties_id":"e8d8655e-77d9-4771-a74c-cf990c567ed9",
+        "division_code":"",
+        "title":"Bomet East",
+        "description":"Bomet East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "18cb1bf6-17a5-4d27-9687-7b652465d9bb",
+    "fields": {
+      "counties_id":"e8d8655e-77d9-4771-a74c-cf990c567ed9",
+        "division_code":"",
+        "title":"Chepalungu",
+        "description":"Chepalungu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0d909dae-5194-4da6-a57e-27397c0f85e0",
+    "fields": {
+      "counties_id":"e8d8655e-77d9-4771-a74c-cf990c567ed9",
+        "division_code":"",
+        "title":"Konoin",
+        "description":"Konoin",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "1b7dffeb-461d-4dd2-8335-3996f12b2488",
+    "fields": {
+      "counties_id":"e8d8655e-77d9-4771-a74c-cf990c567ed9",
+        "division_code":"",
+        "title":"Sotik",
+        "description":"Sotik",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8cd48e0f-9369-4dff-936e-2599631cf22d",
+    "fields": {
+      "counties_id":"e8d8655e-77d9-4771-a74c-cf990c567ed9",
+        "division_code":"",
+        "title":"Bomet Central",
+        "description":"Bomet Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "916ab9e3-f91b-4f30-961c-41adb290ebf0",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Butere",
+        "description":"Butere",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "52508306-e79c-4195-a88d-ef1db43bfe37",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Kakamega Central",
+        "description":"Kakamega Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6c55af08-79c3-4061-a367-a58c75e9ff81",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Kakamega East",
+        "description":"Kakamega East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "20e3c682-d942-4e90-83e1-f7ff68018700",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Kakamega North",
+        "description":"Kakamega North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "14f36188-26b1-413d-9df2-936d51914369",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Kakamega South",
+        "description":"Kakamega South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "184b7e55-1fa2-45ff-b1a8-d7369ccf69ee",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Khwisero",
+        "description":"Khwisero",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "1b866fd3-6e3c-49cf-9a84-ec620bfd9a8c",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Likuyani",
+        "description":"Likuyani",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c234928b-b6f6-43f7-aca8-dd8eed3bc1ee",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Lugari",
+        "description":"Lugari",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d4097885-cdcd-4ead-93ff-4edf7e971082",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Matete",
+        "description":"Matete",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "7781166e-d8de-4e2b-aef0-58ba85dda145",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Matungu",
+        "description":"Matungu",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "63ac7fe8-9601-4304-b6dd-dd200044712e",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Mumias East",
+        "description":"Mumias East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ed042a87-5f91-4b69-b907-be7e23ec1929",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Mumias West",
+        "description":"Mumias West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "52a69321-b8df-478a-92d5-10b0dd7feedc",
+    "fields": {
+      "counties_id":"c11afe90-1f48-4107-918c-31574167cd53",
+        "division_code":"",
+        "title":"Navakholo",
+        "description":"Navakholo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "5f917bd1-9a69-43c9-9585-f02f5d06901e",
+    "fields": {
+      "counties_id":"a17ee622-e633-49e5-a8c1-f557e431f019",
+        "division_code":"",
+        "title":"Emuhaya",
+        "description":"Emuhaya",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "51de6121-a029-4a43-8e70-b0329cfaddd6",
+    "fields": {
+      "counties_id":"a17ee622-e633-49e5-a8c1-f557e431f019",
+        "division_code":"",
+        "title":"Vihiga",
+        "description":"Vihiga",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4a7774b0-45e6-46fa-9930-fe13d3b3360f",
+    "fields": {
+      "counties_id":"a17ee622-e633-49e5-a8c1-f557e431f019",
+        "division_code":"",
+        "title":"Sabatia",
+        "description":"Sabatia",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "820976ad-c1c4-46aa-ba8c-d1ca63971a3c",
+    "fields": {
+      "counties_id":"a17ee622-e633-49e5-a8c1-f557e431f019",
+        "division_code":"",
+        "title":"Luanda",
+        "description":"Luanda",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c2cebb53-ee66-4e5d-a6c0-90737bc0c2db",
+    "fields": {
+      "counties_id":"a17ee622-e633-49e5-a8c1-f557e431f019",
+        "division_code":"",
+        "title":"Hamisi",
+        "description":"Hamisi",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "3e76579f-aa2c-48bf-b4f3-14c11a6bc952",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Bumula",
+        "description":"Bumula",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e11b3aa1-49ec-4ee6-8779-44985e5a46e0",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Bungoma Central",
+        "description":"Bungoma Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "7148bd1e-a975-47ef-84ee-f08ae57947ef",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Bungoma East",
+        "description":"Bungoma East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4dfe37f5-7b89-48cb-abd4-b3ebc7d06e3a",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Bungoma North",
+        "description":"Bungoma North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "be5c8f87-d808-4ba0-b40b-0a21dee43372",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Bungoma South",
+        "description":"Bungoma South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0c6c3e1e-bf0b-4be0-a8ba-530439c25952",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Cheptais",
+        "description":"Cheptais",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "5884f8ae-059e-4db6-8121-414fe217223d",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Kimilili-Bungoma",
+        "description":"Kimilili-Bungoma",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "119b0727-0932-429a-8d64-f438466b41b5",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Mt. Elgon",
+        "description":"Mt. Elgon",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e757a315-cee1-4da1-b1f6-cfcd81f6fc8f",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Bungoma West",
+        "description":"Bungoma West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e8064274-886f-4e0e-b929-7ebe1765f753",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Tongaren",
+        "description":"Tongaren",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "cad5fc97-14c8-43e6-86ff-9e3378ce656d",
+    "fields": {
+      "counties_id":"a02057bb-40a3-4041-b5fc-618dacd97858",
+        "division_code":"",
+        "title":"Webuye West",
+        "description":"Webuye West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "9a103240-f7ef-4440-b910-79e0c12e8b5f",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Bunyala",
+        "description":"Bunyala",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0460e5c5-49a3-497d-9323-b4a1d2d25844",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Busia",
+        "description":"Busia",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "bf0986a1-d1eb-448d-9d80-e89c94a1e56a",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Butula",
+        "description":"Butula",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "61a75dd7-f08d-4e77-a0a5-c4e201dcd8ed",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Nambale",
+        "description":"Nambale",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8a60c915-8c71-429a-a94e-0b0dac5a9d44",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Samia",
+        "description":"Samia",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ae032501-777f-431c-9d7a-30b0f44d5b24",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Teso North",
+        "description":"Teso North",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "51130d60-a815-4928-bb86-1cd4ddd0ff38",
+    "fields": {
+      "counties_id":"6920023d-4f77-457f-9445-dba4bb292071",
+        "division_code":"",
+        "title":"Teso South",
+        "description":"Teso South",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "b7ec88f1-a273-494d-93ed-55cc9ad1a333",
+    "fields": {
+      "counties_id":"581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+        "division_code":"",
+        "title":"Siaya",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "fe2cf2b3-9bb1-48cd-94d5-c9f086a34f10",
+    "fields": {
+      "counties_id":"581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+        "division_code":"",
+        "title":"Gem",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ca5b0ff1-805d-470b-a684-db28395d5c5a",
+    "fields": {
+      "counties_id":"581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+        "division_code":"",
+        "title":"Ugenya",
+        "description":"Ugenya",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b98c38f8-4350-4865-ad33-68e0f8ae327c",
+    "fields": {
+      "counties_id":"581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+        "division_code":"",
+        "title":"Ugunja",
+        "description":"Ugunja",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "7c603829-6163-4774-995f-7633a8e7ac11",
+    "fields": {
+      "counties_id":"581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+        "division_code":"",
+        "title":"Bondo",
+        "description":"Bondo",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "76662a64-e41a-475c-a4b7-4e1fe4694790",
+    "fields": {
+      "counties_id":"581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+        "division_code":"",
+        "title":"Rarieda",
+        "description":"Rarieda",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "76041474-01be-47d6-b120-933feaeb1dd2",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Kisumu East",
+        "description":"Kisumu East",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "cf9511d9-0615-4efc-a0a9-0cbc8bf6d616",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Kisumu Central",
+        "description":"Kisumu Central",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "29b178c0-81fc-4980-9446-2488409a6f43",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Kisumu West",
+        "description":"Kisumu West",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "51c0e8c2-0bb1-425f-8631-cb4d0841371f",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Seme",
+        "description":"Seme",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "54a2acd9-fff1-4298-ac1e-a3ece64052b4",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Muhoroni",
+        "description":"Muhoroni",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4d1a72bd-298e-4ed7-b8f1-1dc5f04bbad0",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Nyando",
+        "description":"Nyando",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "0d107a96-8416-46d6-b64c-313e48e13210",
+    "fields": {
+      "counties_id":"cf07a928-f8ac-452e-a199-3a2399b619d5",
+        "division_code":"",
+        "title":"Nyakach",
+        "description":"Nyakach",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Divisions",
+    "pk": "0e2f24f3-756b-461e-8d90-0031cd2952e8",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Homa Bay",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "811699ac-a0c6-44dc-b244-831e699baf4b",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Ndhiwa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c34ee86a-a6e9-4bb6-ba07-470b772f076c",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Rachuonyo North",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "97ccbfc8-95f0-41cb-a397-e8da24481364",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Rachuonyo East",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "917ddcef-d029-4aad-a444-d643d5c3ecb6",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Rachuonyo South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d8e73d0b-586f-4a87-9aa9-a73306d60f62",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Rangwe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "1410a8e0-afbd-47a1-ad55-f2de506c0c35",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Suba North",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },  {
+    "model": "authentication.Divisions",
+    "pk": "acb20c54-710c-4c42-9705-cfd3d7a78be8",
+    "fields": {
+      "counties_id":"a3fc75c9-4559-4cff-9bfa-22642863db5d",
+        "division_code":"",
+        "title":"Suba South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "83113395-4e7a-4864-a8f6-60bfcd837648",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Awendo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "478bb737-9324-41b7-9935-6e90fbb10874",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Kuria East",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "19922e23-afc2-4e7e-95e8-e75463f0b900",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Kuria West",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4c723bc5-ca65-462c-b4e0-effd91753d6a",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Nyatike",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e29e0a6e-763d-4b77-ab12-ce0e5fe75e3e",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Rongo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4dd1e4bc-a688-4cc9-a508-073b91985d91",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Suna East",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "26124252-c382-44b3-b1a4-f9db9cacaa33",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Suna West",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "acd81083-a190-46d5-9180-f9556804e60b",
+    "fields": {
+      "counties_id":"7b331d27-0879-4de2-a460-6fce6dcdf775",
+        "division_code":"",
+        "title":"Uriri",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "3a7dcc5a-8d23-4250-b8ab-741b9c4e2a95",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Etago",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "467243ca-610a-42c3-99cf-0f21670a6c11",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Gucha",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a8f569bf-c7cd-4e89-8354-546e54d7aa68",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Gucha South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "832fe733-e1b7-4e33-984a-a6ee38d9be55",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Kenyenya",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "85340903-1a82-412e-b580-abfd822efc03",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Kisii Central",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "38c44637-0fcc-4255-be83-7b6a963d5408",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Kisii South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "08d98f09-1d00-4270-a50d-8dac1566ea79",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Kitutu Central",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b215ee52-c35a-4b4f-8a3b-fb05d2cdf868",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Marani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a10280ff-8e5d-42af-9de3-6402cc9be4fb",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Msaba South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "74881b4c-7044-4243-888e-20b6dfec5248",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Nyamache",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6123c161-d360-409b-8658-8be8c6173412",
+    "fields": {
+      "counties_id":"c4cd893f-5416-420a-89a1-50cbe13c1681",
+        "division_code":"",
+        "title":"Sameta",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a159a3f4-5be7-4760-b414-e6a90b516f5e",
+    "fields": {
+      "counties_id":"7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+        "division_code":"",
+        "title":"Borabu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "f76a5bf8-b2ed-4256-b821-63e0c59455cd",
+    "fields": {
+      "counties_id":"7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+        "division_code":"",
+        "title":"Manga",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "ca41c0f6-0861-402a-835d-3d67747117ea",
+    "fields": {
+      "counties_id":"7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+        "division_code":"",
+        "title":"Masaba North",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b54a1e54-d422-46bd-91e5-720b528ab870",
+    "fields": {
+      "counties_id":"7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+        "division_code":"",
+        "title":"Nyamira North",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "97d28051-af49-46d9-b874-bbc6fb180be1",
+    "fields": {
+      "counties_id":"7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+        "division_code":"",
+        "title":"Nyamira South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },  {
+    "model": "authentication.Divisions",
+    "pk": "0cd357f8-d7b2-45ef-92fd-1c29c54e78db",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Dagoretti",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "c825c89c-958d-4983-ae76-88786c891b68",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Embakasi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6f55f1b1-2981-4d34-b471-7fd942f6ef43",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Kamukunji",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4d629d4b-9061-486f-90ba-d4d2dfb7bae6",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Kasarani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "3f768dce-6666-4d2e-8f9d-f4674821ea50",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Kibra",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "06b41c03-46db-4dc1-89d9-171fa4766539",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Lang'ata",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "88f23aae-96db-422c-ad6c-07beaaaa1aa3",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Makadara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "c71e928f-ba8c-4e01-bf4e-8344635698ee",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Mathare",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "877dad65-4ebe-4fa5-aa50-4cccb848dc93",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Njiru",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Divisions",
+    "pk": "a1d05682-1d71-4088-a6c2-efb60aacd0c0",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Starehe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "87b263a4-dcf5-4640-8ec6-edd5955b934c",
+    "fields": {
+      "counties_id":"ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+        "division_code":"",
+        "title":"Westlands",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  }
+  
+]

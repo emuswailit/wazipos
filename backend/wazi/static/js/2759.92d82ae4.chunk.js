@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[2759],{2759:(e,s,a)=>{e.exports=a.p+"static/media/gilbeys-half.718c991ef70aa13e9cdd.png"}}]);

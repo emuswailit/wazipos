@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[25881],{25881:(e,r,d)=>{d.r(r),d.d(r,{ListboxWrapper:()=>s});d(65043);var l=d(70579);const s=e=>{let{children:r}=e;return(0,l.jsx)("div",{className:"w-full  border-small px-1 py-2 rounded-small border-default-200 dark:border-default-100",children:r})}}}]);
+//# sourceMappingURL=25881.cf5166a4.chunk.js.map

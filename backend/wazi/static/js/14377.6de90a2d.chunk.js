@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[14377],{14377:(t,e,a)=>{a.r(e),a.d(e,{default:()=>n});const n=(0,a(74685).vt)({baseURL:"http://127.0.0.1:8000/api/v1/",headers:{"Content-Type":"multipart/form-data",Accept:"*/*"}})}}]);
+//# sourceMappingURL=14377.6de90a2d.chunk.js.map

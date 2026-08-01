@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[22869],{22869:(e,l,a)=>{a.r(l),a.d(l,{default:()=>u});const u=[{id:1,value:"COUNTY",label:"COUNTY"},{id:1,value:"CHURCH",label:"CHURCH"},{id:2,value:"GROUP",label:"GROUP"}]}}]);
+//# sourceMappingURL=22869.c4cc846a.chunk.js.map

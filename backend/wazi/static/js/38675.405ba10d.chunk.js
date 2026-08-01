@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[38675],{38675:(e,n,t)=>{t.r(n),t.d(n,{usePageVisibility:()=>s});var i=t(65043);function s(){const[e,n]=(0,i.useState)(!document.hidden);return(0,i.useEffect)((()=>{const e=()=>{n(!document.hidden)};return document.addEventListener("visibilitychange",e),()=>{document.removeEventListener("visibilitychange",e)}}),[]),e}}}]);
+//# sourceMappingURL=38675.405ba10d.chunk.js.map

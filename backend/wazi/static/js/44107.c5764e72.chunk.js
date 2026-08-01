@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[44107],{44107:(e,s,t)=>{t.r(s),t.d(s,{UserProvider:()=>c,default:()=>d});var r=t(65043),n=t(72273),o=t(70579);const u=r.createContext();class c extends r.Component{constructor(){super(...arguments),this.state={user:(0,n.getLoggedInUser)()},this.setUser=e=>{this.setState((s=>({user:e})))}}render(){const{children:e}=this.props,{user:s}=this.state,{setUser:t}=this;return(0,o.jsx)(u.Provider,{value:{user:s,setUser:t},children:e})}}const d=u}}]);
+//# sourceMappingURL=44107.c5764e72.chunk.js.map

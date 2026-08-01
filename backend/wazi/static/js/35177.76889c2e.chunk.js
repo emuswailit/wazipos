@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[35177],{35177:(e,s,f)=>{e.exports=f.p+"static/media/Shield.7ab56fff277c91081663.svg"}}]);

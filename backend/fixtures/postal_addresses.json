@@ -1,0 +1,6142 @@
+[
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bcd5798a-112b-401b-bfe5-2044629a70ab",
+        "fields": {
+            "postal_code": "00515",
+            "post_office": "BURUBURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d0e5efab-e3c6-47a2-8fc8-6d44abb84d9b",
+        "fields": {
+            "postal_code": "00200",
+            "post_office": "CITY SQUARE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ec9fdcbb-bed4-4e7d-a6ab-df75e5abdb71",
+        "fields": {
+            "postal_code": "00610",
+            "post_office": "EASTLEIGH",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "fa29c7d8-f9a5-48ab-8f0b-7322808f0bf0",
+        "fields": {
+            "postal_code": "00521",
+            "post_office": "EMBAKASI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "366cd045-c23d-4838-ba16-cf88ba306294",
+        "fields": {
+            "postal_code": "00500",
+            "post_office": "ENTERPRISE ROAD",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "29c1fae2-e0ba-4bef-b742-e972343a4785",
+        "fields": {
+            "postal_code": "00601",
+            "post_office": "GIGIRI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "18622325-c3f8-4188-ba44-c044b53c1125",
+        "fields": {
+            "postal_code": "00100",
+            "post_office": "G.P.O NAIROBI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0fcd73c7-5352-4c76-971a-0e991af3072a",
+        "fields": {
+            "postal_code": "00101",
+            "post_office": "JAMIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0cd1377b-2dee-4d1d-9036-8f7886290c6f",
+        "fields": {
+            "postal_code": "00501",
+            "post_office": "J.K.I. AIRPORT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7942e229-6ec2-4103-aede-34d86c0acb65",
+        "fields": {
+            "postal_code": "00607",
+            "post_office": "KAMITI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e988c4a9-ee04-4e7c-9d82-9bc6698df149",
+        "fields": {
+            "postal_code": "00625",
+            "post_office": "KANGEMI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "be8d5c5c-8eb1-485b-91d2-58a341733b02",
+        "fields": {
+            "postal_code": "00502",
+            "post_office": "KAREN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "17294dfd-85c0-4ec5-bc29-e46c10c40502",
+        "fields": {
+            "postal_code": "00518",
+            "post_office": "KAYOLE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "477717a7-a99e-4f71-a82f-6fd9a0719445",
+        "fields": {
+            "postal_code": "00202",
+            "post_office": "KENYATTA N. HOSPITAL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8061b3bb-e6d6-4033-af3d-259671c1038e",
+        "fields": {
+            "postal_code": "00609",
+            "post_office": "KENYATTA UNIVERSITY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2a615191-01ff-4ae5-9ff5-8884d89eed2b",
+        "fields": {
+            "postal_code": "00509",
+            "post_office": "LANGATA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6893b555-1702-407d-b39c-11b44953ae15",
+        "fields": {
+            "postal_code": "00603",
+            "post_office": "LAVINGTON",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9cbb8b70-5ca7-4377-8245-915681d7b126",
+        "fields": {
+            "postal_code": "00604",
+            "post_office": "LOWER KABETE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "be2938fe-8952-48bc-bfde-d3a5c708aad4",
+        "fields": {
+            "postal_code": "00510",
+            "post_office": "MAKONGENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "34652fd4-a74d-46ec-922b-0ac9b61bc21e",
+        "fields": {
+            "postal_code": "00611",
+            "post_office": "MATHARE VALLEY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "df5d010e-7327-43e0-8590-ee53747a2ee7",
+        "fields": {
+            "postal_code": "00503",
+            "post_office": "MBAGATHI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cafc1b19-c7ce-4bab-bb3e-f3d8e99d8f82",
+        "fields": {
+            "postal_code": "00504",
+            "post_office": "CHUMBI RD",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f07a0b9e-8b0f-4b4d-b5e1-933e9e208eef",
+        "fields": {
+            "postal_code": "00519",
+            "post_office": "MLOLONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2b548bc5-d2c5-41f5-8264-5bee160bad90",
+        "fields": {
+            "postal_code": "00619",
+            "post_office": "MUTHAIGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f7524d3b-c4d8-4abb-beba-6e1bab1b7855",
+        "fields": {
+            "postal_code": "00600",
+            "post_office": "NGARA ROAD",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0a667088-3e9b-45db-b9d0-0b5413e420d1",
+        "fields": {
+            "postal_code": "00505",
+            "post_office": "NGONG ROAD",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e2b70743-efe5-4288-8ecd-a026f03087f7",
+        "fields": {
+            "postal_code": "00506",
+            "post_office": "NYAYO STADIUM",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "882d0a85-e632-4cf7-9785-cdc506cc82ef",
+        "fields": {
+            "postal_code": "00623",
+            "post_office": "PARKLANDS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "754747a0-3324-4e63-9af9-4cb2c028667e",
+        "fields": {
+            "postal_code": "00300",
+            "post_office": "RONALD NGALA ST.",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "49f86ef2-c046-4cd0-a451-0c87da110bbc",
+        "fields": {
+            "postal_code": "00520",
+            "post_office": "RUAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "58ac66c8-839f-426e-9cd3-82fafb4e2272",
+        "fields": {
+            "postal_code": "00618",
+            "post_office": "RUARAKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "15fa7957-2507-47d1-a24e-fc79b2546f1b",
+        "fields": {
+            "postal_code": "00606",
+            "post_office": "SARIT CENTRE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d84ab46d-ec9c-4ca2-84e8-f304a5dd5a26",
+        "fields": {
+            "postal_code": "00400",
+            "post_office": "TOM MBOYA ST",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5f8fe877-7a5f-4eda-b7f4-53d0219e7c6c",
+        "fields": {
+            "postal_code": "00517",
+            "post_office": "UHURU GARDENS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e7b863c1-ec4e-45ca-8eff-7805c16bd579",
+        "fields": {
+            "postal_code": "00605",
+            "post_office": "UTHIRU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8b29b7bd-bde0-4dfb-9c10-23f097ab6504",
+        "fields": {
+            "postal_code": "00621",
+            "post_office": "VILLAGE MARKET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "db787adc-efd1-4697-bdb7-dc93798d2a8d",
+        "fields": {
+            "postal_code": "00507",
+            "post_office": "VIWANDANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6e890eca-3c8e-49b5-b7fc-37f12e97fc1e",
+        "fields": {
+            "postal_code": "00800",
+            "post_office": "WESTLANDS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0dde2f1f-8649-4154-a4e7-d6309fc37b9d",
+        "fields": {
+            "postal_code": "00508",
+            "post_office": "YAYA TOWERS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "00533057-1fda-4e64-9cf1-f01d97565642",
+        "fields": {
+            "postal_code": "80101",
+            "post_office": "BAMBURI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ec1164d3-5e1f-4f1c-8f05-7697605ecd45",
+        "fields": {
+            "postal_code": "80102",
+            "post_office": "CHANGAMWE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bd5caf1a-6933-44a1-ae62-9cb80c334f86",
+        "fields": {
+            "postal_code": "80103",
+            "post_office": "COAST GENERAL HOSPITAL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9815f349-9507-45ce-b49d-866dc78ca20e",
+        "fields": {
+            "postal_code": "80104",
+            "post_office": "DOCKS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "17a1fdd9-13ff-40ad-ab2b-3021d317afc9",
+        "fields": {
+            "postal_code": "80122",
+            "post_office": "KENGELENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "11f7de05-4082-4368-ae1c-8e793a881a3f",
+        "fields": {
+            "postal_code": "80107",
+            "post_office": "KILINDINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "da53d1e9-9251-4c71-83dc-6b82105f2ccd",
+        "fields": {
+            "postal_code": "80110",
+            "post_office": "LIKONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f74384bd-fedb-47e9-beb9-f29e3272e67d",
+        "fields": {
+            "postal_code": "80112",
+            "post_office": "MAKUPA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6f831eb9-6379-4d9f-b8e8-d09854f8fd97",
+        "fields": {
+            "postal_code": "80106",
+            "post_office": "MKOMANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7d0e227a-e892-48e9-9599-2c66c89491f7",
+        "fields": {
+            "postal_code": "80115",
+            "post_office": "MOI AIRPORT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "269303b6-7a49-4bf8-9482-29dd109a7b2b",
+        "fields": {
+            "postal_code": "80100",
+            "post_office": "MOMBASA GPO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "86cdd31e-cb2a-45b7-8c16-8f9780f45534",
+        "fields": {
+            "postal_code": "80111",
+            "post_office": "MTONGWE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c614d4ac-914c-405f-a215-0028030f101a",
+        "fields": {
+            "postal_code": "80118",
+            "post_office": "NYALI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4b6d6ac7-fc73-4704-8b8a-0f24f65a6b2e",
+        "fields": {
+            "postal_code": "40101",
+            "post_office": "AHERO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d12f7575-73a0-4575-97ed-6f608534d909",
+        "fields": {
+            "postal_code": "30101",
+            "post_office": "AINABKOI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2f6ebc8f-a1fb-4b34-affd-62eb294714b9",
+        "fields": {
+            "postal_code": "40139",
+            "post_office": "AKALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "257d13c1-d8da-4524-98c9-ecf54a5b7ea5",
+        "fields": {
+            "postal_code": "50244",
+            "post_office": "AMAGORO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "430b95fe-ef9b-4619-8e4c-bd57afe9fc13",
+        "fields": {
+            "postal_code": "20424",
+            "post_office": "AMALO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cc944ebb-f2bf-420f-8d68-c86a56653eef",
+        "fields": {
+            "postal_code": "50403",
+            "post_office": "AMUKURA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ba6ebf62-19b6-43dc-9478-ec723ac8bc39",
+        "fields": {
+            "postal_code": "50309",
+            "post_office": "ASUMBI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d3a3def4-90a4-4e9b-9a84-6656cf7a89dd",
+        "fields": {
+            "postal_code": "00204",
+            "post_office": "ATTHI RIVER",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bf8d6302-8806-4783-8003-cafc6d0bf5ba",
+        "fields": {
+            "postal_code": "40122",
+            "post_office": "AWASI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "52469a47-00f9-46c5-8c59-c2745b626160",
+        "fields": {
+            "postal_code": "20113",
+            "post_office": "BAHATI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d4c6e53d-2551-4936-9ff8-4b72f49f26db",
+        "fields": {
+            "postal_code": "50316",
+            "post_office": "BANJA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b9b904e7-116e-484f-93d8-a32513e73aae",
+        "fields": {
+            "postal_code": "20601",
+            "post_office": "BARAGOI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "77dc66ac-5230-4dea-bc64-161e5f4538f8",
+        "fields": {
+            "postal_code": "30306",
+            "post_office": "BARATON",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6783520f-252b-4a1b-9164-48e173466fe4",
+        "fields": {
+            "postal_code": "10302",
+            "post_office": "BARICHO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a18674d3-2e28-4cf6-85aa-e04822b8b7c2",
+        "fields": {
+            "postal_code": "01101",
+            "post_office": "BISSEL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8d88c84b-f756-4a17-9610-f6ac02be1975",
+        "fields": {
+            "postal_code": "50206",
+            "post_office": "BOKOLI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "11d51cf5-4242-4cf0-986d-d09f626136e8",
+        "fields": {
+            "postal_code": "20400",
+            "post_office": "BOMET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b141034a-3042-4cc5-83f3-3c77212253fe",
+        "fields": {
+            "postal_code": "20101",
+            "post_office": "BONDENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7e158bbd-19d5-470c-8724-9b487da66c24",
+        "fields": {
+            "postal_code": "40601",
+            "post_office": "BONDO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bfde8750-c9ac-4c7c-a236-70e3390ad3f5",
+        "fields": {
+            "postal_code": "50137",
+            "post_office": "BOOKER",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "13e0c67b-987f-4e34-abc7-028b9c071db0",
+        "fields": {
+            "postal_code": "50245",
+            "post_office": "BRIGADIER",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c80ab238-d917-4ab0-8d7f-25463e58c8fc",
+        "fields": {
+            "postal_code": "50105",
+            "post_office": "BUKURA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "537ff640-445a-4694-86eb-e667813b7559",
+        "fields": {
+            "postal_code": "50109",
+            "post_office": "BULIMBO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a70579db-21a0-467d-b329-d85997bfb38f",
+        "fields": {
+            "postal_code": "50404",
+            "post_office": "BUMALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0a94a023-0bde-46cb-bfeb-6c08313ba71c",
+        "fields": {
+            "postal_code": "50200",
+            "post_office": "BUNGOMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "63f2c777-191e-4da1-a604-4bdc1b1c2989",
+        "fields": {
+            "postal_code": "70104",
+            "post_office": "BURA TANA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bf7322ce-04f5-4948-b697-e53f80d25ad1",
+        "fields": {
+            "postal_code": "30102",
+            "post_office": "BURNT FOREST",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6c5dc0f8-043e-43f8-b74b-bdbf78b6c9ae",
+        "fields": {
+            "postal_code": "50400",
+            "post_office": "BUSIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7ea03aa6-95aa-45a4-8584-97733b058af6",
+        "fields": {
+            "postal_code": "50101",
+            "post_office": "BUTERE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0bbfce06-b9ef-4cff-9498-d316ecb13f2f",
+        "fields": {
+            "postal_code": "50405",
+            "post_office": "BUTULA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7f8490db-9f1d-4adc-924c-a97ddd3609a3",
+        "fields": {
+            "postal_code": "50210",
+            "post_office": "BUYOFU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b9a3e8a2-2a7e-4d0a-856b-69997b131038",
+        "fields": {
+            "postal_code": "50302",
+            "post_office": "CHAMAKANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b9a3e8a2-2a7e-4d0a-856b-69997b131038",
+        "fields": {
+            "postal_code": "50317",
+            "post_office": "CHAVAKALI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "df27ca2e-90b2-476d-8256-6726840275d2",
+        "fields": {
+            "postal_code": "30706",
+            "post_office": "CHEBIEMIT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e0bbbb16-cef4-494a-a2e7-5ffa3298f6bb",
+        "fields": {
+            "postal_code": "20215",
+            "post_office": "CHEBORGE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "38e90463-13eb-421e-9cf0-1db34bf35cb9",
+        "fields": {
+            "postal_code": "20401",
+            "post_office": "CHEBUNYO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "484cdbba-d253-4856-b2ca-f6b0df42656f",
+        "fields": {
+            "postal_code": "20222",
+            "post_office": "CHEMAMUL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f41d60e6-1bc8-4486-8317-6a6092edd964",
+        "fields": {
+            "postal_code": "40116",
+            "post_office": "CHEMELIL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "783864d6-cbca-4906-ba00-8b8c731e955f",
+        "fields": {
+            "postal_code": "30605",
+            "post_office": "CHEPARERIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d9fd285b-1918-4466-82d9-ee2b5f17a5bc",
+        "fields": {
+            "postal_code": "30133",
+            "post_office": "CHEPKOILEL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b56a44f9-5150-431f-90d2-7862180ce72c",
+        "fields": {
+            "postal_code": "30129",
+            "post_office": "CHEPKORIO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "77045564-2dcb-49ea-8f90-16da6c3eba3b",
+        "fields": {
+            "postal_code": "50201",
+            "post_office": "CHEPTAIS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a29573c2-37eb-46e1-8447-269742b53721",
+        "fields": {
+            "postal_code": "20217",
+            "post_office": "CHESINENDET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c41469d4-f75a-4e17-9279-71d4fafe7721",
+        "fields": {
+            "postal_code": "60410",
+            "post_office": "CHEIAKANYIGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "74f1291b-6383-4a30-a770-59180cc7dbf2",
+        "fields": {
+            "postal_code": "60409",
+            "post_office": "CHIAKARIGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9fe43b81-c6ad-41f1-81b6-64ff3929393e",
+        "fields": {
+            "postal_code": "60401",
+            "post_office": "CHOGORIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dc9680ba-044a-4038-a7cf-ed38aeaf52bf",
+        "fields": {
+            "postal_code": "60400",
+            "post_office": "CHUKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "69bbcbd6-1eec-4d9a-84ac-ddefe967ca0e",
+        "fields": {
+            "postal_code": "90147",
+            "post_office": "CHUMVI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bb87ebbd-bbc5-4fc5-a4d5-5f9f45147769",
+        "fields": {
+            "postal_code": "80314",
+            "post_office": "CHUMVINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0ae9696b-7d75-4d05-bff9-28854bd2274a",
+        "fields": {
+            "postal_code": "50202",
+            "post_office": "CHWELE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a87e5f51-fa14-447b-a615-499cdfd68c24",
+        "fields": {
+            "postal_code": "70103",
+            "post_office": "DADAAB",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "29c55a00-47d5-4c3a-a405-be946b5a4e96",
+        "fields": {
+            "postal_code": "40112",
+            "post_office": "DAGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9e8cd836-86a0-43b0-872e-6881b0885926",
+        "fields": {
+            "postal_code": "40117",
+            "post_office": "DARAJA MBILI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "eb47d660-0924-4a2d-aaa5-5db3926eb8e2",
+        "fields": {
+            "postal_code": "90145",
+            "post_office": "DAYSTAR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "292ac60e-493b-4682-96ac-cad536cf051d",
+        "fields": {
+            "postal_code": "80410",
+            "post_office": "DEANI BEACH",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "aa383f01-dca6-4572-9142-dc9129d918df",
+        "fields": {
+            "postal_code": "10401",
+            "post_office": "DOLDOL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2325e14a-be61-4f0e-b136-576900b7ef11",
+        "fields": {
+            "postal_code": "01027",
+            "post_office": "DONYOSABUK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9f50d97d-67a5-4502-900a-7601b38b89f5",
+        "fields": {
+            "postal_code": "20115",
+            "post_office": "EGERTON",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ad731fd0-96ab-4af8-bc72-0db1e38cb162",
+        "fields": {
+            "postal_code": "90139",
+            "post_office": "EKALAKALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "59935b3c-6d3b-4115-a96c-a368791e0523",
+        "fields": {
+            "postal_code": "20102",
+            "post_office": "ELBURGON",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4403c4d8-4acd-44ba-b27b-e7bf2af1b595",
+        "fields": {
+            "postal_code": "20103",
+            "post_office": "ELDAMA RAVINE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "95271712-3130-4482-88f9-5504e314601d",
+        "fields": {
+            "postal_code": "30100",
+            "post_office": "ELDORET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d1ea9c57-a1eb-4074-8dfd-ba9217bbd872",
+        "fields": {
+            "postal_code": "70301",
+            "post_office": "ELWAK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "63dfa4bc-ece1-4644-8fac-842c0ec08a33",
+        "fields": {
+            "postal_code": "90121",
+            "post_office": "EMALI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e5f12e74-a9ed-4f77-b467-3f1cc3545565",
+        "fields": {
+            "postal_code": "60100",
+            "post_office": "EMBU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3ab5ef6b-f788-4656-820f-3715eb082d28",
+        "fields": {
+            "postal_code": "50314",
+            "post_office": "EMUHAYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "16248987-c419-4de5-83a8-2251dadfe2ec",
+        "fields": {
+            "postal_code": "10107",
+            "post_office": "ENDARASHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b2dfdc57-7ab3-47d1-8fd2-1bfcd4b90d29",
+        "fields": {
+            "postal_code": "30201",
+            "post_office": "ENDEBESS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ab7d223e-209f-49c5-94e6-ae4d165983b3",
+        "fields": {
+            "postal_code": "40208",
+            "post_office": "ETAGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1e27c755-5d04-4f84-a62b-e23cdf234dc6",
+        "fields": {
+            "postal_code": "80501",
+            "post_office": "FAZA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a0e260ca-ad16-4986-b88d-f354c071ce36",
+        "fields": {
+            "postal_code": "20209",
+            "post_office": "FORT TERNAN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "475fb49c-c71d-4c19-b7d0-7f77082de6e1",
+        "fields": {
+            "postal_code": "50406",
+            "post_office": "FUNYULA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "725e07f7-16d8-4e13-84bb-1bcf94e453f3",
+        "fields": {
+            "postal_code": "10210",
+            "post_office": "GACHARAGE-INI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "00df7999-59dd-429a-a8ae-e3ee6797142d",
+        "fields": {
+            "postal_code": "60209",
+            "post_office": "GAITU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "43b85a1c-eaa4-4996-a500-b07b7ad32e3b",
+        "fields": {
+            "postal_code": "10109",
+            "post_office": "GAKERE ROAD",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "daa0f712-c597-45e6-9c51-115db8a9c7bd",
+        "fields": {
+            "postal_code": "10111",
+            "post_office": "GAKINDU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bb6a571e-b113-4334-bd4b-7758cbacdc39",
+        "fields": {
+            "postal_code": "10239",
+            "post_office": "GAKUNGU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5061ebda-2afb-4810-a492-391d8303ef60",
+        "fields": {
+            "postal_code": "50318",
+            "post_office": "GAMBOGI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "875197fb-328f-4fe7-a0eb-3b8fb7e266f1",
+        "fields": {
+            "postal_code": "80205",
+            "post_office": "GANZE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9570a3eb-77cc-4a35-8675-cc3d17b1d03f",
+        "fields": {
+            "postal_code": "60301",
+            "post_office": "GARBU TULLA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5cc7a84d-f911-4879-b370-7b347970da17",
+        "fields": {
+            "postal_code": "70100",
+            "post_office": "GARISSA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "96fa40d1-99aa-40bb-bb80-134077773cc5",
+        "fields": {
+            "postal_code": "80201",
+            "post_office": "GARSEN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9fe92a6d-8793-4796-b40f-3c8c0b2026f5",
+        "fields": {
+            "postal_code": "00240",
+            "post_office": "GATHUGU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2602269f-0da0-44f4-a5ca-79793bf5d817",
+        "fields": {
+            "postal_code": "10114",
+            "post_office": "GATITU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "72333063-2ecf-4cb7-a5a3-1f5873975b74",
+        "fields": {
+            "postal_code": "01028",
+            "post_office": "GATUKUYU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7bb3ad31-577c-46b6-8f58-893abbd94f1c",
+        "fields": {
+            "postal_code": "01030",
+            "post_office": "GATUNDU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7c2e00c1-1083-4932-b50b-14805238bfa6",
+        "fields": {
+            "postal_code": "60404",
+            "post_office": "GATUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1498d151-4d4f-40d7-8bcf-a288243f03ca",
+        "fields": {
+            "postal_code": "01013",
+            "post_office": "GATURA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6d71255c-8426-46a1-aadc-9921d3615b7c",
+        "fields": {
+            "postal_code": "80208",
+            "post_office": "GEDE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "409baee4-2962-4d96-a84d-d7d006aa1ab4",
+        "fields": {
+            "postal_code": "40503",
+            "post_office": "GESIMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "944b0f14-da7b-4f16-9e86-ae508bf57dfe",
+        "fields": {
+            "postal_code": "40201",
+            "post_office": "GESUSU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "34f516ca-3224-4ae6-a80d-6386a365ebd6",
+        "fields": {
+            "postal_code": "10108",
+            "post_office": "GIAKANJA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "df300876-3191-4adc-a4f5-7bd92150e37a",
+        "fields": {
+            "postal_code": "10213",
+            "post_office": "GIKOE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d637ea10-9e99-4dc5-8c52-864eddd6a50f",
+        "fields": {
+            "postal_code": "20116",
+            "post_office": "GILGIL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "33912b93-2d9c-4066-96e7-56be4026a90a",
+        "fields": {
+            "postal_code": "50304",
+            "post_office": "GISAMBAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f10305c3-0930-435a-b195-bbc7942a43ab",
+        "fields": {
+            "postal_code": "60212",
+            "post_office": "GITEMENE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "98f6adc8-be1a-497a-8d0b-ba304b705836",
+        "fields": {
+            "postal_code": "60205",
+            "post_office": "GOTHONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "14841540-78f8-4788-ad65-28d668061717",
+        "fields": {
+            "postal_code": "00216",
+            "post_office": "GITHUGURI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d657f9eb-02c0-4097-acd6-b0e093340b7f",
+        "fields": {
+            "postal_code": "01003",
+            "post_office": "GITUAMBA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b9dae53a-0675-4faf-b02d-1b946b7abff8",
+        "fields": {
+            "postal_code": "10209",
+            "post_office": "GITUGI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e5bb6927-a3f0-4079-bf83-7a41cd93bd83",
+        "fields": {
+            "postal_code": "80206",
+            "post_office": "GONGONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "97279654-d561-4c77-be7f-c06e76ce9263",
+        "fields": {
+            "postal_code": "70202",
+            "post_office": "GRIFTU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "40964f49-6c8c-4b89-bd6e-6af7a864e9c9",
+        "fields": {
+            "postal_code": "70201",
+            "post_office": "HABASWEIN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "81566d19-6651-4385-9c99-e8b9e5f8843d",
+        "fields": {
+            "postal_code": "50312",
+            "post_office": "HAMISI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "efb56e38-4277-403e-84f4-f232d115abb6",
+        "fields": {
+            "postal_code": "40640",
+            "post_office": "HAWINGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d84eeafa-d2ab-47a8-8039-1833749d1aac",
+        "fields": {
+            "postal_code": "70101",
+            "post_office": "HOLA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "666f87a5-cf02-440c-b745-f41e783de9ed",
+        "fields": {
+            "postal_code": "40300",
+            "post_office": "HOMA BAY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5631a544-1e6d-441c-bd9f-a5e062fa55b8",
+        "fields": {
+            "postal_code": "30109",
+            "post_office": "HURUMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "568745ae-bd34-41a3-aa0c-44ab9565fd99",
+        "fields": {
+            "postal_code": "40209",
+            "post_office": "IGARE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6108214e-373f-4b8a-bf7e-7b55ccf5c622",
+        "fields": {
+            "postal_code": "60402",
+            "post_office": "IGOJI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4d7d6440-c122-4d33-a897-2daec3e2f8b1",
+        "fields": {
+            "postal_code": "20307",
+            "post_office": "IGWAMITI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7098e972-5185-40b6-a445-88504eeb6b0f",
+        "fields": {
+            "postal_code": "90120",
+            "post_office": "IIANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "30f40fdf-d4a8-428d-aba7-d7519904e39f",
+        "fields": {
+            "postal_code": "90135",
+            "post_office": "IKALAASA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dee8748d-d62c-4fb8-b21a-790f61ab3b48",
+        "fields": {
+            "postal_code": "40501",
+            "post_office": "IKONGE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dee8748d-d62c-4fb8-b21a-790f61ab3b48",
+        "fields": {
+            "postal_code": "90207",
+            "post_office": "IKUTHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f8c43d5d-1273-4baf-ae97-4044a3bbd7c5",
+        "fields": {
+            "postal_code": "60405",
+            "post_office": "IKUU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bfbf87a4-8164-427a-8f29-e48072f35d7a",
+        "fields": {
+            "postal_code": "60102",
+            "post_office": "ISHIARA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ba482dd5-c9cc-4414-8763-81f466bd2780",
+        "fields": {
+            "postal_code": "60300",
+            "post_office": "ISIOLO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "eadba73d-cea3-4e10-97c3-0566ecfc7fa9",
+        "fields": {
+            "postal_code": "30700",
+            "post_office": "ITEN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "04c8c256-c047-4d11-a4d2-272f6a537e2e",
+        "fields": {
+            "postal_code": "01015",
+            "post_office": "ITHANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8a699425-a306-4ade-a5b4-b8b857fd2a86",
+        "fields": {
+            "postal_code": "20157",
+            "post_office": "KABARAK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4c1e669f-dc4e-4253-b7ce-871c146ffd88",
+        "fields": {
+            "postal_code": "30400",
+            "post_office": "KABARNET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c893183d-3c5b-4193-9292-f899311ab822",
+        "fields": {
+            "postal_code": "30401",
+            "post_office": "KABARTONJO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a6ad9984-86be-4348-bc36-8660e62cfaec",
+        "fields": {
+            "postal_code": "90205",
+            "post_office": "KABATI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8488635a-c339-46d4-ac70-249d2fff2f98",
+        "fields": {
+            "postal_code": "20114",
+            "post_office": "KABAZI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3da5a578-c844-4382-a9b1-09c74c8307b0",
+        "fields": {
+            "postal_code": "20201",
+            "post_office": "KABIANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dd6da502-f554-418b-98cc-b5d4f9f6f967",
+        "fields": {
+            "postal_code": "30303",
+            "post_office": "KABIYET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a980ee13-93ab-43d1-9b62-90484ac56525",
+        "fields": {
+            "postal_code": "30601",
+            "post_office": "KACHELIBA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5f21c13c-f426-48dc-8c1e-88f5ecc15776",
+        "fields": {
+            "postal_code": "40223",
+            "post_office": "KADONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1c35658b-6b09-4a84-ba83-99e2f4432f96",
+        "fields": {
+            "postal_code": "10306",
+            "post_office": "KAGIO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "48967125-841f-44fc-a558-0d712cbc6334",
+        "fields": {
+            "postal_code": "10307",
+            "post_office": "KAGUMO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5ad161c8-9566-438f-9d1a-79c74bf382e3",
+        "fields": {
+            "postal_code": "01033",
+            "post_office": "KAGUNDU-INI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "aa0b6172-28e8-418d-963c-b6256823da69",
+        "fields": {
+            "postal_code": "00223",
+            "post_office": "KAGWE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "410c6822-b519-4908-b3af-e14cfc273ca0",
+        "fields": {
+            "postal_code": "20304",
+            "post_office": "KAHEHO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0d0a6166-83af-4641-a21f-2dc815293de3",
+        "fields": {
+            "postal_code": "10206",
+            "post_office": "KAHUHIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "597816e0-ca25-4941-9c8c-76ea7eb69bed",
+        "fields": {
+            "postal_code": "10201",
+            "post_office": "KAHURO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bf0e4acf-8ebe-43cb-85bc-2fc7f9ed486b",
+        "fields": {
+            "postal_code": "10214",
+            "post_office": "KAHUTI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6dd13e53-2bfb-4823-9e1a-1d364224ec38",
+        "fields": {
+            "postal_code": "50305",
+            "post_office": "KAIMOSI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "71a56d3a-f9c0-4ad6-bbc5-074512237b64",
+        "fields": {
+            "postal_code": "01100",
+            "post_office": "KAJIADO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c454cfc0-1f0a-4196-aab1-c32d6cb46eab",
+        "fields": {
+            "postal_code": "50100",
+            "post_office": "KAKAMEGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d1a77b4f-63ca-4e4a-bcd8-f285acf9c2cf",
+        "fields": {
+            "postal_code": "30501",
+            "post_office": "KAKUMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9ae7611c-acf1-4851-8631-ed84f1fac404",
+        "fields": {
+            "postal_code": "50115",
+            "post_office": "KAKUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0b0e9506-7315-4997-9bcd-0da1d6fa0f5f",
+        "fields": {
+            "postal_code": "90122",
+            "post_office": "KALAMBA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e873ab92-5555-4f57-98ef-ffe04b8656b7",
+        "fields": {
+            "postal_code": "01001",
+            "post_office": "KALIMONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d8cad82f-156f-4383-ace0-02dca85333ff",
+        "fields": {
+            "postal_code": "30502",
+            "post_office": "KALOKOL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c6044c9b-a7cb-40d5-a84a-87b71c792693",
+        "fields": {
+            "postal_code": "80105",
+            "post_office": "KALOLENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a664e073-c380-438e-bc06-34f8e06a0d37",
+        "fields": {
+            "postal_code": "20134",
+            "post_office": "KAMARA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "be4c374d-fb4d-4d0b-831d-ba66eb779d6f",
+        "fields": {
+            "postal_code": "50116",
+            "post_office": "KAMBIRI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f6e6be13-52a5-45b7-9a0f-2f7f409525ae",
+        "fields": {
+            "postal_code": "10226",
+            "post_office": "KAMBITI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "fcf450ce-378a-4dad-9da7-dec7b157266a",
+        "fields": {
+            "postal_code": "30406",
+            "post_office": "KAMPI-YA-SAMAKI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bbe24cce-dd1f-4680-b967-b03e2d08c9f3",
+        "fields": {
+            "postal_code": "50216",
+            "post_office": "KAMUKUYWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b0446428-872c-46b0-b592-1e684f4c0de7",
+        "fields": {
+            "postal_code": "50408",
+            "post_office": "KAMURIAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ee6fd3f0-2fef-44c7-8864-79fc8246f12b",
+        "fields": {
+            "postal_code": "90403",
+            "post_office": "KAMUWOMGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b50258e5-622c-4456-acc7-66626e08e420",
+        "fields": {
+            "postal_code": "01034",
+            "post_office": "KANDARA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "867baa43-ef1c-47da-93a8-00bab59936e6",
+        "fields": {
+            "postal_code": "40304",
+            "post_office": "KANDIEGE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "67eeaaec-9d51-40a4-81a6-748d4aa4e0f3",
+        "fields": {
+            "postal_code": "10218",
+            "post_office": "KANGARI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ad37b652-229f-4b35-8e47-8d11b70f7296",
+        "fields": {
+            "postal_code": "10202",
+            "post_office": "KANGEMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "51e3dfdc-30a9-44ae-9e4f-637c48add23c",
+        "fields": {
+            "postal_code": "90115",
+            "post_office": "KANGUNDO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "aca6dcbe-6c1e-4e42-9c0a-3b42f42b3248",
+        "fields": {
+            "postal_code": "60118",
+            "post_office": "KANJA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "40150280-5b1b-4bb8-afa6-d3e2c5368572",
+        "fields": {
+            "postal_code": "01002",
+            "post_office": "KANJUKU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2f903a6a-ae89-4e1d-a776-a3986fd16985",
+        "fields": {
+            "postal_code": "60206",
+            "post_office": "KANYAKINE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b87c4b22-7caf-45be-a20f-37e8d09f9ba8",
+        "fields": {
+            "postal_code": "30304",
+            "post_office": "KAPCHENO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b9e06793-d451-433d-a796-67c37c5d546b",
+        "fields": {
+            "postal_code": "30204",
+            "post_office": "KAPCHEROP",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9cacde71-5543-4dd8-9885-7a6155ce9e68",
+        "fields": {
+            "postal_code": "30600",
+            "post_office": "KAPENGURIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b0e132a5-99b4-4787-81fa-7bd5586080c2",
+        "fields": {
+            "postal_code": "30300",
+            "post_office": "KAPSABET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f86a5eb4-8dc2-4aa2-b5b2-6d5467864fd0",
+        "fields": {
+            "postal_code": "30208",
+            "post_office": "KAPSARA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b4421d70-2556-472a-a11c-5495b8bc1023",
+        "fields": {
+            "postal_code": "20214",
+            "post_office": "KAPATET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8e939c57-f5ff-497e-ba87-cd3d73f3484f",
+        "fields": {
+            "postal_code": "20211",
+            "post_office": "KAPSOIT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "eaff4418-660d-4eef-8a45-550bf630021c",
+        "fields": {
+            "postal_code": "50203",
+            "post_office": "KAPSOKWONY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5ad9da92-a33e-49e5-80af-0c5774a17f4c",
+        "fields": {
+            "postal_code": "30705",
+            "post_office": "KAPSOWOR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "09250df9-ab3f-432a-be94-9d8bbc113a72",
+        "fields": {
+            "postal_code": "30114",
+            "post_office": "KAPTAGAT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a33421fa-1cdd-41e9-848a-5db1a5f28323",
+        "fields": {
+            "postal_code": "30701",
+            "post_office": "KAPTARAKWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "45ca7adf-a56d-4ef0-9dca-9b2c3d12d890",
+        "fields": {
+            "postal_code": "60105",
+            "post_office": "KARABA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c1c2554b-71a6-4bc6-8aac-3c0bc997e637",
+        "fields": {
+            "postal_code": "20328",
+            "post_office": "KARANDI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9158418d-69a5-4e77-b8eb-37fdd9e0bf0c",
+        "fields": {
+            "postal_code": "10101",
+            "post_office": "KARATINA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1c9704bc-257c-4274-ae79-733259d9ea2e",
+        "fields": {
+            "postal_code": "40401",
+            "post_office": "KARUNGU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "03852983-4780-4cda-a156-3c17bc2cf178",
+        "fields": {
+            "postal_code": "00219",
+            "post_office": "KARURI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0a35ea85-28bd-4c13-900e-5d8a3ad600fb",
+        "fields": {
+            "postal_code": "60117",
+            "post_office": "KARURUMO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6feb2272-66f7-47f1-a0ea-6c5c429a00b2",
+        "fields": {
+            "postal_code": "90117",
+            "post_office": "KARURUMO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "31ddcb4b-a968-4b33-b779-31463fa03fc0",
+        "fields": {
+            "postal_code": "90106",
+            "post_office": "KATANGI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bc9685ed-22ad-4425-9ce6-948825540036",
+        "fields": {
+            "postal_code": "90105",
+            "post_office": "KATHIANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a8a4e235-e6bf-493b-83e9-5543f69b10ed",
+        "fields": {
+            "postal_code": "90302",
+            "post_office": "KATHONZWENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6fb4cead-04ef-4e7e-84b8-4937349f970d",
+        "fields": {
+            "postal_code": "60406",
+            "post_office": "KATHWANA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ddba168a-1cf3-47ea-82ff-8081cbb950db",
+        "fields": {
+            "postal_code": "40118",
+            "post_office": "KATITO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8b7c9286-e701-463e-8319-277e90eb6472",
+        "fields": {
+            "postal_code": "90107",
+            "post_office": "KAVIANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "123e9f13-6617-45fb-bd84-4de1f75d0d57",
+        "fields": {
+            "postal_code": "40506",
+            "post_office": "KEBIRIGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6a435e91-bdda-4c6b-beb9-a663b15e2070",
+        "fields": {
+            "postal_code": "20220",
+            "post_office": "KODEWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d2e903b4-f814-4c67-ab17-27034c479ea0",
+        "fields": {
+            "postal_code": "20501",
+            "post_office": "KEEKOROK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7d4d5eaa-1ce2-4dae-8ef1-3e8f7a45d95a",
+        "fields": {
+            "postal_code": "40413",
+            "post_office": "KEHENCH",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4bc34af2-e724-4f32-9464-7455b024e675",
+        "fields": {
+            "postal_code": "40301",
+            "post_office": "KUNDU BAY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f28e70cc-234e-4f53-98bd-0fe26677764e",
+        "fields": {
+            "postal_code": "01020",
+            "post_office": "KENOL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "418b4de6-48a9-443f-b51f-f47bcb1f1fec",
+        "fields": {
+            "postal_code": "40211",
+            "post_office": "KENYENYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "70467ebb-a569-498a-8a61-20896032488a",
+        "fields": {
+            "postal_code": "20200",
+            "post_office": "KERICHO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b6b0cc9c-7eb9-43c5-874f-3e088b2a2e03",
+        "fields": {
+            "postal_code": "20131",
+            "post_office": "KIRENGET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d88c36cf-ab82-4dcb-91c3-d86658a2c612",
+        "fields": {
+            "postal_code": "40202",
+            "post_office": "KEROKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bbea568d-7675-4086-aaba-cf515d97d068",
+        "fields": {
+            "postal_code": "10300",
+            "post_office": "KERUGOYYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4381660c-6ffb-423d-a27f-b6c59fc301d7",
+        "fields": {
+            "postal_code": "30215",
+            "post_office": "KESOGON",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "76b704cd-85ce-4b8d-99b5-87d3f2c03145",
+        "fields": {
+            "postal_code": "40212",
+            "post_office": "KEUMBU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f99eac47-1ba7-4112-bda4-9654c3e3b08e",
+        "fields": {
+            "postal_code": "50104",
+            "post_office": "KHAYEGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9bd3d2c5-a4d4-4b9b-abbb-eb19edb872d9",
+        "fields": {
+            "postal_code": "50135",
+            "post_office": "KHWISERO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1b373376-4278-4a43-9d74-55e17ecb8a06",
+        "fields": {
+            "postal_code": "10122",
+            "post_office": "KIAMARIGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cddc5595-fb29-43f9-adae-90eb3424f7fe",
+        "fields": {
+            "postal_code": "00900",
+            "post_office": "KIAMBU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cf5ad386-2d7c-4fb5-b620-7e6baabb32b0",
+        "fields": {
+            "postal_code": "10309",
+            "post_office": "KIAMATUNGU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9158f8e6-91e4-4574-891d-e6537f5d0b68",
+        "fields": {
+            "postal_code": "60602",
+            "post_office": "KIANJIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "03048503-2b32-425e-95a9-22bb70fb783a",
+        "fields": {
+            "postal_code": "60122",
+            "post_office": "KIANJOKOMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7cbc9bf8-8193-4f68-8305-3aff17fa7d95",
+        "fields": {
+            "postal_code": "10301",
+            "post_office": "KIANYAGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "301ff8bf-4e4f-47c6-ba9d-540231584971",
+        "fields": {
+            "postal_code": "60201",
+            "post_office": "KIBIRICHIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ac359d58-7ad0-4dff-8439-51c9a87f071d",
+        "fields": {
+            "postal_code": "90137",
+            "post_office": "KIBWEZI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "581b71b9-26bf-467e-89ff-d602c204b4dc",
+        "fields": {
+            "postal_code": "10102",
+            "post_office": "KIGANJO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "227d7c89-bb46-4b34-81f8-6811b0ca7afd",
+        "fields": {
+            "postal_code": "10203",
+            "post_office": "KIGUMO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "01d97f9b-0803-4917-afa0-aa684b34cee5",
+        "fields": {
+            "postal_code": "10207",
+            "post_office": "KIHOYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "96a382bd-39d9-4f35-89c9-a53d4e90d0ec",
+        "fields": {
+            "postal_code": "60207",
+            "post_office": "KIIRUA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "43663971-2213-494d-98b1-a83249034d4d",
+        "fields": {
+            "postal_code": "00220",
+            "post_office": "KIJABE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "12437670-af50-4856-bc61-81a395ebd5a3",
+        "fields": {
+            "postal_code": "90125",
+            "post_office": "KAKIMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0d32afbf-161d-4374-9e39-ae67a58090ab",
+        "fields": {
+            "postal_code": "80410",
+            "post_office": "KIKONENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "356d03c8-9811-47e0-9c86-3a6c60ec98f4",
+        "fields": {
+            "postal_code": "00902",
+            "post_office": "KIKUYU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "801c9636-0cd0-446e-a518-c168b340241f",
+        "fields": {
+            "postal_code": "90305",
+            "post_office": "KILALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bec25a73-8016-41bf-bee7-932890fe5d89",
+        "fields": {
+            "postal_code": "40700",
+            "post_office": "KILGORIS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5cbedf46-b419-41b7-88c0-e284049fbac2",
+        "fields": {
+            "postal_code": "80108",
+            "post_office": "KILIFI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b9fdcabd-3763-4998-98b9-619d79baa5ac",
+        "fields": {
+            "postal_code": "50115",
+            "post_office": "KILINGILI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e22b2df1-3951-4f69-a5c9-cb5753123c12",
+        "fields": {
+            "postal_code": "10140",
+            "post_office": "KIMATHIWAY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "98efe6fe-9650-42c5-8bae-784e3ad90160",
+        "fields": {
+            "postal_code": "10310",
+            "post_office": "KIMBIMBI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bea5b5b0-b55f-40a3-9eb3-ec22e6ac1b74",
+        "fields": {
+            "postal_code": "50204",
+            "post_office": "KIMILILI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "19f9cf1c-d545-40cb-b168-2fbb8cf576c0",
+        "fields": {
+            "postal_code": "30209",
+            "post_office": "KIMININI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a8f0b612-911e-4ebc-b202-57a5973081d2",
+        "fields": {
+            "postal_code": "20225",
+            "post_office": "KIMULOT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "11c578a8-7a60-43cf-a3cd-eab3b3b0d1d7",
+        "fields": {
+            "postal_code": "30128",
+            "post_office": "KIMWARER",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d21afca7-3375-45cf-918f-b20d5233af57",
+        "fields": {
+            "postal_code": "20320",
+            "post_office": "KINAMBA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a77b087d-cd03-4829-9efb-bfd19ee15d03",
+        "fields": {
+            "postal_code": "80405",
+            "post_office": "KINANGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6f4cadb1-b5f0-4bfa-90c7-b640614f0d8e",
+        "fields": {
+            "postal_code": "00227",
+            "post_office": "KINARI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "557d057d-b625-47c6-b76e-0d54fc596c1c",
+        "fields": {
+            "postal_code": "01031",
+            "post_office": "KINDARUMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "76442405-faca-4dac-aba7-0082272943ea",
+        "fields": {
+            "postal_code": "60216",
+            "post_office": "KINORU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "52d8b6cb-0b42-49d3-b7f8-8c77754809bf",
+        "fields": {
+            "postal_code": "60211",
+            "post_office": "KIONYO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f84d892e-59be-4470-8685-efe10dca877b",
+        "fields": {
+            "postal_code": "30103",
+            "post_office": "KIPKABUS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "065ebfb4-61ad-4394-825e-bc9793ecf24a",
+        "fields": {
+            "postal_code": "50241",
+            "post_office": "KIPKARREN RIVER",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "10ba83d7-721e-485c-8700-608481d8d014",
+        "fields": {
+            "postal_code": "20202",
+            "post_office": "KIPKELION",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "37abe512-3e69-4026-b389-e967879d50c5",
+        "fields": {
+            "postal_code": "20133",
+            "post_office": "KIPTANGWANYI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f73fd3a2-c3ec-4dc1-a086-774b95f6b10d",
+        "fields": {
+            "postal_code": "20213",
+            "post_office": "KIPTERE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3f408276-462b-4571-af28-25598e46b85b",
+        "fields": {
+            "postal_code": "20208",
+            "post_office": "KIPTUNGUMO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9a905ee5-fddf-46a8-9d60-ffeffa063a63",
+        "fields": {
+            "postal_code": "10204",
+            "post_office": "KIRIAINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5b9b5f5d-33a1-45fd-aa19-05371886d23b",
+        "fields": {
+            "postal_code": "60113",
+            "post_office": "KIRITIRI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c7c09c8e-282c-43fa-86b6-bd7fb3ab5f17",
+        "fields": {
+            "postal_code": "50313",
+            "post_office": "KIRITU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "502846d5-3eff-47cb-ace4-0f3d68c43b6e",
+        "fields": {
+            "postal_code": "01018",
+            "post_office": "KIRWARA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "fc090034-1329-42c8-952a-f6d2529cd0fd",
+        "fields": {
+            "postal_code": "90204",
+            "post_office": "KISASI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "244b4219-c48b-4aa8-bd22-3f079202622b",
+        "fields": {
+            "postal_code": "00206",
+            "post_office": "KISERIAN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ee2bd2a3-b755-43ed-872c-22db05336bb2",
+        "fields": {
+            "postal_code": "40200",
+            "post_office": "KISII",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "31873472-4141-4d7e-ad7b-4eed35304df4",
+        "fields": {
+            "postal_code": "40100",
+            "post_office": "KISUMU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f1f040cb-f714-4672-8c5e-4c96132ea797",
+        "fields": {
+            "postal_code": "30200",
+            "post_office": "KITALE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c632423d-2025-4dc6-bc5e-f1bf10bdaf07",
+        "fields": {
+            "postal_code": "00241",
+            "post_office": "KITENGELA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2f72c356-03a5-474e-bc10-f4fb4c3612cc",
+        "fields": {
+            "postal_code": "90124",
+            "post_office": "KITHIMANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b4ad2873-e4ab-4c1a-afbe-422b635e27db",
+        "fields": {
+            "postal_code": "60114",
+            "post_office": "KITHIMU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7e32faa9-e79e-4fd2-a40e-ef8dd2280ea7",
+        "fields": {
+            "postal_code": "90144",
+            "post_office": "KITHYOKO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c3e7812b-fc77-4660-a7b8-a4ad0fe23682",
+        "fields": {
+            "postal_code": "90303",
+            "post_office": "KITISE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2068a996-9ff1-49aa-886f-77b94b735b18",
+        "fields": {
+            "postal_code": "90200",
+            "post_office": "KITUI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "09a08654-c565-4e66-9b89-66e884fb5abc",
+        "fields": {
+            "postal_code": "90111",
+            "post_office": "KIVUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bcf8a7e9-2f90-49fa-bc39-fbff8fe88143",
+        "fields": {
+            "postal_code": "30305",
+            "post_office": "KOBUJOI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "fc5b7539-2dbe-4b48-aa3e-0b0ecf514fb1",
+        "fields": {
+            "postal_code": "90108",
+            "post_office": "KOLA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d4eb91f6-9438-4ddc-9af3-ca12ff29bb50",
+        "fields": {
+            "postal_code": "40102",
+            "post_office": "KOMBEWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7a7b411c-038a-410c-a5c5-0f8e4a24d97a",
+        "fields": {
+            "postal_code": "40102",
+            "post_office": "KONDELE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "89f6c453-3b51-4e3b-b95e-fe753d52665c",
+        "fields": {
+            "postal_code": "10234",
+            "post_office": "KORA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cc7e3f51-d1f5-4252-875f-700c53cfc427",
+        "fields": {
+            "postal_code": "40104",
+            "post_office": "KORU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "33e32f10-441a-42fb-8851-7b5b72cca5cb",
+        "fields": {
+            "postal_code": "40332",
+            "post_office": "KOSELE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1ac814ff-d93f-4a56-ba6c-86d7fcec80fb",
+        "fields": {
+            "postal_code": "50117",
+            "post_office": "KOYONZO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7035b29c-05b0-4714-89f6-04c71d5a91c2",
+        "fields": {
+            "postal_code": "60125",
+            "post_office": "KUBU KUBU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3d2868dc-3294-4257-8d91-cd32d3bf41c8",
+        "fields": {
+            "postal_code": "10304",
+            "post_office": "KUTUS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3c53f70b-47b1-4bb6-9d3d-fb7cdf63a226",
+        "fields": {
+            "postal_code": "80403",
+            "post_office": "KWALE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f79f3385-0d27-4f42-a05c-3a8d4dc13981",
+        "fields": {
+            "postal_code": "90220",
+            "post_office": "KYENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1c141af4-a35a-4844-b772-8f31387e5233",
+        "fields": {
+            "postal_code": "90401",
+            "post_office": "KYUSO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "54bdbf14-2e6b-455d-981d-10e1021abfd3",
+        "fields": {
+            "postal_code": "60601",
+            "post_office": "LAARE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "42cf98ce-01fe-4cd2-9c6f-fd00319a502f",
+        "fields": {
+            "postal_code": "20330",
+            "post_office": "LAIKIPIA CAMPUS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a62f5151-a087-4b35-a814-80d618df2c98",
+        "fields": {
+            "postal_code": "60502",
+            "post_office": "LAISAMIS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6c98ef68-a6fb-4b8f-be5a-1d4966795a76",
+        "fields": {
+            "postal_code": "80500",
+            "post_office": "LAMU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "64e9f337-e7a5-4529-9043-c3be52b4d535",
+        "fields": {
+            "postal_code": "20112",
+            "post_office": "LANET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1f2aee2d-2b8a-4bb7-8d39-b719b90d5d1c",
+        "fields": {
+            "postal_code": "30112",
+            "post_office": "LANGAS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "49b76562-0dc7-4ac7-9df3-eaa7bec67884",
+        "fields": {
+            "postal_code": "30302",
+            "post_office": "LESSOS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f74fa588-aff1-496d-88e9-b09f8aa8c649",
+        "fields": {
+            "postal_code": "00217",
+            "post_office": "LIMURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "55c4d5c1-5230-4e81-be47-2969db78eace",
+        "fields": {
+            "postal_code": "20210",
+            "post_office": "LITEIN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0da54328-f7e6-4488-8002-6e21b81434ee",
+        "fields": {
+            "postal_code": "30500",
+            "post_office": "LODWWAR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "63064def-f8d8-4ff6-a1ff-3cf2c59f72d0",
+        "fields": {
+            "postal_code": "00209",
+            "post_office": "LOITOKITOK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "180958f4-a28d-4550-b7ca-b3eece26bd87",
+        "fields": {
+            "postal_code": "60503",
+            "post_office": "LOKICHOGGIO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3493618a-9781-4f55-9247-5e129cb12ec2",
+        "fields": {
+            "postal_code": "30504",
+            "post_office": "LOKITAUNG",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0d042c2c-335a-40b5-bb3f-81965baea054",
+        "fields": {
+            "postal_code": "40701",
+            "post_office": "LOLGORIAN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ef94260b-3781-4c2b-a293-cf08d6ba452b",
+        "fields": {
+            "postal_code": "20203",
+            "post_office": "LONDIANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "de02dcbd-c693-4534-9504-f224f35e0ee6",
+        "fields": {
+            "postal_code": "20402",
+            "post_office": "LONGISA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3ed10846-26df-4063-9110-f721beb5d2ec",
+        "fields": {
+            "postal_code": "50307",
+            "post_office": "LUANDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "eeef5135-549f-45ff-b396-ac73f91a2f93",
+        "fields": {
+            "postal_code": "50240",
+            "post_office": "LUANDETI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0f725add-efce-4c75-aed3-89ed7eabf9c0",
+        "fields": {
+            "postal_code": "50118",
+            "post_office": "LUBAO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "df275049-bce6-4262-b332-acd9990c64a2",
+        "fields": {
+            "postal_code": "50108",
+            "post_office": "LUGARI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4dd4681b-27b9-49d7-9655-13af2bc88dca",
+        "fields": {
+            "postal_code": "50218",
+            "post_office": "LUGULU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6d1fcb48-a86e-439d-b5d2-149b8c6b7501",
+        "fields": {
+            "postal_code": "40623",
+            "post_office": "LUHANO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "64a3ae47-5a86-4e8f-83c7-7cb0aa3ca22e",
+        "fields": {
+            "postal_code": "50242",
+            "post_office": "LUMAKANDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "874173a4-3e2a-4c7a-94a7-20a67ab00591",
+        "fields": {
+            "postal_code": "80402",
+            "post_office": "LUNGA LUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "19dd5b92-027f-4682-9ed6-a5b6d476abee",
+        "fields": {
+            "postal_code": "50119",
+            "post_office": "LUNZA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e9504366-919e-4470-9910-0035c9c9b261",
+        "fields": {
+            "postal_code": "50220",
+            "post_office": "LWAKHAKHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4a4f5038-3cab-473e-bee4-d563c7b18341",
+        "fields": {
+            "postal_code": "20147",
+            "post_office": "MAAI MAHIU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c6509e92-6e18-450a-8c9e-e20bde98d061",
+        "fields": {
+            "postal_code": "50235",
+            "post_office": "MABUSI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ac003580-27e1-4b7f-928c-8c6a19fa473d",
+        "fields": {
+            "postal_code": "90100",
+            "post_office": "MACHAKOS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "562355b4-d1aa-4832-9569-ecb3e16d6fe7",
+        "fields": {
+            "postal_code": "01002",
+            "post_office": "MADARAKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bcd26d3a-ec5e-4f1a-bd86-3d725f97e4d8",
+        "fields": {
+            "postal_code": "40613",
+            "post_office": "MADIANY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "321158ac-79f6-4cbc-8d16-e02a8dec86cc",
+        "fields": {
+            "postal_code": "80207",
+            "post_office": "MADINA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a8828dbc-8c85-448a-b556-42b944299599",
+        "fields": {
+            "postal_code": "00205",
+            "post_office": "MAGADI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c5c4bb98-207d-428f-88d1-380228ac2a45",
+        "fields": {
+            "postal_code": "40516",
+            "post_office": "MAGENA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8b1141b6-5cdd-4a13-8529-35c88179c906",
+        "fields": {
+            "postal_code": "5325",
+            "post_office": "MAGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "00430ead-a101-43d1-b4cc-fa9e85759e1e",
+        "fields": {
+            "postal_code": "40507",
+            "post_office": "MAGOMBO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7fbb6614-f299-4574-b611-017bbb28cf8f",
+        "fields": {
+            "postal_code": "60407",
+            "post_office": "MAGUTUNI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1a5f2a56-c22f-4c29-b909-efa3bf7d4df5",
+        "fields": {
+            "postal_code": "40508",
+            "post_office": "MAGWAGWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a80b23f9-c431-4e98-849e-9a9b75c14ecc",
+        "fields": {
+            "postal_code": "90138",
+            "post_office": "MAKINDU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "382d1de2-5de6-4cbe-b4b2-4a78d7762db7",
+        "fields": {
+            "postal_code": "90300",
+            "post_office": "MAKUENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f0f12104-a2ad-4581-8eb8-ffe8e698b1ab",
+        "fields": {
+            "postal_code": "50209",
+            "post_office": "MALAKISI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ecc0fa80-7f25-4ef9-9f8a-2eb27714aa1f",
+        "fields": {
+            "postal_code": "50103",
+            "post_office": "MALAVA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8fa247cd-7fcf-4623-a0bd-04d00fc0c60a",
+        "fields": {
+            "postal_code": "80200",
+            "post_office": "MALINDI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0c282f31-be89-45b3-815b-046333a62742",
+        "fields": {
+            "postal_code": "70300",
+            "post_office": "MANDERA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6e3fed60-cd16-409e-b1e8-e9285da7ed8a",
+        "fields": {
+            "postal_code": "60101",
+            "post_office": "MANYATTA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f2352016-a28a-4244-929f-faa1b77aaef6",
+        "fields": {
+            "postal_code": "50300",
+            "post_office": "MARAGOLI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e7bc3f01-ddf2-4d65-9cd6-84ed60fb2015",
+        "fields": {
+            "postal_code": "10205",
+            "post_office": "MARAGUA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "da801c6d-5f4c-48e0-b899-16d4ea4ab769",
+        "fields": {
+            "postal_code": "20600",
+            "post_office": "MARALAL",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9d223597-bc9c-4fde-9c1f-62369b69e575",
+        "fields": {
+            "postal_code": "80113",
+            "post_office": "MARIAKANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "de7cd537-97d2-4035-998d-7f4804758147",
+        "fields": {
+            "postal_code": "30403",
+            "post_office": "MARIGAT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5278dfd4-de69-494a-8bd9-cf63ff1a5061",
+        "fields": {
+            "postal_code": "60408",
+            "post_office": "MARIMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bcf227f2-35f7-419f-89f5-132a42afe457",
+        "fields": {
+            "postal_code": "60215",
+            "post_office": "MARIMANTI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d9ee23b5-d626-423b-9eef-42650ea1ed02",
+        "fields": {
+            "postal_code": "20322",
+            "post_office": "MARMANET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "38d351f3-ab0b-4dbd-a33b-93d0557d81fa",
+        "fields": {
+            "postal_code": "60500",
+            "post_office": "MARSABIT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "963abf4c-b2c8-4b70-ac2e-cd27748310a2",
+        "fields": {
+            "postal_code": "70105",
+            "post_office": "MASALANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cf6ae0d5-2873-4d5d-9078-56c1c4c8d292",
+        "fields": {
+            "postal_code": "40105",
+            "post_office": "MASENO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b874aa97-5250-4224-8ba3-e7a09a6fb4cd",
+        "fields": {
+            "postal_code": "01103",
+            "post_office": "MASHURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "45247e64-e457-4518-bb9d-74a3901265c9",
+        "fields": {
+            "postal_code": "90101",
+            "post_office": "MASII",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e31b03a4-9fee-4ff2-a3d8-93b5192a4b8b",
+        "fields": {
+            "postal_code": "90141",
+            "post_office": "MASINGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ecb06b15-3331-4d08-bc15-3a0f7bf97415",
+        "fields": {
+            "postal_code": "00221",
+            "post_office": "MATATHIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ca426584-d73d-4486-896e-f90844649ce3",
+        "fields": {
+            "postal_code": "90140",
+            "post_office": "MATILIKU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f87aa737-1031-419b-a15b-c93d976e9946",
+        "fields": {
+            "postal_code": "80406",
+            "post_office": "MATUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6fd4daf8-ffd4-42c1-b554-63d0df633cc8",
+        "fields": {
+            "postal_code": "30205",
+            "post_office": "MATUNDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "62008947-d1fe-4ac0-9433-e0563191433f",
+        "fields": {
+            "postal_code": "90119",
+            "post_office": "MATUU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a97346a3-3e7d-435c-89fe-0d299fca0034",
+        "fields": {
+            "postal_code": "60600",
+            "post_office": "MAUA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "db45c4bc-a956-48b4-849f-1050c17722f0",
+        "fields": {
+            "postal_code": "80317",
+            "post_office": "MAUNGU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7b9c3854-9438-4f67-bfe3-2470a60b5a16",
+        "fields": {
+            "postal_code": "90304",
+            "post_office": "MAVINDINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8d7a1ae7-0cb0-4df1-8322-32c0e955cbd8",
+        "fields": {
+            "postal_code": "40310",
+            "post_office": "MAWENGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c78ad7b6-b444-4a2e-becf-734c85747c27",
+        "fields": {
+            "postal_code": "80114",
+            "post_office": "MAZERAS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dcb69b7b-0853-4071-80f6-a5f4b5013fde",
+        "fields": {
+            "postal_code": "10233",
+            "post_office": "MBIRI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4df2ee00-eb41-4570-946b-9e7e34eb721c",
+        "fields": {
+            "postal_code": "40305",
+            "post_office": "MBITA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c245fe8b-02c2-4ef1-93d1-2fe65445386c",
+        "fields": {
+            "postal_code": "90214",
+            "post_office": "MBITINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6a103ec0-2a46-4197-bcef-28740f3fb45c",
+        "fields": {
+            "postal_code": "90110",
+            "post_office": "MBAUNI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "92bda57d-6b20-4e14-a15e-eee8c0f56693",
+        "fields": {
+            "postal_code": "90127",
+            "post_office": "MBUMBUNI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1ab4fc9b-5b37-4f23-b6cf-d95d312cf104",
+        "fields": {
+            "postal_code": "40123",
+            "post_office": "MEGA CITY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "564d443f-4d23-4a0f-8e87-70925ecab058",
+        "fields": {
+            "postal_code": "20104",
+            "post_office": "MENENGAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f2e286f1-8255-46c3-ae12-889d7e981cc7",
+        "fields": {
+            "postal_code": "60303",
+            "post_office": "MERTI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8c45a5d9-86a7-4047-be28-0f790bef4571",
+        "fields": {
+            "postal_code": "60200",
+            "post_office": "MERU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "27077779-62b6-4e3c-9b4e-54b099134506",
+        "fields": {
+            "postal_code": "40319",
+            "post_office": "MFANGANO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f1997443-215e-41b3-8a93-94a518156c4d",
+        "fields": {
+            "postal_code": "80313",
+            "post_office": "MGAMBONYI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "742ff2db-6bb7-4de6-8b4d-9a36c73c26a3",
+        "fields": {
+            "postal_code": "80306",
+            "post_office": "MGANCHE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "39095e6b-da6c-436e-8480-26b238f63907",
+        "fields": {
+            "postal_code": "60604",
+            "post_office": "MIATHENE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "fa9e1dca-d26a-41a7-b956-dc5189a35de3",
+        "fields": {
+            "postal_code": "90402",
+            "post_office": "MIGWANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "68027c50-4b1f-4e25-b9e2-aab6eb690057",
+        "fields": {
+            "postal_code": "20301",
+            "post_office": "MIHARATI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f9056b48-5608-42ef-977c-ab43dc059aff",
+        "fields": {
+            "postal_code": "60607",
+            "post_office": "MIKINDURI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4c1ca396-2793-4e05-ac3e-7da9b8ff9879",
+        "fields": {
+            "postal_code": "50138",
+            "post_office": "MILIMANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ca5796ca-a0a6-4ab5-ab2c-326f78b0cd8d",
+        "fields": {
+            "postal_code": "20124",
+            "post_office": "MIRANGINE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2966f543-0788-4d05-b694-e39e588d7c2d",
+        "fields": {
+            "postal_code": "40320",
+            "post_office": "MIROGI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "09965ba1-cc68-4a73-b153-5fe5d23f594a",
+        "fields": {
+            "postal_code": "50207",
+            "post_office": "MISIKHU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "031684fe-7356-4cee-b090-3041dc615d2a",
+        "fields": {
+            "postal_code": "90104",
+            "post_office": "MITABONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "48b145f5-c764-4503-832e-196cf0d4bb37",
+        "fields": {
+            "postal_code": "60204",
+            "post_office": "MITUNGUU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b219936a-390c-497a-8c27-041ed2c25773",
+        "fields": {
+            "postal_code": "90112",
+            "post_office": "MIU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "3bd09c5b-0e6d-41f4-b12c-12a490b2b741",
+        "fields": {
+            "postal_code": "00620",
+            "post_office": "MOBIL PLAZA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "75f4a953-f15d-476b-a5c6-0d44d9f13d06",
+        "fields": {
+            "postal_code": "70102",
+            "post_office": "MODO GASHE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d7552210-4073-438a-bd8f-ef9cbd276ea5",
+        "fields": {
+            "postal_code": "20403",
+            "post_office": "MOGOGOSIEK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a4ef3a9f-a4b9-4812-ab23-29af85ae913e",
+        "fields": {
+            "postal_code": "2005",
+            "post_office": "MIGOTIO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "437e0b21-6ec4-462a-a37d-25c70004a6b6",
+        "fields": {
+            "postal_code": "30107",
+            "post_office": "MOI UNIVERSITY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8e4536a0-79e8-4d97-89f1-c2e1cd574422",
+        "fields": {
+            "postal_code": "30104",
+            "post_office": "MOIBEN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f9da4bec-f233-44e1-9667-2e78a3e272ca",
+        "fields": {
+            "postal_code": "30202",
+            "post_office": "MOI'S BRIDGE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "08d02cdf-d3b7-4dd2-b2c2-9bed97b70a32",
+        "fields": {
+            "postal_code": "40510",
+            "post_office": "MOKOMONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6e2e2be2-aba1-45b9-b42e-2bf900850a08",
+        "fields": {
+            "postal_code": "80502",
+            "post_office": "MOKOWE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2607587e-5b07-418d-82cd-96f1b1a4adaf",
+        "fields": {
+            "postal_code": "20106",
+            "post_office": "MOLO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4262bcc5-6cc0-4bc6-856b-dbb4be8d8025",
+        "fields": {
+            "postal_code": "30307",
+            "post_office": "MOSORIOT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7d1fe4a3-a506-408d-af6e-fe87bbcbea6e",
+        "fields": {
+            "postal_code": "60700",
+            "post_office": "MOYALE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8d8b937c-e897-4b14-88c6-4505c5e24d8a",
+        "fields": {
+            "postal_code": "80503",
+            "post_office": "MPEKETONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f5d5ec45-855e-4412-9fef-56d9a767ed9a",
+        "fields": {
+            "postal_code": "80404",
+            "post_office": "MSAMBWENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "98df2a5f-3f4a-4fd0-ab57-5922554806e7",
+        "fields": {
+            "postal_code": "90128",
+            "post_office": "MTITU ANDEI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "58d1056c-b313-4e4f-8224-e7634d12c20c",
+        "fields": {
+            "postal_code": "80117",
+            "post_office": "MTOPANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "439d82fa-d4c2-47b1-84b5-47f0a99382e0",
+        "fields": {
+            "postal_code": "80109",
+            "post_office": "MTWAPA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dce816b4-7e37-4e06-9ccc-c89a6d514a4a",
+        "fields": {
+            "postal_code": "50423",
+            "post_office": "MBWAYO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8a8562dc-f7f0-48ae-9f70-9a74ae5404e3",
+        "fields": {
+            "postal_code": "10129",
+            "post_office": "MUGUNDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f7cf54dc-d7fb-4320-9a98-b2a74039d7b6",
+        "fields": {
+            "postal_code": "40107",
+            "post_office": "MUHORONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e8e82093-bf60-4987-b764-cde3c94fe05b",
+        "fields": {
+            "postal_code": "40409",
+            "post_office": "MUHURU BAY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0d22c81f-8084-473b-9512-f98737e03436",
+        "fields": {
+            "postal_code": "50225",
+            "post_office": "MUKHE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f77eae1e-431e-45a9-96dc-90acb7f9ac9d",
+        "fields": {
+            "postal_code": "10103",
+            "post_office": "MUKURWEINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2730152b-59c2-4870-85e6-6554a146a26b",
+        "fields": {
+            "postal_code": "50102",
+            "post_office": "MUMIAS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "672c1121-440d-4979-8650-b2c0aba1af28",
+        "fields": {
+            "postal_code": "10200",
+            "post_office": "MURANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6e1805d6-64ed-498b-8640-65d752cab812",
+        "fields": {
+            "postal_code": "50125",
+            "post_office": "MUSANDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0a434ccc-6f78-4e14-950f-6af0a96b583b",
+        "fields": {
+            "postal_code": "90211",
+            "post_office": "MUTHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e26d9a47-ab5c-4803-9207-0030745ece10",
+        "fields": {
+            "postal_code": "60625",
+            "post_office": "MUTHARA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e9be7201-e324-4635-b3a9-5cbec2e9936f",
+        "fields": {
+            "postal_code": "90113",
+            "post_office": "MUTHTHENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4b54da97-0294-4397-a681-f87d0160d546",
+        "fields": {
+            "postal_code": "90117",
+            "post_office": "MUTITUNI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2071bb48-8b06-4dec-87d2-3cdbbb4a27f8",
+        "fields": {
+            "postal_code": "90201",
+            "post_office": "MUTOMO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "33a49d8f-d85d-4688-af99-06b31e7b53c5",
+        "fields": {
+            "postal_code": "40628",
+            "post_office": "MUTUMBU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "efe9ba8c-ddca-43f8-b21c-36453719e57b",
+        "fields": {
+            "postal_code": "90102",
+            "post_office": "MWALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7292a4ae-b97d-478e-8c71-6a1de5c5ba17",
+        "fields": {
+            "postal_code": "80305",
+            "post_office": "MWATATE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cd5a4047-f145-4936-801f-6d384882625d",
+        "fields": {
+            "postal_code": "10104",
+            "post_office": "MWEIGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4c08cc57-b76f-4603-8322-b82e60bd7eee",
+        "fields": {
+            "postal_code": "90400",
+            "post_office": "MWINGI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "02640463-bee8-4790-b7b4-7e7ede4b6ba8",
+        "fields": {
+            "postal_code": "50226",
+            "post_office": "MYANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cdacbd00-dbe7-4dd4-a0e1-577df4ca417a",
+        "fields": {
+            "postal_code": "20504",
+            "post_office": "NAIRAGE ENKARE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9f18ae6b-bbbd-4704-bb5e-9ed957418c3b",
+        "fields": {
+            "postal_code": "20504",
+            "post_office": "NAISHI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9ec3ec52-8923-48ce-be9e-42b7b02312e3",
+        "fields": {
+            "postal_code": "20117",
+            "post_office": "NAIVASHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "aa55ad87-3597-440b-87f0-801e1919e4e8",
+        "fields": {
+            "postal_code": "20100",
+            "post_office": "NAKURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bf8c1825-fd26-40d3-ae73-0e89e1031800",
+        "fields": {
+            "postal_code": "00207",
+            "post_office": "NAMANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6b482a54-5556-4531-98d9-0c48c7864fcc",
+        "fields": {
+            "postal_code": "50127",
+            "post_office": "NAMBACHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a90c5a60-d4cf-441b-b297-132ad8df5cbc",
+        "fields": {
+            "postal_code": "50409",
+            "post_office": "NAMBALE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ef0a5182-7876-4877-bf49-1604c8c498e5",
+        "fields": {
+            "postal_code": "30301",
+            "post_office": "NANDI HILLS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "56d7fabb-d84a-4732-b1bb-012f29e3bb67",
+        "fields": {
+            "postal_code": "40615",
+            "post_office": "NANGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f68c79e4-d254-46b9-bcf6-2b11aef42292",
+        "fields": {
+            "postal_code": "10400",
+            "post_office": "NANYUKI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d74f1603-c692-410d-99d3-788a65ed0718",
+        "fields": {
+            "postal_code": "10105",
+            "post_office": "NARO MORU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b2c1722c-4e48-4213-b6cf-ed1e2f5aebd3",
+        "fields": {
+            "postal_code": "20500",
+            "post_office": "NAROK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "702a8863-f79d-45ac-8524-c5f1d3327bbf",
+        "fields": {
+            "postal_code": "90118",
+            "post_office": "NDALANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f302f196-5918-4563-8db5-58f8f961c07a",
+        "fields": {
+            "postal_code": "50212",
+            "post_office": "NDALU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2634ee41-c0ef-40c3-ad85-9fb05f28ccee",
+        "fields": {
+            "postal_code": "20404",
+            "post_office": "NDANAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "cb93d03d-11c3-4b50-b687-e2d27337be5b",
+        "fields": {
+            "postal_code": "20306",
+            "post_office": "NDARANGWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6c237b1e-6f84-4f6f-a5be-ef4593ce3d7d",
+        "fields": {
+            "postal_code": "00229",
+            "post_office": "NDERU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a7f3cbc3-21ba-4257-adf2-73e5d79ada36",
+        "fields": {
+            "postal_code": "40302",
+            "post_office": "NDHIWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "26a5d3f9-edd5-4bde-b0a3-0571c32ff477",
+        "fields": {
+            "postal_code": "01016",
+            "post_office": "NDITHINI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b8812d63-035e-4052-af41-9e2b63f9d00b",
+        "fields": {
+            "postal_code": "90202",
+            "post_office": "NDOOA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "12aa5870-3bb2-41d0-903f-60f5743bc045",
+        "fields": {
+            "postal_code": "40602",
+            "post_office": "NDORI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1053ec5c-323d-4d24-9431-d1d8f78bf987",
+        "fields": {
+            "postal_code": "20317",
+            "post_office": "NDUNYU NJERU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "29ee602a-334f-4259-a949-6a375d6a6f93",
+        "fields": {
+            "postal_code": "80311",
+            "post_office": "NG'AMBWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a89e6590-9b56-45f1-8aa1-d73e5bca8301",
+        "fields": {
+            "postal_code": "00218",
+            "post_office": "NGECHA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "96abf4a4-4617-41f5-bbf6-6fd67860e30f",
+        "fields": {
+            "postal_code": "00901",
+            "post_office": "NGEWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6539bc9e-718e-4827-ba3f-269e5a2cc8e3",
+        "fields": {
+            "postal_code": "30404",
+            "post_office": "NGINYANG",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6511a5a9-d435-44c2-9b1c-49b0079a305b",
+        "fields": {
+            "postal_code": "40603",
+            "post_office": "NG'IYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "450fc217-dc7c-4a7b-b839-fbf0f2732b90",
+        "fields": {
+            "postal_code": "00208",
+            "post_office": "NGONG HILLS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6d670fd3-087e-45ec-a492-ccc28d0d3173",
+        "fields": {
+            "postal_code": "90129",
+            "post_office": "NGWATA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f99c34da-ec33-4faa-b4a7-78b389e1ca9c",
+        "fields": {
+            "postal_code": "20107NJORO",
+            "post_office": "",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "389157d0-ad14-4bcc-9865-4fc88feaa71d",
+        "fields": {
+            "postal_code": "60214",
+            "post_office": "NKONDI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "49f6024b-caf3-412d-9175-336859dff2f4",
+        "fields": {
+            "postal_code": "60202",
+            "post_office": "NKUBU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2b7b740f-14cd-42b3-827f-d800141c4757",
+        "fields": {
+            "postal_code": "20318",
+            "post_office": "NORTH-KINANGOP",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "34eea67b-5b06-461f-91e8-febc5630e9a3",
+        "fields": {
+            "postal_code": "90130",
+            "post_office": "NUNGUNI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f606fe66-b148-415b-a9d1-7eae61b81d0c",
+        "fields": {
+            "postal_code": "40124",
+            "post_office": "NYABONDO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dd054972-ba8d-4e29-9a45-23eba552a58c",
+        "fields": {
+            "postal_code": "20300",
+            "post_office": "NYAHURURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "45fdb46f-0209-4237-94ff-c2221c3dc5c9",
+        "fields": {
+            "postal_code": "40203",
+            "post_office": "NYAMACHE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2b1d68b5-ba57-4118-9c6c-adcfff45f5a5",
+        "fields": {
+            "postal_code": "40206",
+            "post_office": "NYAMARAMBE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "49684b46-7fa1-434e-8883-819e69b7cbc9",
+        "fields": {
+            "postal_code": "40205",
+            "post_office": "NYAMBUNWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bf6d81ed-7b72-483d-9300-166743ee9ab1",
+        "fields": {
+            "postal_code": "40500",
+            "post_office": "NYAMIRA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9c521bf4-78c7-45b4-93aa-2fa8d773f94a",
+        "fields": {
+            "postal_code": "40632",
+            "post_office": "NYAMONYE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "de748ed1-e7af-4a54-a8f8-0bc65faf2900",
+        "fields": {
+            "postal_code": "40333",
+            "post_office": "NYNDWIWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e041a606-e99e-4029-9ef2-5135da7e94a5",
+        "fields": {
+            "postal_code": "40126",
+            "post_office": "NYANGANDE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "90846412-01ba-40f6-9254-a047dbde8425",
+        "fields": {
+            "postal_code": "40127",
+            "post_office": "NYANGORI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f6159ff3-b4be-4895-8669-bb9abbd2231b",
+        "fields": {
+            "postal_code": "40218",
+            "post_office": "NYANGUSU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e3be1647-548e-4634-8b10-b47adb5cda55",
+        "fields": {
+            "postal_code": "40311",
+            "post_office": "NYANGWESO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "31650f93-e0c2-4a25-927f-9e20137f7965",
+        "fields": {
+            "postal_code": "40502",
+            "post_office": "NYANSIONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4a4a8a49-7476-431a-a817-e90b7b3ae53b",
+        "fields": {
+            "postal_code": "40402",
+            "post_office": "NYATIKE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "66a74a8f-83bf-494f-a205-61bb5f572e4b",
+        "fields": {
+            "postal_code": "10100",
+            "post_office": "NYERI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "850cc082-3e59-49c3-bf5f-2083f56f3611",
+        "fields": {
+            "postal_code": "40611",
+            "post_office": "NYILIMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2db539e0-4e1a-4ada-8e9d-219da2db5f54",
+        "fields": {
+            "postal_code": "90136",
+            "post_office": "NZEEKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c2a8f65a-d275-42f1-9804-d27e4222513e",
+        "fields": {
+            "postal_code": "90143",
+            "post_office": "NZIU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1ab1367b-bc80-4c6b-b9fd-31326a1b364c",
+        "fields": {
+            "postal_code": "40204",
+            "post_office": "OGENBO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "85d982af-0044-43d1-bf9c-9a298b782924",
+        "fields": {
+            "postal_code": "40323",
+            "post_office": "OGONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8d8aea78-91d7-43bb-842b-f533711f3191",
+        "fields": {
+            "postal_code": "90301",
+            "post_office": "OKIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "81e50645-f291-4172-849e-069431a9ce26",
+        "fields": {
+            "postal_code": "20152",
+            "post_office": "OLENGURUONE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ddc8432c-2083-48ff-ae50-0830ad330421",
+        "fields": {
+            "postal_code": "20302",
+            "post_office": "OLJORO-OROK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "57ef8993-057a-43c6-89f5-1dc0b6ef475e",
+        "fields": {
+            "postal_code": "20303",
+            "post_office": "OL-KALOU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "85544727-f95f-4031-9d1f-97967da8b97d",
+        "fields": {
+            "postal_code": "20503",
+            "post_office": "OLOLULUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "11971aaf-95ee-4834-9f49-7f5f563c9673",
+        "fields": {
+            "postal_code": "40221",
+            "post_office": "OMONGONCHORO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8bf9ff15-3004-40f4-9526-248d7bf47aba",
+        "fields": {
+            "postal_code": "00511",
+            "post_office": "ONGATA RONGAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "43154ecb-b956-4e66-8135-483dc43174ff",
+        "fields": {
+            "postal_code": "30602",
+            "post_office": "ORTUM",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bc942bf0-8e1d-4da1-90ec-1163c829a711",
+        "fields": {
+            "postal_code": "10106",
+            "post_office": "OTHAYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5d847ee9-6f06-44d5-a1e1-ddec6afe1de4",
+        "fields": {
+            "postal_code": "40222",
+            "post_office": "OYUGIS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0355786e-3bcf-4a61-a091-c34e5b960910",
+        "fields": {
+            "postal_code": "40111",
+            "post_office": "PAP-ONDITI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f10ba95b-8b54-4119-bea8-b588d4bf1e81",
+        "fields": {
+            "postal_code": "40131",
+            "post_office": "PAW AKUCHE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "16655fec-ffcc-455a-8351-95228dbb3f0e",
+        "fields": {
+            "postal_code": "50410",
+            "post_office": "PORT VICTORIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "53122764-ace4-47b6-a884-b3dd86f6c784",
+        "fields": {
+            "postal_code": "40132",
+            "post_office": "RABUOR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "29778647-f11c-4e77-a5c5-528b01fd7f52",
+        "fields": {
+            "postal_code": "40604",
+            "post_office": "RANGENGNI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "575ba81b-8776-4c63-aee1-8aa0fd5b016e",
+        "fields": {
+            "postal_code": "40412",
+            "post_office": "RENEN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "858d4fc5-79a2-4494-8d17-a5cd2c20b48a",
+        "fields": {
+            "postal_code": "40303",
+            "post_office": "RANGWE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1180060a-3a57-43c7-8b80-9cf72cafc74c",
+        "fields": {
+            "postal_code": "40403",
+            "post_office": "RAPOGI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a92d5ea3-51aa-4f7b-8b43-e814c0fe3f38",
+        "fields": {
+            "postal_code": "40133",
+            "post_office": "RERU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "37a7161c-009a-45f4-b481-82095baaf5af",
+        "fields": {
+            "postal_code": "70302",
+            "post_office": "RHAMU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "e5866374-c9ae-4fc7-84b1-c6cac2d1e920",
+        "fields": {
+            "postal_code": "40511",
+            "post_office": "RIGOMA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ae1d1b62-fdbb-4378-8b63-d1f71157074f",
+        "fields": {
+            "postal_code": "40512",
+            "post_office": "RIOCHANDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "71aca6f6-83db-4c57-b83e-3896498d9427",
+        "fields": {
+            "postal_code": "40220",
+            "post_office": "RIOSIRI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "616c458f-83cd-495b-8e52-490a2b74dc33",
+        "fields": {
+            "postal_code": "40326",
+            "post_office": "RODI KOPANY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "798cd653-a4e3-4db5-a11d-d7369d4dd189",
+        "fields": {
+            "postal_code": "20108",
+            "post_office": "RONGAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9d0f21eb-5dc5-4a45-a79a-7edd2a9971c7",
+        "fields": {
+            "postal_code": "40404",
+            "post_office": "RONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c09054f5-be3c-4c1e-8b21-6ef1ca521807",
+        "fields": {
+            "postal_code": "20204",
+            "post_office": "RORET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0040b98b-91ba-4ed0-ba15-b6444fdd313b",
+        "fields": {
+            "postal_code": "00232",
+            "post_office": "RUIRU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "45d8cba4-b6e4-41b3-8934-807bdfb25cd9",
+        "fields": {
+            "postal_code": "20321",
+            "post_office": "RUMURUTI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ed678058-f08f-4493-ab19-e7a323a0646e",
+        "fields": {
+            "postal_code": "60103",
+            "post_office": "RUNYENJES",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "16798c6a-5c70-43ab-88df-a065ab711781",
+        "fields": {
+            "postal_code": "20313",
+            "post_office": "RURII",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8f7811d1-2278-4a68-b222-ddb1e947640d",
+        "fields": {
+            "postal_code": "10133",
+            "post_office": "SABA-SABA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7720bceb-3f28-44a8-bdd1-defc433d41fc",
+        "fields": {
+            "postal_code": "80308",
+            "post_office": "SAGALLA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2c0b5128-4f3c-4d52-9055-187c2008d98a",
+        "fields": {
+            "postal_code": "10230",
+            "post_office": "SAGANA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "69def49e-1d13-419e-aeff-983bbd51148f",
+        "fields": {
+            "postal_code": "80120",
+            "post_office": "SAMBURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d7284291-4a03-46b7-bcd1-de025dce8d56",
+        "fields": {
+            "postal_code": "40405",
+            "post_office": "SARE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "922b9ed5-8679-44ac-bf1b-23c61e3516c8",
+        "fields": {
+            "postal_code": "40612",
+            "post_office": "SAWAGONGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "792c53ff-c0bb-430c-8d35-ab0cb87ea302",
+        "fields": {
+            "postal_code": "40614",
+            "post_office": "SEGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "de752992-ddae-4cbf-9b8a-dce7d9ed421f",
+        "fields": {
+            "postal_code": "50308",
+            "post_office": "SEREM",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b16bec4d-e4d5-45d0-861d-a4e6db2e76c1",
+        "fields": {
+            "postal_code": "30407",
+            "post_office": "SERETUNIN",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0eaf1ef6-b589-4dd0-863b-1e68607c04b4",
+        "fields": {
+            "postal_code": "50106",
+            "post_office": "SHIANDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5c4b7255-d724-4d1b-a070-9c9ddd2dba37",
+        "fields": {
+            "postal_code": "80407",
+            "post_office": "SHIMBA HILLS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "dcbd6087-6e81-4848-b71c-a287d7ce8c2d",
+        "fields": {
+            "postal_code": "80409",
+            "post_office": "SHIMONI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c69d4610-bb4d-499b-ae2b-87bbe28af663",
+        "fields": {
+            "postal_code": "50107",
+            "post_office": "SHINYALU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d997c455-da9a-4c28-9f8d-a8d13986d856",
+        "fields": {
+            "postal_code": "60104",
+            "post_office": "SIAKAGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0b7ed386-b140-459e-b9e8-99ecd08f1f65",
+        "fields": {
+            "postal_code": "40600",
+            "post_office": "SIAYA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "763c26b7-de5d-44a5-a105-d059027115bf",
+        "fields": {
+            "postal_code": "40605",
+            "post_office": "SIDINDI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "57b3d5c9-9535-419d-97a4-0fff29ea45b0",
+        "fields": {
+            "postal_code": "20405",
+            "post_office": "SOGOR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8c832642-4d5f-47ab-ba52-f6b216fdfe88",
+        "fields": {
+            "postal_code": "20422",
+            "post_office": "SILIBWET",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "07e635cc-7823-47f2-941f-f21535b1d09f",
+        "fields": {
+            "postal_code": "40308",
+            "post_office": "SINDO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "65609d15-562e-47d5-a2dc-d5f1369a4ff9",
+        "fields": {
+            "postal_code": "20423",
+            "post_office": "SIONGIRIO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "29d33553-77d4-40d5-9b9c-e5297573ffa9",
+        "fields": {
+            "postal_code": "50208",
+            "post_office": "SIRISIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f96374c9-a998-468c-b5b7-9634dc10a956",
+        "fields": {
+            "postal_code": "20128",
+            "post_office": "SOLIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2525eea0-ccc1-4127-88b6-ec04d97f7486",
+        "fields": {
+            "postal_code": "40109",
+            "post_office": "SONDU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d5950536-7d90-4fc7-8097-39db2eae475c",
+        "fields": {
+            "postal_code": "40110",
+            "post_office": "SONGHOR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "986f9f54-ae65-4f46-902a-0a3a65de3aa5",
+        "fields": {
+            "postal_code": "20205",
+            "post_office": "SOSIOT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "93b9d2e3-fdcb-47e8-a7f0-7447ee8cc2bb",
+        "fields": {
+            "postal_code": "20406",
+            "post_office": "SOTIK",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7a089f61-7fd7-46fa-969c-19a4d3ee938e",
+        "fields": {
+            "postal_code": "20319",
+            "post_office": "SOUTH-KINANGOP",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4ba3586f-2631-46b6-ad9c-5ac53414bd3d",
+        "fields": {
+            "postal_code": "30105",
+            "post_office": "SOY",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4e16628f-70f6-44ac-ac30-6e14dbf9bc5d",
+        "fields": {
+            "postal_code": "40418",
+            "post_office": "SUBA-KURIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2da566be-3260-4bb3-a2f6-2700ae3322c5",
+        "fields": {
+            "postal_code": "20109",
+            "post_office": "SUBUKIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "951814bb-3922-4e89-aaf0-3d03d3f9a272",
+        "fields": {
+            "postal_code": "20602",
+            "post_office": "SUGUTA MAR MAR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0fe518a2-edb8-4d75-b0ff-fa0371d2b4a5",
+        "fields": {
+            "postal_code": "20151",
+            "post_office": "SALMAC",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "132f79e9-99aa-4304-b9d1-ed43c887cc61",
+        "fields": {
+            "postal_code": "90132",
+            "post_office": "SULTAN HAMUD",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c6de0f72-96f4-41b4-a305-5a70457eca00",
+        "fields": {
+            "postal_code": "40400",
+            "post_office": "SUNA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "75d9dcc8-1102-4d83-9f21-83863bcb2bde",
+        "fields": {
+            "postal_code": "40229",
+            "post_office": "TABAKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "a07655dc-d387-4d01-bc33-8056fa1a8fb8",
+        "fields": {
+            "postal_code": "70303",
+            "post_office": "TAKABA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "17bb3d12-8306-4b71-bce3-9b5039a28cb7",
+        "fields": {
+            "postal_code": "90131",
+            "post_office": "TALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "2d3a793d-db04-49b9-994f-b04feb2c6e75",
+        "fields": {
+            "postal_code": "30704",
+            "post_office": "TAMBACH",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "73371efb-1305-451e-b3ae-f6aa94f3a49e",
+        "fields": {
+            "postal_code": "80309",
+            "post_office": "TAUSA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4aeb09c8-4b98-46c4-95a8-0ac3691c243f",
+        "fields": {
+            "postal_code": "80302",
+            "post_office": "TAVETA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ee594a1c-b3a1-4607-a4cb-646b8d7839f0",
+        "fields": {
+            "postal_code": "90133",
+            "post_office": "TAWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d200e8bf-18b1-452f-b071-a0425324b006",
+        "fields": {
+            "postal_code": "30405",
+            "post_office": "TENGES",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9c93bd6f-f3e1-42c6-af90-14659250533b",
+        "fields": {
+            "postal_code": "01000",
+            "post_office": "THIKA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "88207b8b-9983-46b3-ad79-12a768c467a9",
+        "fields": {
+            "postal_code": "10406",
+            "post_office": "TIMAU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "1e59c4e9-d47b-4e54-a998-f9c16d4eedf3",
+        "fields": {
+            "postal_code": "20110",
+            "post_office": "TIMBER MILLS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c9ff84f3-60d9-4f4f-a89b-b639d595bb82",
+        "fields": {
+            "postal_code": "30108",
+            "post_office": "TIMBOROA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "292431b7-fa11-40c5-a0e5-6947f9723e0c",
+        "fields": {
+            "postal_code": "50309",
+            "post_office": "TIRIKI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "d95ad17f-ea7a-42d1-b15e-685dae5cc378",
+        "fields": {
+            "postal_code": "30707",
+            "post_office": "TOT",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "c107ce15-6ffc-40e4-98b7-4f1c39dbae46",
+        "fields": {
+            "postal_code": "90203",
+            "post_office": "TULIA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5f53e0b3-f31f-41dc-aba5-4c754626b670",
+        "fields": {
+            "postal_code": "60213",
+            "post_office": "TUNYAI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "13af1ed4-680d-4af0-8d65-2b64c8ba4ddc",
+        "fields": {
+            "postal_code": "30106",
+            "post_office": "TURBO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "16ef8647-c941-4973-8aed-b8822de76f80",
+        "fields": {
+            "postal_code": "40606",
+            "post_office": "UGUNJA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f6be1a95-7e73-4447-86b0-459add94369b",
+        "fields": {
+            "postal_code": "80400",
+            "post_office": "UKUNDA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f1e5583c-6804-4bd0-9a27-ab307eddec19",
+        "fields": {
+            "postal_code": "40607",
+            "post_office": "UKWALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9b14d512-33f4-457e-9171-f762eb349f1a",
+        "fields": {
+            "postal_code": "00222",
+            "post_office": "UPLANDS",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7c3466f4-b2f0-4144-b0f9-83a8da97ecff",
+        "fields": {
+            "postal_code": "40608",
+            "post_office": "URANGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "07724a66-7640-4c8f-a0ef-ff20feb5ca9d",
+        "fields": {
+            "postal_code": "40228",
+            "post_office": "URIRI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "4090ae69-9fa9-4173-8ed3-dc97f342e2a6",
+        "fields": {
+            "postal_code": "40609",
+            "post_office": "USENGE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0e27d7db-6470-48c6-ab6a-9c9e4eab3c5c",
+        "fields": {
+            "postal_code": "50310",
+            "post_office": "VIHIGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "7511ae28-a6b6-4bc5-a51f-13758ca579e2",
+        "fields": {
+            "postal_code": "80119",
+            "post_office": "VIPINGO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "6fd84d7c-4f83-4e2a-b99d-8cca09873f31",
+        "fields": {
+            "postal_code": "80211",
+            "post_office": "VITENGENI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9b3646c0-2434-474e-81b4-a21369ba698a",
+        "fields": {
+            "postal_code": "80300",
+            "post_office": "VOI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f8cf5a9d-e5a4-445a-b393-1a9c3399fa4f",
+        "fields": {
+            "postal_code": "60121",
+            "post_office": "WACHORO",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "bb2fc843-3ae6-4cb5-b760-f261d39808e8",
+        "fields": {
+            "postal_code": "70200",
+            "post_office": "WAJIR",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "19761ef1-3067-4ebd-9aeb-48bbc781f754",
+        "fields": {
+            "postal_code": "20603",
+            "post_office": "WAMBA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "797fae31-4563-453a-9d14-5052e69f2623",
+        "fields": {
+            "postal_code": "90103",
+            "post_office": "WAMUNYU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "0f5079b2-d4c8-4d56-9964-0a2e2218ee97",
+        "fields": {
+            "postal_code": "00614",
+            "post_office": "WANGIGE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8b815837-5c55-486e-b69c-8efdcac7e810",
+        "fields": {
+            "postal_code": "10303",
+            "post_office": "WANGURU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "f174d9f0-8fcb-4e34-bac8-38bbaeb569c2",
+        "fields": {
+            "postal_code": "20305",
+            "post_office": "WANJOHI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "262c195c-4e3b-4b2a-8f36-c10a6286c57a",
+        "fields": {
+            "postal_code": "80202",
+            "post_office": "WATAMU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "376df9f3-55bd-4d0c-b61e-85402e8cfb14",
+        "fields": {
+            "postal_code": "50205",
+            "post_office": "WEBUYE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "856108a0-a8cf-473f-9f9d-e643cb3c92a5",
+        "fields": {
+            "postal_code": "30603",
+            "post_office": "WEI-WEI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "8a0d6ed0-1f98-41f5-be30-96ccf69be1ec",
+        "fields": {
+            "postal_code": "80303",
+            "post_office": "WERUNGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b113f412-9453-4c34-897a-3c67e537720e",
+        "fields": {
+            "postal_code": "40141",
+            "post_office": "WANAM",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9ef6d97f-299a-421e-a250-03a1f97735b5",
+        "fields": {
+            "postal_code": "80504",
+            "post_office": "WITU",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ba10e5c1-bd3b-4ccd-9d46-475fa9bd12d6",
+        "fields": {
+            "postal_code": "50311",
+            "post_office": "WADONGA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "5cf78c71-e737-427f-a789-37968d4aae1a",
+        "fields": {
+            "postal_code": "80304",
+            "post_office": "WUNDANYI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "b847e9c6-48ea-48a5-82ff-efd122f5dfc0",
+        "fields": {
+            "postal_code": "40610",
+            "post_office": "YALA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "ec37371e-6371-4423-883f-e1c5e4fd3dd9",
+        "fields": {
+            "postal_code": "90134",
+            "post_office": "YOANI",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "06e285d7-7180-4833-8b1f-219d01a68b36",
+        "fields": {
+            "postal_code": "30214",
+            "post_office": "ZIWA",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    },
+    {
+        "model": "authentication.PostalAddresses",
+        "pk": "9faaabd4-9f2e-49e5-ba85-309afb6775b5",
+        "fields": {
+            "postal_code": "90213",
+            "post_office": "ZOMBE",
+            "created": "2024-11-24T00:00:00Z",
+            "updated": "2024-11-24T00:00:00Z"
+        }
+    }
+]

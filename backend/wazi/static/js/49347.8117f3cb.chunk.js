@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[49347],{49347:(e,n,r)=>{r.r(n),r.d(n,{default:()=>s});r(65043);var d=r(70579);function s(){return(0,d.jsx)("div",{children:"RadiologyOrders"})}}}]);
+//# sourceMappingURL=49347.8117f3cb.chunk.js.map

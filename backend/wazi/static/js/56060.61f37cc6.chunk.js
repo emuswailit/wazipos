@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[56060],{56060:(e,t,n)=>{n.r(t),n.d(t,{default:()=>p});const p=(0,n(74685).vt)({baseURL:"https://api.wazipos.com/api/v1/",headers:{"Content-Type":"application/json",Accept:"application/json"}})}}]);
+//# sourceMappingURL=56060.61f37cc6.chunk.js.map

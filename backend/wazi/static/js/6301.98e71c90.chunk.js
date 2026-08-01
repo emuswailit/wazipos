@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[6301],{6301:(e,f,s)=>{e.exports=s.p+"static/media/arrow-up.f0281f2a41a6844dff95.svg"}}]);

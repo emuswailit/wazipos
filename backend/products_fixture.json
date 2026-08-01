@@ -1,0 +1,102 @@
+Attempting JP............auth
+result json at token {'token_type': 'Bearer', 'access_token': 'Rn7HiZI0g6hgaj9MCaeQWAlYrdWKRB2ffXPQ4yQwvj', 'expires_in': 3600}
+[
+{
+  "model": "products.products",
+  "pk": "12b5607a-42b0-4deb-b13a-b49b1f33317b",
+  "fields": {
+    "entity": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "preparation": null,
+    "title": "PRODUCT 1",
+    "packaging": "0",
+    "bar_code": "34567890",
+    "category": "5954c6bf-1fa5-40c3-9698-91d8eeca7e15",
+    "sub_category": null,
+    "description": "",
+    "is_pom": false,
+    "is_vatable": "false",
+    "manufacturer": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "origin_country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+    "units_per_pack": 1,
+    "owner": "f39f5fdc-c0e6-43e9-ae68-0733991a101d",
+    "active": true,
+    "created": "2026-02-11T05:03:37.474Z",
+    "updated": "2026-02-11T05:03:37.475Z",
+    "images": []
+  }
+},
+{
+  "model": "products.products",
+  "pk": "1e811704-ef62-42de-bf63-05628a9b6c02",
+  "fields": {
+    "entity": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "preparation": null,
+    "title": "PRODUCT",
+    "packaging": "1",
+    "bar_code": "34567890",
+    "category": "5954c6bf-1fa5-40c3-9698-91d8eeca7e15",
+    "sub_category": null,
+    "description": "",
+    "is_pom": false,
+    "is_vatable": "false",
+    "manufacturer": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "origin_country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+    "units_per_pack": 1,
+    "owner": "f39f5fdc-c0e6-43e9-ae68-0733991a101d",
+    "active": true,
+    "created": "2026-02-11T05:01:41.995Z",
+    "updated": "2026-02-11T05:01:41.995Z",
+    "images": []
+  }
+},
+{
+  "model": "products.products",
+  "pk": "5028284c-dcd3-4ecc-b6fa-f7f67c25dc33",
+  "fields": {
+    "entity": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "preparation": null,
+    "title": "FRESH TOMATOES",
+    "packaging": "",
+    "bar_code": "",
+    "category": "4cadab9a-a116-44b4-b25a-3aea006119f9",
+    "sub_category": null,
+    "description": null,
+    "is_pom": false,
+    "is_vatable": "false",
+    "manufacturer": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "origin_country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+    "units_per_pack": 0,
+    "owner": "f39f5fdc-c0e6-43e9-ae68-0733991a101d",
+    "active": true,
+    "created": "2026-02-11T04:59:40.385Z",
+    "updated": "2026-02-11T04:59:40.385Z",
+    "images": []
+  }
+},
+{
+  "model": "products.products",
+  "pk": "974539b3-7372-4c58-9d14-e3ab801ff78c",
+  "fields": {
+    "entity": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "preparation": null,
+    "title": "RINA COOKING FAT 1KG",
+    "packaging": "0",
+    "bar_code": "34567890",
+    "category": "5954c6bf-1fa5-40c3-9698-91d8eeca7e15",
+    "sub_category": null,
+    "description": "",
+    "is_pom": false,
+    "is_vatable": "false",
+    "manufacturer": "8355f95c-e7bd-4eed-9117-63ae463c1815",
+    "origin_country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+    "units_per_pack": 1,
+    "owner": "f39f5fdc-c0e6-43e9-ae68-0733991a101d",
+    "active": true,
+    "created": "2026-02-11T05:07:12.979Z",
+    "updated": "2026-02-11T05:07:16.945Z",
+    "images": [
+      "7a2c895d-e932-421a-81de-b44ffa67eaa5"
+    ]
+  }
+}
+]

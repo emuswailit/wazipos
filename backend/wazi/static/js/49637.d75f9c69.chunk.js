@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[49637],{49637:(e,n,r)=>{r.r(n),r.d(n,{TabPaneWrapper:()=>l});var s=r(89379),a=r(80045),c=r(70579);const t=["children"];function l(e){let{children:n}=e,r=(0,a.A)(e,t);return(0,c.jsx)("div",(0,s.A)((0,s.A)({className:"bg-green-300",style:{margin:12}},r),{},{children:n}))}}}]);
+//# sourceMappingURL=49637.d75f9c69.chunk.js.map

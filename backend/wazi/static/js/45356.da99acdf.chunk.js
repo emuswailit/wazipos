@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[45356],{45356:(s,t,e)=>{e.r(t),e.d(t,{default:()=>i});const i=class{constructor(s,t,e,i,h,n,r,a,u,c,d){this.id=s,this.first_name=t,this.last_name=e,this.names=i,this.gender=h,this.date_of_birth=n,this.age=r,this.user=a,this.user_title=u,this.user_phone=c,this.image=d}}}}]);
+//# sourceMappingURL=45356.da99acdf.chunk.js.map

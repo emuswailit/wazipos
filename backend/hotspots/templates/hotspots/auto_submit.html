@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ title|default:"Wazi Wifi" }} - Authorizing Network Access</title>
+    <style>
+        body { 
+            background-color: #0056b3; 
+            color: #ffffff; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0; 
+            padding: 12px; 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            box-sizing: border-box; 
+        }
+        .card { 
+            width: 100%; 
+            max-width: 400px; 
+            background-color: #0056b3; 
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+            border-radius: 12px; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); 
+            padding: 24px 16px; 
+            box-sizing: border-box; 
+            text-align: center; 
+        }
+        .success-checkmark { 
+            width: 60px; 
+            height: 60px; 
+            border-radius: 50%; 
+            background: rgba(255, 255, 255, 0.15); 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 28px; 
+            margin: 0 auto 16px auto; 
+            color: #ffffff; 
+            animation: pulse 1.8s infinite ease-in-out; 
+        }
+        @keyframes pulse { 
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); } 
+            70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); } 
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); } 
+        }
+        .header h1 { font-size: 22px; font-weight: 900; letter-spacing: 1px; margin: 0 0 8px 0; }
+        .header p { font-size: 13px; font-weight: 500; margin: 0 0 24px 0; opacity: 0.9; line-height: 1.4; }
+        .btn-connect { 
+            display: inline-block; 
+            width: 100%; 
+            background-color: #ffffff; 
+            color: #0056b3; 
+            border: none; 
+            border-radius: 8px; 
+            padding: 14px; 
+            font-size: 14px; 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            cursor: pointer; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+            text-decoration: none; 
+            box-sizing: border-box; 
+        }
+        .btn-connect:active { transform: scale(0.98); }
+        .loading-text { font-size: 11px; opacity: 0.7; margin-top: 16px; letter-spacing: 0.5px; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="success-checkmark">✓</div>
+        <div class="header">
+            <h1>Access Approved!</h1>
+            <p>Activating your access session. Please keep this screen open while we connect your device...</p>
+        </div>
+
+        <!-- Correctly bound hidden authentication form mapping -->
+        <form id="routerAuthForm" action="{{ login_url }}" method="POST" style="display:none;">
+            <input type="hidden" name="username" value="{{ username }}">
+            <input type="hidden" name="password" value="{{ password }}">
+            <input type="hidden" name="dst" value="https://google.com">
+        </form>
+
+        <button type="button" onclick="triggerManualSubmit()" class="btn-connect">
+            Connect Now
+        </button>
+        <div class="loading-text">Handshaking with Router Node...</div>
+    </div>
+
+    <script type="text/javascript">
+        function triggerManualSubmit() {
+            var form = document.getElementById('routerAuthForm');
+            if (form) {
+                document.querySelector('.loading-text').innerText = "Routing Internet Session Tickets...";
+                form.submit();
+            }
+        }
+
+        // Unified singular lifecycle listener
+        document.addEventListener("DOMContentLoaded", function () {
+            var targetUrl = "{{ login_url }}";
+            if (targetUrl && targetUrl.trim() !== "") {
+                // Short 1.5 second timeout gives the client rendering engine enough breathing room
+                setTimeout(function () {
+                    triggerManualSubmit();
+                }, 1500);
+            } else {
+                document.querySelector('.loading-text').innerText = "Error: Gateway routing config missing.";
+                document.querySelector('.loading-text').style.color = "#ff4d4d";
+            }
+        });
+    </script>
+</body>
+</html>

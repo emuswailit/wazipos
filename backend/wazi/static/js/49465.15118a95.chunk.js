@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[49465],{49465:(e,r,t)=>{t.r(r),t.d(r,{default:()=>a});var n=t(70579);function a(){return(0,n.jsx)(n.Fragment,{children:(0,n.jsx)("button",{onClick:null,className:"bg-white py-2 px-6 rounded text-base hover:bg-transparent border-2 border-white text-gray-800 transition-all duration-500 hover:opacity-75 shadow-lg hover:border-gray-800",children:"Log Out"})})}}}]);
+//# sourceMappingURL=49465.15118a95.chunk.js.map

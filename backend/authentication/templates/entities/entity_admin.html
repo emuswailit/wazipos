@@ -1,0 +1,11 @@
+{% extends 'core/base.html' %}
+
+{% block title %} Edit Entity {% endblock %}
+
+{% block content %}
+<div class="box">
+    <h1>Edit entity -{{entity.title}}</h1>
+    <a href="{% url 'logout' %}" class="button is-danger is-uppercase">Log Out</a>
+</div>
+
+{% endblock %}

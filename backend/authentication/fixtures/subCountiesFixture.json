@@ -1,0 +1,1436 @@
+[
+    {
+        "model": "authentication.SubCounties",
+        "pk": "85e9e64e-b460-41eb-8e89-ca8020ccf149",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "sub_county_code": "",
+            "title": "Changamwe",
+            "description": "Changamwe",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "8932a18f-2a72-4a43-9c8d-6e0cd9b18135",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "sub_county_code": "",
+            "title": "Jomvu",
+            "description": "Jomvu",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "2229f165-56a2-47de-9597-24370d2f77d3",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "sub_county_code": "",
+            "title": "Kisauni",
+            "description": "Kisauni",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "97cf632e-ca1d-4357-90bd-7b343730c12f",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "sub_county_code": "",
+            "title": "Likoni",
+            "description": "Likoni",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1be1d904-b77f-413f-a519-d2e7c44fc38b",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "sub_county_code": "",
+            "title": "Mvita",
+            "description": "Mvita",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "51efe544-04c5-46de-b9a0-dc2c683c2103",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "sub_county_code": "",
+            "title": "Nyali",
+            "description": "Nyali",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "4703977d-2a0e-4f29-95d0-29ac7b3aeb0a",
+        "fields": {
+            "county_id": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+            "sub_county_code": "",
+            "title": "Kinango",
+            "description": "Kinango",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "809f0997-8904-46fb-a61d-2ab6653a7ea9",
+        "fields": {
+            "county_id": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+            "sub_county_code": "",
+            "title": "Lunga Lunga",
+            "description": "Lunga Lunga",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "4302155a-a8ec-4e82-831b-b21bad2bdde4",
+        "fields": {
+            "county_id": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+            "sub_county_code": "",
+            "title": "Msambweni",
+            "description": "Msambweni",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "6bb1a4e5-87d2-4a29-9eb7-81a47a9b211b",
+        "fields": {
+            "county_id": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+            "sub_county_code": "",
+            "title": "Matuga",
+            "description": "Matuga",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "f07d8016-41de-42c0-a25b-bdd80744019d",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Ganze",
+            "description": "Ganze",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "e786ee3b-5a7d-4837-b194-f7e0650178ca",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Kaloleni",
+            "description": "Kaloleni",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "19429c40-6534-46e1-8992-e29e7fd2ec05",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Kilifi North",
+            "description": "Kilifi North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "881cbb3d-1f59-49c6-8f66-da480a464f95",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Kilifi South",
+            "description": "Kilifi South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "190c9cab-a6ec-4359-8c5c-5fe81a0885f0",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Magarini",
+            "description": "Magarini",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b6589f38-382b-413b-9078-b06452b5f047",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Malindi",
+            "description": "Malindi",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "fb82f7f6-6cdb-4296-93b5-47d9bcff773f",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "sub_county_code": "",
+            "title": "Rabai",
+            "description": "Rabai",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "2786a09c-20f3-4ffe-9590-23da0db5b8a4",
+        "fields": {
+            "county_id": "42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+            "sub_county_code": "",
+            "title": "Bura",
+            "description": "Bura",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "679ce73e-97a4-40d4-8154-56d80ab03421",
+        "fields": {
+            "county_id": "42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+            "sub_county_code": "",
+            "title": "Galole",
+            "description": "Galole",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "f158886b-c2c4-4a8a-a12e-d295e613aa90",
+        "fields": {
+            "county_id": "42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+            "sub_county_code": "",
+            "title": "Garsen",
+            "description": "Garsen",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "85a3166b-c72d-462b-9e23-3c0378337be9",
+        "fields": {
+            "county_id": "5b4484dc-1ebf-4ce6-a5c4-605127011778",
+            "sub_county_code": "",
+            "title": "Lamu East",
+            "description": "Lamu East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "184be4ae-485d-40ec-aac3-d5c90f92187a",
+        "fields": {
+            "county_id": "5b4484dc-1ebf-4ce6-a5c4-605127011778",
+            "sub_county_code": "",
+            "title": "Lamu West",
+            "description": "Lamu West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+
+
+    {
+        "model": "authentication.SubCounties",
+        "pk": "7d534515-49e0-4004-8d12-655863fa9e39",
+        "fields": {
+            "county_id": "54089583-ed2b-4dea-b3f8-3daf6748a037",
+            "sub_county_code": "",
+            "title": "Mwatate",
+            "description": "Mwatate",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "d1b73370-a964-450d-aca5-79930496d610",
+        "fields": {
+            "county_id": "54089583-ed2b-4dea-b3f8-3daf6748a037",
+            "sub_county_code": "",
+            "title": "Taveta",
+            "description": "Taveta",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "3da046dc-e7ef-40a4-bf28-714bc067beb2",
+        "fields": {
+            "county_id": "54089583-ed2b-4dea-b3f8-3daf6748a037",
+            "sub_county_code": "",
+            "title": "Voi",
+            "description": "Voi",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "3da046dc-e7ef-40a4-bf28-714bc067beb2",
+        "fields": {
+            "county_id": "54089583-ed2b-4dea-b3f8-3daf6748a037",
+            "sub_county_code": "",
+            "title": "Wundanyi",
+            "description": "Wundanyi",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b69c1f25-a55a-41d2-8b89-bc7de8d8f89e",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Daadab",
+            "description": "Daadab",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "a36469de-2a10-4558-8c4b-8853640ecad4",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Fafi",
+            "description": "Fafi",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "9a16c951-0c41-46ea-add3-63ea10e70c12",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Garissa Township",
+            "description": "Garissa Township",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "324517a9-bcc2-420a-ab3a-b947c38ee93d",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Hulugho",
+            "description": "Hulugho",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "bf80ae11-f098-4a52-882f-1af1659080a1",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Ijara",
+            "description": "Ijara",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "ac96f18b-afb6-4499-80b9-83261c633dc1",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Lagdera",
+            "description": "Lagdera",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "6d7e6884-ab39-4fb9-a74f-2a6e657b41dd",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "sub_county_code": "",
+            "title": "Balambala",
+            "description": "Balambala",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0fbbe29c-0e08-49eb-b98d-d6b0337e2536",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "sub_county_code": "",
+            "title": "Eldas",
+            "description": "Eldas",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "e7398272-6035-4355-aacb-f2f3e2751561",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "sub_county_code": "",
+            "title": "Tarbaj",
+            "description": "Tarbaj",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "58f9e699-3404-4be7-8387-9f3aa6071e45",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "sub_county_code": "",
+            "title": "Wajir East",
+            "description": "Wajir East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0db43288-672a-41ef-8ced-7fc64207fd6a",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "sub_county_code": "",
+            "title": "Wajir North",
+            "description": "Wajir North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "d1e065e6-4878-4a56-a1f5-cd7ca1411357",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "sub_county_code": "",
+            "title": "Wajir South",
+            "description": "Wajir South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b69eb431-bf5b-40aa-ba79-c20c69b68c4d",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "sub_county_code": "",
+            "title": "Wajir West",
+            "description": "Wajir West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "be2c5718-a707-487b-9a76-d0359276f2b2",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "sub_county_code": "",
+            "title": "Banissa",
+            "description": "Banissa",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "234960de-d19e-46f1-b55c-01929f3467c4",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "sub_county_code": "",
+            "title": "Lafey",
+            "description": "Lafey",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "f35732c4-694f-4561-a283-2538b0582edc",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "sub_county_code": "",
+            "title": "Mandera North",
+            "description": "Mandera North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "25d22101-9da7-42d9-b135-f055d41d8851",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "sub_county_code": "",
+            "title": "Mandera South",
+            "description": "Mandera South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "11caa274-8e6f-411b-8189-3ede7f2abea6",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "sub_county_code": "",
+            "title": "Mandera East",
+            "description": "Mandera East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "5301e520-0214-44e7-b640-d0fc6fdec157",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "sub_county_code": "",
+            "title": "Mandera West",
+            "description": "Mandera West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "bc05d847-6fbd-49b0-a8c6-a0a63219f75f",
+        "fields": {
+            "county_id": "d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+            "sub_county_code": "",
+            "title": "Saku",
+            "description": "Saku",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "633dfd05-cf64-45e3-bee0-d3a17275e618",
+        "fields": {
+            "county_id": "d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+            "sub_county_code": "",
+            "title": "North Horr",
+            "description": "North Horr",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "f520e909-790c-463e-a325-a18ea0eb6300",
+        "fields": {
+            "county_id": "d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+            "sub_county_code": "",
+            "title": "Laisamis",
+            "description": "Laisamis",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0cfe125d-eb5a-4748-990c-24cc7474f708",
+        "fields": {
+            "county_id": "d6b2a08f-5690-47f3-8b94-68dc6a22c6b5",
+            "sub_county_code": "",
+            "title": "Moyale",
+            "description": "Moyale",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "aa76e651-dfcf-4e8f-a8e5-cd34cf4be877",
+        "fields": {
+            "county_id": "7822576a-322f-4a79-89f8-0c98b0dc97ba",
+            "sub_county_code": "",
+            "title": "Isiolo",
+            "description": "Isiolo",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "6e4eef13-3936-4755-93c1-d0240102118a",
+        "fields": {
+            "county_id": "7822576a-322f-4a79-89f8-0c98b0dc97ba",
+            "sub_county_code": "",
+            "title": "Merti",
+            "description": "Merti",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1de03ebf-2c8a-454d-a5de-1d0582eb961c",
+        "fields": {
+            "county_id": "7822576a-322f-4a79-89f8-0c98b0dc97ba",
+            "sub_county_code": "",
+            "title": "Garbatulla",
+            "description": "Garbatulla",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "5ba62702-b51a-494e-a78c-9d0aac41273e",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Buuri",
+            "description": "Buuri",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "7699dde7-c209-4ddb-91d7-d94e5a8cee40",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Igembe Central",
+            "description": "Igembe Central",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "8c946579-18c3-4289-a101-7e5687e805ae",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Igembe North",
+            "description": "Igembe North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "4c4bfdbe-740c-4a5a-9a6a-d7884d01f14a",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Igembe South",
+            "description": "Igembe South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "fc4b7ebc-7647-4449-8661-169b69c1c7b3",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Imenti Central",
+            "description": "Imenti Central",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b46e53c6-3bba-4f6f-889d-2230d736e8bd",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Imenti North",
+            "description": "Imenti North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b69f8742-c7f1-4870-877c-8347848efc21",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Imenti South",
+            "description": "Imenti South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "4939f68a-256c-4676-9096-6e34eb967098",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Tigania East",
+            "description": "Tigania East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "add3eb98-f96d-4f8c-a3c2-f871e45d1667",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "sub_county_code": "",
+            "title": "Tigania West",
+            "description": "Tigania West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "edb55c18-f559-4b66-a9f6-87081f41e973",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Tharaka North",
+            "description": "Tharaka North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "9592f5f1-9d7c-409d-9464-70700bf9cc5e",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Tharaka South",
+            "description": "Tharaka South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "a5e2de2c-c549-4e92-95bc-bd3bcfc61ee0",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Chuka",
+            "description": "Chuka",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "2e6efc0c-3f2f-46cd-8b24-c1fb2a6acc4b",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Igambango’mbe",
+            "description": "Igambango’mbe",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "fd0fc965-883e-4a98-b3e4-ce33b957b6b6",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Maara",
+            "description": "Maara",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "5ed449f7-c8ea-444d-8576-299f4f13bc4a",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Chiakariga",
+            "description": "Chiakariga",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "6685b3c7-ac24-4643-9c80-04789e35243a",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "sub_county_code": "",
+            "title": "Muthambi",
+            "description": "Muthambi",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "676a1239-6df8-4d1c-bdb6-37c5b37020b4",
+        "fields": {
+            "county_id": "849840bd-f62b-4a13-916f-143a3577a453",
+            "sub_county_code": "",
+            "title": "Manyatta",
+            "description": "Manyatta",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "540e09d0-4511-4c08-9aed-0e18de32ad67",
+        "fields": {
+            "county_id": "849840bd-f62b-4a13-916f-143a3577a453",
+            "sub_county_code": "",
+            "title": "Mbeere North",
+            "description": "Mbeere North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1c0d2379-3e47-478d-9b8e-43d1c6c450fc",
+        "fields": {
+            "county_id": "849840bd-f62b-4a13-916f-143a3577a453",
+            "sub_county_code": "",
+            "title": "Mbeere South",
+            "description": "Mbeere South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1205b164-22a6-44d2-8297-002fbc6a5282",
+        "fields": {
+            "county_id": "849840bd-f62b-4a13-916f-143a3577a453",
+            "sub_county_code": "",
+            "title": "Runyenjes",
+            "description": "Runyenjes",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "f6be8950-1af2-465d-97e3-48e21077caf8",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Kitui West",
+            "description": "Kitui West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "4faf08df-9f1c-404c-b0a9-0e9bbea76d1f",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Kitui Central",
+            "description": "Kitui Central",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "6329cb92-7e92-4088-b904-ae4db8098b31",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Kitui Rural",
+            "description": "Kitui Rural",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "fe0d57aa-fd07-4d11-acad-dc20b7323a09",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Kitui South",
+            "description": "Kitui South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0c44b734-1054-4163-bd1a-098d73354f71",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Kitui East",
+            "description": "Kitui East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "78fabe49-c1f3-44d1-98a6-5e74cb7771f4",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Mwingi North",
+            "description": "Mwingi North",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "e64e3063-3c04-496f-865a-5f9d77048b0f",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Mwingi West",
+            "description": "Mwingi West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "d1a60a9f-3959-4570-8d8e-ce2d165e017a",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "sub_county_code": "",
+            "title": "Mwingi Central",
+            "description": "Mwingi Central",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1e7cb0c0-fe2a-42ef-b6a9-07e79013c297",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Kathiani",
+            "description": "Kathiani",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "97d3745d-a4f8-430c-a9e9-72a56fdf7957",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Machakos Town",
+            "description": "Machakos Town",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "45b2debe-0d2b-41c1-9988-766a8a4ec79d",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Masinga",
+            "description": "Masinga",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "6a07a277-d036-48dd-8d33-25e584cbb892",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Matungulu",
+            "description": "Matungulu",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b2ce932a-8916-4844-832b-466368cb4f8e",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Mavoko",
+            "description": "Mavoko",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "96f62db7-22a8-4438-9108-d88e20c88b56",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Mwala",
+            "description": "Mwala",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "9b9d43a8-1c6d-454c-8491-5e6f71f90be8",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "sub_county_code": "",
+            "title": "Yatta",
+            "description": "Yatta",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "142b624f-3770-4fcc-9497-83b861320758",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "sub_county_code": "",
+            "title": "Kaiti",
+            "description": "Kaiti",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "821464fb-e7de-4309-87be-d50e8f65d843",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "sub_county_code": "",
+            "title": "Kibwezi West",
+            "description": "Kibwezi West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "3dc4def3-fc51-48f0-9fa4-a0601ac5bf4c",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "sub_county_code": "",
+            "title": "Kibwezi East",
+            "description": "Kibwezi East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0b2c014b-5508-4859-8bde-3c629541713d",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "sub_county_code": "",
+            "title": "Kilome",
+            "description": "Kilome",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "cdfd391f-7226-44ca-a3cd-8255d4c5f9f3",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "sub_county_code": "",
+            "title": "Makueni",
+            "description": "Makueni",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "96e2754c-7f71-4991-a391-70dfc11fab39",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "sub_county_code": "",
+            "title": "Mbooni",
+            "description": "Mbooni",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "c1a854c8-d1da-4f3f-921f-c1bd7f2d9b30",
+        "fields": {
+            "county_id": "a9d61a90-e7dc-4931-815e-cb1951ddca92",
+            "sub_county_code": "",
+            "title": "Kinangop",
+            "description": "Kinangop",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "573e9b87-36b6-4852-8cde-9579f096a21a",
+        "fields": {
+            "county_id": "a9d61a90-e7dc-4931-815e-cb1951ddca92",
+            "sub_county_code": "",
+            "title": "Kipipiri",
+            "description": "Kipipiri",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "61fd0c65-9423-4e5a-be0e-45336b7d43c1",
+        "fields": {
+            "county_id": "a9d61a90-e7dc-4931-815e-cb1951ddca92",
+            "sub_county_code": "",
+            "title": "Ndaragwa",
+            "description": "Ndaragwa",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b93e39d4-a3de-41eb-8887-4e591ce9a86a",
+        "fields": {
+            "county_id": "a9d61a90-e7dc-4931-815e-cb1951ddca92",
+            "sub_county_code": "",
+            "title": "Ol-Kalou",
+            "description": "Ol-Kalou",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "4fb8a845-670c-41ca-a81a-417ff7ca73fd",
+        "fields": {
+            "county_id": "a9d61a90-e7dc-4931-815e-cb1951ddca92",
+            "sub_county_code": "",
+            "title": "Ol Joro Orok",
+            "description": "Ol Joro Orok",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "707d3e82-c1dd-4537-9378-cd20b6a4015b",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Kieni East",
+            "description": "Kieni East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "9a07ad3e-a10a-4f03-8580-6e7345e76069",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Kieni West",
+            "description": "Kieni West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "b265b20e-3b97-41ea-a8ef-5c0354e74b26",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Mathira East",
+            "description": "Mathira East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "8bb82a8f-164b-478e-bea7-4e08b747e2db",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Mathira West",
+            "description": "Mathira West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "eb144da9-1b24-4889-807e-3ae87c59e735",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Mukurweini",
+            "description": "Mukurweini",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0986ff6d-1485-4951-b480-a073eb252a8c",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Nyeri Town",
+            "description": "Nyeri Town",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "66b60deb-e9f2-4e94-a17a-74160e819513",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Othaya",
+            "description": "Othaya",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "3c2e66ba-7991-47c4-8ab9-4b7decb6d163",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "sub_county_code": "",
+            "title": "Tetu",
+            "description": "Tetu",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "fb7e53ad-e29a-4dac-b341-bd3777d6c4f4",
+        "fields": {
+            "county_id": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+            "sub_county_code": "",
+            "title": "Kirinyaga Central",
+            "description": "Kirinyaga Central",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "98fda60e-e771-487d-87a0-ed316b7aa59c",
+        "fields": {
+            "county_id": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+            "sub_county_code": "",
+            "title": "Kirinyaga East",
+            "description": "Kirinyaga East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "a1c06aae-d555-4a44-a891-30a274a485fe",
+        "fields": {
+            "county_id": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+            "sub_county_code": "",
+            "title": "Kirinyaga West",
+            "description": "Kirinyaga West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "7e3b4ee1-e5c8-47be-9fde-6e1a725afcf2",
+        "fields": {
+            "county_id": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+            "sub_county_code": "",
+            "title": "Mwea East",
+            "description": "Mwea East",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1488faeb-66dc-4256-89ab-9a5b2dca30bd",
+        "fields": {
+            "county_id": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+            "sub_county_code": "",
+            "title": "Mwea West",
+            "description": "Mwea West",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "e88f515e-27f5-49fb-b8b3-4f243386613e",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Gatanga",
+            "description": "Gatanga",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0a5cf93a-136f-49f0-a8e0-6d362118b6e3",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Kahuro",
+            "description": "Kahuro",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "375c60b5-35df-4231-ab05-264727519e29",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Kandara",
+            "description": "Kandara",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "8f2d1ab5-c2aa-4713-a1a2-db765f57b714",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Kangema",
+            "description": "Kangema",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "006941b1-2a1c-48b4-b162-7d3ee7be3abd",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Kigumo",
+            "description": "Kigumo",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "0745cb2d-068d-4316-9e50-64833bb0345b",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Kiharu",
+            "description": "Kiharu",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "1a0ab3c3-e178-4407-85f4-9d31ed8028b2",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Mathioya",
+            "description": "Mathioya",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    },
+    {
+        "model": "authentication.SubCounties",
+        "pk": "dd67f947-e006-4027-beec-502e1aec74de",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "sub_county_code": "",
+            "title": "Murang’a South",
+            "description": "Murang’a South",
+            "created": "2021-11-28",
+            "updated": "2021-11-28"
+        }
+    }
+
+
+
+
+]

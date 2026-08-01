@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wazi Wifi - Payment Failed</title>
+    <style>
+        body {
+            background-color: #0056b3;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 12px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+        .card {
+            width: 100%;
+            max-width: 400px;
+            background-color: #0056b3;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            padding: 24px 16px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            color: #ffcccc;
+        }
+        .header h1 {
+            font-size: 22px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            margin: 0 0 8px 0;
+        }
+        .header p {
+            font-size: 13px;
+            font-weight: 500;
+            margin: 0 0 20px 0;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
+        .alert-danger {
+            background-color: rgba(255, 102, 102, 0.15);
+            border: 1px solid rgba(255, 102, 102, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 24px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #ffcccc;
+        }
+        /* Solid White Contrast CTA Button */
+        .btn-retry {
+            display: block;
+            width: 100%;
+            background-color: #ffffff;
+            color: #0056b3;
+            border: none;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 14px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-decoration: none;
+            box-sizing: border-box;
+            transition: background 0.15s;
+        }
+        .btn-retry:active {
+            transform: scale(0.98);
+        }
+        .divider {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            margin: 16px 0;
+        }
+        .footer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 11px;
+            gap: 4px;
+        }
+        .footer a {
+            color: #ffffff;
+            font-weight: bold;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <!-- Visual anchor warning element -->
+        <div class="error-icon">⚠️</div>
+        
+        <div class="header">
+            <h1>{{ title }}</h1>
+            <p>We could not complete your connection request.</p>
+        </div>
+
+        <!-- Displays the target error message mapped dynamically from views.py -->
+        <div class="alert-danger">
+            {{ message|default:"The transaction request could not be processed." }}
+        </div>
+
+        <!-- Form elements targeting the named URL routing schema to pass state properties forward cleanly -->
+        <form method="GET" action="{% url 'hotspots:login' %}">
+            <input type="hidden" name="mac" value="{{ mac }}">
+            <input type="hidden" name="nas_id" value="{{ nas_id }}">
+            <input type="hidden" name="router_ip" value="{{ router_ip }}">
+            <input type="hidden" name="login_url" value="{{ login_url }}">
+            
+            <button type="submit" class="btn-retry">
+                Try Login Again
+            </button>
+        </form>
+
+        <div class="divider"></div>
+        <div class="footer">
+            <div>
+                <span>Support: </span>
+                <a href="tel:{{ contact }}">{{ contact|default:"0733217348" }}</a>
+            </div>
+            <div style="font-size: 10px; opacity: 0.8;">
+                Node: <span style="font-weight: 600;">{{ router_ip|default:"Local" }}</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[22709],{22709:(n,e,t)=>{t.r(e),t.d(e,{default:()=>s});t(65043);var r=t(70579);function s(){return(0,r.jsx)("div",{children:"InpatientVitalsForm"})}}}]);
+//# sourceMappingURL=22709.544ce008.chunk.js.map

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[55971],{55971:(e,r,n)=>{n.r(r),n.d(r,{default:()=>t});n(65043);var s=n(70579);function t(){return(0,s.jsx)("div",{children:"PhysiotherapyOrders"})}}}]);
+//# sourceMappingURL=55971.07582481.chunk.js.map

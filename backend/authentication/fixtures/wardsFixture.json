@@ -1,0 +1,3309 @@
+[
+
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0001",
+        "title":"Port Reitz",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0002",
+        "title":"Kipevu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0003",
+        "title":"Miritini",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0004",
+        "title":"Chaani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"cb5c2096-a926-4810-8a39-5e7e246ee843",
+        "ward_code":"0006",
+        "title":"Jomvu Kuu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"cb5c2096-a926-4810-8a39-5e7e246ee843",
+        "ward_code":"0007",
+        "title":"Magongo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"cb5c2096-a926-4810-8a39-5e7e246ee843",
+        "ward_code":"0008",
+        "title":"Mikindani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"000",
+        "title":"Mjambere",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"0010",
+        "title":"Junda",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"0011",
+        "title":"Bamburi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"0012",
+        "title":"Mwakirungw",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"0013",
+        "title":"Mtopanga",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"0014",
+        "title":"Magogoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b07770af-2a50-4e8b-a0dd-8c1dd2c125d8",
+        "ward_code":"0015",
+        "title":"Shanzu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"24a50b0b-eae1-4fa5-987b-cdfcf7be75da",
+        "ward_code":"0016",
+        "title":"Frere Town",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"24a50b0b-eae1-4fa5-987b-cdfcf7be75da",
+        "ward_code":"0017",
+        "title":"Ziwa La Ng'ombe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"24a50b0b-eae1-4fa5-987b-cdfcf7be75da",
+        "ward_code":"0018",
+        "title":"Mkomani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"24a50b0b-eae1-4fa5-987b-cdfcf7be75da",
+        "ward_code":"0019",
+        "title":"Kongowea",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"24a50b0b-eae1-4fa5-987b-cdfcf7be75da",
+        "ward_code":"0020",
+        "title":"Kadzandani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0021",
+        "title":"Mtongwe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0022",
+        "title":"Shika Adabu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0023",
+        "title":"Bofu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0024",
+        "title":"Likoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+        "ward_code":"0025",
+        "title":"Timbwani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"19a70304-3aff-46e4-bb85-f8940f3413e5",
+        "ward_code":"0026",
+        "title":"Mji Wa Kale/Madaraka",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"19a70304-3aff-46e4-bb85-f8940f3413e5",
+        "ward_code":"0027",
+        "title":"Tudor",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"19a70304-3aff-46e4-bb85-f8940f3413e5",
+        "ward_code":"0028",
+        "title":"Tononoka",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"19a70304-3aff-46e4-bb85-f8940f3413e5",
+        "ward_code":"0029",
+        "title":"Shimanzi/Ganjoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"19a70304-3aff-46e4-bb85-f8940f3413e5",
+        "ward_code":"0030",
+        "title":"Majengo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30a2ec26-6f94-47c7-8a69-6b8c4aff0ad5",
+        "ward_code":"0031",
+        "title":"Gombato Bongwe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30a2ec26-6f94-47c7-8a69-6b8c4aff0ad5",
+        "ward_code":"0032",
+        "title":"Ukunda",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30a2ec26-6f94-47c7-8a69-6b8c4aff0ad5",
+        "ward_code":"0033",
+        "title":"Kinondo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30a2ec26-6f94-47c7-8a69-6b8c4aff0ad5",
+        "ward_code":"0034",
+        "title":"Ramisi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d4190e8b-77be-43bb-94a4-c89135f86a2b",
+        "ward_code":"0035",
+        "title":"Pongwe/Kikokeni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d4190e8b-77be-43bb-94a4-c89135f86a2b",
+        "ward_code":"0036",
+        "title":"Dzombo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d4190e8b-77be-43bb-94a4-c89135f86a2b",
+        "ward_code":"0037",
+        "title":"Mwereni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d4190e8b-77be-43bb-94a4-c89135f86a2b",
+        "ward_code":"0038",
+        "title":"Vanga",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"eb89e09f-b713-4771-9723-e79e1cb1ecfc",
+        "ward_code":"0039",
+        "title":"Tsimba Golini",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"eb89e09f-b713-4771-9723-e79e1cb1ecfc",
+        "ward_code":"0040",
+        "title":"Waa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"eb89e09f-b713-4771-9723-e79e1cb1ecfc",
+        "ward_code":"0041",
+        "title":"Tiwi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"eb89e09f-b713-4771-9723-e79e1cb1ecfc",
+        "ward_code":"0042",
+        "title":"Kubo South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"eb89e09f-b713-4771-9723-e79e1cb1ecfc",
+        "ward_code":"0043",
+        "title":"Mkongani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0044",
+        "title":"Ndavaya",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0045",
+        "title":"Puma",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0046",
+        "title":"Kinango",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0047",
+        "title":"Mackinon Road",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0048",
+        "title":"Chengoni/Samburu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0049",
+        "title":"Mwavumbo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5a9c258c-5af9-4c65-9d94-25d31489ca02",
+        "ward_code":"0050",
+        "title":"Kasemeni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0051",
+        "title":"Tezo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0052",
+        "title":"Sokoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0053",
+        "title":"Kibarani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0054",
+        "title":"Dabaso",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0055",
+        "title":"Matsangoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0056",
+        "title":"Watamu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30683b64-7105-4e51-a1b2-41d8c867a542",
+        "ward_code":"0057",
+        "title":"Mnarani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fdc31a39-70da-4ff0-a97f-d39c16f9e70e",
+        "ward_code":"0058",
+        "title":"Junju",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fdc31a39-70da-4ff0-a97f-d39c16f9e70e",
+        "ward_code":"0059",
+        "title":"Mwarakaya",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fdc31a39-70da-4ff0-a97f-d39c16f9e70e",
+        "ward_code":"0060",
+        "title":"Shimo La Tewa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fdc31a39-70da-4ff0-a97f-d39c16f9e70e",
+        "ward_code":"0061",
+        "title":"Chasimba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fdc31a39-70da-4ff0-a97f-d39c16f9e70e",
+        "ward_code":"0062",
+        "title":"Mtepeni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"17f5bfcc-260b-42cf-a68b-68a321b5863b",
+        "ward_code":"0063",
+        "title":"Mariakani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"17f5bfcc-260b-42cf-a68b-68a321b5863b",
+        "ward_code":"0064",
+        "title":"Kaya Fungo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"17f5bfcc-260b-42cf-a68b-68a321b5863b",
+        "ward_code":"0065",
+        "title":"Kaloleni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"17f5bfcc-260b-42cf-a68b-68a321b5863b",
+        "ward_code":"0066",
+        "title":"Mwanamwinga",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b9d70c74-ce46-4def-8437-e8fcc1aafdc5",
+        "ward_code":"0067",
+        "title":"Mwawesa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b9d70c74-ce46-4def-8437-e8fcc1aafdc5",
+        "ward_code":"0068",
+        "title":"Ruruma",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b9d70c74-ce46-4def-8437-e8fcc1aafdc5",
+        "ward_code":"0069",
+        "title":"Jibana",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b9d70c74-ce46-4def-8437-e8fcc1aafdc5",
+        "ward_code":"0070",
+        "title":"Rabai/Kisurutini",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"523c667a-3e7a-4d8b-bf37-3fa3d18ece00",
+        "ward_code":"0071",
+        "title":"Dungicha",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"523c667a-3e7a-4d8b-bf37-3fa3d18ece00",
+        "ward_code":"0072",
+        "title":"Bamba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"523c667a-3e7a-4d8b-bf37-3fa3d18ece00",
+        "ward_code":"0073",
+        "title":"Jaribuni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"523c667a-3e7a-4d8b-bf37-3fa3d18ece00",
+        "ward_code":"0074",
+        "title":"Sokoke",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f2c5233e-e7dd-40fe-8a87-a21af69e16d5",
+        "ward_code":"0075",
+        "title":"Jilore",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f2c5233e-e7dd-40fe-8a87-a21af69e16d5",
+        "ward_code":"0076",
+        "title":"Kakuyuni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f2c5233e-e7dd-40fe-8a87-a21af69e16d5",
+        "ward_code":"0077",
+        "title":"Ganda",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f2c5233e-e7dd-40fe-8a87-a21af69e16d5",
+        "ward_code":"0078",
+        "title":"Malindi Town",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f2c5233e-e7dd-40fe-8a87-a21af69e16d5",
+        "ward_code":"0079",
+        "title":"Shella",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"70d868ba-ef04-431c-8df4-f5db96f33dae",
+        "ward_code":"0080",
+        "title":"Marafa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"70d868ba-ef04-431c-8df4-f5db96f33dae",
+        "ward_code":"0081",
+        "title":"",
+        "description":"Magarini",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"70d868ba-ef04-431c-8df4-f5db96f33dae",
+        "ward_code":"0082",
+        "title":"Gongoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"70d868ba-ef04-431c-8df4-f5db96f33dae",
+        "ward_code":"0083",
+        "title":"Adu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"70d868ba-ef04-431c-8df4-f5db96f33dae",
+        "ward_code":"0084",
+        "title":"Garashi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"70d868ba-ef04-431c-8df4-f5db96f33dae",
+        "ward_code":"0085",
+        "title":"Sabaki",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"e457a2db-8baa-4557-a942-6d2faa4405ea",
+        "ward_code":"0086",
+        "title":"Kipini East",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"e457a2db-8baa-4557-a942-6d2faa4405ea",
+        "ward_code":"0087",
+        "title":"Garsen South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"e457a2db-8baa-4557-a942-6d2faa4405ea",
+        "ward_code":"0088",
+        "title":"Kipini West",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"e457a2db-8baa-4557-a942-6d2faa4405ea",
+        "ward_code":"0089",
+        "title":"Garsen Central",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"e457a2db-8baa-4557-a942-6d2faa4405ea",
+        "ward_code":"0090",
+        "title":"Garsen West",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"e457a2db-8baa-4557-a942-6d2faa4405ea",
+        "ward_code":"0091",
+        "title":"Garsen North",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"657f72ca-0634-40fd-8e04-ab4fd2d28b33",
+        "ward_code":"0092",
+        "title":"Kinakomba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"657f72ca-0634-40fd-8e04-ab4fd2d28b33",
+        "ward_code":"0093",
+        "title":"Mikinduni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"657f72ca-0634-40fd-8e04-ab4fd2d28b33",
+        "ward_code":"0094",
+        "title":"Chewani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"657f72ca-0634-40fd-8e04-ab4fd2d28b33",
+        "ward_code":"0095",
+        "title":"Wayu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0bf7e987-db68-4b89-8aa9-eb2d0c3d2ba3",
+        "ward_code":"0096",
+        "title":"Chewele",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0bf7e987-db68-4b89-8aa9-eb2d0c3d2ba3",
+        "ward_code":"0097",
+        "title":"Hirimani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0bf7e987-db68-4b89-8aa9-eb2d0c3d2ba3",
+        "ward_code":"0098",
+        "title":"Bangale",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0bf7e987-db68-4b89-8aa9-eb2d0c3d2ba3",
+        "ward_code":"0099",
+        "title":"Sala",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0bf7e987-db68-4b89-8aa9-eb2d0c3d2ba3",
+        "ward_code":"00100",
+        "title":"Madogo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"359cd922-71aa-4674-b37c-f17984a961df",
+        "ward_code":"0101",
+        "title":"Faza",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"359cd922-71aa-4674-b37c-f17984a961df",
+        "ward_code":"0102",
+        "title":"Kiunga",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"359cd922-71aa-4674-b37c-f17984a961df",
+        "ward_code":"0103",
+        "title":"Basuba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"31d85c58-ad30-455a-871f-ccb0436297ba",
+        "ward_code":"0104",
+        "title":"Shella",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"31d85c58-ad30-455a-871f-ccb0436297ba",
+        "ward_code":"0105",
+        "title":"Mkomani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"31d85c58-ad30-455a-871f-ccb0436297ba",
+        "ward_code":"0106",
+        "title":"Hindi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"31d85c58-ad30-455a-871f-ccb0436297ba",
+        "ward_code":"0108",
+        "title":"Hongwe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"31d85c58-ad30-455a-871f-ccb0436297ba",
+        "ward_code":"0109",
+        "title":"Witu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"31d85c58-ad30-455a-871f-ccb0436297ba",
+        "ward_code":"0110",
+        "title":"Bahari",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"546b81e2-ce6a-49a0-bf25-5f462b9551ad",
+        "ward_code":"0111",
+        "title":"Chala",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"546b81e2-ce6a-49a0-bf25-5f462b9551ad",
+        "ward_code":"0112",
+        "title":"Mahoo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"546b81e2-ce6a-49a0-bf25-5f462b9551ad",
+        "ward_code":"0113",
+        "title":"Bomani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"546b81e2-ce6a-49a0-bf25-5f462b9551ad",
+        "ward_code":"0114",
+        "title":"Mboghoni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"546b81e2-ce6a-49a0-bf25-5f462b9551ad",
+        "ward_code":"0115",
+        "title":"Mata",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fffb9efb-64ee-470b-9989-243b00e34d1b",
+        "ward_code":"0116",
+        "title":"Wundanyi/Mbale",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fffb9efb-64ee-470b-9989-243b00e34d1b",
+        "ward_code":"0117",
+        "title":"Werugha",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fffb9efb-64ee-470b-9989-243b00e34d1b",
+        "ward_code":"0118",
+        "title":"Wumingu/Kishushe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"fffb9efb-64ee-470b-9989-243b00e34d1b",
+        "ward_code":"0119",
+        "title":"Mwanda/Mgange",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"61b1796d-d267-463d-b3e3-081d048a6a50",
+        "ward_code":"0120",
+        "title":"Ronge",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"61b1796d-d267-463d-b3e3-081d048a6a50",
+        "ward_code":"0121",
+        "title":"Mwatate",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"61b1796d-d267-463d-b3e3-081d048a6a50",
+        "ward_code":"0122",
+        "title":"Boma",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"61b1796d-d267-463d-b3e3-081d048a6a50",
+        "ward_code":"0123",
+        "title":"Chawia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"78950ab7-e697-490f-abc7-2a485c2610c6",
+        "ward_code":"0125",
+        "title":"Mbololo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"78950ab7-e697-490f-abc7-2a485c2610c6",
+        "ward_code":"0126",
+        "title":"Sagala",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"78950ab7-e697-490f-abc7-2a485c2610c6",
+        "ward_code":"0127",
+        "title":"Kaloleni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"78950ab7-e697-490f-abc7-2a485c2610c6",
+        "ward_code":"0128",
+        "title":"Marungu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"78950ab7-e697-490f-abc7-2a485c2610c6",
+        "ward_code":"0129",
+        "title":"Kasigau",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"78950ab7-e697-490f-abc7-2a485c2610c6",
+        "ward_code":"0130",
+        "title":"Ngolia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"05e6d9a5-bce6-41b4-92ce-1dafc392cefc",
+        "ward_code":"0131",
+        "title":"Waheri",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"05e6d9a5-bce6-41b4-92ce-1dafc392cefc",
+        "ward_code":"0132",
+        "title":"Galbet",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"05e6d9a5-bce6-41b4-92ce-1dafc392cefc",
+        "ward_code":"0133",
+        "title":"Township",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"05e6d9a5-bce6-41b4-92ce-1dafc392cefc",
+        "ward_code":"0134",
+        "title":"Iftin",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f647bb98-411a-40e9-bde5-68063f2d687e",
+        "ward_code":"0135",
+        "title":"Balambala",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f647bb98-411a-40e9-bde5-68063f2d687e",
+        "ward_code":"0136",
+        "title":"Danyere",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f647bb98-411a-40e9-bde5-68063f2d687e",
+        "ward_code":"0137",
+        "title":"Jarajara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f647bb98-411a-40e9-bde5-68063f2d687e",
+        "ward_code":"0138",
+        "title":"Saka",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"f647bb98-411a-40e9-bde5-68063f2d687e",
+        "ward_code":"0139",
+        "title":"Sankuri",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"7a5a1fb8-f581-44fa-b278-391228bd886e",
+        "ward_code":"0140",
+        "title":"Modogashe",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"7a5a1fb8-f581-44fa-b278-391228bd886e",
+        "ward_code":"0141",
+        "title":"Benane",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"7a5a1fb8-f581-44fa-b278-391228bd886e",
+        "ward_code":"0142",
+        "title":"Goreale",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"7a5a1fb8-f581-44fa-b278-391228bd886e",
+        "ward_code":"0143",
+        "title":"Maalamin",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"7a5a1fb8-f581-44fa-b278-391228bd886e",
+        "ward_code":"0144",
+        "title":"Sabena",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"7a5a1fb8-f581-44fa-b278-391228bd886e",
+        "ward_code":"0145",
+        "title":"Baraki",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+        "ward_code":"0146",
+        "title":"Dertu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+        "ward_code":"0147",
+        "title":"Dadaab",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+        "ward_code":"0148",
+        "title":"Labisgale",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+        "ward_code":"0149",
+        "title":"Damajale",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+        "ward_code":"0150",
+        "title":"Liboi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8cc43e3f-ba86-4810-b64c-4cf34e0f352f",
+        "ward_code":"0151",
+        "title":"Abakaile",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4839fdbe-5ce7-489b-a779-6b877f47c7c5",
+        "ward_code":"0152",
+        "title":"Bura",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4839fdbe-5ce7-489b-a779-6b877f47c7c5",
+        "ward_code":"0153",
+        "title":"Dekaharia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4839fdbe-5ce7-489b-a779-6b877f47c7c5",
+        "ward_code":"0154",
+        "title":"Jarajila",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4839fdbe-5ce7-489b-a779-6b877f47c7c5",
+        "ward_code":"0155",
+        "title":"Fafi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4839fdbe-5ce7-489b-a779-6b877f47c7c5",
+        "ward_code":"0156",
+        "title":"Nanighi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a02f7c2a-a423-431b-b268-45dd60c4b4ad",
+        "ward_code":"0157",
+        "title":"Hulugho",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a02f7c2a-a423-431b-b268-45dd60c4b4ad",
+        "ward_code":"0158",
+        "title":"Sangailu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a02f7c2a-a423-431b-b268-45dd60c4b4ad",
+        "ward_code":"0159",
+        "title":"Ijara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a02f7c2a-a423-431b-b268-45dd60c4b4ad",
+        "ward_code":"0160",
+        "title":"Masalani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0161",
+        "title":"Gurar",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0162",
+        "title":"Bute",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0163",
+        "title":"Korondile",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0164",
+        "title":"Malkagufu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0165",
+        "title":"Batalu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0166",
+        "title":"Danaba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"6bbebdb3-db81-4019-9da7-a559d25d22e4",
+        "ward_code":"0167",
+        "title":"Godoma",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a040e99b-9e56-477e-b527-6f978cd6682d",
+        "ward_code":"0168",
+        "title":"Wagberi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a040e99b-9e56-477e-b527-6f978cd6682d",
+        "ward_code":"0169",
+        "title":"Township",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a040e99b-9e56-477e-b527-6f978cd6682d",
+        "ward_code":"0170",
+        "title":"Barwago",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a040e99b-9e56-477e-b527-6f978cd6682d",
+        "ward_code":"0171",
+        "title":"Khorof/Harar",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d69dd169-e5b1-479c-874e-d47e86a482ae",
+        "ward_code":"0172",
+        "title":"Elben",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d69dd169-e5b1-479c-874e-d47e86a482ae",
+        "ward_code":"0172",
+        "title":"Sarman",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d69dd169-e5b1-479c-874e-d47e86a482ae",
+        "ward_code":"0174",
+        "title":"Tarbaj",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d69dd169-e5b1-479c-874e-d47e86a482ae",
+        "ward_code":"0175",
+        "title":"Wargadud",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"031bdb5b-c5a4-4b5a-9ae3-50a68d75a627",
+        "ward_code":"0176",
+        "title":"Arbajahan",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"031bdb5b-c5a4-4b5a-9ae3-50a68d75a627",
+        "ward_code":"0177",
+        "title":"Hadado Athobohol",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"031bdb5b-c5a4-4b5a-9ae3-50a68d75a627",
+        "ward_code":"01078",
+        "title":"Ademasajide",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"031bdb5b-c5a4-4b5a-9ae3-50a68d75a627",
+        "ward_code":"0179",
+        "title":"Ganyure",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"031bdb5b-c5a4-4b5a-9ae3-50a68d75a627",
+        "ward_code":"0180",
+        "title":"Wagalla",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b0eedb13-5860-480f-9fb3-024425b2b03a",
+        "ward_code":"0181",
+        "title":"Eldas",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b0eedb13-5860-480f-9fb3-024425b2b03a",
+        "ward_code":"0182",
+        "title":"Della",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b0eedb13-5860-480f-9fb3-024425b2b03a",
+        "ward_code":"0183",
+        "title":"Lakoley South/Basir",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b0eedb13-5860-480f-9fb3-024425b2b03a",
+        "ward_code":"0184",
+        "title":"Elnur/Tula Tula",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+        "ward_code":"0185",
+        "title":"Benane",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+        "ward_code":"0186",
+        "title":"Burder",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+        "ward_code":"0187",
+        "title":"Dadaja Bulla",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+        "ward_code":"0188",
+        "title":"Habaswein",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+        "ward_code":"0189",
+        "title":"Lagbogol South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"32b63adc-07f6-40d4-8efa-a0619a7b1abc",
+        "ward_code":"0190",
+        "title":"Ibrahim Ure",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0191",
+        "title":"Takaba South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0192",
+        "title":"Takaba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0193",
+        "title":"Lagsure",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0194",
+        "title":"Dandu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0195",
+        "title":"Gither",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0196",
+        "title":"Derkhale",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0198",
+        "title":"Guba",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0199",
+        "title":"Malkamari",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"b80ef36e-eacd-4225-8ebb-6b7c16958758",
+        "ward_code":"0200",
+        "title":"Kiliwehiri",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"08ac4659-4587-4afd-b031-d702c99f66e7",
+        "ward_code":"0201",
+        "title":"Ashabito",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"08ac4659-4587-4afd-b031-d702c99f66e7",
+        "ward_code":"0202",
+        "title":"Guticha",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"08ac4659-4587-4afd-b031-d702c99f66e7",
+        "ward_code":"0203",
+        "title":"Marothile",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"08ac4659-4587-4afd-b031-d702c99f66e7",
+        "ward_code":"0204",
+        "title":"Rhamu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"08ac4659-4587-4afd-b031-d702c99f66e7",
+        "ward_code":"0205",
+        "title":"Rhamu Dimtu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d501f167-1c72-4b7d-a650-f5bb38debe85",
+        "ward_code":"0206",
+        "title":"Wargadud",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d501f167-1c72-4b7d-a650-f5bb38debe85",
+        "ward_code":"0207",
+        "title":"Kutulo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d501f167-1c72-4b7d-a650-f5bb38debe85",
+        "ward_code":"0208",
+        "title":"El Wak South",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d501f167-1c72-4b7d-a650-f5bb38debe85",
+        "ward_code":"0209",
+        "title":"El Wak North",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"d501f167-1c72-4b7d-a650-f5bb38debe85",
+        "ward_code":"0210",
+        "title":"Shimbir Fatuma",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+        "ward_code":"0211",
+        "title":"Arabia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+        "ward_code":"0212",
+        "title":"Libehia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+        "ward_code":"0213",
+        "title":"Libehia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+        "ward_code":"0213",
+        "title":"Libehio",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+        "ward_code":"0214",
+        "title":"Neboi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5517bbd4-4e9c-49fb-8ccd-2be82a93b1d6",
+        "ward_code":"0215",
+        "title":"Township",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4906d266-60f3-4d1d-b890-fb8e4031281c",
+        "ward_code":"0216",
+        "title":"Sala",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4906d266-60f3-4d1d-b890-fb8e4031281c",
+        "ward_code":"0217",
+        "title":"Fino",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4906d266-60f3-4d1d-b890-fb8e4031281c",
+        "ward_code":"0218",
+        "title":"Lafey",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4906d266-60f3-4d1d-b890-fb8e4031281c",
+        "ward_code":"0219",
+        "title":"Waranqara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"4906d266-60f3-4d1d-b890-fb8e4031281c",
+        "ward_code":"0220",
+        "title":"Alungo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0221",
+        "title":"Butiye",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0222",
+        "title":"Sololo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0223",
+        "title":"Heillu/Manyatta",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0224",
+        "title":"Golbo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0225",
+        "title":"Moyale Township",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0226",
+        "title":"Uran",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5cfe7271-0c34-4006-b280-2f992e2e538d",
+        "ward_code":"0227",
+        "title":"Obbu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"25aa2658-b706-4e7c-9820-142aa149493d",
+        "ward_code":"0228",
+        "title":"Dukana",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"25aa2658-b706-4e7c-9820-142aa149493d",
+        "ward_code":"0229",
+        "title":"Maikona",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"25aa2658-b706-4e7c-9820-142aa149493d",
+        "ward_code":"0230",
+        "title":"Turbi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"25aa2658-b706-4e7c-9820-142aa149493d",
+        "ward_code":"0231",
+        "title":"North Horr",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"25aa2658-b706-4e7c-9820-142aa149493d",
+        "ward_code":"0231",
+        "title":"Illeret",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0051c2ee-2310-4b59-ba53-0ff3b036c2c7",
+        "ward_code":"0233",
+        "title":"Sagante/Jaldesa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0051c2ee-2310-4b59-ba53-0ff3b036c2c7",
+        "ward_code":"0234",
+        "title":"Karare",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"0051c2ee-2310-4b59-ba53-0ff3b036c2c7",
+        "ward_code":"0235",
+        "title":"Marsabit Central",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5f9bc02d-f7e5-4271-a6dc-8c41e6185c36",
+        "ward_code":"0236",
+        "title":"Loiyangalani",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5f9bc02d-f7e5-4271-a6dc-8c41e6185c36",
+        "ward_code":"0238",
+        "title":"Kargi/South Horr",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5f9bc02d-f7e5-4271-a6dc-8c41e6185c36",
+        "ward_code":"0239",
+        "title":"Logologo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"5f9bc02d-f7e5-4271-a6dc-8c41e6185c36",
+        "ward_code":"0240",
+        "title":"Laisamis",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0241",
+        "title":"Wabera",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0242",
+        "title":"Bulla Pesa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0243",
+        "title":"Chari",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0244",
+        "title":"Cherab",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0245",
+        "title":"Ngare Mara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0246",
+        "title":"Burat",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9419c542-ae79-48b9-a77e-d1fe79505f58",
+        "ward_code":"0247",
+        "title":"Oldo Nyiro",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"47bba74c-e81d-4bea-849e-43d8e984aa3d",
+        "ward_code":"0248",
+        "title":"Garba Tulla",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"47bba74c-e81d-4bea-849e-43d8e984aa3d",
+        "ward_code":"0249",
+        "title":"Kinna",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"47bba74c-e81d-4bea-849e-43d8e984aa3d",
+        "ward_code":"0250",
+        "title":"Sericho",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30e7cb6d-d8a6-42fd-8690-e271fadb9d9d",
+        "ward_code":"0251",
+        "title":"Maua",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30e7cb6d-d8a6-42fd-8690-e271fadb9d9d",
+        "ward_code":"0252",
+        "title":"Kiegoi/Antubochiu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30e7cb6d-d8a6-42fd-8690-e271fadb9d9d",
+        "ward_code":"0253",
+        "title":"Athiru Gaiti",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30e7cb6d-d8a6-42fd-8690-e271fadb9d9d",
+        "ward_code":"0254",
+        "title":"Akachiu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"30e7cb6d-d8a6-42fd-8690-e271fadb9d9d",
+        "ward_code":"0255",
+        "title":"Kanuni",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a90f5aa1-e110-4434-8278-9d42abfd6a57",
+        "ward_code":"0256",
+        "title":"Akirang'ondu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a90f5aa1-e110-4434-8278-9d42abfd6a57",
+        "ward_code":"0257",
+        "title":"Athiru Ruujine",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a90f5aa1-e110-4434-8278-9d42abfd6a57",
+        "ward_code":"0258",
+        "title":"Igembe East",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a90f5aa1-e110-4434-8278-9d42abfd6a57",
+        "ward_code":"0259",
+        "title":"Njia",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"a90f5aa1-e110-4434-8278-9d42abfd6a57",
+        "ward_code":"0260",
+        "title":"Kangeta",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9b2c3bc7-b089-45bb-a333-d0da141f9919",
+        "ward_code":"0261",
+        "title":"Antuambui",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9b2c3bc7-b089-45bb-a333-d0da141f9919",
+        "ward_code":"0262",
+        "title":"Ntunene",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9b2c3bc7-b089-45bb-a333-d0da141f9919",
+        "ward_code":"0263",
+        "title":"Antubetwe Kiongo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9b2c3bc7-b089-45bb-a333-d0da141f9919",
+        "ward_code":"0264",
+        "title":"Naathu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"9b2c3bc7-b089-45bb-a333-d0da141f9919",
+        "ward_code":"0265",
+        "title":"Amwathi",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"80db67a4-58a7-40cb-ba8e-2cc0fee66846",
+        "ward_code":"0266",
+        "title":"Athwana",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"80db67a4-58a7-40cb-ba8e-2cc0fee66846",
+        "ward_code":"0267",
+        "title":"Akithii",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"80db67a4-58a7-40cb-ba8e-2cc0fee66846",
+        "ward_code":"0268",
+        "title":"Kianjai",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"80db67a4-58a7-40cb-ba8e-2cc0fee66846",
+        "ward_code":"0269",
+        "title":"Nkomo",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"80db67a4-58a7-40cb-ba8e-2cc0fee66846",
+        "ward_code":"0270",
+        "title":"Mbeu",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8547b7af-9f47-451e-bad6-dac598ed22e5",
+        "ward_code":"0271",
+        "title":"Thangata",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8547b7af-9f47-451e-bad6-dac598ed22e5",
+        "ward_code":"0272",
+        "title":"Mikinduri",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8547b7af-9f47-451e-bad6-dac598ed22e5",
+        "ward_code":"0273",
+        "title":"Kiguchwa",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8547b7af-9f47-451e-bad6-dac598ed22e5",
+        "ward_code":"0274",
+        "title":"Muthara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Wards",
+    "pk": "",
+    "fields": {
+      "constituency_id":"8547b7af-9f47-451e-bad6-dac598ed22e5",
+        "ward_code":"0275",
+        "title":"Muthara",
+        "description":"",
+        "created":"2021-11-28",
+        "updated":"2021-11-28"
+    }
+  }
+
+]
