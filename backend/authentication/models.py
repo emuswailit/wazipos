@@ -1637,6 +1637,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
         return str(f"{self.first_name} {self.last_name} - {self.phone} ")
 
     def tokens(self):
+        roles = []
         employee=None
         my_is_staff="true"
         entity_trial_done= "false"
@@ -1686,7 +1687,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
                 roles.append(role_item)
 
         # Add roles to token
-        roles = []
+
         if not self.is_staff:
             my_is_staff="false"
             if Roles.objects.filter(value="Client").exists():
