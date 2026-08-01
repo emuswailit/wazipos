@@ -1669,6 +1669,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
             # else:
             #     entity_trial_done="true"
 
+        ## Admin role
         if self.is_staff:
             admin_role = Roles.objects.filter(value="Admin").first()
             if admin_role:
