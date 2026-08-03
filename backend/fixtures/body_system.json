@@ -1,171 +1,158 @@
 [
-{
-    "model": "drugs.bodysystem",
-    "pk": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "ANTI-INFECTIONS AND ANTI-INFESTATIONS",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
+    {
+        "model": "drugs.bodysystem",
+        "pk": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+        "fields": {
+            "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ANTI-INFECTIONS AND ANTI-INFESTATIONS",
+            "description": "Medicines used to treat bacterial, viral, fungal, protozoal, and helminthic infections.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "1a7c3d4f-2b8e-4a1c-9d3f-5e6b7c8d9e0f",
+        "fields": {
+            "entity": "3a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+            "title": "ALIMENTARY TRACT AND GASTROINTESTINAL SYSTEM",
+            "description": "Medicines for acid-related disorders, bowel ulcers, antiemetics, and laxatives.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "2b8d4e5f-3c9a-5b2d-0e4f-6a7b8c9d0e1f",
+        "fields": {
+            "entity": "4b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e",
+            "title": "CARDIOVASCULAR SYSTEM",
+            "description": "Medicines used for hypertension, heart failure, angina, arrhythmias, and lipid disorders.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "3c9e5f6a-4d0b-6c3e-1f5a-7b8c9d0e1f2a",
+        "fields": {
+            "entity": "5c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f",
+            "title": "RESPIRATORY SYSTEM",
+            "description": "Medicines for obstructive airway diseases, asthma, COPD, and antitussives.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "4d0f6a7b-5e1c-7d4f-2a6b-8c9d0e1f2a3b",
+        "fields": {
+            "entity": "6d4f5e6a-7b8c-9d0e-1f2a-3b4c5d6e7f8a",
+            "title": "NERVOUS SYSTEM AND MENTAL HEALTH",
+            "description": "Analgesics, antiepileptics, anxiolytics, antipsychotics, and medicines used in opioid dependence.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "5e1a7b8c-6f2d-8e5f-3b7c-9d0e1f2a3b4c",
+        "fields": {
+            "entity": "7e5a6b7c-8d9e-0f1a-2b3c-4d5e6f7a8b9c",
+            "title": "ENDOCRINE SYSTEM AND METABOLISM",
+            "description": "Hormones, antidiabetic agents, thyroid agents, and corticosteroids.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "6f2b8c9d-7a3e-9f6a-4c8d-0e1f2a3b4c5d",
+        "fields": {
+            "entity": "8f6b7c8d-9e0f-1a2b-3c4d-5e6f7a8b9c0d",
+            "title": "BLOOD AND BLOOD-FORMING ORGANS",
+            "description": "Antianemia preparations, anticoagulants, antiplatelets, and plasma substitutes.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "7a3c9d0e-8b4f-0a7b-5d9e-1f2a3b4c5d6e",
+        "fields": {
+            "entity": "9a7c8d9e-0f1a-2b3c-4d5e-6f7a8b9c0d1e",
+            "title": "GENITO-URINARY SYSTEM AND SEX HORMONES",
+            "description": "Gynecologicals, contraceptives, urologicals, and sex hormones.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "8b4d0e1f-9c5a-1b8c-6e0f-2a3b4c5d6e7f",
+        "fields": {
+            "entity": "0b8d9e0f-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+            "title": "DERMATOLOGICAL PREPARATIONS",
+            "description": "Topical antifungals, antibacterials, anti-inflammatory agents, and skin barrier preparations.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "9c5e1f2a-0d6b-2c9d-7f1a-3b4c5d6e7f8a",
+        "fields": {
+            "entity": "1c9e0f1a-2b3c-4d5e-6f7a-8b9c0d1e2f3a",
+            "title": "MUSCULO-SKELETAL SYSTEM",
+            "description": "Anti-inflammatory products, antirheumatics, muscle relaxants, and topical agents for joint pain.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "0d6f2a3b-1e7c-3d0e-8f2b-4c5d6e7f8a9b",
+        "fields": {
+            "entity": "2d0f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+            "title": "OPHTHALMOLOGICAL AND OTOLOGICAL PREPARATIONS",
+            "description": "Anti-infectives, anti-inflammatory agents, and anti-glaucoma drugs for eye and ear application.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
+    },
+    {
+        "model": "drugs.bodysystem",
+        "pk": "1e7a3b4c-2f8d-4e1f-9a3c-5d6e7f8a9b0c",
+        "fields": {
+            "entity": "3e1a2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+            "title": "ANTINEOPLASTIC AND IMMUNOMODULATING AGENTS",
+            "description": "Medicines used in cancer therapy, cytotoxic drugs, and immunosuppressants.",
+            "owner": null,
+            "created": "2023-12-06T00:00:00Z",
+            "updated": "2023-12-06T00:00:00Z",
+            "images": []
+        }
     }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "1b96454c-48ee-4997-968b-e3d2b078fccd",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "ALLERGY AND ANAPHYLAXIS",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "211c011c-1db1-4328-8a4e-ad5e6bad7919",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "RENAL AND ONCOLOGY",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "36a3883c-8da4-4d72-8653-ca2883009354",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "CARDIOVASCULAR",
-        "description": "Heart and blood conduits including arteries, veins",
-        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
-        "created": "2023-09-25T21:56:29.004Z",
-        "updated": "2023-09-25T21:56:59.389Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "5acbdf6c-4662-4e05-8f2a-21b51aa4053a",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "CARDIOVASCULAR SYSTEM",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "68986bc6-dd2d-4f79-ac25-ad8bc62ef24b",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "GENITO-URINARY SYSTEM",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "778a53d9-bb2a-4420-bb5f-14eb5b319ec6",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "RESPIRATORY",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "7a409230-26cc-4f58-9713-2acf46ff2609",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "DRUGS AFFECTING NUTRITION AND METABOLISM",
-        "description": "DRUGS AFFECTING NUTRITION AND METABOLISM",
-        "owner": "43214f99-475a-46fa-bc87-f3f562addb53",
-        "created": "2023-12-15T15:05:34.903Z",
-        "updated": "2023-12-15T15:05:34.903Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "7a62b1b1-15a3-4431-94ff-1b6e16ba5c15",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "EAR, NOSE AND THROAT",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "b2d22586-7828-4e02-bffd-3a377b4eb388",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "ALIMENTARY SYSTEM",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "b98a8fb5-570b-4fce-9325-73cd23ed2218",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "NUTRITION AND METABOLISM",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "ca9e5f29-1bd0-4e99-bf95-907ec3332e38",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "CENTRAL NERVOUS SYSTEM",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-},
-{
-    "model": "drugs.bodysystem",
-    "pk": "d3113b1c-703e-4411-a03b-793db493cabb",
-    "fields": {
-        "entity": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "title": "ENDOCRINE",
-        "description": "",
-        "owner": null,
-        "created": "2023-12-06T00:00:00Z",
-        "updated": "2023-12-06T00:00:00Z",
-        "images": []
-    }
-}
 ]

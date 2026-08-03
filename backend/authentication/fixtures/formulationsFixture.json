@@ -1,23 +1,218 @@
 [
   {
-    "model": "authentication.Clusters",
+    "model": "drugs.Formulations",
     "pk": "a9f79a9e-ca45-4bf7-b3be-c580823b0ef0",
     "fields": {
-      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "label":"ACCOUNTS",
-        "value":"ACCOUNTS"
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "CAPSULES",
+      "description": "Solid dosage form in which the drug is enclosed in a hard or soft soluble container or shell of gelatin."
     }
   },
-
   {
-    "model": "authentication.Clusters",
-    "pk": "d2e225a5-f152-4d05-826c-b35d120b400d",
+    "model": "drugs.Formulations",
+    "pk": "2b914df3-1ea6-428f-ac2d-06b281579d4e",
     "fields": {
-      "entity_id":"2f00d537-ba50-49da-b669-3c2052e9f0e9",
-        "label":"ADMIN",
-        "value":"ADMIN"
-       
-      
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "TABLETS",
+      "description": "Solid pharmaceutical dosage form containing drug substances with or without suitable diluents, prepared by compression."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "9c9f79ae-ba45-4bf7-b3be-c580823b0ef0",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "INJECTION SOLUTION",
+      "description": "Sterile liquid preparation containing one or more soluble drug substances dissolved in a suitable vehicle for parenteral administration."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "5f6df2ae-e63d-40d7-bbff-764910149fae",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "ORAL SUSPENSION",
+      "description": "Liquid preparation containing finely divided drug particles distributed somewhat uniformly throughout a vehicle in which the drug exhibits minimum solubility."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "175f2dd8-e092-42c9-afa1-f32260bc11f7",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "CREAM",
+      "description": "Semisolid emulsion dosage form containing one or more drug substances dissolved or dispersed in a suitable base, usually for external skin application."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "e2e225a5-e152-4d05-826c-b35d120b400d",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "OINTMENT",
+      "description": "Semisolid preparation intended for external application to the skin or mucous membranes, typically utilizing an anhydrous, greasy base."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "8c8d0723-9g96-579c-963d-c35g30fe0398",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "ORAL SYRUP",
+      "description": "Concentrated aqueous solution of a sugar, such as sucrose, containing a medicinal agent for pleasant tasting oral intake."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "48d9e183-0h07-680d-074e-d46h41gf1409",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "POWDER FOR RECONSTITUTION",
+      "description": "Mixture of dry, finely divided drugs and excipients requiring the addition of a specified liquid vehicle before administration (e.g., antibiotics)."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "59e0f294-1i18-791e-185f-e57i52hg2510",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "TRANSDERMAL PATCH",
+      "description": "Medicated adhesive patch placed on the skin to deliver a specific, controlled dose of medication through the skin and into the bloodstream."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "7bc301fd-f110-4f51-b995-1f8cb20d0499",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "GEL",
+      "description": "Semisolid system consisting of either suspensions made up of small inorganic particles or large organic molecules interpenetrated by a liquid."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "b1d3f9b2-4091-4cf1-8bc6-df300ea1e82d",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "EYE DROPS",
+      "description": "Sterile aqueous or oily solutions or suspensions of one or more active pharmaceutical ingredients intended for instillation into the conjunctival sac."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "f92f1b40-08d3-4927-9c94-cb4820a6eef3",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "SUPPOSITORY",
+      "description": "Solid dosage form intended for insertion into body orifices (rectum, vagina, or urethra) where it melts, softens, or dissolves to exert localized or systemic effects."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "03b89051-5ea6-42ea-8cd2-b3c990ee48b2",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "INHALER AEROSOL",
+      "description": "Pharmaceutical product packaged under pressure containing therapeutic active ingredients released upon activation of an appropriate valve system."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "d03ef21a-5d05-4ee9-b4b1-e23fa20ddf51",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "INTRAUTERINE DEVICE",
+      "description": "Specialized drug-delivery system inserted into the uterine cavity designed to continuously release active agents (e.g., hormones) over an extended timeframe."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "c1f73b82-4091-4cf1-8bc6-df300ea1e82d",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "LYOPHILIZED POWDER VIAL",
+      "description": "Freeze-dried sterile drug matrix requiring reconstitution with a specific diluent right before parenteral injection, optimized for unstable macromolecules."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "4b73f322-a9f7-4bf7-b3be-c580823b0ef0",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "LIPOSOMAL SUSPENSION",
+      "description": "Advanced lipid-bilayer vesicular nanoparticle formulation designed to encapsulate active molecules, targeting specific tissues while reducing systemic toxicity."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "9d0dd2e2-1524-4d05-826c-b35d120b400d",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "ORALLY DISINTEGRATING TABLET",
+      "description": "Solid oral formulation engineered to dissolve rapidly on the tongue without the need for water, optimizing compliance for pediatric or dysphagic patients."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "1f8cb20d-0499-4927-9c94-cb4820a6eef3",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "EXTENDED RELEASE CAPSULE",
+      "description": "Sustained-release oral capsule containing coated matrix beads designed to slowly discharge active ingredients to maintain consistent therapeutic blood levels."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "b3c990ee-8b2f-42ea-8cd2-b3c990ee48b2",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "EXTEMPORANEOUS PASTE",
+      "description": "Thick, stiff semisolid preparation containing a high concentration of finely divided solids dispersed in an oily or aqueous vehicle for localized structural protection."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "e23fa20d-df51-4ee9-b4b1-e23fa20ddf51",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "SOLU CONTAINED FILM",
+      "description": "Thin, flexible polymeric strip placed directly in the buccal cavity or on the tongue to disintegrate rapidly for systemic mucosal tracking."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "df300ea1-ebd3-4cf1-8bc6-df300ea1e82d",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "MEDICATED SHAMPOO",
+      "description": "Liquid surfactant vehicle containing active antifungal, cytostatic, or anti-keratolytic substances designed for localized treatment of scalp and skin pathologies."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "cb4820a6-eef3-4927-9c94-cb4820a6eef3",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "SUBCUTANEOUS IMPLANT ROD",
+      "description": "Biocompatible, non-erodible rod system inserted subdermally to deliver long-term, zero-order release kinetics of active hormones over several years."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "b9951f8c-0499-4f51-b995-1f8cb20d0499",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "LOTION",
+      "description": "Low-to-medium viscosity fluid emulsion intended for external application to unbroken cutaneous skin layers without causing friction."
+    }
+  },
+  {
+    "model": "drugs.Formulations",
+    "pk": "ac2d06b2-9d4e-418f-ac2d-06b281579d4e",
+    "fields": {
+      "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+      "title": "EFFERVESCENT TABLET",
+      "description": "Uncoated tablet containing organic acids and sodium bicarbonate engineered to react rapidly in water, releasing carbon dioxide to form a buffered solution."
     }
   }
 ]

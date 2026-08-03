@@ -1,0 +1,158 @@
+[
+    {
+        "model": "drugs.Frequencies",
+        "pk": "c462381a-8a81-4ad7-ae2a-dd77b04bf6f3",
+        "fields": {
+            "title": "ONCE DAILY",
+            "abbreviation": "OD",
+            "latin": "omni die",
+            "numerical": 1,
+            "description": "Treatment administered once every 24 hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "e2d83f41-39a4-4cf1-8bc6-df300ea1e82d",
+        "fields": {
+            "title": "TWICE DAILY",
+            "abbreviation": "BD",
+            "latin": "bis in die",
+            "numerical": 2,
+            "description": "Treatment administered twice a day, typically every 12 hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "9f79a9ec-ca45-4bf7-b3be-c580823b0ef0",
+        "fields": {
+            "title": "THREE TIMES DAILY",
+            "abbreviation": "TDS",
+            "latin": "ter in die",
+            "numerical": 3,
+            "description": "Treatment administered three times a day, typically every 8 hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "5e6df2ae-d63d-40d7-bbff-764910149fae",
+        "fields": {
+            "title": "FOUR TIMES DAILY",
+            "abbreviation": "QDS",
+            "latin": "quater in die",
+            "numerical": 4,
+            "description": "Treatment administered four times a day, typically every 6 hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "165f2dd8-f092-42c9-afa1-f32260bc11f7",
+        "fields": {
+            "title": "WHEN REQUIRED",
+            "abbreviation": "PRN",
+            "latin": "pro re nata",
+            "numerical": 0,
+            "description": "Administered as needed or when required based on symptomatic presentation.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "d2e225a5-f152-4d05-826c-b35d120b400d",
+        "fields": {
+            "title": "IMMEDIATELY",
+            "abbreviation": "STAT",
+            "latin": "statim",
+            "numerical": 1,
+            "description": "Administered immediately as a single, urgent loading dose layer.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "7c8d0723-8g96-579c-963d-c35g30fe0398",
+        "fields": {
+            "title": "EVERY NIGHT",
+            "abbreviation": "ON",
+            "latin": "omni nocte",
+            "numerical": 1,
+            "description": "Administered once daily at bedtime hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "38d9e183-9h07-680d-074e-d46h41gf1409",
+        "fields": {
+            "title": "EVERY MORNING",
+            "abbreviation": "OM",
+            "latin": "omni mane",
+            "numerical": 1,
+            "description": "Administered once daily during morning hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "49e0f294-0i18-791e-185f-e57i52hg2510",
+        "fields": {
+            "title": "ALTERNATE DAYS",
+            "abbreviation": "QOD",
+            "latin": "quaque altera die",
+            "numerical": 0.5,
+            "description": "Administered once every second day (every 48 hours).",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "6bc301fd-e110-4f51-b995-1f8cb20d0499",
+        "fields": {
+            "title": "EVERY FOUR HOURS",
+            "abbreviation": "q4h",
+            "latin": "quaque quarta hora",
+            "numerical": 6,
+            "description": "Administered every 4 hours, totaling 6 allocations per 24 hours.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "a1d3f9b2-3091-4cf1-8bc6-df300ea1e82d",
+        "fields": {
+            "title": "EVERY EIGHT HOURS",
+            "abbreviation": "q8h",
+            "latin": "quaque octava hora",
+            "numerical": 3,
+            "description": "Administered strictly every 8 hours, totaling 3 allocations per day.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    },
+    {
+        "model": "drugs.Frequencies",
+        "pk": "e92f1b40-98d3-4927-9c94-cb4820a6eef3",
+        "fields": {
+            "title": "TWICE A WEEK",
+            "abbreviation": "BIW",
+            "latin": "bis in septimana",
+            "numerical": 0.28,
+            "description": "Administered twice per week at spaced intervals.",
+            "created": "2026-08-02 10:18:44",
+            "updated": "2026-08-02 10:18:44"
+        }
+    }
+]

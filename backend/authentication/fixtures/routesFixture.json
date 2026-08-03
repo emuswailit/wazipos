@@ -1,0 +1,211 @@
+[
+    {
+        "model": "drugs.Routes",
+        "pk": "0f8bf2fe-697c-4135-b886-eac9cb9201ae",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRAMUSCULAR",
+            "description": "Injection delivered deeply into a large skeletal body muscle group for rapid systemic uptake.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "2b814df3-2ea6-418f-ac2d-06b281579d4e",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "ORAL",
+            "description": "Administration through the mouth by swallowing for systematic absorption via the gastrointestinal tract.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "9a9f79ae-ca45-4bf7-b3be-c580823b0ef0",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRAVENOUS",
+            "description": "Injection directly into a vein providing immediate delivery into the bloodstream with 100% bioavailability.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "5e6df2ae-d63d-40d7-bbff-764910149fae",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "SUBCUTANEOUS",
+            "description": "Injection into the fatty tissue layer situated immediately beneath the cutaneous skin layer.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "165f2dd8-f092-42c9-afa1-f32260bc11f7",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "SUBLINGUAL",
+            "description": "Placement under the tongue to allow direct absorption through the highly vascularized mucous membranes.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "d2e225a5-f152-4d05-826c-b35d120b400d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "TOPICAL",
+            "description": "Application locally to a specific area on the surface of the body, most commonly onto skin or mucous membranes.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "7c8d0723-8g96-579c-963d-c35g30fe0398",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INHALATION",
+            "description": "Administration via gas or aerosol through the respiratory tract for localized lung treatment or systemic delivery.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "38d9e183-9h07-680d-074e-d46h41gf1409",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "RECTAL",
+            "description": "Administration through the rectum, useful when oral route is compromised or bypassed to avoid first-pass hepatic metabolism.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "49e0f294-0i18-791e-185f-e57i52hg2510",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "BUCCAL",
+            "description": "Placement inside the mouth cheek cavity allowing absorption straight into oral mucosal blood vessels.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "6bc301fd-e110-4f51-b995-1f8cb20d0499",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "TRANSDERMAL",
+            "description": "Delivery via a skin patch formulation for continuous, slow release into systemic circulation over extended timeframes.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "a1d3f9b2-3091-4cf1-8bc6-df300ea1e82d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRADERMAL",
+            "description": "Injection into the dermis layer situated just below the epidermis, most commonly used for hypersensitivity skin tests.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "e92f1b40-98d3-4927-9c94-cb4820a6eef3",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "NASAL",
+            "description": "Administration into the nostrils via sprays or drops targeting local mucous layers or direct brain-barrier crossings.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "f3a4c2b1-7e5d-4f6a-8b9c-df5e3a1b2c3d",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "VAGINAL",
+            "description": "Administration into the vaginal canal for local treatment or systemic absorption.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "b4c5d6e7-8f9a-0b1c-2d3e-4f5g6h7i8j9k",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "OPHTHALMIC",
+            "description": "Administration into the eye via drops or ointments for local treatment of ocular conditions.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "c5d6e7f8-9g0h-1i2j-3k4l-5m6n7o8p9q0r",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "OTIC",
+            "description": "Administration into the ear canal via drops for local treatment of ear conditions.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "d6e7f8g9-0h1i-2j3k-4l5m-6n7o8p9q0r1s",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRAARTICULAR",
+            "description": "Injection directly into a joint space for localized treatment of joint conditions.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "e7f8g9h0-1i2j-3k4l-5m6n-7o8p9q0r1s2t",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRAPERITONEAL",
+            "description": "Injection into the peritoneal cavity for localized treatment or systemic absorption.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "f8g9h0i1-2j3k-4l5m-6n7o-8p9q0r1s2t3u",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRATHECAL",
+            "description": "Injection into the cerebrospinal fluid surrounding the spinal cord for direct central nervous system delivery.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    },
+    {
+        "model": "drugs.Routes",
+        "pk": "g9h0i1j2-3k4l-5m6n-7o8p-9q0r1s2t3u4v",
+        "fields": {
+            "entity_id": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
+            "title": "INTRACARDIAC",
+            "description": "Injection directly into the heart muscle or chambers for immediate emergency situations.",
+            "created": "2023-12-06",
+            "updated": "2023-12-06"
+        }
+    }
+]

@@ -96,10 +96,10 @@ class AdminsOnlyPermissions(permissions.BasePermission):
             # TODO: REVISIT IMPACT OF THIS CHECK
             for x in request.user.roles.all():
                 create_log("INFO", f"User role: {x}")
-                if x.entity==request.user.entity:
-                    print("Role entity", x.entity)
-                    print("User entity", request.user.entity)
-                    roles.append(x.value)
+                # if x.entity==request.user.entity:
+                #     print("Role entity", x.entity)
+                #     print("User entity", request.user.entity)
+                roles.append(x.value)
 
             print("User roles", roles)
             print("Allowed roles", allowed_roles)
