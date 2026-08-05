@@ -9,6 +9,8 @@ from django.core.files import File
 from io import BytesIO
 from PIL import Image
 from authentication.models import Departments,Users
+from django.contrib.postgres.fields import ArrayField
+from enum import Enum
 
 User = get_user_model()
 
@@ -127,7 +129,53 @@ class DrinksCategory(EntityRelatedModel):
 
     def save(self, *args, **kwargs):
         self.title = self.title.upper()
+  
         super(DrinksCategory, self).save(*args, **kwargs)
+
+
+
+
+class EntityType(Enum):
+    BAR = "Bar"
+    BANK = "Bank"
+    CLINIC = "Clinic"
+    DEFAULT = "Default"
+    DISPENSARY = "Dispensary"
+    GENERAL_DISTRIBUTOR = "GeneralDistributor"
+    PHARMACEUTICAL_DISTRIBUTOR = "PharmaceuticalDistributor"
+    FARM = "Farm"
+    GROCERY = "Grocery"
+    HOSPITAL = "Hospital"
+    HOTEL = "Hotel"
+    INTERNET_SERVICE_PROVIDER = "InternetServiceProvider"
+    INSURANCE = "Insurance"
+    GENERAL_MANUFACTURER = "GeneralManufacturer"
+    PHARMACEUTICAL_MANUFACTURER = "PharmaceuticalManufacturer"
+    PARK = "Park"
+    PARKING = "Parking"
+    GENERAL_RETAILER = "GeneralRetailer"
+    PHARMACEUTICAL_RETAILER = "PharmaceuticalRetailer"
+    REALTY = "Realty"
+    RESTAURANT = "Restaurant"
+    SACCO = "Sacco"
+    TRANSPORT_COMPANY = "TransportCompany"
+    TELCO = "Telco"
+    GENERAL_WHOLESALER = "GeneralWholesaler"
+    PHARMACEUTICAL_WHOLESALER = "PharmaceuticalWholesaler"
+
+    @classmethod
+    def choices(cls):
+        return [(item.value, item.value) for item in cls]
+
+    @classmethod
+    def default_entities(cls):
+        """Returns the default list of string values for migrations/models."""
+        return [
+            cls.GENERAL_MANUFACTURER.value,
+            cls.GENERAL_WHOLESALER.value,
+            cls.GENERAL_RETAILER.value
+        ]
+
 
 class Products(EntityRelatedModel):
     IS_VATABLE_OPTIONS = (
@@ -178,6 +226,12 @@ class Products(EntityRelatedModel):
     active = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    allowed_entities = ArrayField(
+        models.CharField(max_length=50, choices=EntityType.choices()),
+        blank=True,
+        # Uses the classmethod callable to guarantee immutability across row generation
+        default=EntityType.default_entities 
+    )
 
     # class Meta:
     #     unique_together = ("manufacturer", "title", "units_per_pack")

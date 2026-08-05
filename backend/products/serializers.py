@@ -309,6 +309,7 @@ class ProductsSerializer(serializers.ModelSerializer):
             "sub_category_details",
             "origin_country",
             "active",
+            "allowed_entities",
             "created",
             "updated",
         )

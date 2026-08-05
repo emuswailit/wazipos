@@ -127,10 +127,18 @@ def get_all_products(user):
 
         authorized_products = []
 
-        if Products.objects.filter(category__in=user.entity.categories.all(), active=True).exists():
-            authorized_products = Products.objects.filter(
-                category__in=user.entity.categories.all(), active=True).all()
-        return authorized_products
+        # if Products.objects.filter(category__in=user.entity.categories.all(), active=True).exists():
+        #     authorized_products = Products.objects.filter(
+        #         category__in=user.entity.categories.all(), active=True).all()
+        # return authorized_products
+        queryset = Products.objects.all()
+        # Look for a query parameter like ?entity_type=Grocery
+        entity_type = user.entity.entity_type('entity_type')
+        
+        if entity_type:
+            # Filters the array column against the query value
+            queryset = queryset.filter(allowed_businesses__contains=[entity_type])
+        return queryset
 def get_client_products(user):
     print
     if user.is_staff:
