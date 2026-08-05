@@ -497,12 +497,20 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
         else:
             instance.preparation = instance.preparation
             instance.save()
-        if 'manufacturer' in data:
-            instance.manufacturer_id = data.get(
-                "manufacturer", instance.manufacturer.id)
+        if 'manufacturer' in data and not data['manufacturer']=="":
+            if Entities.objects.filter(id=data['manufacturer']).exists():
+                manufacturer = Entities.objects.get(id=data['manufacturer'])
+                instance.manufacturer = manufacturer
+                instance.save()
         else:
             pass
-        instance.category_id = data.get("category", instance.category.id)
+
+        if 'category' in data and not data['category']=="":
+            if Categories.objects.filter(id=data['category']).exists():
+                category = Categories.objects.get(id=data['category'])
+                instance.category = category
+                instance.save()
+      
         instance.title = data.get("title", instance.title)
         instance.description = data.get("description", instance.title)
         instance.units_per_pack = data.get(
