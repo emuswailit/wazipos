@@ -139,6 +139,7 @@ def get_all_products(user):
             # Filters the array column against the query value
             queryset = queryset.filter(allowed_businesses__contains=[entity_type])
         return queryset
+    
 def get_client_products(user):
     print
     if user.is_staff:
