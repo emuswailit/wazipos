@@ -73,7 +73,7 @@ def create_wholesaler_receipt(data, user):
         if unit_of_receipt == "":
             errors.append("Unit of receipt cannot be empty")
     except KeyError:
-        errors.append("Pack selling price is required")
+        errors.append("Unit of receipt is required")
 
     try:
         if "manufacture_date" in data["wholesaler_receipt_details"] and not data["wholesaler_receipt_details"]["manufacture_date"]=="":
@@ -82,7 +82,7 @@ def create_wholesaler_receipt(data, user):
                 raise exceptions.ValidationError(
                     'Manufacture date is required for pharmaceutical products')
     except KeyError:
-        errors.append("Pack selling price is required")
+        errors.append("Manufacture date is required for pharmaceuticals is required")
 
     try:
         if "expiry_date" in data["wholesaler_receipt_details"] and not data["wholesaler_receipt_details"]["manufacture_date"]=="":
