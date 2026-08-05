@@ -18,7 +18,7 @@ from django.db import IntegrityError
 
 
 @api_view(["POST"])
-@permission_classes([wholesaler_permissions.WholesalerEmployeePermission])
+@permission_classes([permissions.IsAuthenticated])
 def wholesalerReceiptsStaffAPIView(request):
     try:
         action = request.data["action"]
