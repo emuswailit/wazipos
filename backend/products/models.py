@@ -200,7 +200,7 @@ class Products(EntityRelatedModel):
     title = models.CharField(max_length=100)
     packaging = models.CharField(max_length=100, default="")
     bar_code = models.CharField(max_length=256, default="",null=True,blank=True)
-    category = models.ForeignKey(Categories, on_delete=models.CASCADE)
+    category = models.ForeignKey(Categories, on_delete=models.CASCADE,null=True,blank=True)
     sub_category = models.ForeignKey(
         SubCategories, on_delete=models.CASCADE, null=True, blank=True
     )
