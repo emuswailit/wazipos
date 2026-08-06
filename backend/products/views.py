@@ -430,33 +430,134 @@ class ProductDetailAPIView(generics.RetrieveAPIView):
         return obj
 
 
+# class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
+#     """
+#     Update prodcut with images3
+
+#     """
+
+#     name = "product-update"
+#     permission_classes = (permissions.IsAuthenticated,)
+#     serializer_class = serializers.ProductsSerializer
+#     parser_classes = (MultiPartParser, FormParser)
+#     queryset = models.Products.objects.all()
+#     lookup_fields = ("pk",)
+
+#     def update(self, request, *args, **kwargs):
+#         """
+#         Update product with new images
+#         """
+#         files = request.FILES.getlist("images")
+#         instance = self.get_object()
+#         serializer_context = {
+#             "request": request,
+#         }
+#         serializer = serializers.ProductsSerializer(
+#             instance, context=serializer_context
+#         )
+#         if files:
+#             uploaded_files = []
+#             for file in files:
+#                 content = models.ProductImages.objects.create(
+#                     owner=request.user,
+#                     image=file,
+#                     entity=request.user.entity,
+#                     product=instance,
+#                 )
+#                 uploaded_files.append(content)
+
+#             instance.images.add(*uploaded_files)
+#             instance.save()
+#             context = serializer.data
+#             context["images"] = [file.id for file in uploaded_files]
+#             print('Created', content)
+
+#         data = request.data
+#         category_obj = instance.category
+
+#         is_vatable = data.get("is_vatable", None)
+#         if is_vatable:
+#             instance.is_vatable = is_vatable
+#             instance.save()
+
+#         bar_code = data.get("bar_code", None)
+#         if bar_code:
+#             if models.Products.objects.filter(bar_code=bar_code).exists():
+#                 create_log("error",f"{bar_code} is already in use")
+#             else:
+#                 instance.bar_code = bar_code
+#                 instance.save()
+
+#         preparation_id = data.get("preparation", None)
+#         if preparation_id:
+#             if Preparation.objects.filter(id=preparation_id).exists():
+#                 preparation = Preparation.objects.get(id=preparation_id)
+#                 instance.preparation = preparation
+#                 instance.save()
+#         else:
+#             instance.preparation = instance.preparation
+#             instance.save()
+#         if 'manufacturer' in data and not data['manufacturer']=="":
+#             if Entities.objects.filter(id=data['manufacturer']).exists():
+#                 manufacturer = Entities.objects.get(id=data['manufacturer'])
+#                 instance.manufacturer = manufacturer
+#                 instance.save()
+#         else:
+#             pass
+
+#         if 'category' in data and not data['category']=="":
+#             if Categories.objects.filter(id=data['category']).exists():
+#                 category = Categories.objects.get(id=data['category'])
+#                 instance.category = category
+#                 instance.save()
+      
+#         instance.title = data.get("title", instance.title)
+#         instance.description = data.get("description", instance.title)
+#         instance.units_per_pack = data.get(
+#             "units_per_pack", instance.units_per_pack)
+#         instance.packaging = data.get(
+#             "packaging", instance.packaging)
+#         # instance.is_vatable = data.get("is_vatable", instance.is_vatable)
+#         instance.save()
+
+#         return Response(
+#                 data={
+#                     "response_code": 0,
+#                     "response_message": "Product updated successfully.",
+#                     "product": serializer.data,
+#                     "errors": [],
+#                 },
+#                 status=status.HTTP_201_CREATED,
+#             )
+
+#     def get_object(self):
+#         queryset = self.get_queryset()
+#         filter = {}
+#         for field in self.lookup_fields:
+#             filter[field] = self.kwargs[field]
+
+#         obj = get_object_or_404(queryset, **filter)
+#         self.check_object_permissions(self.request, obj)
+#         return obj
+
 class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
-    Update prodcut with images3
-
+    Update product with images safely using DRF standards.
     """
-
     name = "product-update"
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = serializers.ProductsSerializer
     parser_classes = (MultiPartParser, FormParser)
     queryset = models.Products.objects.all()
-    lookup_fields = ("pk",)
+    lookup_field = "pk"  # Standard DRF lookup
 
     def update(self, request, *args, **kwargs):
-        """
-        Update product with new images
-        """
-        files = request.FILES.getlist("images")
         instance = self.get_object()
-        serializer_context = {
-            "request": request,
-        }
-        serializer = serializers.ProductsSerializer(
-            instance, context=serializer_context
-        )
+        
+        # 1. Handle incoming multipart files safely before changing the instance
+        files = request.FILES.getlist("images")
+        uploaded_files = []
         if files:
-            uploaded_files = []
             for file in files:
                 content = models.ProductImages.objects.create(
                     owner=request.user,
@@ -465,81 +566,38 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
                     product=instance,
                 )
                 uploaded_files.append(content)
-
             instance.images.add(*uploaded_files)
-            instance.save()
-            context = serializer.data
-            context["images"] = [file.id for file in uploaded_files]
-            print('Created', content)
 
-        data = request.data
-        category_obj = instance.category
-
-        is_vatable = data.get("is_vatable", None)
-        if is_vatable:
-            instance.is_vatable = is_vatable
-            instance.save()
-
-        bar_code = data.get("bar_code", None)
-        if bar_code:
-            if models.Products.objects.filter(bar_code=bar_code).exists():
-                create_log("error",f"{bar_code} is already in use")
-            else:
-                instance.bar_code = bar_code
-                instance.save()
-
-        preparation_id = data.get("preparation", None)
-        if preparation_id:
-            if Preparation.objects.filter(id=preparation_id).exists():
-                preparation = Preparation.objects.get(id=preparation_id)
-                instance.preparation = preparation
-                instance.save()
-        else:
-            instance.preparation = instance.preparation
-            instance.save()
-        if 'manufacturer' in data and not data['manufacturer']=="":
-            if Entities.objects.filter(id=data['manufacturer']).exists():
-                manufacturer = Entities.objects.get(id=data['manufacturer'])
-                instance.manufacturer = manufacturer
-                instance.save()
-        else:
-            pass
-
-        if 'category' in data and not data['category']=="":
-            if Categories.objects.filter(id=data['category']).exists():
-                category = Categories.objects.get(id=data['category'])
-                instance.category = category
-                instance.save()
-      
-        instance.title = data.get("title", instance.title)
-        instance.description = data.get("description", instance.title)
-        instance.units_per_pack = data.get(
-            "units_per_pack", instance.units_per_pack)
-        instance.packaging = data.get(
-            "packaging", instance.packaging)
-        # instance.is_vatable = data.get("is_vatable", instance.is_vatable)
-        instance.save()
-
-        return Response(
-                data={
-                    "response_code": 0,
-                    "response_message": "Product updated successfully.",
-                    "product": serializer.data,
-                    "errors": [],
-                },
-                status=status.HTTP_201_CREATED,
+        # 2. Prevent unique constraint bar_code errors before passing data to the serializer
+        bar_code = request.data.get("bar_code")
+        if bar_code and models.Products.objects.filter(bar_code=bar_code).exclude(pk=instance.pk).exists():
+            create_log("error", f"{bar_code} is already in use")
+            return Response(
+                data={"errors": {"bar_code": ["This bar code is already in use."]}},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-    def get_object(self):
-        queryset = self.get_queryset()
-        filter = {}
-        for field in self.lookup_fields:
-            filter[field] = self.kwargs[field]
+        # 3. Clean fallback logic for description matching yours
+        # (Your code had a bug setting instance.description to instance.title)
+        mutable_data = request.data.copy()
+        if "description" not in mutable_data and "title" in mutable_data:
+            mutable_data["description"] = mutable_data["title"]
 
-        obj = get_object_or_404(queryset, **filter)
-        self.check_object_permissions(self.request, obj)
-        return obj
+        # 4. Use the serializer for robust unique-constraint database validation
+        serializer = self.get_serializer(instance, data=mutable_data, partial=True)
+        serializer.is_valid(raise_exception=True) # Catches the IntegrityError cleanly!
+        serializer.save()
 
+        # 5. Build standard structured response
+        return Response(
+            data={
+                "response_code": 0,
+                "response_message": "Product updated successfully.",
+                "product": serializer.data,
+                "errors": [],
+            },
+            status=status.HTTP_200_OK, # Updates should use 200 OK, not 201 Created
+        )
 
 class ProductImageList(generics.ListCreateAPIView):
     """
