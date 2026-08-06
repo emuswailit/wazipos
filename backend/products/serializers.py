@@ -398,7 +398,40 @@ class ProductsSerializer(serializers.ModelSerializer):
             return PreparationSerializer(preparation, context=self.context).data
         else:
             return None
+    def to_internal_value(self, data):
+        """
+        Intercept incoming form-data dictionary early and turn 
+        duplicate Postman keys into a true Python array list.
+        """
+        # Ensure data is a mutable copy so we can write back values safely
+        if hasattr(data, '_mutable') and not data._mutable:
+            data = data.copy()
 
+        # Handle 'allowed_entities' or bracketed 'allowed_entities[]' from multipart forms
+        if hasattr(data, 'getlist'):
+            if 'allowed_entities' in data:
+                data['allowed_entities'] = data.getlist('allowed_entities')
+            elif 'allowed_entities[]' in data:
+                data['allowed_entities'] = data.getlist('allowed_entities[]')
+
+        return super().to_internal_value(data)
+
+    def validate_allowed_entities(self, value):
+        """
+        Optional: Double check that incoming elements comply with the 
+        backend's EntityType choices since we are using CharField as the child.
+        """
+        from models import EntityType # Replace with true import location
+        
+        valid_choices = EntityType.choices() # Assuming it returns an iterable/list of strings or tuples
+        # Standardize validation depending on whether choices are a dictionary, tuple list, or plain list
+        flat_choices = [c[0] if isinstance(c, tuple) else c for c in valid_choices]
+
+        for item in value:
+            if item not in flat_choices:
+                raise serializers.ValidationError(f'"{item}" is not a valid entity choice.')
+                
+        return value
     # def get_manufacturer_details(self, obj):
     #     if obj.manufacturer:
     #         if models.Entities.objects.filter(id=obj.manufacturer.id).exists():
