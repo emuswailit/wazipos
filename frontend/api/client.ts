@@ -1,33 +1,31 @@
-import { ApisauceInstance, create } from "apisauce";
-// 🌟 Link directly to your updated storageService location hook mapping
 import { storageService } from "@/hooks/storage";
+import { ApisauceInstance, create } from "apisauce";
 
-/**
- * Type-safe API Client Configured using Apisauce.
- * Binds type definitions directly to the return object.
- */
 const apiClient: ApisauceInstance = create({
   baseURL: "https://api.wazipos.co.ke/api/v1/",
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
-  timeout: 15000, // Highly recommended boilerplate configuration safeguard for mobile networks
+  timeout: 15000,
 });
 
-/**
- * Async Request Transform Middleware Interceptor.
- * Intercepts outgoing requests to automatically append valid authorization headers.
- */
 apiClient.addAsyncRequestTransform(async (request) => {
   try {
-    const authToken = await storageService.getToken();
+    let authToken = await storageService.getToken();
+
+    if (!authToken && typeof window !== "undefined" && window?.localStorage) {
+      authToken = window.localStorage.getItem("authToken") || window.localStorage.getItem("token");
+    }
+
     if (authToken) {
-      if (!request.headers) request.headers = {};
+      if (!request.headers) {
+        request.headers = {};
+      }
       request.headers["Authorization"] = `Bearer ${authToken}`;
     }
   } catch (err) {
-    console.error("Network interceptor cache tracking breakdown:", err);
+    console.error("Web dynamic network interceptor tracing breakdown:", err);
   }
 });
 

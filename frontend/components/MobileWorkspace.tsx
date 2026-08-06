@@ -2,8 +2,6 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { CustomMapView } from './CustomMapView';
-// 🌟 FIX: Pull DirectoryPanel in as a default import (remove from curly braces)
-// to perfectly match the default export structure defined in DirectoryPanel.tsx
 import DirectoryPanel, { ShopItem } from './DirectoryPanel';
 
 interface MobileWorkspaceProps {
@@ -59,21 +57,29 @@ export function MobileWorkspace({
                     index={1}
                     snapPoints={snapPoints}
                     enablePanDownToClose={false}
-                    backgroundStyle={{ backgroundColor: isCurrentlyDarkMode ? "#0f172a" : "#ffffff" }}
-                    handleIndicatorStyle={{ backgroundColor: isCurrentlyDarkMode ? "#334155" : "#cbd5e1" }}
+                    // 🌟 FIXED: Links sheet background directly to your live theme variables panel hex color code
+                    backgroundStyle={{ backgroundColor: theme.panel }}
+                    // 🌟 FIXED: Links drag handle explicitly to theme text dark parameters to match color shifts
+                    handleIndicatorStyle={{ backgroundColor: theme.textDark }}
                 >
-                    <DirectoryPanel
-                        theme={theme}
-                        isCurrentlyDarkMode={isCurrentlyDarkMode}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        categories={categories}
-                        selectedCategory={selectedCategory}
-                        setSelectedCategory={setSelectedCategory}
-                        filteredShops={filteredShops}
-                        onShopFocus={onShopFocus}
-                        isMobileSheet={true} // 🌟 Active gesture sheet layers enabled natively
-                    />
+                    {/* 
+                      🌟 CRITICAL WRAPPER: Some versions of Gorhom sheet require a wrapper view 
+                      with the explicit background color to prevent inner child element leakages
+                    */}
+                    <View style={{ backgroundColor: theme.panel, flex: 1 }}>
+                        <DirectoryPanel
+                            theme={theme}
+                            isCurrentlyDarkMode={isCurrentlyDarkMode}
+                            searchQuery={searchQuery}
+                            setSearchQuery={setSearchQuery}
+                            categories={categories}
+                            selectedCategory={selectedCategory}
+                            setSelectedCategory={setSelectedCategory}
+                            filteredShops={filteredShops}
+                            onShopFocus={onShopFocus}
+                            isMobileSheet={true}
+                        />
+                    </View>
                 </BottomSheet>
             )}
         </View>

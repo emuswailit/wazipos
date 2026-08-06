@@ -1,117 +1,144 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-// 🌟 Import your optimized storage utility service
-import { storageService } from '@/hooks/storage';
+import { jwtDecode } from "jwt-decode";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 
-// Define the shape of your global theme color palette 
-interface ThemeProps {
-    primary: string;
-    surface: string;
-    border: string;
-    background: string;
+// Dynamically import Expo SecureStore only when running on native platforms to prevent Web bundle crashes
+let SecureStore: any = null;
+if (Platform.OS !== "web") {
+    SecureStore = require("expo-secure-store");
+}
+
+export interface UserRole {
+    id: string;
+    cluster: string;
+    owner: string;
+    entity: string;
+    entity_title: string;
+    level: string;
+    title: string;
+    value: string;
+}
+
+export interface UserProfile {
+    id: string;
+    email: string;
+    name: string;
+    roles: UserRole[];
 }
 
 interface AuthContextType {
-    user: any | null;
-    isLoading: boolean;
-    theme: ThemeProps;
+    user: UserProfile | null;
+    isDarkMode: boolean;
+    isLoading: boolean; // Tracks background storage reading state on initial boot
+    theme: {
+        background: string;
+        panel: string;
+        primary: string;
+        text: string;
+        textDark: string;
+    };
     login: (token: string) => Promise<void>;
     logout: () => Promise<void>;
+    toggleTheme: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Balanced material design styling guidelines passed to your downstream screens
-const lightTheme: ThemeProps = {
-    primary: "#2563eb",   // Deep cobalt blue primary action colour
-    surface: "#f8fafc",   // Slate card surface white tracking metric
-    border: "#e2e8f0",    // Soft separator border framework gray
-    background: "#ffffff" // Main display background base
-};
-
-const darkTheme: ThemeProps = {
-    primary: "#3b82f6",   // Brighter neon cobalt for readability over dark backgrounds
-    surface: "#1e293b",   // Slate-800 card background profile
-    border: "#334155",    // Slate-700 structural border grids
-    background: "#0f172a" // Deep Slate-900 absolute viewport backdrop
-};
+const TOKEN_KEY = "wazipos_auth_token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<any | null>(null);
+    const [user, setUser] = useState<UserProfile | null>(null);
+    const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [isDarkMode, setIsDarkMode] = useState<boolean>(false); // Can tie into device hooks later
 
-    // 🌟 AUTO-LOGIN RESTORATION SYSTEM RUNS ON BOOT
+    const theme = {
+        background: isDarkMode ? "#0f172a" : "#f8fafc",
+        panel: isDarkMode ? "#1e293b" : "#ffffff",
+        text: isDarkMode ? "#f8fafc" : "#0f172a",
+        textDark: isDarkMode ? "#94a3b8" : "#334155",
+        primary: "#3b82f6"
+    };
+
+    // ─── RUNTIME APP HYDRATION (STAYS LOGGED IN ON REFRESH/BOOT) ───
     useEffect(() => {
-        async function restoreSession() {
+        async function bootstrapAsync() {
             try {
-                // storageService handles extraction and expiration filtering automatically
-                const sessionUser = await storageService.getUser();
-                if (sessionUser) {
-                    setUser(sessionUser);
-                    console.log("Session System Trace: Re-anchored valid active account user profile.");
+                let token: string | null = null;
+
+                if (Platform.OS === "web") {
+                    token = localStorage.getItem(TOKEN_KEY);
+                } else if (SecureStore) {
+                    token = await SecureStore.getItemAsync(TOKEN_KEY);
                 }
-            } catch (error) {
-                console.error("Session System Trace: Failed to validate local secure credentials:", error);
+
+                if (token) {
+                    // Safe token evaluation decode step
+                    const decoded: any = jwtDecode(token);
+                    setUser(decoded);
+                }
+            } catch (e) {
+                console.error("Failed to restore token from persistent storage layout layers:", e);
+                // Wipe clean if corrupted token found
+                setUser(null);
             } finally {
                 setIsLoading(false);
             }
         }
-
-        restoreSession();
+        bootstrapAsync();
     }, []);
 
-    // 🌟 LOGIN ACTION LIFECYCLE HOOK LAYER
+    // ─── LOGIN ACTION: RECEIVES, SAVES, AND DECODES THE JWT TOKEN ───
     const login = async (token: string) => {
         try {
-            setIsLoading(true);
-            await storageService.storeToken(token);
-            const authenticatedUser = await storageService.getUser();
-            setUser(authenticatedUser);
+            if (!token) throw new Error("Invalid string token incoming payload parameter.");
+
+            // 1. Decode token profile content details
+            const decodedUser = jwtDecode<UserProfile>(token);
+
+            // 2. Persist token across appropriate hardware sandbox targets
+            if (Platform.OS === "web") {
+                localStorage.setItem(TOKEN_KEY, token);
+            } else if (SecureStore) {
+                await SecureStore.setItemAsync(TOKEN_KEY, token);
+            }
+
+            // 3. Commit profile structural data arrays straight into reactive states
+            setUser(decodedUser);
+            console.log("Authentication profile session initialized successfully for:", decodedUser.name);
         } catch (error) {
-            console.error("Auth Mutation Error: Execution phase failed to store token configuration:", error);
-        } finally {
-            setIsLoading(false);
+            console.error("Login Engine Decode Processing Failure:", error);
+            throw error; // Propagate up to login view UI form catch states
         }
     };
 
-    // 🌟 LOGOUT ACTION LIFECYCLE HOOK LAYER
+    // ─── LOGOUT ACTION: WIPES STORES AND STATES CLEAN ───
     const logout = async () => {
         try {
-            setIsLoading(true);
-            await storageService.removeToken();
-            setUser(null);
-            console.log("Session System Trace: Local account tokens deleted cleanly.");
-        } catch (error) {
-            console.error("Auth Mutation Error: Execution phase failed to clean token files:", error);
+            if (Platform.OS === "web") {
+                localStorage.removeItem(TOKEN_KEY);
+            } else if (SecureStore) {
+                await SecureStore.deleteItemAsync(TOKEN_KEY);
+            }
+        } catch (e) {
+            console.error("Storage clean up execution error details:", e);
         } finally {
-            setIsLoading(false);
+            setUser(null);
         }
     };
 
-    // Select theme configurations dynamically based on layout toggles
-    const theme = useMemo(() => (isDarkMode ? darkTheme : lightTheme), [isDarkMode]);
-
-    // Memoize values to prevent downstream component render spikes
-    const authPayload = useMemo(() => ({
-        user,
-        isLoading,
-        theme,
-        login,
-        logout
-    }), [user, isLoading, theme]);
+    const toggleTheme = () => setIsDarkMode((prev) => !prev);
 
     return (
-        <AuthContext.Provider value={authPayload}>
+        <AuthContext.Provider value={{ user, isDarkMode, isLoading, theme, login, logout, toggleTheme }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-// 🌟 CONSUMER INTERFACE HOOK FOR INSTANT DOWNSTREAM EXTRACTION
 export function useAuth() {
     const context = useContext(AuthContext);
     if (context === undefined) {
-        throw new Error("useAuth must be executed within an initialized <AuthProvider> tree node.");
+        throw new Error("useAuth must be wrapped explicitly inside an <AuthProvider />.");
     }
     return context;
 }

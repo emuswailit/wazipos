@@ -1,7 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from 'react-native';
 
-const AUTH_TOKEN_KEY = "authToken";
+const AUTH_TOKEN_KEY = "wazipos_auth_token";
+
 const REG_DETAILS_KEY = "registrationDetails";
 
 export interface RegistrationDetails {

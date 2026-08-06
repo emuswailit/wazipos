@@ -1,123 +1,195 @@
-import { useAuth } from '@/context/AuthContext';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import routesApi from "@/api/drugs/routesApi";
+import { useAuth } from "@/context/AuthContext";
+import useApi from "@/hooks/useApi";
+import { Stack, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, StatusBar, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-// 🌟 Direct imports bypassing index orchestrators
-import CreateRouteForm from './CreateRouteForm';
-import { CustomModal } from './CustomModal';
-import RoutesDataGrid, { DataPayload } from './RoutesDataGrid';
+import RouteDetailsModal from "./RouteDetailsModal";
+import RouteFormModal from "./RouteFormModal";
+import RoutesListSection from "./RoutesListSection";
 
-export default function RoutesScreen() {
-  const { theme } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+interface DrugRouteItem {
+    id: string;
+    title: string;
+    description: string;
+    owner: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
 
-  // 🌟 Main runtime list state (This data array populates dynamically from your API responses)
-  const [itemsList, setItemsList] = useState<DataPayload[]>([
-    {
-      id: "16b7c961-7f85-468b-852c-b24f29ed9287",
-      title: "DRUGS ACTING AGAINST INFECTIONS AND INFESTATIONS",
-      description: "Comprehensive pharmacology dataset targeting antimicrobial agents, cell wall synthesis inhibitors, and antiparasitic metrics.",
-      owner: "2f890514-2ea6-418f-ac2d-06b281579d4e",
-      images: [],
-      entity: "165f2dd8-f092-42c9-afa1-f32260bc11f7",
-      created: "2026-08-01 09:51:29",
-      updated: "2026-08-01 09:51:29"
+const formatHumanDate = (dateString: string) => {
+    if (!dateString) return "N/A";
+    try {
+        const cleanStr = dateString.replace(" ", "T");
+        const dateObj = new Date(cleanStr);
+        if (isNaN(dateObj.getTime())) return dateString;
+        return dateObj.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+    } catch { return dateString; }
+};
+
+export default function DrugAdministrationRoutesScreen() {
+    const { theme, isDarkMode } = useAuth();
+    const { width } = useWindowDimensions();
+    const { tab } = useLocalSearchParams<{ tab?: string }>();
+    const isLargeScreen = width >= 768;
+
+    const [selectedRoute, setSelectedRoute] = useState<DrugRouteItem | null>(null);
+    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<DrugRouteItem | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    const getDrugRoutesApi = useApi<any>(async (payload: any) => await routesApi.getRoutes(payload));
+    const addDrugRouteApi = useApi<any>(async (payload: any) => await routesApi.addRoute(payload));
+    const updateDrugRouteApi = useApi<any>(async (payload: any) => await routesApi.updateRoute(payload));
+
+    const fetchRoutes = () => {
+        getDrugRoutesApi.request({ "action": "GetRoutes" });
+    };
+
+    useEffect(() => { fetchRoutes(); }, [tab]);
+
+    const drugRoutes: DrugRouteItem[] = useMemo(() => {
+        if (getDrugRoutesApi.data && Array.isArray(getDrugRoutesApi.data)) {
+            return getDrugRoutesApi.data.map((item: any) => ({
+                id: item.pk || item.id || Math.random().toString(),
+                title: item.fields?.title || item.title || "UNSPECIFIED",
+                description: item.fields?.description || item.description || "",
+                owner: item.fields?.owner || item.owner || "N/A",
+                entity: item.fields?.entity || item.entity || "",
+                created: item.fields?.created || item.created || "",
+                updated: item.fields?.updated || item.updated || ""
+            }));
+        }
+        return [];
+    }, [getDrugRoutesApi.data]);
+
+    const filteredRoutes = useMemo(() => {
+        return drugRoutes.filter(item =>
+            item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [drugRoutes, searchQuery]);
+
+    const handleFormSubmit = async (values: { title: string; description: string }) => {
+        try {
+            if (editingItem) {
+                await updateDrugRouteApi.request({
+                    "action": "UpdateRoute",
+                    "route_details": {
+                        "id": editingItem.id,
+                        "title": values.title.toUpperCase().trim(),
+                        "description": values.description.trim()
+                    }
+                });
+            } else {
+                await addDrugRouteApi.request({
+                    "action": "CreateRoute",
+                    "route_details": {
+                        "title": values.title.toUpperCase().trim(),
+                        "description": values.description.trim()
+                    }
+                });
+            }
+            setIsFormModalOpen(false);
+            setEditingItem(null);
+            fetchRoutes();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleOpenEditFlow = (item: DrugRouteItem) => {
+        setEditingItem(item);
+        setIsFormModalOpen(true);
+    };
+
+    const handleOpenCreateFlow = () => {
+        setEditingItem(null);
+        setIsFormModalOpen(true);
+    };
+
+    const textTitleColor = isDarkMode ? "#ffffff" : theme.primary;
+    const cardBorderColor = isDarkMode ? "border-slate-800" : "border-slate-200";
+
+    if (getDrugRoutesApi.loading && drugRoutes.length === 0) {
+        return (
+            <View style={{ backgroundColor: theme.background }} className="flex-1 items-center justify-center">
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={{ color: theme.textDark }} className="text-xs font-bold mt-3">Loading routes from remote ledger...</Text>
+            </View>
+        );
     }
-  ]);
 
-  // Asynchronous network tracker mock parameter
-  const [isLoading, setIsLoading] = useState(false);
-
-  // 🌟 Real-time Text Pattern Search Filtering Pipeline (Matches Title OR Description)
-  const filteredItems = useMemo(() => {
-    return itemsList.filter(item =>
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [itemsList, searchQuery]);
-
-  // Reset pagination position cleanly whenever a search parameter truncates active dataset arrays
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
-
-  // Callback handler to inject newly generated valid database models straight into view state lists
-  const handleCreateSuccess = (newRoute: DataPayload) => {
-    setItemsList(prev => [newRoute, ...prev]);
-    setIsCreateOpen(false);
-  };
-
-  if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
-        <ActivityIndicator color={theme.primary} size="large" />
-      </View>
+        <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']} style={{ backgroundColor: theme.background }}>
+            <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.background} />
+            <Stack.Screen options={{ title: "Administration Routes", headerShown: true, headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.primary, headerTitleStyle: { fontWeight: '800' }, headerShadowVisible: false }} />
+
+            <View style={{ backgroundColor: theme.background }} className="flex-1 p-6 relative">
+
+                <View className="flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-y-4 border-b pb-4 border-slate-700/10 w-full">
+                    <View className="flex-1 pr-4">
+                        <Text style={{ color: textTitleColor }} className="text-2xl font-black tracking-tight">Drug Administration Routes</Text>
+                        <Text style={{ color: theme.textDark }} className="text-xs font-medium mt-0.5">Manage and track method classifications for localized systematic therapeutic ingestion.</Text>
+                    </View>
+                    <View className="flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+                        <TextInput
+                            className="px-4 h-[42px] rounded-xl border text-sm font-medium w-full md:w-[240px] outline-none"
+                            style={{ backgroundColor: theme.panel, borderColor: theme.border, color: theme.text }}
+                            placeholder="Filter..."
+                            placeholderTextColor="#94A3B8"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        <TouchableOpacity
+                            onPress={handleOpenCreateFlow}
+                            style={{ backgroundColor: theme.primary }}
+                            className="h-[42px] w-full md:w-auto px-5 rounded-xl justify-center items-center shadow-sm whitespace-nowrap active:opacity-90"
+                        >
+                            <Text className="text-white font-black text-xs uppercase tracking-wider">+ Add Route</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {filteredRoutes.length === 0 ? (
+                    <View style={{ backgroundColor: theme.panel, borderColor: isDarkMode ? "#1e293b" : "#e2e8f0" }} className="flex-1 rounded-2xl border border-dashed items-center justify-center p-8">
+                        <Text style={{ color: theme.textDark }} className="text-sm font-bold text-center">No administration routes found in this network cluster.</Text>
+                    </View>
+                ) : (
+                    <RoutesListSection
+                        routes={filteredRoutes}
+                        isLargeScreen={isLargeScreen}
+                        theme={theme}
+                        cardBorderClass={cardBorderColor}
+                        formatDateHandler={formatHumanDate}
+                        onOpenDetailsTrigger={(item) => setSelectedRoute(item)}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                )}
+
+                <RouteFormModal
+                    visible={isFormModalOpen}
+                    onClose={() => { setIsFormModalOpen(false); setEditingItem(null); }}
+                    isDarkMode={isDarkMode}
+                    theme={theme}
+                    isSubmittingRemote={addDrugRouteApi.loading || updateDrugRouteApi.loading}
+                    onSubmitTrigger={handleFormSubmit}
+                    initialData={editingItem}
+                />
+
+                <RouteDetailsModal
+                    routeItem={selectedRoute}
+                    onClose={() => setSelectedRoute(null)}
+                    theme={theme}
+                    formatDateHandler={formatHumanDate}
+                    onOpenEditTrigger={handleOpenEditFlow} // 🌟 ADDED: Connects detail action button to form editor
+                />
+
+
+            </View>
+        </SafeAreaView>
     );
-  }
-
-  return (
-    <View className="flex-1 p-4 md:p-6 w-full max-w-[1200px] mx-auto">
-
-      {/* Search Input Bar & Interactive Actions Header Row */}
-      <View className="flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <View className="flex-1 flex-col md:flex-row gap-3">
-          <TextInput
-            className="flex-1 px-4 h-[50px] md:h-[40px] rounded-xl border text-sm font-medium outline-none"
-            style={{
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
-              color: theme.primary
-            }}
-            placeholder="Search by title or description..."
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <Pressable
-            onPress={() => setIsCreateOpen(true)}
-            className="px-5 h-[50px] md:h-[40px] rounded-xl flex-row justify-center items-center active:opacity-80 shadow-sm"
-            style={{ backgroundColor: theme.primary }}
-          >
-            <Text className="text-white font-bold text-sm tracking-wide">+ ADD NEW ROUTE</Text>
-          </Pressable>
-        </View>
-
-        {/* Dynamic Telemetry Items Counter Badge Element */}
-        <View
-          className="self-start md:self-auto px-4 py-2 rounded-full border"
-          style={{ borderColor: theme.border }}
-        >
-          <Text className="text-xs font-bold text-slate-500">
-            SHOWING <Text style={{ color: theme.primary }}>{filteredItems.length}</Text> OF {itemsList.length} ENTRIES
-          </Text>
-        </View>
-      </View>
-
-      {/* 🌟 Direct Viewport Grid Rendering Layout Trigger Component */}
-      <RoutesDataGrid
-        items={filteredItems}
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-      />
-
-      {/* 🌟 Dedicated Multi-Platform Asset Creation Form Window Modal overlay */}
-      <CustomModal visible={isCreateOpen} onClose={() => setIsCreateOpen(false)}>
-        <View className="mb-4">
-          <Text className="text-lg font-black tracking-tight mb-1" style={{ color: theme.primary }}>
-            Create Asset Route
-          </Text>
-          <Text className="text-xs text-slate-400">
-            Populate architectural layout metrics safely through verified validation parameters.
-          </Text>
-        </View>
-
-        <CreateRouteForm
-          onSuccess={handleCreateSuccess}
-          onCancel={() => setIsCreateOpen(false)}
-        />
-      </CustomModal>
-    </View>
-  );
 }

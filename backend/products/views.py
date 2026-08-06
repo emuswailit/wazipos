@@ -549,10 +549,11 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
     serializer_class = serializers.ProductsSerializer
     parser_classes = (MultiPartParser, FormParser)
     queryset = models.Products.objects.all()
-    lookup_field = "pk"  # Standard DRF lookup
+    lookup_field = "pk"
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
+        mutable_data = request.data.copy()  # Create a mutable copy early
         
         # 1. Handle incoming multipart files safely before changing the instance
         files = request.FILES.getlist("images")
@@ -568,13 +569,11 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
                 uploaded_files.append(content)
             instance.images.add(*uploaded_files)
 
-        if request.data.get("allowed_entities"):
-            allowed_entities = request.data.get("allowed_entities")
-            instance.allowed_entities.set(allowed_entities)
-            instance.save()
+        # NOTE: Manually updating allowed_entities here was removed.
+        # DRF's serializer lifecycle automatically overwrites standard ArrayFields.
 
         # 2. Prevent unique constraint bar_code errors before passing data to the serializer
-        bar_code = request.data.get("bar_code")
+        bar_code = mutable_data.get("bar_code")
         if bar_code and models.Products.objects.filter(bar_code=bar_code).exclude(pk=instance.pk).exists():
             create_log("error", f"{bar_code} is already in use")
             return Response(
@@ -583,15 +582,13 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
             )
 
         # 3. Clean fallback logic for description matching yours
-        # (Your code had a bug setting instance.description to instance.title)
-        mutable_data = request.data.copy()
         if "description" not in mutable_data and "title" in mutable_data:
             mutable_data["description"] = mutable_data["title"]
 
         # 4. Use the serializer for robust unique-constraint database validation
         serializer = self.get_serializer(instance, data=mutable_data, partial=True)
-        serializer.is_valid(raise_exception=True) # Catches the IntegrityError cleanly!
-        serializer.save()
+        serializer.is_valid(raise_exception=True) 
+        serializer.save()  # Overwrites allowed_entities and saves everything in one clean transaction!
 
         # 5. Build standard structured response
         return Response(
@@ -601,8 +598,9 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
                 "product": serializer.data,
                 "errors": [],
             },
-            status=status.HTTP_200_OK, # Updates should use 200 OK, not 201 Created
+            status=status.HTTP_200_OK, 
         )
+
 
 class ProductImageList(generics.ListCreateAPIView):
     """
