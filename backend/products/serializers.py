@@ -1,7 +1,7 @@
 import uuid
 from authentication.models import Entities
 from drugs.models import Preparation
-import ast
+
 # from wholesalers.models import WholesalerReceipts
 from . import models
 from rest_framework import exceptions, serializers
@@ -398,68 +398,7 @@ class ProductsSerializer(serializers.ModelSerializer):
             return PreparationSerializer(preparation, context=self.context).data
         else:
             return None
-    def to_internal_value(self, data):
-        """
-        Intercept incoming form-data dictionary early and turn 
-        duplicate Postman keys into a true Python array list.
-        """
-        # Ensure data is a mutable copy so we can write back values safely
-        if hasattr(data, '_mutable') and not data._mutable:
-            data = data.copy()
 
-        # Handle 'allowed_entities' or bracketed 'allowed_entities[]' from multipart forms
-        if hasattr(data, 'getlist'):
-            if 'allowed_entities' in data:
-                data['allowed_entities'] = data.getlist('allowed_entities')
-            elif 'allowed_entities[]' in data:
-                data['allowed_entities'] = data.getlist('allowed_entities[]')
-
-        return super().to_internal_value(data)
-
-    def to_internal_value(self, data):
-            # Create a mutable copy of the incoming QueryDict/Dict safely
-            if hasattr(data, '_mutable') and not data._mutable:
-                data = data.copy()
-
-            # 1. Extract the raw structural data from multi-part fields safely
-            if hasattr(data, 'getlist'):
-                if 'allowed_entities' in data:
-                    val = data.getlist('allowed_entities')
-                elif 'allowed_entities[]' in data:
-                    val = data.getlist('allowed_entities[]')
-                else:
-                    val = data.get('allowed_entities')
-            else:
-                val = data.get('allowed_entities')
-
-            # 2. Flatten string-encoded arrays like "['BANK']" if Postman double-serialized it
-            if isinstance(val, str) and val.startswith('[') and val.endswith(']'):
-                try:
-                    val = ast.literal_eval(val)
-                except (ValueError, SyntaxError):
-                    pass
-            
-            # If it's a list containing a single string representation array element
-            if isinstance(val, list) and len(val) == 1 and isinstance(val[0], str) and val[0].startswith('['):
-                try:
-                    val = ast.literal_eval(val[0])
-                except (ValueError, SyntaxError):
-                    pass
-
-            # 3. FIX: Convert incoming values to Title Case to match your Enum definition ("BANK" -> "Bank")
-            if isinstance(val, list):
-                cleaned_list = []
-                for item in val:
-                    if isinstance(item, str):
-                        # Converts "BANK" or "bank" into "Bank" to perfectly match your Enum data
-                        cleaned_list.append(item.strip().title())
-                    else:
-                        cleaned_list.append(item)
-                data['allowed_entities'] = cleaned_list
-            elif isinstance(val, str):
-                data['allowed_entities'] = [val.strip().title()]
-
-            return super().to_internal_value(data)
     # def get_manufacturer_details(self, obj):
     #     if obj.manufacturer:
     #         if models.Entities.objects.filter(id=obj.manufacturer.id).exists():
