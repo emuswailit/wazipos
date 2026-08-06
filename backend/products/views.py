@@ -568,6 +568,11 @@ class ProductUpdateAPIView(generics.RetrieveUpdateAPIView):
                 uploaded_files.append(content)
             instance.images.add(*uploaded_files)
 
+        if request.data.get("allowed_entities"):
+            allowed_entities = request.data.get("allowed_entities")
+            instance.allowed_entities.set(allowed_entities)
+            instance.save()
+
         # 2. Prevent unique constraint bar_code errors before passing data to the serializer
         bar_code = request.data.get("bar_code")
         if bar_code and models.Products.objects.filter(bar_code=bar_code).exclude(pk=instance.pk).exists():
