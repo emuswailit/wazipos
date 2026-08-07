@@ -30,20 +30,20 @@ def create_wholesaler_receipt(data, user):
 
     employee_obj = employees_models_validators.validate_employee(user)
 
-    # try:
-    #     product_id = data["wholesaler_receipt_details"]["product"]
-    #     if product_id == "":
-    #         errors.append("Product ID cannot be empty")
-    #     else:
-    #         # Check product exists
-    #         product_obj = product_models_validator.validate_product(product_id)
-    #         # Check if product is among authorized entity categories
-    #         entity_categories = user.entity.categories.all()
-    #         if product_obj.category not in entity_categories:
-    #             errors.append(
-    #                 f'{product_obj.title} in not under any of your authorized categories')
-    # except KeyError:
-    #     errors.append("Product ID is required")
+    try:
+        product_id = data["wholesaler_receipt_details"]["product"]
+        if product_id == "":
+            errors.append("Product ID cannot be empty")
+        else:
+            # Check product exists
+            product_obj = product_models_validator.validate_product(product_id)
+            # Check if product is among authorized entity categories
+            # entity_categories = user.entity.categories.all()
+            # if product_obj.category not in entity_categories:
+            #     errors.append(
+            #         f'{product_obj.title} in not under any of your authorized categories')
+    except KeyError:
+        errors.append("Product ID is required")
 
     try:
         received_unit_quantity = data["wholesaler_receipt_details"]["received_unit_quantity"]
