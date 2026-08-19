@@ -1411,10 +1411,11 @@ def process_retailer_order_payment(data,user):
 
     if PaymentMethods.objects.filter(id=data['payment_method']).exists():
         payment_method = PaymentMethods.objects.filter(id=data['payment_method']).first()
+        create_log("INFO",f"{payment_method}")
     else:
         errors.append("No payment method with provided ID exists")
         return errors,None
-    create_log("INFO", f"Payment method: {payment_method.title}")
+    
     if payment_method.title =="CASH":
         # reference_number = generate_reference_number(retailer_order.wholesaler, user)
         retailer_order_payment = RetailerOrderPayments.objects.create(
