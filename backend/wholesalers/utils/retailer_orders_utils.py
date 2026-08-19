@@ -1433,7 +1433,7 @@ def process_retailer_order_payment(data,user):
         retailer_order.save()
 
     elif payment_method.title=="MOBILE MONEY":
-        
+        print("Am here")
         if not data['mobile_money_phone'] or data['mobile_money_phone']=="":
             errors.append("Mobile money phone is required")
         create_log("INFO", f"mobile_money_phone: { data['mobile_money_phone']}")
