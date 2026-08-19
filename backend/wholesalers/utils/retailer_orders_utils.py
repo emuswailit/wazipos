@@ -1433,13 +1433,15 @@ def process_retailer_order_payment(data,user):
         retailer_order.save()
 
     elif payment_method.title=="MOBILE MONEY":
-        errors.append("No mobile money payment")
-        return errors,None
+        
         if not data['mobile_money_phone'] or data['mobile_money_phone']=="":
             errors.append("Mobile money phone is required")
         create_log("INFO", f"mobile_money_phone: { data['mobile_money_phone']}")
         telco, formatted_phone_number = get_telco_by_phone_number( data['mobile_money_phone'])
         reference_number = generate_reference_number(retailer_order.wholesaler, user)
+        if not reference_number:
+            errors.append("Error generating reference number")
+            return errors,None
         create_log("INFO", f"Reference number: {reference_number}")
         payload_data = {
             "orderId": reference_number, "amount": int(retailer_order.final_price_total), "accountTo": config('WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT'),
