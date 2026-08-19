@@ -1474,10 +1474,16 @@ def process_retailer_order_payment(data,user):
                 owner=user
             )
                 return [],retailer_order
+            else:
+                errors.append("Payment via mobile money not successful")
+                return errors, None
         except Exception as e:
             create_log("INFO", f"payment for {retailer_order} failed")
             errors.append(str(e))
             return errors, None
+    else:
+        errors.append("Payment method could not be verified")
+        return errors, None
 
 
 # Process payment
