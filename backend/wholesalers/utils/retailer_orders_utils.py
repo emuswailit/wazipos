@@ -1403,6 +1403,7 @@ def process_retailer_order_payment(data,user):
         retailer_order = RetailerOrders.objects.filter(id=data['retailer_order']).first()
     else:
         errors.append("No order with provided ID exists")
+        return errors,None
 
     if RetailerOrderPayments.objects.filter(retailer_order=retailer_order,status="SUCCESS").exists():
         errors.append("Order is already paid")
@@ -1436,7 +1437,7 @@ def process_retailer_order_payment(data,user):
         create_log("INFO", f"mobile_money_phone: { data['mobile_money_phone']}")
         telco, formatted_phone_number = get_telco_by_phone_number( data['mobile_money_phone'])
         reference_number = generate_reference_number(retailer_order.wholesaler, user)
-
+        create_log("INFO", f"Reference number: {reference_number}")
         payload_data = {
             "orderId": reference_number, "amount": int(retailer_order.final_price_total), "accountTo": config('WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT'),
             "description": f"Retailer order payment for  - {retailer_order}", "modeOfPayment": "MOBILE_MONEY",
