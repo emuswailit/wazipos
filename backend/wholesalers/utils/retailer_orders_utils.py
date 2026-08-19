@@ -1414,7 +1414,7 @@ def process_retailer_order_payment(data,user):
     else:
         errors.append("No payment method with provided ID exists")
         return errors,None
-    create_log("INFO", f"Payment method: { payment_method.title}")
+    create_log("INFO", f"Payment method: {payment_method.title}")
     if payment_method.title =="CASH":
         # reference_number = generate_reference_number(retailer_order.wholesaler, user)
         retailer_order_payment = RetailerOrderPayments.objects.create(
@@ -1433,6 +1433,8 @@ def process_retailer_order_payment(data,user):
         retailer_order.save()
 
     elif payment_method.title=="MOBILE MONEY":
+        errors.append("No mobile money payment")
+        return errors,None
         if not data['mobile_money_phone'] or data['mobile_money_phone']=="":
             errors.append("Mobile money phone is required")
         create_log("INFO", f"mobile_money_phone: { data['mobile_money_phone']}")
