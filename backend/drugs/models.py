@@ -93,8 +93,8 @@ class BodySystem(EntityRelatedModel):
 
 
 class DrugClass(EntityRelatedModel):
-    body_system = models.ForeignKey(BodySystem, on_delete=models.CASCADE)
-    title = models.CharField(max_length=100)
+    # body_system = models.ForeignKey(BodySystem, on_delete=models.CASCADE)
+    title = models.CharField(max_length=360)
     image = models.ImageField(
         upload_to="drug_class_image_upload", null=True, blank=True
     )
@@ -113,7 +113,7 @@ class DrugClass(EntityRelatedModel):
 
 class DrugSubClass(EntityRelatedModel):
     drug_class = models.ForeignKey(DrugClass, on_delete=models.CASCADE)
-    title = models.CharField(max_length=100, unique=True)
+    title = models.CharField(max_length=360, unique=True)
     image = models.ImageField(
         upload_to="drug_subclass_image_upload", null=True, blank=True
     )
@@ -137,7 +137,7 @@ class Generic(EntityRelatedModel):
     )
     image = models.ImageField(upload_to="generic_images_upload", null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
-    title = models.CharField(max_length=240, blank=True, null=True)
+    title = models.CharField(max_length=360, blank=True, null=True)
     description = models.TextField(null=True, blank=True)
     synonym = models.TextField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -162,7 +162,7 @@ class Generic(EntityRelatedModel):
 
 class Indications(EntityRelatedModel):
     generic = models.ForeignKey(Generic, on_delete=models.CASCADE)
-    title = models.CharField(max_length=240, blank=True, null=True)
+    title = models.CharField(max_length=360, blank=True, null=True)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)

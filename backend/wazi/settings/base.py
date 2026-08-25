@@ -387,6 +387,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
      "https://api.jambopay.com",
       "http://localhost:5173",
+      "http://localhost:8081",
      
 ]
 
@@ -396,6 +397,7 @@ CORS_ORIGIN_WHITELIST = ("http://localhost:3000",)
 CORS_ALLOWED_ORIGINS = [
     "https://wazipos.co.ke",
      "http://localhost:5173",
+     "http://localhost:8081",
 ]
 # Celery Broker - Redis
 CELERY_BROKER_URL = 'redis://localhost:6379/0'

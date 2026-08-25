@@ -136,7 +136,7 @@ class FrequencySerializer(serializers.HyperlinkedModelSerializer):
 
 
 class DrugClassSerializer(serializers.ModelSerializer):
-    body_system_title = serializers.SerializerMethodField(read_only=True)
+ 
 
     class Meta:
         model = models.DrugClass
@@ -144,8 +144,6 @@ class DrugClassSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
-            "body_system",
-            "body_system_title",
             "owner",
             "image",
             "created",

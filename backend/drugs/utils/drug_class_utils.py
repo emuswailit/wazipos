@@ -23,17 +23,7 @@ def validate_drug_class_data(data):
 
     except KeyError:
         errors.append("Drug class title is required")
-    try:
-        body_system_id = data["drug_class_details"]["body_system"]
-        if data["drug_class_details"]["body_system"] == "":
-            errors.append("Body system ID cannot be empty")
-        if body_system_id and BodySystem.objects.filter(id=body_system_id).exists():
-            pass
-        else:
-            errors.append("Body system with given ID does not exist")
 
-    except KeyError:
-        errors.append("Body system ID is required")
     if len(errors) > 0:
         raise exceptions.ValidationError(errors)
     else:
@@ -41,11 +31,11 @@ def validate_drug_class_data(data):
 
 
 def create_drug_class(data, user):
+    print(data)
     try:
         created = DrugClass.objects.create(
             title=data["drug_class_details"]["title"],
             description=data["drug_class_details"]["description"],
-            body_system_id=data["drug_class_details"]["body_system"],
             owner=user,
             entity=user.entity,
         )
@@ -54,7 +44,8 @@ def create_drug_class(data, user):
         else:
             return None
     except Exception as e:
-        raise exceptions.ValidationError(e)
+        print(str(e))
+        raise exceptions.ValidationError(str(e))
 
 
 def get_all_drug_classes(user):
