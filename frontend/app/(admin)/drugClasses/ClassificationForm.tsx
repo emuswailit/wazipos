@@ -1,7 +1,6 @@
 import { Formik } from "formik";
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native";
 import * as Yup from "yup";
-import BodySystemAutocomplete from "./BodySystemAutocomplete";
 
 interface ClassificationFormProps {
     theme: any;
@@ -14,8 +13,8 @@ interface ClassificationFormProps {
 
 const ClassificationFormSchema = Yup.object().shape({
     title: Yup.string().min(3, "Title must be at least 3 characters").required("Drug class title is required"),
-    description: Yup.string().min(5, "Provide a clean definition summary description").required("Drug class description is required"),
-    body_system: Yup.string().required("Body system linkage selection is required"),
+    description: Yup.string().min(5, "Provide a clean definition summary description"),
+
 });
 
 export default function ClassificationForm({ theme, isDarkMode, isSubmittingRemote, onSubmitTrigger, initialData, onCancel }: ClassificationFormProps) {
@@ -25,7 +24,7 @@ export default function ClassificationForm({ theme, isDarkMode, isSubmittingRemo
             initialValues={{
                 title: initialData?.title || "",
                 description: initialData?.description || "",
-                body_system: initialData?.body_system || ""
+
             }}
             validationSchema={ClassificationFormSchema}
             onSubmit={(values, formikHelpers) => {
@@ -50,15 +49,6 @@ export default function ClassificationForm({ theme, isDarkMode, isSubmittingRemo
                         {touched.title && errors.title && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.title}</Text>}
                     </View>
 
-                    <BodySystemAutocomplete
-                        theme={theme}
-                        isDarkMode={isDarkMode}
-                        selectedValue={values.body_system}
-                        initialTitle={initialData?.body_system_title}
-                        hasError={!!(touched.body_system && errors.body_system)}
-                        onSelect={(id) => setFieldValue("body_system", id)}
-                    />
-                    {touched.body_system && errors.body_system && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.body_system}</Text>}
 
                     <View className="items-start w-full">
                         <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-black tracking-wider mb-1">Clinical Description Brief</Text>

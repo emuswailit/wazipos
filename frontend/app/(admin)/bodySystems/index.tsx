@@ -71,13 +71,7 @@ export default function BodySystemsScreen() {
                     }
                 });
             } else {
-                const response = await addBodySystemApi.request({
-                    action: "CreateBodySystem",
-                    body_system_details: {
-                        title: values.title.toUpperCase().trim(),
-                        description: values.description.trim()
-                    }
-                });
+                const response = await addBodySystemApi.request(values);
                 console.log(`📡 [Inbound API Resolution] Create Request Status: ${response?.status ?? 'N/A'} | Body:`, JSON.stringify(response?.data));
             }
             resetForm();

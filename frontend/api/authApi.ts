@@ -1,5 +1,5 @@
 import { ApiResponse } from "apisauce";
-import client from "./client";
+import client from "./clientOpen";
 
 // ==========================================
 // DATA CONTRACT INTERFACES (INPUT/OUTPUT)

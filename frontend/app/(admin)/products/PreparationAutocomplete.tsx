@@ -43,8 +43,22 @@ export default function PreparationAutocomplete({ theme, isDarkMode, selectedVal
         );
     }, [options, search]);
 
+    const isThemePanelTransparent = !theme.panel || theme.panel === "transparent" || theme.panel === "rgba(0,0,0,0)";
+    const fallbackSolidBackground = isThemePanelTransparent ? (isDarkMode ? "#0f172a" : "#ffffff") : theme.panel;
+    const rowDelimiterColor = isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+
     return (
         <View style={{ zIndex: zIndexValue }} className="items-start w-full relative">
+            {open && (
+                <Pressable
+                    className="absolute top-[-5000px] bottom-[-5000px] left-[-5000px] right-[-5000px]"
+                    style={{ zIndex: 9998, backgroundColor: "transparent" }}
+                    onPress={() => setOpen(false)}
+                >
+                    <View className="flex-1 w-full h-full" />
+                </Pressable>
+            )}
+
             <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-black tracking-wider mb-1">Linked Scientific Preparation Form</Text>
             <TextInput
                 onFocus={() => setOpen(true)}
@@ -57,16 +71,29 @@ export default function PreparationAutocomplete({ theme, isDarkMode, selectedVal
             />
             {open && (
                 <View
-                    style={{ backgroundColor: isDarkMode ? "#0f172a" : "#ffffff", borderColor: theme.primary, zIndex: 9999 }}
-                    className="absolute top-[68px] left-0 right-0 border rounded-xl shadow-lg max-h-[150px] overflow-hidden bg-white dark:bg-slate-900"
+                    style={{
+                        backgroundColor: fallbackSolidBackground,
+                        borderColor: theme.primary,
+                        zIndex: 9999,
+                        top: 46,
+                        left: 0,
+                        right: 0,
+                        maxHeight: 150,
+                        elevation: 12,
+                        shadowColor: "#000000",
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 8
+                    }}
+                    className="absolute border rounded-xl overflow-hidden"
                 >
-                    <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
+                    <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled={true} style={{ backgroundColor: fallbackSolidBackground }}>
                         {getPrepsApi.loading ? (
                             <View className="p-4"><ActivityIndicator size="small" color={theme.primary} /></View>
                         ) : filtered.length === 0 ? (
                             <View className="p-4"><Text style={{ color: theme.textDark }} className="text-xs text-center">No structural strengths matched.</Text></View>
                         ) : (
-                            filtered.map((item) => (
+                            filtered.map((item, index) => (
                                 <Pressable
                                     key={item.id}
                                     onPress={() => {
@@ -74,8 +101,12 @@ export default function PreparationAutocomplete({ theme, isDarkMode, selectedVal
                                         setSearch(item.title);
                                         setOpen(false);
                                     }}
-                                    style={({ pressed }) => ({ backgroundColor: pressed ? (isDarkMode ? "#1e293b" : "#f1f5f9") : "transparent" })}
-                                    className="px-4 py-3 border-b border-slate-700/5"
+                                    style={({ pressed }) => ({
+                                        backgroundColor: pressed ? (isDarkMode ? "#1e293b" : "#f1f5f9") : "transparent",
+                                        borderBottomWidth: index === filtered.length - 1 ? 0 : 1,
+                                        borderBottomColor: rowDelimiterColor
+                                    })}
+                                    className="px-4 py-3 flex-row items-center"
                                 >
                                     <Text style={{ color: selectedValue === item.id ? theme.primary : theme.text }} className={`text-xs ${selectedValue === item.id ? 'font-black' : 'font-medium'}`}>
                                         {item.title}

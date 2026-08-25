@@ -14,7 +14,6 @@ interface DrugSubClassFormProps {
 
 const DrugSubClassFormSchema = Yup.object().shape({
     title: Yup.string().min(3, "Title must be at least 3 characters").required("Drug subclass title is required"),
-    description: Yup.string().min(5, "Provide a clean description summary description").required("Drug subclass description is required"),
     drug_class: Yup.string().required("Drug class selection linkage is required"),
 });
 

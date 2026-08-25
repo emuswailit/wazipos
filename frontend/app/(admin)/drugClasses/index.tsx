@@ -45,7 +45,7 @@ export default function DrugClassificationsScreen() {
     const updateDrugClassApi = useApi<any>(async (payload: any) => await drugClassesApi.updateDrugClass(payload));
 
     const fetchDrugClasses = () => {
-        getDrugClassesApi.request({ "action": "GetBodySystems" });
+        getDrugClassesApi.request({ "action": "GetDrugClasses" });
     };
 
     useEffect(() => {
@@ -57,7 +57,9 @@ export default function DrugClassificationsScreen() {
             console.log(`❌ [API Error Matrix] Class Creation Validation Failed:`, JSON.stringify(addDrugClassApi));
         }
 
-    }, [addDrugClassApi]);
+        console.log("addDrugClassApi.data", addDrugClassApi.data)
+
+    }, [addDrugClassApi.data]);
 
 
     const classifications: ClassificationItem[] = useMemo(() => {
@@ -83,6 +85,7 @@ export default function DrugClassificationsScreen() {
     }, [classifications, searchQuery]);
 
     const handleFormSubmit = async (values: any, { resetForm }: any) => {
+        console.log("VALZ", values)
         try {
             if (editingItem) {
                 await updateDrugClassApi.request({
@@ -90,21 +93,16 @@ export default function DrugClassificationsScreen() {
                     drug_class_details: {
                         id: editingItem.id,
                         title: values.title.toUpperCase().trim(),
-                        description: values.description.trim()
+                        description: values.description
                     }
                 });
             } else {
                 await addDrugClassApi.request({
-                    action: "CreateDrugClass",
-                    drug_class_details: {
-                        title: values.title.toUpperCase().trim(),
-                        description: values.description.trim(),
-                        body_system: values.body_system.trim()
-                    }
+                    ...values
                 });
             }
 
-            resetForm();
+            // resetForm();
             setIsFormModalOpen(false);
             setEditingItem(null);
             fetchDrugClasses();
@@ -134,6 +132,8 @@ export default function DrugClassificationsScreen() {
             </View>
         );
     }
+
+
 
     return (
         <SafeAreaView className="flex-1" edges={['left', 'right', 'bottom']} style={{ backgroundColor: theme.background }}>

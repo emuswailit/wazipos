@@ -1,105 +1,141 @@
-import { useAuth } from "@/context/AuthContext";
-import { Stack } from "expo-router";
-import { useMemo, useState } from "react";
-import { StatusBar, Text, TextInput, View, useWindowDimensions } from "react-native";
-import WholesaleOrderDetails from "./WholesaleOrderDetails";
-import WholesaleOrdersList, { WholesaleOrder } from "./WholesaleOrdersList";
-export default function WholesaleOrdersScreen() {
-    const { theme, isDarkMode } = useAuth();
+import { useAuth } from '@/context/AuthContext';
+import { useState } from 'react';
+import { ActivityIndicator, Platform, ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import WholesaleOrderInvoiceModal from './WholesaleOrderInvoiceModal';
+import { useWholesaleOrdersList } from './useWholesaleOrdersList';
+
+export default function WholesaleOrdersDashboard() {
+    const { theme } = useAuth();
     const { width } = useWindowDimensions();
-    const [searchQuery, setSearchQuery] = useState("");
-    const [selectedOrder, setSelectedOrder] = useState<WholesaleOrder | null>(null);
-    const mockOrders: WholesaleOrder[] = useMemo(() => [
-        {
-            id: "ORD-9081",
-            invoiceNumber: "INV-2026-0041",
-            buyerName: "MEGA PHARMACY DISTRIBUTORS LTD",
-            orderDate: "2026-04-18 11:20:00",
-            totalAmount: 184500,
-            paymentStatus: "PAID",
-            fulfillmentStatus: "DELIVERED",
-            items: [
-                { id: "1", sku: "WHL-AMPIX-500", title: "AMPIMOX 500MG CAPSULES", qty: 20, unitPrice: 4200, subtotal: 84000 },
-                { id: "2", sku: "WHL-CCOOK-3L", title: "CAPTAIN COOK COOKING OIL 3 LITRES", qty: 20, unitPrice: 2450, subtotal: 49000 },
-                { id: "3", sku: "WHL-PANAD-EXT", title: "PANADOL EXTRA ADVANCE TABLETS", qty: 28, unitPrice: 1850, subtotal: 51500 }
-            ]
-        },
-        {
-            id: "ORD-9082",
-            invoiceNumber: "INV-2026-0042",
-            buyerName: "ALBA ENTERPRISES WHOLESALE CORP",
-            orderDate: "2026-04-19 09:14:00",
-            totalAmount: 42000,
-            paymentStatus: "PENDING",
-            fulfillmentStatus: "PROCESSING",
-            items: [
-                { id: "1", sku: "WHL-AMPIX-500", title: "AMPIMOX 500MG CAPSULES", qty: 10, unitPrice: 4200, subtotal: 42000 }
-            ]
-        },
-        {
-            id: "ORD-9083",
-            invoiceNumber: "INV-2026-0043",
-            buyerName: "COASTAL RETAIL PHARMACIES HUB",
-            orderDate: "2026-04-19 14:02:00",
-            totalAmount: 14700,
-            paymentStatus: "OVERDUE",
-            fulfillmentStatus: "HOLD",
-            items: [
-                { id: "1", sku: "WHL-PANAD-EXT", title: "PANADOL EXTRA ADVANCE TABLETS", qty: 8, unitPrice: 1850, subtotal: 14700 }
-            ]
-        }
-    ], []);
-    const filteredOrders = useMemo(() => {
-        return mockOrders.filter(item =>
-            item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.buyerName.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [mockOrders, searchQuery]);
-    const formatHumanDate = (dateString: string) => {
-        if (!dateString) return "N/A";
-        try {
-            const dateObj = new Date(dateString.replace(" ", "T"));
-            return dateObj.toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
-        } catch { return dateString; }
+    const isLargeScreen = width >= 768;
+    const [selectedOrder, setSelectedOrder] = useState<any>(null);
+    const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+    const { ordersList, isLoading, errorMessage } = useWholesaleOrdersList();
+
+    const handleLaunchInvoiceSheet = (orderPayload: any) => {
+        setSelectedOrder(orderPayload);
+        setIsInvoiceOpen(true);
     };
-    const cardBorderColor = isDarkMode ? "border-slate-800" : "border-slate-200";
-    return (
-        <View className="flex-1" style={{ backgroundColor: theme.background }}>
-            <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.background} />
-            <Stack.Screen options={{ headerShown: false }} />
-            <View style={{ backgroundColor: theme.background }} className="flex-1 p-6">
-                {/* 🌟 FIXED: Triggers the clean setSelectedOrder state update block smoothly below */}
-                {selectedOrder ? (
-                    <WholesaleOrderDetails routeItem={selectedOrder} onClose={() => setSelectedOrder(null)} theme={theme} formatDateHandler={formatHumanDate} />
-                ) : (
-                    <View className="flex-1">
-                        <View className="flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-y-4 border-b pb-4 border-slate-700/10 w-full">
-                            <View className="flex-1 pr-4">
-                                <View className="flex-row items-center gap-x-2">
-                                    <Text style={{ color: isDarkMode ? "#ffffff" : theme.primary }} className="text-2xl font-black tracking-tight">Wholesale Orders</Text>
-                                    <View style={{ backgroundColor: theme.primary + "15" }} className="px-2 py-0.5 rounded-lg border border-slate-700/5">
-                                        <Text style={{ color: theme.primary }} className="text-xs font-black">{filteredOrders.length} {filteredOrders.length === 1 ? "Order" : "Orders"}</Text>
-                                    </View>
-                                </View>
-                                <Text style={{ color: theme.textDark }} className="text-xs font-medium mt-0.5">Audit volume commercial client invoices, dispatch stages, and settlement balances.</Text>
-                            </View>
-                            <View className="flex-col md:flex-row items-center gap-3 w-full md:w-auto">
-                                <TextInput className="px-4 h-[42px] rounded-xl border text-sm font-medium w-full md:w-[240px] outline-none" style={{ backgroundColor: theme.panel, borderColor: theme.border, color: theme.text }} placeholder="Search by ID, invoice, client..." placeholderTextColor="#94A3B8" value={searchQuery} onChangeText={setSearchQuery} />
+
+    const handleTriggerInvoicePrintMacro = (order: any) => {
+        alert(`Initiating thermal print server dispatch routine for Reference Ledger: ${order.reference_number || 'N/A'}`);
+    };
+
+    if (isLoading && ordersList.length === 0) {
+        return (
+            <View className="flex-1 justify-center items-center p-8 w-full" style={{ backgroundColor: theme.background }}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={{ color: theme.textDark }} className="text-xs font-semibold mt-2 font-mono">Fetching ledger logs from backend...</Text>
+            </View>
+        );
+    }
+
+    if (errorMessage && ordersList.length === 0) {
+        return (
+            <View style={{ backgroundColor: theme.panel, borderColor: theme.border }} className="w-full p-6 border rounded-xl items-center justify-center">
+                <Text className="text-red-500 text-sm font-bold">⚠️ Connection Error: {errorMessage}</Text>
+            </View>
+        );
+    }
+
+    if (!ordersList || ordersList.length === 0) {
+        return (
+            <View style={{ backgroundColor: theme.panel, borderColor: theme.border }} className="w-full p-8 rounded-xl border items-center justify-center">
+                <Text style={{ color: theme.textDark }} className="text-sm font-semibold italic">No wholesale retailer ledger entries returned in remote server index pipelines.</Text>
+            </View>
+        );
+    }
+
+    const renderTableRowsLoop = () => (
+        <>
+            {ordersList.map((order: any) => {
+                const isPaid = order.is_paid === 'true';
+                return (
+                    <View key={order.id} style={{ borderBottomColor: theme.border }} className="flex-row items-center px-4 py-2 border-b">
+                        <Text style={{ color: theme.text }} className="flex-2 text-xs font-bold" numberOfLines={1}>{order.retailer_title || 'Unknown Retailer'}</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xxs font-mono truncate px-1">{order.reference_number || 'N/A'}</Text>
+                        <Text style={{ color: theme.text }} className="flex-1 text-xs font-medium text-center">{order.order_items?.length || 0} Lines</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xxs font-bold text-center uppercase tracking-wide">{order.payment_method_title || order.order_terms || 'CASH'}</Text>
+                        <View className="flex-1 items-center justify-center">
+                            <View style={{ backgroundColor: isPaid ? '#22c55e15' : '#ef444415' }} className="px-2.5 py-0.5 rounded-md">
+                                <Text style={{ color: isPaid ? '#22c55e' : '#ef4444' }} className="text-[10px] font-black uppercase tracking-widest">{isPaid ? 'PAID' : 'PENDING'}</Text>
                             </View>
                         </View>
-                        {filteredOrders.length === 0 ? (
-                            <View style={{ backgroundColor: theme.panel }} className={`flex-1 rounded-2xl border border-dashed ${cardBorderColor} items-center justify-center p-8`}>
-                                <Text style={{ color: theme.textDark }} className="text-sm font-bold text-center">No matching bulk distribution entries loaded.</Text>
-                            </View>
-                        ) : (
-                            <View className="flex-1">
-                                <WholesaleOrdersList items={filteredOrders} isLargeScreen={width >= 768} theme={theme} cardBorderClass={cardBorderColor} formatDateHandler={formatHumanDate} onOpenDetailsTrigger={(item) => setSelectedOrder(item)} />
-                            </View>
-                        )}
+                        <Text style={{ color: theme.primary }} className="flex-1 text-xs font-black text-right pr-4">KES {parseFloat(order.final_price_total || order.order_price_total || 0).toFixed(2)}</Text>
+                        <View className="flex-1 flex-row items-center justify-end gap-x-2">
+                            <TouchableOpacity onPress={() => handleLaunchInvoiceSheet(order)} style={{ backgroundColor: theme.background }} className="px-2.5 py-1.5 rounded-md">
+                                <Text style={{ color: theme.text }} className="text-[10px] font-bold uppercase">🔎 View</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleTriggerInvoicePrintMacro(order)} style={{ backgroundColor: theme.primary }} className="px-2.5 py-1.5 rounded-md">
+                                <Text className="text-white text-[10px] font-bold uppercase">🖨️ Print</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                )}
-            </View>
-        </View>
+                );
+            })}
+        </>
+    );
+
+    return (
+        <ScrollView style={{ flex: 1, width: '100%', backgroundColor: theme.background }} className="flex-col gap-y-3 p-4">
+            {isLoading && (
+                <View className="flex-row items-center gap-x-2 px-1 justify-end">
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={{ color: theme.textDark }} className="text-[10px] font-bold font-mono uppercase tracking-wider">Syncing Ledger...</Text>
+                </View>
+            )}
+            {!isLargeScreen ? (
+                <View className="w-full gap-y-3 px-1">
+                    {ordersList.map((order: any) => {
+                        const isPaid = order.is_paid === 'true';
+                        return (
+                            <View key={order.id} style={{ backgroundColor: theme.panel, borderColor: theme.border }} className="p-4 rounded-xl border shadow-sm flex-col gap-y-2.5">
+                                <View className="flex-row justify-between items-center">
+                                    <Text style={{ color: theme.text }} className="text-sm font-black w-2/3" numberOfLines={1}>{order.retailer_title || 'Unknown Retailer'}</Text>
+                                    <View style={{ backgroundColor: isPaid ? '#22c55e15' : '#ef444415' }} className="px-2 py-0.5 rounded-md">
+                                        <Text style={{ color: isPaid ? '#22c55e' : '#ef4444' }} className="text-[9px] font-black uppercase tracking-wider">{isPaid ? 'PAID' : 'PENDING'}</Text>
+                                    </View>
+                                </View>
+                                <Text style={{ color: theme.textDark }} className="text-xxs font-mono opacity-60">REF: {order.reference_number || 'N/A'}</Text>
+                                <View style={{ borderTopColor: theme.border }} className="flex-row justify-between items-center mt-1 pt-2 border-t border-dashed">
+                                    <Text style={{ color: theme.textDark }} className="text-xs font-semibold">{order.order_items?.length || 0} products</Text>
+                                    <Text style={{ color: theme.primary }} className="text-sm font-extrabold">KES {parseFloat(order.final_price_total || order.order_price_total || 0).toFixed(2)}</Text>
+                                </View>
+                                <View className="flex-row items-center gap-x-2 mt-2 pt-2 border-t" style={{ borderTopColor: theme.border }}>
+                                    <TouchableOpacity onPress={() => handleLaunchInvoiceSheet(order)} style={{ backgroundColor: theme.background }} className="flex-1 py-2 items-center justify-center rounded-lg">
+                                        <Text style={{ color: theme.text }} className="text-xxs font-bold uppercase">🔎 View Details</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => handleTriggerInvoicePrintMacro(order)} style={{ backgroundColor: theme.primary }} className="flex-1 py-2 items-center justify-center rounded-lg">
+                                        <Text className="text-white text-xxs font-bold uppercase">🖨️ Print Invoice</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        );
+                    })}
+                </View>
+            ) : (
+                <View style={{ backgroundColor: theme.panel, borderColor: theme.border }} className="w-full rounded-xl border shadow-sm overflow-hidden">
+                    <View style={{ backgroundColor: theme.background, borderBottomColor: theme.border }} className="flex-row px-4 py-3 border-b">
+                        <Text style={{ color: theme.textDark }} className="flex-2 text-xs font-black uppercase tracking-wider">Retailer / Client</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-black uppercase tracking-wider">Reference Ledger</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-black uppercase tracking-wider text-center">Manifest Size</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-black uppercase tracking-wider text-center">Settlement</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-black uppercase tracking-wider text-center">Status</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-black uppercase tracking-wider text-right pr-4">Billing Gross</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-black uppercase tracking-wider text-right">Actions</Text>
+                    </View>
+                    {Platform.OS === 'web' ? (
+                        <ScrollView className="w-full max-h-[520px]" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+                            {renderTableRowsLoop()}
+                        </ScrollView>
+                    ) : (
+                        <View className="w-full">
+                            {renderTableRowsLoop()}
+                        </View>
+                    )}
+                </View>
+            )}
+            <WholesaleOrderInvoiceModal theme={theme} isOpen={isInvoiceOpen} order={selectedOrder} onClose={() => { setIsInvoiceOpen(false); setSelectedOrder(null); }} />
+        </ScrollView>
     );
 }

@@ -29,8 +29,8 @@ function GlobalAppShellLayout() {
   const isLargeScreen = width >= 768;
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
-  // 🌟 FIXED: Sidebar starts OPEN on Web/Desktop, but CLOSED by default on Native Mobile
-  const [sidebarOpen, setSidebarOpen] = useState(Platform.OS === "web");
+  // 🌟 FIXED: Sidebar is now explicitly initialized to TRUE (Always Visible on all viewports)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Authentication Route Guard Logic
   React.useEffect(() => {
@@ -83,6 +83,7 @@ function GlobalAppShellLayout() {
             />
           ) : (
             <View style={{ backgroundColor: theme.panel, borderBottomColor: theme.background }} className="h-14 w-full border-b px-4 flex-row justify-between items-center shadow-xs">
+              {/* Menu Toggle Trigger Button */}
               <TouchableOpacity onPress={() => setSidebarOpen(!sidebarOpen)} style={{ backgroundColor: theme.background }} className="p-2 rounded-xl">
                 <Text style={{ color: customTextColor }} className="font-extrabold text-xs">☰ Menu</Text>
               </TouchableOpacity>
@@ -114,7 +115,7 @@ function GlobalAppShellLayout() {
                 </View>
 
                 <View className="flex-1">
-                  {/* 🌟 FIXED: Passed the layout toggle down so the sidebar component can close itself on native */}
+                  {/* Fixed Navigation link layers */}
                   <SidebarNavigationList onCloseSidebarTrigger={() => setSidebarOpen(false)} />
                 </View>
               </View>

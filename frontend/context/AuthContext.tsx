@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         panel: isDarkMode ? "#1e293b" : "#ffffff",
         text: isDarkMode ? "#f8fafc" : "#0f172a",
         textDark: isDarkMode ? "#94a3b8" : "#334155",
-        primary: "#3b82f6"
+        primary: "#0056b3"
     };
 
     // ─── RUNTIME APP HYDRATION (STAYS LOGGED IN ON REFRESH/BOOT) ───

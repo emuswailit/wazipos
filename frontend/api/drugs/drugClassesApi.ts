@@ -6,7 +6,7 @@ export type UploadProgressCallback = (progressFraction: number) => void;
 export interface DrugClassPayload {
   title: string;
   description: string;
-  body_system: string;
+
 }
 
 export interface CreateDrugClassRequest {
@@ -22,8 +22,8 @@ const addDrugClass = (
     action: "CreateDrugClass",
     drug_class_details: {
       title: data.title.trim(),
-      description: data.description.trim(),
-      body_system: data.body_system.trim(),
+      description: data.description,
+
     }
   };
 

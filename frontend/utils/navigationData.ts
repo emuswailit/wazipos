@@ -97,20 +97,27 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         subRoutes: [
             {
                 id: 1,
+                title: "New Order",
+                route: "/newWholesaleOrder?tab=newWholesaleOrder", // Points directly to app/(admin)/
+                allowedRoles: ["Admin"],
+                showInSidebar: true
+            },
+            {
+                id: 2,
                 title: "Orders",
                 route: "/wholesaleOrders?tab=wholesaleOrders", // Points directly to app/(admin)/
                 allowedRoles: ["Admin"],
                 showInSidebar: true
             },
             {
-                id: 2,
+                id: 3,
                 title: "Inventory",
                 route: "/wholesaleInventory?tab=wholesaleInventory", // Points directly to app/(admin)/
                 allowedRoles: ["Admin"],
                 showInSidebar: true
             },
             {
-                id: 3,
+                id: 4,
                 title: "Payments",
                 route: "/wholesalePayments?tab=wholesalePayments", // Points directly to app/(admin)/
                 allowedRoles: ["Admin"],
@@ -165,13 +172,24 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
     },
     {
         id: 9,
+        title: "Account",
+        route: "/(tabs)/account",
+        allowedRoles: ["Admin", "Vendor"],
+        showInSidebar: true,
+        subRoutes: [
+            { title: "Account", route: "/(tabs)/account?tab=account", allowedRoles: ["Admin", "Vendor"], showInSidebar: true },
+            { title: "Subscriptions", route: "/(tabs)/account?tab=subscriptions", allowedRoles: ["Admin"], showInSidebar: true },
+        ]
+    },
+    {
+        id: 10,
         title: "Accounts Ledger",
         route: "/(tabs)/business",
         allowedRoles: ["Admin", "Vendor"],
         showInSidebar: true,
     },
     {
-        id: 10,
+        id: 11,
         title: "My Profile",
         route: "/(tabs)/profile",
         allowedRoles: ["Client", "Admin", "Vendor"],

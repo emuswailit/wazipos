@@ -26,22 +26,22 @@ export default function PreparationsListSection({
             <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerClassName="w-full">
                 <View style={{ backgroundColor: theme.panel }} className="flex-col rounded-2xl min-w-[950px] overflow-hidden w-full">
                     <View style={{ backgroundColor: theme.background === "#f8fafc" ? "#f1f5f9" : "#0f172a" }} className="flex-row items-center px-6 py-4">
-                        <Text style={{ color: theme.textDark }} className="w-[220px] font-black text-xs uppercase tracking-wider">Preparation Identifier</Text>
+                        <Text style={{ color: theme.textDark }} className="w-[400px] font-black text-xs uppercase tracking-wider">Preparation Title</Text>
                         <Text style={{ color: theme.textDark }} className="w-[140px] font-black text-xs uppercase tracking-wider px-2">Formulation Form</Text>
                         <Text style={{ color: theme.textDark }} className="w-[200px] font-black text-xs uppercase tracking-wider px-2">Active Ingredient Compounds</Text>
-                        <Text style={{ color: theme.textDark }} className="flex-1 font-black text-xs uppercase tracking-wider px-2">Description</Text>
+                        <Text style={{ color: theme.textDark }} className="flex-1 w-[200px] font-black text-xs uppercase tracking-wider px-2">Description</Text>
                         <Text style={{ color: theme.textDark }} className="w-[120px] font-black text-xs uppercase tracking-wider text-center">Created On</Text>
                         <Text style={{ color: theme.textDark }} className="w-[140px] font-black text-xs uppercase tracking-wider text-right">Actions</Text>
                     </View>
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {preparations.map((item) => (
                             <View key={item.id} className="flex-row items-center px-6 py-4 web:hover:bg-slate-500/5">
-                                <Text style={{ color: theme.primary }} className="w-[220px] font-black text-sm tracking-wide">{item.long_title || item.title}</Text>
+                                <Text style={{ color: theme.primary }} className="w-[400px] font-black text-sm tracking-wide">{item.long_title || item.title}</Text>
                                 <View className="w-[140px] px-2">
                                     <Text style={{ color: theme.text }} className="bg-slate-500/10 px-2 py-0.5 rounded text-xs font-bold truncate max-w-full">{item.formulation_title}</Text>
                                 </View>
                                 <Text style={{ color: theme.text }} className="w-[200px] text-xs font-semibold px-2 truncate italic">{item.generics_string}</Text>
-                                <Text style={{ color: theme.textDark }} className="flex-1 text-xs font-medium px-2 truncate" numberOfLines={1}>{item.description || "N/A"}</Text>
+                                <Text style={{ color: theme.textDark }} className="flex-1 w-[200px] text-xs font-medium px-2 truncate" numberOfLines={1}>{item.description || "N/A"}</Text>
                                 <Text style={{ color: theme.textDark }} className="w-[120px] text-xs font-semibold text-center">{formatDateHandler(item.created)}</Text>
                                 <View className="w-[140px] flex-row gap-x-2 justify-end items-center">
                                     <TouchableOpacity onPress={() => onOpenEditTrigger(item)} style={{ borderColor: theme.border }} className="py-1 px-2.5 border rounded-lg active:bg-slate-100 dark:active:bg-slate-800 transition-all"><Text style={{ color: theme.text }} className="text-xs font-semibold">Edit</Text></TouchableOpacity>

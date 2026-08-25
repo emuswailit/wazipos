@@ -37,19 +37,28 @@ export default function ProductFormFields({
     return (
         <View style={{ backgroundColor: theme.panel, borderColor: theme.primary }} className="p-6 rounded-2xl border shadow-sm flex-col w-full gap-y-4">
 
-            <View style={{ zIndex: 120 }} className="items-start w-full">
+            <View style={{ zIndex: 1000 }} className="items-start w-full relative">
                 <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-black tracking-wider mb-1">Commercial Product Brand Name</Text>
                 <TextInput onChangeText={handleChange("title")} onBlur={handleBlur("title")} value={values.title} placeholder="e.g. AMPIMOX" placeholderTextColor="#64748b" style={{ backgroundColor: theme.background, borderColor: touched.title && errors.title ? "#ef4444" : theme.primary, color: theme.text }} className="w-full rounded-xl px-4 h-[42px] border text-sm font-medium outline-none" />
                 {touched.title && errors.title && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.title}</Text>}
             </View>
 
-            <PreparationAutocomplete theme={theme} isDarkMode={isDarkMode} selectedValue={values.preparation} initialTitle={initialData?.long_preparation_title || initialData?.preparation_title} hasError={!!(touched.preparation && errors.preparation)} onSelect={(id) => setFieldValue("preparation", id)} zIndexValue={110} />
-            {touched.preparation && errors.preparation && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.preparation}</Text>}
+            <View style={{ zIndex: 900 }} className="w-full relative">
+                <PreparationAutocomplete theme={theme} isDarkMode={isDarkMode} selectedValue={values.preparation} initialTitle={initialData?.long_preparation_title || initialData?.preparation_title} hasError={!!(touched.preparation && errors.preparation)} onSelect={(id) => setFieldValue("preparation", id)} zIndexValue={950} />
+                {touched.preparation && errors.preparation && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.preparation}</Text>}
+            </View>
 
-            <ManufacturerAutocomplete theme={theme} isDarkMode={isDarkMode} selectedValue={values.manufacturer} initialTitle={initialData?.manufacturer_title} hasError={!!(touched.manufacturer && errors.manufacturer)} onSelect={(id) => setFieldValue("manufacturer", id)} zIndexValue={100} />
-            {touched.manufacturer && errors.manufacturer && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.manufacturer}</Text>}
+            <View style={{ zIndex: 800 }} className="w-full relative">
+                <ManufacturerAutocomplete theme={theme} isDarkMode={isDarkMode} selectedValue={values.manufacturer} initialTitle={initialData?.manufacturer_title} hasError={!!(touched.manufacturer && errors.manufacturer)} onSelect={(id) => setFieldValue("manufacturer", id)} zIndexValue={850} />
+                {touched.manufacturer && errors.manufacturer && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.manufacturer}</Text>}
+            </View>
 
-            <View style={{ zIndex: 1 }} className="w-full flex-row gap-x-4">
+            <View style={{ zIndex: 700 }} className="w-full relative">
+                <AllowedEntitiesPicker theme={theme} selectedValues={values.allowed_entities} onSelectionChange={(vals) => setFieldValue("allowed_entities", vals)} />
+                {touched.allowed_entities && errors.allowed_entities && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.allowed_entities}</Text>}
+            </View>
+
+            <View style={{ zIndex: 10 }} className="w-full flex-row gap-x-4 relative">
                 <View className="flex-1 items-start">
                     <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-black tracking-wider mb-1">Units Quantity per Pack</Text>
                     <TextInput keyboardType="numeric" onChangeText={handleChange("units_per_pack")} onBlur={handleBlur("units_per_pack")} value={values.units_per_pack} placeholder="100" placeholderTextColor="#64748b" style={{ backgroundColor: theme.background, borderColor: touched.units_per_pack && errors.units_per_pack ? "#ef4444" : theme.primary, color: theme.text }} className="w-full rounded-xl px-4 h-[42px] border text-sm font-medium outline-none" />
@@ -62,13 +71,13 @@ export default function ProductFormFields({
                 </View>
             </View>
 
-            <View style={{ zIndex: 1 }} className="items-start w-full">
+            <View style={{ zIndex: 10 }} className="items-start w-full relative">
                 <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-black tracking-wider mb-1">Product Barcode SKU / GTIN Number</Text>
                 <BarcodeScannerTrigger theme={theme} onScanSuccess={(scannedSku) => setFieldValue("bar_code", scannedSku)} />
                 <TextInput onChangeText={handleChange("bar_code")} onBlur={handleBlur("bar_code")} value={values.bar_code} placeholder="Scanned data string mounts here natively" placeholderTextColor="#64748b" style={{ backgroundColor: theme.background, borderColor: theme.primary, color: theme.text }} className="w-full rounded-xl px-4 h-[42px] border text-sm font-medium outline-none" />
             </View>
 
-            <View style={{ zIndex: 1 }} className="items-start w-full">
+            <View style={{ zIndex: 10 }} className="items-start w-full relative">
                 <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-black tracking-wider mb-1">Is Vatable Supply Node Parameter</Text>
                 <View className="flex-row items-center gap-x-4 mt-1">
                     {["true", "false"].map((opt) => (
@@ -82,22 +91,17 @@ export default function ProductFormFields({
                 </View>
             </View>
 
-            <View style={{ zIndex: 1 }} className="items-start w-full">
-                <AllowedEntitiesPicker theme={theme} selectedValues={values.allowed_entities} onSelectionChange={(vals) => setFieldValue("allowed_entities", vals)} />
-                {touched.allowed_entities && errors.allowed_entities && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.allowed_entities}</Text>}
-            </View>
-
-            <View style={{ zIndex: 1 }} className="items-start w-full">
+            <View style={{ zIndex: 10 }} className="items-start w-full relative">
                 <ProductImagesPicker theme={theme} isDarkMode={isDarkMode} images={values.images} onImagesChange={(updatedUris) => setFieldValue("images", updatedUris)} />
                 {touched.images && errors.images && <Text className="text-red-500 text-[11px] font-semibold mt-1">{errors.images}</Text>}
             </View>
 
-            <View style={{ zIndex: 1 }} className="flex-row items-center gap-x-3 mt-4 w-full">
+            <View style={{ zIndex: 1 }} className="flex-row items-center gap-x-3 mt-4 w-full relative">
                 <TouchableOpacity onPress={onCancel} disabled={isSubmittingRemote} className="flex-1 h-12 rounded-xl items-center justify-center border border-slate-200 dark:border-slate-800 active:bg-slate-50">
                     <Text className="text-slate-500 font-bold text-sm uppercase tracking-wider">Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleSubmit()} disabled={isSubmittingRemote} style={{ backgroundColor: theme.primary }} className="flex-1 h-12 rounded-xl items-center justify-center shadow-md active:opacity-90">
-                    {isSubmittingRemote ? <ActivityIndicator color="#ffffff" size="small" /> : <Text className="text-white font-bold text-sm uppercase tracking-wider">{initialData ? "Update Product" : "Commit Brand"}</Text>}
+                    {isSubmittingRemote ? <ActivityIndicator color="#ffffff" size="small" /> : <Text className="text-white font-bold text-sm uppercase tracking-wider">Save Product</Text>}
                 </TouchableOpacity>
             </View>
 
