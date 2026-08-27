@@ -3123,7 +3123,7 @@ def re_initiate_order_payment(data, user):
                 # )
             else:
                 raise exceptions.ValidationError("Order already paid for")
-
+## This is the new method
 @transaction.atomic
 def create_customer_order(data, user):
     errors=[]
