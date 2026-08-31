@@ -133,7 +133,7 @@ def get_all_products(user):
         # return authorized_products
         queryset = Products.objects.all()
         # Look for a query parameter like ?entity_type=Grocery
-        entity_type = user.entity.entity_type('entity_type')
+        entity_type = user.entity.entity_type
         
         if entity_type:
             # Filters the array column against the query value
