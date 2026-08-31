@@ -137,7 +137,7 @@ def get_all_products(user):
         
         if entity_type:
             # Filters the array column against the query value
-            queryset = queryset.filter(allowed_businesses__contains=[entity_type])
+            queryset = queryset.filter(allowed_entities__contains=[entity_type])
         return queryset
     
 def get_client_products(user):
