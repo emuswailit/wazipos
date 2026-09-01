@@ -1632,7 +1632,7 @@ class VendorPurchasePredictionAPIView(APIView):
         for product in master_products:
             m = calculate_single_product_metrics(
                 product=product,
-                entity_owner=entity.owner,
+                owner=entity.owner,
                 total_horizon_days=total_horizon_days,
                 horizon_expiry_threshold=horizon_expiry_threshold,
                 history_cutoff=history_cutoff,
