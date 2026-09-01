@@ -1601,18 +1601,28 @@ from .helpers import (
     create_retailer_order_group
 )
 
+import datetime
+import math
+from decimal import Decimal
+from django.db.models import Q
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         """
-        Phase 1 Simulator View (GET Variant):
+        Phase 1 Simulator View (Production GET Variant):
         Processes timelines and estimates required stock across lookback windows.
-        Extracts parameters directly from URL query parameters context safely.
+        Converts query parameter string mappings into structured primitives for the Serializer layer safely.
         """
-        # Read parameters from query string params context cleanly
-        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params)
+        # 🚀 FIX: Convert standard query parameters dictionary cleanly into a format DRF Serializer can parse natively
+        query_data = request.query_params.dict()
+        
+        query_serializer = InventoryPredictionQuerySerializer(data=query_data)
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
