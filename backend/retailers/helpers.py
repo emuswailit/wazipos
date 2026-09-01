@@ -18,14 +18,15 @@ def get_entity_interacted_products(owner):
     o_ids = OutOfStock.objects.filter(owner=owner, is_ordered="false").values_list('product_id', flat=True)
     return Products.objects.filter(id__in=set(list(r_ids) + list(o_ids)), active=True)
 
-
-# 🟢 UPDATED: Changed parameter name 'h_days' to match view's named keyword 'total_horizon_days'
-def calculate_single_product_metrics(product, owner, total_horizon_days, exp_th, cut, max_shelf, lookback):
+def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback):
+    """Aggregates shelf metrics, expiration calculations, and logs anomalies for one product."""
     today = datetime.date.today()
     factor = int(product.units_per_pack) if product.units_per_pack else 1
     
     p_stock = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true").aggregate(t=Sum('current_unit_quantity'))['t'] or 0
-    e_stock = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true", expiry_date__isnull=False, expiry_date__lte=exp_th, expiry_date__gte=today).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
+    
+    # Updated reference to use horizon_expiry_threshold
+    e_stock = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true", expiry_date__isnull=False, expiry_date__lte=horizon_expiry_threshold, expiry_date__gte=today).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
     usable_stock = max(0, p_stock - e_stock)
     
     o_date = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true").aggregate(o=Min('created'))['o']
@@ -34,9 +35,10 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, exp_th,
         if isinstance(o_date, datetime.datetime): 
             o_date = o_date.date()
         age = (today - o_date).days
-        overstayed = age >= max_shelf
+        overstayed = age >= max_shelf_days # Updated to match max_shelf_days
         
-    sold = CustomerOrderItems.objects.filter(retailer_receipt__owner=owner, retailer_receipt__product=product, customer_order__status__in=["COMPLETED", "DELIVERED"], customer_order__created__date__gte=cut).aggregate(t=Sum('purchased_quantity'))['t'] or 0
+    # Updated reference to use history_cutoff
+    sold = CustomerOrderItems.objects.filter(retailer_receipt__owner=owner, retailer_receipt__product=product, customer_order__status__in=["COMPLETED", "DELIVERED"], customer_order__created__date__gte=history_cutoff).aggregate(t=Sum('purchased_quantity'))['t'] or 0
     ads = Decimal(sold) / Decimal(lookback)
     raw_oos = OutOfStock.objects.filter(product=product, owner=owner, is_ordered="false").aggregate(t=Sum('required_quantity'))['t'] or 0
     
@@ -50,7 +52,6 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, exp_th,
             val_oos = raw_oos
             
     return {"pack_factor": factor, "total_physical_stock": p_stock, "expiring_stock_hidden": e_stock, "usable_stock_calculated": usable_stock, "shelf_age_days": age, "has_overstayed": overstayed, "avg_daily_sales": ads, "raw_backlog_demand": raw_oos, "validated_backlog_demand": val_oos, "has_inventory_discrepancy": disc, "discrepancy_note": note}
-
 
 def find_wholesaler_procurement_offers(product, packs, today):
     """Scans the live wholesale catalog to match active multi-tier vendor promotions."""
