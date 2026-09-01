@@ -1605,14 +1605,14 @@ from .helpers import (
 class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         """
-        Phase 1 Simulator View (POST Method Variant):
-        Processes timelines and estimates required stock using parameters sent in the request body.
-        Natively matches up multi-tier Wholesaler Quantity Discounts inside a clean response array.
+        Phase 1 Simulator View (GET Variant):
+        Processes timelines and estimates required stock across lookback windows.
+        Extracts parameters directly from URL query parameters context safely.
         """
-        # Read variables directly from request body instead of URL parameters
-        query_serializer = InventoryPredictionQuerySerializer(data=request.data)
+        # Read parameters from query string params context cleanly
+        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params)
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1706,7 +1706,6 @@ class VendorPurchasePredictionAPIView(APIView):
             },
             "predictions": predictions
         }, status=status.HTTP_200_OK)
-
 
 class RetailerBulkCheckoutAPIView(APIView):
     permission_classes = [IsAuthenticated]
