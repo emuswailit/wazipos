@@ -19,8 +19,8 @@ def get_entity_interacted_products(owner):
     return Products.objects.filter(id__in=set(list(r_ids) + list(o_ids)), active=True)
 
 
-def calculate_single_product_metrics(product, owner, h_days, exp_th, cut, max_shelf, lookback):
-    """Aggregates shelf metrics, expiration calculations, and logs anomalies for one product."""
+# 🟢 UPDATED: Changed parameter name 'h_days' to match view's named keyword 'total_horizon_days'
+def calculate_single_product_metrics(product, owner, total_horizon_days, exp_th, cut, max_shelf, lookback):
     today = datetime.date.today()
     factor = int(product.units_per_pack) if product.units_per_pack else 1
     
