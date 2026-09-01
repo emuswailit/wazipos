@@ -205,14 +205,9 @@ class Products(EntityRelatedModel):
         SubCategories, on_delete=models.CASCADE, null=True, blank=True
     )
     description = models.TextField(null=True, blank=True)
-    is_drug = models.BooleanField(default=True)
     is_pom = models.BooleanField(default=True)
     is_vatable = models.CharField(
         max_length=50, choices=IS_VATABLE_OPTIONS, default="false"
-    )
-    images = models.ManyToManyField(
-        ProductImages,
-        related_name="images",
     )
     manufacturer = models.ForeignKey(
         Entities, related_name="product_manufacturer", on_delete=models.CASCADE,null=True,blank=True
@@ -258,11 +253,9 @@ class Products(EntityRelatedModel):
 
     objects = ProductsManager()
 
-    def is_drug(self):
-        if self.preparation:
-            return True
-        else:
-            return False
+    @property
+    def check_is_drug(self):
+        return self.preparation is not None
 
     def save(self, *args, **kwargs):
         self.title = self.title.upper()

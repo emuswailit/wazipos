@@ -2546,3 +2546,25 @@ class StockAdjustmentsSerializer(serializers.ModelSerializer):
 
     def get_retailer_receipt_title(self,obj):
         return obj.retailer_receipt.product.title
+
+from rest_framework import serializers
+
+class InventoryPredictionQuerySerializer(serializers.Serializer):
+    """Sanitises the input params for the simulator playground endpoint."""
+    days_to_order = serializers.IntegerField(min_value=1, max_value=365)
+    lead_time_days = serializers.IntegerField(min_value=0, max_value=90, default=0)
+    lookback_window = serializers.IntegerField(default=30, min_value=7, max_value=90, required=False)
+    max_shelf_days = serializers.IntegerField(default=90, min_value=15, max_value=365, required=False)
+
+
+from rest_framework import serializers
+
+class RetailerOrderCheckoutItemSerializer(serializers.Serializer):
+    """Validates individual items inside the bulk checkout array payload."""
+    wholesaler_receipt_id = serializers.IntegerField()
+    purchased_quantity = serializers.IntegerField(min_value=0)
+
+
+class BulkWholesaleCheckoutRequestSerializer(serializers.Serializer):
+    """Validates the simplified payload where only the items array matters."""
+    items = RetailerOrderCheckoutItemSerializer(many=True, allow_empty=False)

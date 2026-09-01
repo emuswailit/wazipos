@@ -913,6 +913,9 @@ def create_entity_system_user(sender, instance, created, **kwargs):
             create_log("info", f"System user created for entity {instance.title} with code {password}")
         except Exception as e:
             create_log("error",f"Error creating system user for entity {instance.title}: {e}")  
+
+
+
 class EntityBranches(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Entity Branches"
