@@ -1605,13 +1605,14 @@ from .helpers import (
 class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         """
-        Phase 1 Simulator View:
-        Processes timelines and estimates required stock across lookback windows.
+        Phase 1 Simulator View (POST Method Variant):
+        Processes timelines and estimates required stock using parameters sent in the request body.
         Natively matches up multi-tier Wholesaler Quantity Discounts inside a clean response array.
         """
-        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params)
+        # Read variables directly from request body instead of URL parameters
+        query_serializer = InventoryPredictionQuerySerializer(data=request.data)
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1657,7 +1658,7 @@ class VendorPurchasePredictionAPIView(APIView):
             # Convert pieces into wholesaler bulk package unit allocations
             final_quantity_packs = int(math.ceil(final_quantity_pieces / m["pack_factor"]))
             
-            # Calls your helper which extracts structural multi-tier discount array tables 
+            # Extracts structural multi-tier discount array tables 
             proposed_offers = find_wholesaler_procurement_offers(
                 product=product,
                 final_quantity_packs=final_quantity_packs,
