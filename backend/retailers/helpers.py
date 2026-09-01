@@ -1,26 +1,25 @@
 import datetime
-import math
 from decimal import Decimal
-from collections import defaultdict
 from django.db.models import Sum, Min
-from rest_framework.exceptions import ValidationError
+from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock
 
-# --- Core Database App Imports ---
-from authentication.models import Entities
 from products.models import Products
-from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock, RetailerOrders, RetailerOrderItems
-from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
-
+from retailers.models import RetailerReceipts, OutOfStock
 
 def get_entity_interacted_products(owner):
-    """Gathers all unique Products that this Entity owner has ever interacted with."""
+    """
+    Gathers all unique Products that this Entity owner has ever interacted with.
+    Scans active inventory records and active out-of-stock backlogs.
+    """
     r_ids = RetailerReceipts.objects.filter(owner=owner, is_active="true").values_list('product_id', flat=True)
     o_ids = OutOfStock.objects.filter(owner=owner, is_ordered="false").values_list('product_id', flat=True)
     return Products.objects.filter(id__in=set(list(r_ids) + list(o_ids)), active=True)
 
 
 def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback_days):
-    """Aggregates shelf metrics, expiration calculations, and logs anomalies for one product."""
+    """
+    Aggregates shelf metrics, expiration calculations, and logs anomalies for one product.
+    """
     today = datetime.date.today()
     factor = int(product.units_per_pack) if product.units_per_pack else 1
     
@@ -37,7 +36,7 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
         overstayed = age >= max_shelf_days
         
     sold = CustomerOrderItems.objects.filter(retailer_receipt__owner=owner, retailer_receipt__product=product, customer_order__status__in=["COMPLETED", "DELIVERED"], customer_order__created__date__gte=history_cutoff).aggregate(t=Sum('purchased_quantity'))['t'] or 0
-    ads = Decimal(sold) / Decimal(lookback_days) # Updated to lookback_days
+    ads = Decimal(sold) / Decimal(lookback_days)
     raw_oos = OutOfStock.objects.filter(product=product, owner=owner, is_ordered="false").aggregate(t=Sum('required_quantity'))['t'] or 0
     
     val_oos, disc, note = 0, False, ""
@@ -53,9 +52,12 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
 
 
 
+from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
 
-def find_wholesaler_procurement_offers(product, packs, today):
-    """Scans the live wholesale catalog to match active multi-tier vendor promotions."""
+def find_wholesaler_procurement_offers(product, final_quantity_packs, today):
+    """
+    Scans the live wholesale catalog to match active multi-tier vendor promotions.
+    """
     offers = []
     receipts = WholesalerReceipts.objects.filter(product=product, current_unit_quantity__gt=0, in_placement='true').select_related('received_from')
     
@@ -72,20 +74,20 @@ def find_wholesaler_procurement_offers(product, packs, today):
             for q in q_discs:
                 q_promos.append(f"Volume Deal: Buy {q.limit_quantity} Packs, get {q.awarded_quantity} Packs completely FREE!")
                 
-                if 0 < packs < q.limit_quantity:
-                    hint = f"Upsell Hint: Increase your order by {q.limit_quantity - packs} Packs to unlock {q.awarded_quantity} free Packs!"
+                if 0 < final_quantity_packs < q.limit_quantity:
+                    hint = f"Upsell Hint: Increase your order by {q.limit_quantity - final_quantity_packs} Packs to unlock {q.awarded_quantity} free Packs!"
                     target = q.limit_quantity
-                elif packs >= q.limit_quantity:
-                    hint = f"Deal Activated: Your pack order qualifications grant you {(packs // q.limit_quantity) * q.awarded_quantity} free Packs!"
-                    target = packs
+                elif final_quantity_packs >= q.limit_quantity:
+                    hint = f"Deal Activated: Your pack order qualifications grant you {(final_quantity_packs // q.limit_quantity) * q.awarded_quantity} free Packs!"
+                    target = final_quantity_packs
                 else:
                     hint = "No adjustments needed."
-                    target = packs
+                    target = final_quantity_packs
                     
                 proc_opts.append({
                     "limit_quantity_tier": q.limit_quantity, 
                     "awarded_quantity": q.awarded_quantity, 
-                    "predicted_requirement_packs": packs, 
+                    "predicted_requirement_packs": final_quantity_packs, 
                     "optimized_recommendation_packs": target, 
                     "action_guidance": hint
                 })
@@ -94,12 +96,12 @@ def find_wholesaler_procurement_offers(product, packs, today):
             proc_opts.append({
                 "limit_quantity_tier": 0, 
                 "awarded_quantity": 0, 
-                "predicted_requirement_packs": packs, 
-                "optimized_recommendation_packs": packs, 
+                "predicted_requirement_packs": final_quantity_packs, 
+                "optimized_recommendation_packs": final_quantity_packs, 
                 "action_guidance": "No adjustments needed."
             })
             
-        if packs > 0 or p_disc or q_discs.exists():
+        if final_quantity_packs > 0 or p_disc or q_discs.exists():
             offers.append({
                 "wholesaler_receipt_id": r.id, 
                 "supplier_name": name, 
@@ -119,8 +121,14 @@ def find_wholesaler_procurement_offers(product, packs, today):
             
     return offers
 
+from collections import defaultdict
+from rest_framework.exceptions import ValidationError
+from wholesalers.models import WholesalerReceipts
 
 def group_checkout_items_by_wholesaler(items):
+    """
+    Groups checkout selections cleanly by distinct Wholesaler ID keys.
+    """
     groups = defaultdict(list)
     ignored = 0
     
@@ -130,7 +138,6 @@ def group_checkout_items_by_wholesaler(items):
         except (TypeError, ValueError): 
             raise ValidationError("purchased_quantity must be a valid whole integer.")
             
-        # 🟢 FIX 1 & 2: Restored standard conditional loop check criteria
         if qty <= 0: 
             ignored += 1
             continue
@@ -150,75 +157,65 @@ def group_checkout_items_by_wholesaler(items):
         
     return groups, ignored
 
+from decimal import Decimal
+from authentication.models import Entities
+from retailers.models import RetailerOrders, RetailerOrderItems, OutOfStock
 
 def create_retailer_order_group(retailer_entity, wholesaler_id, grouped_items, validated_data, request_user):
     """
-    Creates a single parent RetailerOrders record per wholesaler and appends its child line items.
-    All operational terms and types are omitted here to be selected later at payment.
+    Creates a parent Supplier transaction row and generates child items inside a ledger.
     """
-    wholesaler_entity = Entities.objects.get(id=wholesaler_id)
-    
-    # 🟢 REMOVED: order_terms, order_type, and delivery_method are gone
-    parent_order = RetailerOrders.objects.create(
-        retailer=retailer_entity,
-        wholesaler=wholesaler_entity,
-        status='SUBMITTED',
-        order_origin='RETAILER',
+    w_entity = Entities.objects.get(id=wholesaler_id)
+    order = RetailerOrders.objects.create(
+        retailer=retailer_entity, 
+        wholesaler=w_entity, 
+        status='SUBMITTED', 
+        order_origin='RETAILER', 
         owner=request_user
     )
-
-    gross_total, discount_total, final_total = Decimal('0.00'), Decimal('0.00'), Decimal('0.00')
-
-    for record in grouped_items:
-        receipt = record['w_receipt']
-        quantity = record['purchased_quantity']
+    gross, disc, final = Decimal('0.00'), Decimal('0.00'), Decimal('0.00')
+    
+    for item in grouped_items:
+        r, qty = item['w_receipt'], item['purchased_quantity']
+        bp = r.unit_selling_price
         
-        base_price = receipt.unit_selling_price
-        
-        if receipt.final_unit_selling_price > 0:
-            final_unit_price = receipt.final_unit_selling_price
+        if r.final_unit_selling_price > 0:
+            fp = r.final_unit_selling_price
         else:
-            final_unit_price = base_price
+            fp = bp
             
-        unit_discount = receipt.discount_unit_selling_price
-
-        line_price_total = base_price * Decimal(quantity)
-        line_final_total = final_unit_price * Decimal(quantity)
-        line_discount_total = unit_discount * Decimal(quantity)
+        ud = r.discount_unit_selling_price
+        g_l = bp * Decimal(qty)
+        f_l = fp * Decimal(qty)
+        d_l = ud * Decimal(qty)
+        gross += g_l; disc += d_l; final += f_l
         
-        gross_total += line_price_total
-        discount_total += line_discount_total
-        final_total += line_final_total
-
         RetailerOrderItems.objects.create(
-            retailer_order=parent_order,
-            wholesaler_receipt=receipt,
-            purchased_quantity=quantity,
-            total_quantity=quantity,
-            item_price=base_price,
-            item_price_total=line_price_total,
-            item_final_price=final_unit_price,
-            item_final_price_total=line_final_total,
-            item_price_discount=unit_discount,
-            item_price_discount_total=line_discount_total,
-            unit_of_issue=receipt.unit_of_receipt,
+            retailer_order=order, 
+            wholesaler_receipt=r, 
+            purchased_quantity=qty, 
+            total_quantity=qty, 
+            item_price=bp, 
+            item_price_total=g_l, 
+            item_final_price=fp, 
+            item_final_price_total=f_l, 
+            item_price_discount=ud, 
+            item_price_discount_total=d_l, 
+            unit_of_issue=r.unit_of_receipt, 
             owner=request_user
         )
-
-        receipt.current_unit_quantity -= quantity
-        receipt.save(update_fields=['current_unit_quantity'])
-
-        OutOfStock.objects.filter(product=receipt.product, owner=request_user, is_ordered="false").update(is_ordered="true")
-
-    parent_order.order_gross_price_total = gross_total
-    parent_order.order_discount_total = discount_total
-    parent_order.final_price = final_total
-    parent_order.final_price_total = final_total
-    parent_order.save(update_fields=['order_gross_price_total', 'order_discount_total', 'final_price', 'final_price_total'])
-
+        r.current_unit_quantity -= qty
+        r.save(update_fields=['current_unit_quantity'])
+        OutOfStock.objects.filter(product=r.product, owner=request_user, is_ordered="false").update(is_ordered="true")
+        
+    order.order_gross_price_total = gross
+    order.order_discount_total = disc
+    order.final_price = final
+    order.final_price_total = final
+    order.save(update_fields=['order_gross_price_total', 'order_discount_total', 'final_price', 'final_price_total'])
+    
     return {
-        "retailer_order_id": parent_order.id,
-        "wholesaler_title": wholesaler_entity.title,
-        "final_price_total": float(parent_order.final_price_total)
+        "retailer_order_id": order.id, 
+        "wholesaler_title": w_entity.title, 
+        "final_price_total": float(order.final_price_total)
     }
-
