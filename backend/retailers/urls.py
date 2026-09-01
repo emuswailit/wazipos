@@ -64,14 +64,14 @@ urlpatterns = [
       # Phase 1: The Dynamic Simulation Playground (GET)
     # Retailer sends: ?days_to_order=30&lead_time_days=5&max_shelf_days=90
     path(
-        'procurement/predictions/', 
+        'procurement/predictions', 
         views.VendorPurchasePredictionAPIView.as_view(), 
         name='inventory-prediction-simulator'
     ),
       # Phase 2: The Final Order Execution Lock (POST)
     # Retailer passes the selected payload array to turn recommendations into real DB rows
     path(
-        'procurement/checkout/', 
+        'procurement/checkout', 
         views.RetailerBulkCheckoutAPIView.as_view(), 
         name='inventory-bulk-checkout'
     ),
