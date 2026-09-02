@@ -1614,6 +1614,7 @@ class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        create_log("info",f"request data: {request.query_params.dict()}")
         """Processes parameter tokens and outputs clean base unit tracking maps safely."""
         query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
         if not query_serializer.is_valid():
