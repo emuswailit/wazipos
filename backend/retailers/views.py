@@ -1624,6 +1624,7 @@ class VendorPurchasePredictionAPIView(APIView):
         today = datetime.date.today()
         history_cutoff = today - datetime.timedelta(days=v.get('lookback_window', 30))
         total_horizon_days = v['days_to_order'] + v['lead_time_days']
+        create_log("info",f"total_horizon_days: {total_horizon_days}")
         horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
 
         entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
