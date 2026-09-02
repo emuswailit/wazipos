@@ -1583,6 +1583,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
 import datetime
 import math
 from decimal import Decimal
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.views import APIView
@@ -1591,7 +1592,7 @@ from rest_framework.permissions import IsAuthenticated
 
 # --- Custom App Relational Imports ---
 from authentication.models import Entities
-from retailers.models import RetailerReceipts
+from retailers.models import RetailerReceipts, RetailerIndent
 from .serializers import InventoryPredictionQuerySerializer
 from .helpers import (
     get_entity_interacted_products, 
@@ -1605,8 +1606,8 @@ class VendorPurchasePredictionAPIView(APIView):
     def get(self, request, *args, **kwargs):
         """
         Phase 1 Simulator View:
-        Processes timeline parameters and calculates dynamic product forecasts 
-        strictly centered around generic base Units.
+        1. Identifies or initializes an open active corporate Indent tracking document.
+        2. Processes parameter coefficients and returns base unit product forecasts.
         """
         # Convert standard query parameters dictionary cleanly into a format DRF Serializer can parse natively
         query_data = request.query_params.dict()
@@ -1626,6 +1627,31 @@ class VendorPurchasePredictionAPIView(APIView):
         if not entity:
             return Response({"error": "No active retailer profiling instance recognized."}, status=status.HTTP_404_NOT_FOUND)
 
+        # 🚀 STEP 1: Look up or Atomic-Initialize active open document context tracking rows
+        try:
+            with transaction.atomic():
+                active_indent = RetailerIndent.objects.filter(
+                    entity=entity,
+                    owner=request.user,
+                    is_open="true"
+                ).first()
+
+                if not active_indent:
+                    # Initialize a new open Indent requisition head natively if missing
+                    active_indent = RetailerIndent.objects.create(
+                        entity=entity,
+                        owner=request.user,
+                        order_days=int(v['days_to_order']),
+                        lead_time=int(v['lead_time_days']),
+                        is_open="true"
+                    )
+        except Exception as tx_err:
+            return Response(
+                {"error": f"Failed during corporate indent checking or initialization allocation: {str(tx_err)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # STEP 2: Iterate and process prediction lines metrics maps
         predictions = []
         master_products = get_entity_interacted_products(entity.owner)
 
@@ -1652,17 +1678,16 @@ class VendorPurchasePredictionAPIView(APIView):
                 final_quantity_units += int(m["validated_backlog_demand"])
                 recommendation_notes = "Normal unit replenishment."
 
-            # Calculate available wholesale promotions based directly on base units
+            # Calculate wholesale configurations based on unified base units
             proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
-            # Pull pricing asset valuation safely from previous RetailerReceipts records
+            # Pull pricing asset valuation directly from historical baseline receipt structures
             last_receipt = RetailerReceipts.objects.filter(
                 owner=entity.owner, 
                 product=product, 
                 is_active="true"
             ).order_by('-created').first()
             
-            # 🛡️ Safe fallback protections guard against empty NoneType numerical arguments
             unit_cost = Decimal('0.00')
             if last_receipt and last_receipt.unit_buying_price is not None:
                 unit_cost = last_receipt.unit_buying_price
@@ -1693,9 +1718,13 @@ class VendorPurchasePredictionAPIView(APIView):
                 "wholesaler_procurement_offers": proposed_offers
             })
         
+        # STEP 3: Return payload tracking variables securely containing active indent metadata
         return Response({
-            "entity_id": entity.id, 
+            "entity_id": str(entity.id), 
             "entity_title": entity.title, 
+            # ➕ INJECTED TARGET LIFECYCLE IDENTIFIERS
+            "retailer_indent_id": str(active_indent.id), 
+            "retailer_indent_status": "OPEN_DRAFT" if active_indent.is_open == "true" else "CLOSED",
             "config": {
                 "ordering_window_days": v['days_to_order'],
                 "lead_time_days": v['lead_time_days'],
