@@ -158,7 +158,7 @@ def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity
         wholesale_receipt=target_receipt,
         wholesaler_price_discount=p_disc,
         wholesaler_quantity_discount=q_disc,
-        predicted_purchase_units=final_quantity_units,
+        required_quantity=final_quantity_units,
         final_pack_price=unit_cost,
         item_gross_total_amount=gross_subtotal,
         item_net_total_amount=gross_subtotal
