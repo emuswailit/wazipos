@@ -68,6 +68,11 @@ urlpatterns = [
         views.VendorPurchasePredictionAPIView.as_view(), 
         name='inventory-prediction-simulator'
     ),
+    path(
+        'procurement/ordering', 
+        views.RetailerCloseAndOrderIndentAPIView.as_view(), 
+        name='inventory-prediction-ordering'
+    ),
       # Phase 2: The Final Order Execution Lock (POST)
     # Retailer passes the selected payload array to turn recommendations into real DB rows
  

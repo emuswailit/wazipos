@@ -1581,7 +1581,6 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
 
 
 import datetime
-import math
 from decimal import Decimal
 from django.db import transaction
 from django.db.models import Q
@@ -1592,12 +1591,14 @@ from rest_framework.permissions import IsAuthenticated
 
 # --- Custom App Relational Imports ---
 from authentication.models import Entities
-from retailers.models import RetailerReceipts, RetailerIndent
+from retailers.models import RetailerReceipts
 from .serializers import InventoryPredictionQuerySerializer
 from .helpers import (
     get_entity_interacted_products, 
     calculate_single_product_metrics, 
-    find_wholesaler_procurement_offers
+    find_wholesaler_procurement_offers,
+    sync_or_create_active_indent,       # ➕ Imported Outsourced Helpers
+    rebuild_indent_item_row
 )
 
 class VendorPurchasePredictionAPIView(APIView):
@@ -1605,14 +1606,11 @@ class VendorPurchasePredictionAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         """
-        Phase 1 Simulator View:
-        1. Identifies or initializes an open active corporate Indent tracking document.
-        2. Processes parameter coefficients and returns base unit product forecasts.
+        Phase 1 Simulator & Requisition Synchronizer View:
+        Leverages modular helpers to maintain parameter syncs and child rows
+        re-populations, returning optimized base unit prediction matrices.
         """
-        # Convert standard query parameters dictionary cleanly into a format DRF Serializer can parse natively
-        query_data = request.query_params.dict()
-        
-        query_serializer = InventoryPredictionQuerySerializer(data=query_data)
+        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1627,34 +1625,16 @@ class VendorPurchasePredictionAPIView(APIView):
         if not entity:
             return Response({"error": "No active retailer profiling instance recognized."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 🚀 STEP 1: Look up or Atomic-Initialize active open document context tracking rows
+        # 🚀 REFACTORED PROCESSOR 1: Header Parameter Mapping Sync Handled in Single Line
         try:
-            with transaction.atomic():
-                active_indent = RetailerIndent.objects.filter(
-                    entity=entity,
-                    owner=request.user,
-                    is_open="true"
-                ).first()
+            active_indent = sync_or_create_active_indent(entity, request.user, v)
+        except Exception as err:
+            return Response({"error": f"Indent synchronization failure: {str(err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-                if not active_indent:
-                    # Initialize a new open Indent requisition head natively if missing
-                    active_indent = RetailerIndent.objects.create(
-                        entity=entity,
-                        owner=request.user,
-                        order_days=int(v['days_to_order']),
-                        lead_time=int(v['lead_time_days']),
-                        is_open="true"
-                    )
-        except Exception as tx_err:
-            return Response(
-                {"error": f"Failed during corporate indent checking or initialization allocation: {str(tx_err)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        # STEP 2: Iterate and process prediction lines metrics maps
         predictions = []
         master_products = get_entity_interacted_products(entity.owner)
 
+        # Process calculation maps cleanly
         for product in master_products:
             m = calculate_single_product_metrics(
                 product=product,
@@ -1662,37 +1642,34 @@ class VendorPurchasePredictionAPIView(APIView):
                 total_horizon_days=total_horizon_days,
                 horizon_expiry_threshold=horizon_expiry_threshold,
                 history_cutoff=history_cutoff,
-                max_shelf_days=v.get('max_shelf_days', 90),
-                lookback_days=v.get('lookback_window', 30)
+                max_shelf_days=active_indent.max_shelf_days,
+                lookback_days=active_indent.lookback_days
             )
 
             safety_buffer = 10 if not m["has_overstayed"] else 0
             base_demand = m["avg_daily_sales"] * Decimal(total_horizon_days)
             predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(m["usable_stock_calculated"]))
-            final_quantity_units = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
+            final_quantity_pieces = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
 
-            if m["has_overstayed"] and final_quantity_units > 0:
+            if m["has_overstayed"] and final_quantity_pieces > 0:
                 final_quantity_units = int(m["validated_backlog_demand"])
                 recommendation_notes = "Overstayed stock blocker active."
             else:
-                final_quantity_units += int(m["validated_backlog_demand"])
+                final_quantity_units = final_quantity_pieces + int(m["validated_backlog_demand"])
                 recommendation_notes = "Normal unit replenishment."
 
-            # Calculate wholesale configurations based on unified base units
+            final_quantity_units = int(math.ceil(final_quantity_units / m["pack_factor"]))
             proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
-            # Pull pricing asset valuation directly from historical baseline receipt structures
-            last_receipt = RetailerReceipts.objects.filter(
-                owner=entity.owner, 
-                product=product, 
-                is_active="true"
-            ).order_by('-created').first()
-            
-            unit_cost = Decimal('0.00')
-            if last_receipt and last_receipt.unit_buying_price is not None:
-                unit_cost = last_receipt.unit_buying_price
-                
+            last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product, is_active="true").order_by('-created').first()
+            unit_cost = last_receipt.unit_buying_price if (last_receipt and last_receipt.unit_buying_price is not None) else Decimal('0.00')
             total_value = Decimal(m["total_physical_stock"]) * unit_cost
+
+            # 🚀 REFACTORED PROCESSOR 2: Child Re-population Handled Atomically per Row
+            try:
+                rebuild_indent_item_row(entity, entity.owner, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today)
+            except Exception as item_err:
+                return Response({"error": f"Child lines population breakdown: {str(item_err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             predictions.append({
                 "product_id": str(product.id), 
@@ -1718,17 +1695,201 @@ class VendorPurchasePredictionAPIView(APIView):
                 "wholesaler_procurement_offers": proposed_offers
             })
         
-        # STEP 3: Return payload tracking variables securely containing active indent metadata
         return Response({
             "entity_id": str(entity.id), 
             "entity_title": entity.title, 
-            # ➕ INJECTED TARGET LIFECYCLE IDENTIFIERS
             "retailer_indent_id": str(active_indent.id), 
             "retailer_indent_status": "OPEN_DRAFT" if active_indent.is_open == "true" else "CLOSED",
             "config": {
-                "ordering_window_days": v['days_to_order'],
-                "lead_time_days": v['lead_time_days'],
-                "total_coverage_horizon": total_horizon_days
+                "ordering_window_days": active_indent.order_days,
+                "lead_time_days": active_indent.lead_time,
+                "lookback_window_days": active_indent.lookback_days,
+                "max_shelf_age_days": active_indent.max_shelf_days,
+                "total_coverage_horizon": active_indent.order_days + active_indent.lead_time
             },
             "predictions": predictions
         }, status=status.HTTP_200_OK)
+
+
+import datetime
+from decimal import Decimal
+from django.db import transaction
+from django.db.models import Q
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+# --- Custom System Relational Imports ---
+from authentication.models import Entities
+from wholesalers.models import WholesalerReceipts
+from retailers.models import RetailerIndent, RetailerIndentItem, RetailerOrders, RetailerOrderItems
+
+class RetailerCloseAndOrderIndentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        """
+        Phase 3 Closing Transaction API View:
+        1. Closes out active internal RetailerIndent draft (sets is_open="false").
+        2. Synchronizes final selected frontend items with RetailerIndentItem database metrics rows.
+        3. Spawns distinct RetailerOrders mapped strictly to RetailerOrders schema model attributes.
+        """
+        data = request.data
+        indent_id = data.get("indent_id")
+        frontend_items = data.get("items", [])
+
+        if not indent_id or not frontend_items:
+            return Response(
+                {"error": "Missing parameters. Ensure indent_id and item list arrays are populated."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
+        if not entity:
+            return Response({"error": "No active retailer entity profile configuration matched."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            with transaction.atomic():
+                # 1. Fetch and close parent Indent lifecycle tracking state flags
+                try:
+                    indent = RetailerIndent.objects.select_for_update().get(id=indent_id, entity=entity, is_open="true")
+                except RetailerIndent.DoesNotExist:
+                    return Response(
+                        {"error": f"Active open draft indent reference ID {indent_id} missing or already finalized."},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+
+                # Lock the document state
+                indent.is_open = "false"
+                indent.save()
+
+                # Group entries by distinct Wholesaler IDs to map discrete corporate fields
+                wholesaler_groups = {}
+                
+                # 2. Iterate selected lines to update configurations and map bundles
+                for item in frontend_items:
+                    receipt_id = item.get("wholesaler_receipt")
+                    if not receipt_id:
+                        continue
+
+                    try:
+                        w_receipt = WholesalerReceipts.objects.get(id=receipt_id)
+                    except WholesalerReceipts.DoesNotExist:
+                        raise ValueError(f"Target wholesale catalog record ID {receipt_id} unresolvable.")
+
+                    supplier_entity = w_receipt.received_from
+                    if not supplier_entity:
+                        raise ValueError(f"Wholesaler stock receipt ID {receipt_id} lacks a valid provider profile link.")
+
+                    req_qty = int(item["required_quantity"])
+                    final_price = Decimal(str(item["price"]))
+                    gross_subtotal = Decimal(str(item["total"]))
+
+                    # Synchronize final variables onto existing matching RetailerIndentItem rows
+                    RetailerIndentItem.objects.update_or_create(
+                        entity=entity,
+                        retailer_indent=indent,
+                        wholesale_receipt=w_receipt,
+                        defaults={
+                            "owner": entity.owner,
+                            "predicted_purchase_units": req_qty,
+                            "final_pack_price": final_price,
+                            "item_gross_total_amount": gross_subtotal,
+                            "item_net_total_amount": gross_subtotal,
+                            "wholesaler_price_discount_id": item.get("wholesaler_price_discount_id"),
+                            "wholesaler_quantity_discount_id": item.get("wholesaler_quantity_discount_id")
+                        }
+                    )
+
+                    # Initialize vendor grouping array tracks dynamically
+                    if supplier_entity.id not in wholesaler_groups:
+                        wholesaler_groups[supplier_entity.id] = {
+                            "supplier": supplier_entity,
+                            "lines": []
+                        }
+                    
+                    wholesaler_groups[supplier_entity.id]["lines"].append({
+                        "w_receipt": w_receipt,
+                        "quantity": req_qty,
+                        "price": final_price,
+                        "total": gross_subtotal
+                    })
+
+                # 3. Create independent RetailerOrders sheets for each distinct Wholesaler group
+                created_orders_metadata = []
+
+                for w_id, group in wholesaler_groups.items():
+                    supplier = group["supplier"]
+                    lines = group["lines"]
+
+                    order_gross = sum(ln["total"] for ln in lines)
+
+                    # Generate parent Retailer Order tracking header document block matching choices metrics
+                    retailer_order = RetailerOrders.objects.create(
+                        entity=entity,
+                        owner=entity.owner,
+                        retailer=entity,            # Matches related_name='wholesalerOrderRetailer'
+                        wholesaler=supplier,        # Matches related_name='wholesalerOrderWholesaler'
+                        order_origin="RETAILER",
+                        order_type="NORMAL",
+                        order_terms="CASH",
+                        status="SUBMITTED",
+                        is_paid="false",
+                        is_delivered="false",
+                        is_processed="false",
+                        is_packed="false",
+                        is_received="false",
+                        is_approved="false",
+                        is_dispatched="false",
+                        delivery_method="SELF",
+                        # Financial configurations totals
+                        order_gross_price_total=order_gross,
+                        final_price=order_gross,
+                        final_price_total=order_gross,
+                        order_discount_total=Decimal("0.00"),
+                        order_tax_total=Decimal("0.00"),
+                        shipping_amount=Decimal("0.00")
+                    )
+
+                    # Append granular child row metrics lines matching RetailerOrderItems schema parameters
+                    for ln in lines:
+                        RetailerOrderItems.objects.create(
+                            entity=entity,
+                            owner=entity.owner,
+                            retailer_order=retailer_order,
+                            wholesale_receipt=ln["w_receipt"],
+                            purchased_quantity=ln["quantity"],
+                            total_quantity=ln["quantity"],
+                            discount_quantity=0,
+                            item_price=ln["price"],
+                            item_price_total=ln["total"],
+                            item_final_price=ln["price"],
+                            item_final_price_total=ln["total"],
+                            item_net_price=ln["price"],
+                            item_net_price_total=ln["total"],
+                            unit_of_issue="Pack",
+                            item_tax=Decimal("0.00"),
+                            item_tax_total=Decimal("0.00"),
+                            item_counter_price_discount_amount_total=Decimal("0.00"),
+                            item_price_discount_total=Decimal("0.00")
+                        )
+
+                    created_orders_metadata.append({
+                        "order_id": retailer_order.id,
+                        "supplier_title": supplier.title,
+                        "order_total": float(order_gross)
+                    })
+
+                return Response({
+                    "message": "Indent requisition closed and vendor purchase orders generated successfully.",
+                    "retailer_indent_id": indent.id,
+                    "indent_status": "CLOSED_FINALIZED",
+                    "purchase_orders_created": created_orders_metadata
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as transaction_error:
+            return Response(
+                {"error": f"Full-stack atomic generation sequence failed execution: {str(transaction_error)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

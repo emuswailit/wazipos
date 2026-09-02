@@ -295,9 +295,30 @@ class RetailQuantityDiscounts(EntityRelatedModel):
     )
 
 
+# class RetailerIndent(EntityRelatedModel):
+#     class Meta:
+#         verbose_name_plural="Retailer Indent"
+#     indent_number = models.ForeignKey(
+#         DocumentNumbers,
+#         related_name="indent_number",
+#         on_delete=models.CASCADE, null=True, blank=True
+#     )
+#     order_days = models.IntegerField()
+#     lead_time = models.IntegerField()
+#     is_open = models.CharField(
+#         max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
+#     )
+#     created = models.DateTimeField(auto_now_add=True)
+#     updated = models.DateTimeField(auto_now=True)
+#     owner = models.ForeignKey(
+#         Users,
+#         related_name="retailer_indent_owner",
+#         on_delete=models.CASCADE,
+#     )
 class RetailerIndent(EntityRelatedModel):
     class Meta:
         verbose_name_plural="Retailer Indent"
+        
     indent_number = models.ForeignKey(
         DocumentNumbers,
         related_name="indent_number",
@@ -305,6 +326,11 @@ class RetailerIndent(EntityRelatedModel):
     )
     order_days = models.IntegerField()
     lead_time = models.IntegerField()
+    
+    # ➕ ADDED MODEL SIMULATION PARAMETERS TRACKING FIELDS
+    lookback_days = models.IntegerField(default=30)
+    max_shelf_days = models.IntegerField(default=90)
+    
     is_open = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
     )
