@@ -1580,22 +1580,38 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         
 
 
-from decimal import Decimal 
+import datetime
+import math
+from decimal import Decimal
 from django.db.models import Q
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+
+# --- Custom App Relational Imports ---
 from authentication.models import Entities
 from retailers.models import RetailerReceipts
 from .serializers import InventoryPredictionQuerySerializer
-from .helpers import get_entity_interacted_products, calculate_single_product_metrics, find_wholesaler_procurement_offers
+from .helpers import (
+    get_entity_interacted_products, 
+    calculate_single_product_metrics, 
+    find_wholesaler_procurement_offers
+)
 
 class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        """Processes parameters and returns dynamic simulations matching base unit metrics."""
-        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
+        """
+        Phase 1 Simulator View:
+        Processes timeline parameters and calculates dynamic product forecasts 
+        strictly centered around generic base Units.
+        """
+        # Convert standard query parameters dictionary cleanly into a format DRF Serializer can parse natively
+        query_data = request.query_params.dict()
+        
+        query_serializer = InventoryPredictionQuerySerializer(data=query_data)
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1605,15 +1621,24 @@ class VendorPurchasePredictionAPIView(APIView):
         total_horizon_days = v['days_to_order'] + v['lead_time_days']
         horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
 
+        # Locate active retailer corporate context profile mapping header
         entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
         if not entity:
-            return Response({"error": "No profiling recognized."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No active retailer profiling instance recognized."}, status=status.HTTP_404_NOT_FOUND)
 
         predictions = []
         master_products = get_entity_interacted_products(entity.owner)
 
         for product in master_products:
-            m = calculate_single_product_metrics(product, entity.owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, v.get('max_shelf_days', 90), v.get('lookback_window', 30))
+            m = calculate_single_product_metrics(
+                product=product,
+                owner=entity.owner,
+                total_horizon_days=total_horizon_days,
+                horizon_expiry_threshold=horizon_expiry_threshold,
+                history_cutoff=history_cutoff,
+                max_shelf_days=v.get('max_shelf_days', 90),
+                lookback_days=v.get('lookback_window', 30)
+            )
 
             safety_buffer = 10 if not m["has_overstayed"] else 0
             base_demand = m["avg_daily_sales"] * Decimal(total_horizon_days)
@@ -1627,10 +1652,22 @@ class VendorPurchasePredictionAPIView(APIView):
                 final_quantity_units += int(m["validated_backlog_demand"])
                 recommendation_notes = "Normal unit replenishment."
 
+            # Calculate available wholesale promotions based directly on base units
             proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
-            last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product, is_active="true").order_by('-created').first()
-            unit_cost = last_receipt.unit_buying_price if last_receipt else Decimal('0.00')
+            # Pull pricing asset valuation safely from previous RetailerReceipts records
+            last_receipt = RetailerReceipts.objects.filter(
+                owner=entity.owner, 
+                product=product, 
+                is_active="true"
+            ).order_by('-created').first()
+            
+            # 🛡️ Safe fallback protections guard against empty NoneType numerical arguments
+            unit_cost = Decimal('0.00')
+            if last_receipt and last_receipt.unit_buying_price is not None:
+                unit_cost = last_receipt.unit_buying_price
+                
+            total_value = Decimal(m["total_physical_stock"]) * unit_cost
 
             predictions.append({
                 "product_id": str(product.id), 
@@ -1643,14 +1680,26 @@ class VendorPurchasePredictionAPIView(APIView):
                     "average_daily_sales": round(float(m["avg_daily_sales"]), 2), 
                     "validated_backlog_demand": m["validated_backlog_demand"],
                     "unit_cost_price": float(unit_cost),
-                    "total_value_calculated": float(m["total_physical_stock"] * unit_cost)
+                    "total_value_calculated": float(total_value)
                 },
-                "flags": {"expiry_warning": m["expiring_stock_hidden"] > 0, "has_overstayed_on_shelf": m["has_overstayed"], "has_inventory_discrepancy": m["has_inventory_discrepancy"]},
+                "flags": {
+                    "expiry_warning": m["expiring_stock_hidden"] > 0, 
+                    "has_overstayed_on_shelf": m["has_overstayed"], 
+                    "has_inventory_discrepancy": m["has_inventory_discrepancy"]
+                },
                 "discrepancy_details": m["discrepancy_note"], 
                 "recommendation_notes": recommendation_notes,
                 "predicted_purchase_units": final_quantity_units, 
                 "wholesaler_procurement_offers": proposed_offers
             })
         
-        return Response({"entity_id": entity.id, "entity_title": entity.title, "predictions": predictions}, status=status.HTTP_200_OK)
-
+        return Response({
+            "entity_id": entity.id, 
+            "entity_title": entity.title, 
+            "config": {
+                "ordering_window_days": v['days_to_order'],
+                "lead_time_days": v['lead_time_days'],
+                "total_coverage_horizon": total_horizon_days
+            },
+            "predictions": predictions
+        }, status=status.HTTP_200_OK)
