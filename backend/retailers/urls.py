@@ -70,11 +70,7 @@ urlpatterns = [
     ),
       # Phase 2: The Final Order Execution Lock (POST)
     # Retailer passes the selected payload array to turn recommendations into real DB rows
-    path(
-        'procurement/checkout', 
-        views.RetailerBulkCheckoutAPIView.as_view(), 
-        name='inventory-bulk-checkout'
-    ),
+ 
     # path(
     #     "discounts/price/<uuid:pk>",
     #     views.RetailerPriceDiscountsDetail.as_view(),

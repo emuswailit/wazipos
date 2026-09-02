@@ -1579,50 +1579,23 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                             )
         
 
-import datetime
-import math
-from decimal import Decimal
-from django.db import transaction
+
+
 from django.db.models import Q
-from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
-
-# --- Custom Internal App Component Imports ---
 from authentication.models import Entities
-from .serializers import InventoryPredictionQuerySerializer, BulkWholesaleCheckoutRequestSerializer
-from .helpers import (
-    get_entity_interacted_products,
-    calculate_single_product_metrics,
-    find_wholesaler_procurement_offers,
-    group_checkout_items_by_wholesaler,
-    create_retailer_order_group
-)
-
-import datetime
-import math
-from decimal import Decimal
-from django.db.models import Q
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from retailers.models import RetailerReceipts
+from .serializers import InventoryPredictionQuerySerializer
+from .helpers import get_entity_interacted_products, calculate_single_product_metrics, find_wholesaler_procurement_offers
 
 class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        """
-        Phase 1 Simulator View (Production GET Variant):
-        Processes timelines and estimates required stock across lookback windows.
-        Converts query parameter string mappings into structured primitives for the Serializer layer safely.
-        """
-        # 🚀 FIX: Convert standard query parameters dictionary cleanly into a format DRF Serializer can parse natively
-        query_data = request.query_params.dict()
-        
-        query_serializer = InventoryPredictionQuerySerializer(data=query_data)
+        """Processes parameters and returns dynamic simulations matching base unit metrics."""
+        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1632,142 +1605,52 @@ class VendorPurchasePredictionAPIView(APIView):
         total_horizon_days = v['days_to_order'] + v['lead_time_days']
         horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
 
-        # Locate active retailer corporate context profile mapping header
         entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
         if not entity:
-            return Response({"error": "No active retailer profiling instance recognized."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No profiling recognized."}, status=status.HTTP_404_NOT_FOUND)
 
         predictions = []
         master_products = get_entity_interacted_products(entity.owner)
 
         for product in master_products:
-            m = calculate_single_product_metrics(
-                product=product,
-                owner=entity.owner,
-                total_horizon_days=total_horizon_days,
-                horizon_expiry_threshold=horizon_expiry_threshold,
-                history_cutoff=history_cutoff,
-                max_shelf_days=v.get('max_shelf_days', 90),
-                lookback_days=v.get('lookback_window', 30)
-            )
+            m = calculate_single_product_metrics(product, entity.owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, v.get('max_shelf_days', 90), v.get('lookback_window', 30))
 
-            safety_stock_buffer = 10 if not m["has_overstayed"] else 0
+            safety_buffer = 10 if not m["has_overstayed"] else 0
             base_demand = m["avg_daily_sales"] * Decimal(total_horizon_days)
-            total_needed = base_demand + Decimal(safety_stock_buffer)
-            
-            predicted_purchase_pieces = max(Decimal(0), total_needed - Decimal(m["usable_stock_calculated"]))
-            final_predicted_pieces = int(predicted_purchase_pieces.quantize(Decimal('1.'), rounding='ROUND_UP'))
+            predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(m["usable_stock_calculated"]))
+            final_quantity_units = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
 
-            if m["has_overstayed"] and final_predicted_pieces > 0:
-                final_quantity_pieces = int(m["validated_backlog_demand"])
-                recommendation_notes = f"Warning: Item overstayed ({m['shelf_age_days']} days). Restock blocked."
+            if m["has_overstayed"] and final_quantity_units > 0:
+                final_quantity_units = int(m["validated_backlog_demand"])
+                recommendation_notes = "Overstayed stock blocker active."
             else:
-                final_quantity_pieces = final_predicted_pieces + int(m["validated_backlog_demand"])
-                recommendation_notes = "Normal restocking recommendation."
+                final_quantity_units += int(m["validated_backlog_demand"])
+                recommendation_notes = "Normal unit replenishment."
 
-            # Convert pieces into wholesaler bulk package unit allocations
-            final_quantity_packs = int(math.ceil(final_quantity_pieces / m["pack_factor"]))
-            
-            # Extracts structural multi-tier discount array tables 
-            proposed_offers = find_wholesaler_procurement_offers(
-                product=product,
-                final_quantity_packs=final_quantity_packs,
-                today=today
-            )
+            proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
-            # Map piece requirements logs back into multi-tier child items array blocks cleanly
-            for offer in proposed_offers:
-                for tier in offer["procurement_optimization"]:
-                    tier["predicted_requirement_pieces"] = final_quantity_pieces
+            last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product, is_active="true").order_by('-created').first()
+            unit_cost = last_receipt.unit_buying_price if last_receipt else Decimal('0.00')
 
             predictions.append({
-                "product_id": product.id, 
+                "product_id": str(product.id), 
                 "title": product.product_name(), 
                 "bar_code": product.bar_code, 
-                "units_per_pack": m["pack_factor"],
-                "metrics_in_pieces": {
+                "metrics_in_units": {
                     "total_physical_stock": m["total_physical_stock"], 
-                    "expiring_stock_hidden": m["expiring_stock_hidden"],
                     "usable_stock_calculated": m["usable_stock_calculated"], 
                     "shelf_age_days": m["shelf_age_days"],
                     "average_daily_sales": round(float(m["avg_daily_sales"]), 2), 
-                    "raw_backlog_demand": m["raw_backlog_demand"],
                     "validated_backlog_demand": m["validated_backlog_demand"],
+                    "unit_cost_price": float(unit_cost),
+                    "total_value_calculated": float(m["total_physical_stock"] * unit_cost)
                 },
-                "flags": {
-                    "expiry_warning": m["expiring_stock_hidden"] > 0, 
-                    "has_overstayed_on_shelf": m["has_overstayed"],
-                    "has_inventory_discrepancy": m["has_inventory_discrepancy"],
-                },
+                "flags": {"expiry_warning": m["expiring_stock_hidden"] > 0, "has_overstayed_on_shelf": m["has_overstayed"], "has_inventory_discrepancy": m["has_inventory_discrepancy"]},
                 "discrepancy_details": m["discrepancy_note"], 
                 "recommendation_notes": recommendation_notes,
-                "predicted_purchase_pieces": final_quantity_pieces, 
-                "predicted_purchase_packs": final_quantity_packs,
+                "predicted_purchase_units": final_quantity_units, 
                 "wholesaler_procurement_offers": proposed_offers
             })
         
-        return Response({
-            "entity_id": entity.id, 
-            "entity_title": entity.title,
-            "config": {
-                "ordering_window_days": v['days_to_order'], 
-                "lead_time_days": v['lead_time_days'], 
-                "total_coverage_horizon": total_horizon_days
-            },
-            "predictions": predictions
-        }, status=status.HTTP_200_OK)
+        return Response({"entity_id": entity.id, "entity_title": entity.title, "predictions": predictions}, status=status.HTTP_200_OK)
 
-class RetailerBulkCheckoutAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, *args, **kwargs):
-        """
-        Phase 2 Checkout View: 
-        Atomic multi-vendor checkout order splitting processor.
-        """
-        serializer = BulkWholesaleCheckoutRequestSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        validated_data = serializer.validated_data
-        retailer_entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
-        if not retailer_entity:
-            return Response({"error": "No active retailer entity configuration detected."}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            with transaction.atomic():
-                # Call multi-vendor partition processor helper 
-                wholesaler_groups, ignored_count = group_checkout_items_by_wholesaler(validated_data['items'])
-
-                if not wholesaler_groups:
-                    return Response({
-                        "message": "Checkout halted. All submitted items had a selection quantity of zero.",
-                        "orders_generated_count": 0, 
-                        "ignored_items_count": ignored_count, 
-                        "orders": []
-                    }, status=status.HTTP_200_OK)
-
-                created_order_details = []
-                
-                # Split unique orders atomically based on Supplier ID groups
-                for wholesaler_id, grouped_items in wholesaler_groups.items():
-                    order_summary = create_retailer_order_group(
-                        retailer_entity=retailer_entity, 
-                        wholesaler_id=wholesaler_id,
-                        grouped_items=grouped_items, 
-                        validated_data=validated_data, 
-                        request_user=request.user
-                    )
-                    created_order_details.append(order_summary)
-
-                return Response({
-                    "message": "Orders generated successfully.", 
-                    "orders_generated_count": len(created_order_details), 
-                    "ignored_items_count": ignored_count, 
-                    "orders": created_order_details
-                }, status=status.HTTP_201_CREATED)
-
-        except ValidationError as e:
-            return Response({"error": e.detail}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({"error": f"Database transactional tracking anomaly error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
