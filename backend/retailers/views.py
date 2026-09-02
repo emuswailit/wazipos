@@ -1614,18 +1614,28 @@ class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        create_log("info",f"request data: {request.query_params.dict()}")
-        """Processes parameter tokens and outputs clean base unit tracking maps safely."""
-        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
+        """
+        Phase 1 Simulator & Requisition Synchronizer View:
+        Leverages unrestricted data scanning across all historical product records
+        to yield dynamically scaling procurement forecasting results.
+        """
+        raw_params = request.query_params.dict()
+        create_log("info", f"Raw Incoming Request Data Params Map: {raw_params}")
+
+        query_serializer = InventoryPredictionQuerySerializer(data=raw_params)
         if not query_serializer.is_valid():
+            create_log("error", f"Serializer validation failed: {query_serializer.errors}")
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         v = query_serializer.validated_data
         today = datetime.date.today()
+        
+        # 📊 Dynamic Cutoffs derived strictly from user query tokens
         history_cutoff = today - datetime.timedelta(days=v.get('lookback_window', 30))
         total_horizon_days = v['days_to_order'] + v['lead_time_days']
-        create_log("info",f"total_horizon_days: {total_horizon_days}")
         horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
+        
+        create_log("info", f"Calculated Timeline - Horizon Days: {total_horizon_days}, History Cutoff: {history_cutoff}")
 
         entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
         if not entity:
@@ -1634,13 +1644,16 @@ class VendorPurchasePredictionAPIView(APIView):
         try:
             active_indent = sync_or_create_active_indent(entity, request.user, v)
         except Exception as err:
+            create_log("error", f"Failed syncing indent parameters header: {str(err)}")
             return Response({"error": f"Indent synchronization failure: {str(err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         predictions = []
+        
+        # Gathers all products ever linked with the owner across total receipt history records
         master_products = get_entity_interacted_products(entity.owner)
 
         for product in master_products:
-            # 🚀 Clean extraction call driven securely by helpers definition patterns
+            # 🚀 RUNS CORE MATHEMATICS (Removing is_active flag bottlenecks automatically inside helpers)
             metric_data = calculate_single_product_metrics(
                 product=product,
                 owner=entity.owner,
@@ -1651,10 +1664,10 @@ class VendorPurchasePredictionAPIView(APIView):
                 lookback_days=active_indent.lookback_days
             )
 
-            # Extra local defense fallback token layer
             if not metric_data or not isinstance(metric_data, dict):
                 continue
 
+            # Compute restock demand thresholds from intake consumption rates
             safety_buffer = 10 if not metric_data["has_overstayed"] else 0
             base_demand = metric_data["avg_daily_sales"] * Decimal(total_horizon_days)
             predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(metric_data["usable_stock_calculated"]))
@@ -1667,15 +1680,18 @@ class VendorPurchasePredictionAPIView(APIView):
                 final_quantity_units += int(metric_data["validated_backlog_demand"])
                 recommendation_notes = "Normal unit replenishment."
 
+            # Map available wholesaler procurement configurations
             proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
-            last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product, is_active="true").order_by('-created').first()
+            # Extract last product cost for bookkeeping valuation asset tracking lines
+            last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product).order_by('-created').first()
             unit_cost = last_receipt.unit_buying_price if (last_receipt and last_receipt.unit_buying_price is not None) else Decimal('0.00')
             total_value = Decimal(metric_data["total_physical_stock"]) * unit_cost
 
             try:
                 rebuild_indent_item_row(entity, entity.owner, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today)
             except Exception as item_err:
+                create_log("error", f"Child lines populating breakdown step anomaly: {str(item_err)}")
                 return Response({"error": f"Child lines population breakdown: {str(item_err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             predictions.append({
@@ -1716,7 +1732,6 @@ class VendorPurchasePredictionAPIView(APIView):
             },
             "predictions": predictions
         }, status=status.HTTP_200_OK)
-
 
 import datetime
 from decimal import Decimal

@@ -8,12 +8,13 @@ from rest_framework.exceptions import ValidationError
 def get_entity_interacted_products(owner):
     """
     Gathers all unique Products that this Entity owner has ever interacted with.
-    Scans active inventory records and active out-of-stock backlogs.
+    Scans across ALL historical inventory records and active out-of-stock backlogs.
     """
     from products.models import Products
     from retailers.models import RetailerReceipts, OutOfStock
 
-    r_ids = RetailerReceipts.objects.filter(owner=owner, is_active="true").values_list('product_id', flat=True)
+    # 🛑 Removed is_active filter completely to capture total history footprints
+    r_ids = RetailerReceipts.objects.filter(owner=owner).values_list('product_id', flat=True)
     o_ids = OutOfStock.objects.filter(owner=owner, is_ordered="false").values_list('product_id', flat=True)
     return Products.objects.filter(id__in=set(list(r_ids) + list(o_ids)), active=True)
 
@@ -21,17 +22,34 @@ def get_entity_interacted_products(owner):
 def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback_days):
     """
     Aggregates shelf metrics, expiration calculations, and logs anomalies for one product.
-    Operates strictly on generic base Units.
+    🛡️ Scans ALL historical records (Removes is_active restriction).
+    🛡️ Evaluates cumulative received vs current shelf balances to calculate dynamic depletion speeds.
     """
     from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock
 
     today = datetime.date.today()
     
-    p_stock = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true").aggregate(t=Sum('current_unit_quantity'))['t'] or 0
-    e_stock = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true", expiry_date__isnull=False, expiry_date__lte=horizon_expiry_threshold, expiry_date__gte=today).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
+    # 📦 TRACKER 1: Sum current stock remaining across ALL matching historical lines
+    p_stock = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
+    
+    # 📦 TRACKER 2: Sum initial intake volume delivered historically across ALL matches
+    received_stock = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(r=Sum('received_unit_quantity'))['r'] or 0
+    
+    # Calculate exactly how many units have been drained/consumed from inventory over time
+    consumed_volume_historical = max(0, received_stock - p_stock)
+    
+    # Expiry calculation scanning across all non-depleted logs
+    e_stock = RetailerReceipts.objects.filter(
+        owner=owner, 
+        product=product, 
+        expiry_date__isnull=False, 
+        expiry_date__lte=horizon_expiry_threshold, 
+        expiry_date__gte=today
+    ).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
     usable_stock = max(0, p_stock - e_stock)
     
-    o_date = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true").aggregate(o=Min('created'))['o']
+    # Track the oldest batch entry arrival timestamp for shelf age indexing
+    o_date = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(o=Min('created'))['o']
     age, overstayed = 0, False
     if o_date:
         if isinstance(o_date, datetime.datetime): 
@@ -39,6 +57,7 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
         age = (today - o_date).days
         overstayed = age >= max_shelf_days
         
+    # Standard transactional sales logs lookup
     sold = CustomerOrderItems.objects.filter(
         retailer_receipt__owner=owner, 
         retailer_receipt__product=product, 
@@ -46,8 +65,20 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
         customer_order__created__date__gte=history_cutoff
     ).aggregate(t=Sum('purchased_quantity'))['t'] or 0
     
-    ads = Decimal(sold) / Decimal(lookback_days)
-    raw_oos = OutOfStock.objects.filter(product=product, owner=owner, is_ordered="false").aggregate(t=Sum('required_quantity'))['t'] or 0
+    # 🚀 DYNAMIC VELOCITY ADJUSTER RECALCULATION
+    if sold == 0 and consumed_volume_historical > 0 and age > 0:
+        # Infers real-time depletion rate from historical shelf drops across batch lifetimes
+        ads = Decimal(consumed_volume_historical) / Decimal(age)
+    else:
+        ads = Decimal(sold) / Decimal(lookback_days)
+        
+    # Gather active unfulfilled out-of-stock backlogs within simulation lookback constraints
+    raw_oos = OutOfStock.objects.filter(
+        product=product, 
+        owner=owner, 
+        is_ordered="false",
+        created__date__gte=history_cutoff
+    ).aggregate(t=Sum('required_quantity'))['t'] or 0
     
     val_oos = raw_oos
     disc = False
@@ -75,10 +106,7 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
 
 
 def find_wholesaler_procurement_offers(product, final_quantity_units, today):
-    """
-    Scans the live wholesale catalog to match active multi-tier vendor promotions.
-    Operates strictly centered around single generic base Units.
-    """
+    """Scans the live wholesale catalog to match active multi-tier vendor promotions."""
     from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts
 
     receipts = WholesalerReceipts.objects.filter(product=product, current_unit_quantity__gt=0, in_placement='true').select_related('received_from')
@@ -110,10 +138,7 @@ def find_wholesaler_procurement_offers(product, final_quantity_units, today):
 
 
 def sync_or_create_active_indent(entity, user, v):
-    """
-    Locates or atomic-initializes the active open draft indent document header.
-    Automatically synchronizes all four parameter coefficients directly onto the DB entry row.
-    """
+    """Locates or atomic-initializes the active open draft indent document header."""
     from retailers.models import RetailerIndent, RetailerIndentItem
 
     with transaction.atomic():
@@ -140,16 +165,12 @@ def sync_or_create_active_indent(entity, user, v):
                 is_open="true"
             )
         
-        # Flush out stale child rows before running fresh calculation overlays
         RetailerIndentItem.objects.filter(retailer_indent=active_indent, entity=entity).delete()
         return active_indent
 
 
 def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today):
-    """
-    Atomic item synchronizer that logs individual rows under the active parent indent header.
-    🚀 Calculates total_quantity, incorporates dynamic promotion pricing adjustments, and sets totals.
-    """
+    """Atomic item synchronizer that logs individual rows under the active parent indent header."""
     from retailers.models import RetailerIndentItem
     from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
 
@@ -160,36 +181,19 @@ def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity
     p_disc = None
     q_disc = None
     bonus_units = 0
-    
-    # Dynamic operational price tracker defaults to standard item cost fallback parameter
     actual_pack_price = Decimal(str(unit_cost))
     
     if proposed_offers:
         try:
             target_receipt = WholesalerReceipts.objects.get(id=proposed_offers["wholesaler_receipt_id"])
+            p_disc = WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", start__lte=today, end__gte=today).first()
             
-            # 🔎 1. LOOK UP ACTIVE PRICE PROMOTIONS
-            p_disc = WholesalerPriceDiscounts.objects.filter(
-                wholesaler_receipt=target_receipt, 
-                is_active="true", 
-                start__lte=today, 
-                end__gte=today
-            ).first()
-            
-            # 💰 If an active price discount matches, apply the offer_price threshold parameters
             if p_disc:
                 actual_pack_price = Decimal(str(p_disc.offer_price))
             elif target_receipt.final_unit_selling_price > 0:
-                # Fallback to pre-synchronized model values if receipt contains active signals metadata
                 actual_pack_price = Decimal(str(target_receipt.final_unit_selling_price))
             
-            # 🔎 2. LOOK UP ACTIVE VOLUME PROMOTIONS
-            q_disc = WholesalerQuantityDiscounts.objects.filter(
-                wholesaler_receipt=target_receipt, 
-                is_active="true", 
-                start__lte=today, 
-                end__gte=today
-            ).first()
+            q_disc = WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", start__lte=today, end__gte=today).first()
             
             if q_disc and q_disc.limit_quantity > 0:
                 if final_quantity_units >= q_disc.limit_quantity:
@@ -199,7 +203,6 @@ def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity
         except WholesalerReceipts.DoesNotExist:
             pass
 
-    # 📊 Compute financial subtotals using the evaluated promotion rate
     gross_subtotal = Decimal(final_quantity_units) * actual_pack_price
     calculated_total_quantity = final_quantity_units + bonus_units
 
@@ -212,7 +215,7 @@ def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity
         wholesaler_quantity_discount=q_disc,
         required_quantity=final_quantity_units,
         total_quantity=calculated_total_quantity,
-        final_pack_price=actual_pack_price, # ✅ Live promotion price logged natively
+        final_pack_price=actual_pack_price,
         item_gross_total_amount=gross_subtotal,
         item_net_total_amount=gross_subtotal
     )
