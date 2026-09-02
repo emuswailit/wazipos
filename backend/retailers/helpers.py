@@ -9,8 +9,30 @@ from products.models import Products
 from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock, RetailerIndent, RetailerIndentItem
 from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
 
-# ... Keep get_entity_interacted_products, calculate_single_product_metrics, and find_wholesaler_procurement_offers exactly the same ...
 
+# retailers/helpers.py
+import datetime
+from decimal import Decimal
+from django.db.models import Sum, Min
+
+# 🚀 FIX: Move model lookups inside functions to completely bypass circular import locks
+def get_entity_interacted_products(owner):
+    """Gathers all unique Products that this Entity owner has ever interacted with."""
+    from products.models import Products
+    from retailers.models import RetailerReceipts, OutOfStock
+
+    r_ids = RetailerReceipts.objects.filter(owner=owner, is_active="true").values_list('product_id', flat=True)
+    o_ids = OutOfStock.objects.filter(owner=owner, is_ordered="false").values_list('product_id', flat=True)
+    return Products.objects.filter(id__in=set(list(r_ids) + list(o_ids)), active=True)
+
+
+def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback_days):
+    """Aggregates shelf metrics, expiration calculations, and logs anomalies for one product."""
+    from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock
+
+    today = datetime.date.today()
+    p_stock = RetailerReceipts.objects.filter(owner=owner, product=product, is_active="true").aggregate(t=Sum('current_unit_quantity'))['t'] or 0
+    # ... keep rest of function body identical ...
 
 def sync_or_create_active_indent(entity, user, v):
     """
