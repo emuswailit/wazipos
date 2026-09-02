@@ -15,21 +15,31 @@ def get_entity_interacted_products(owner):
     return Products.objects.filter(id__in=set(list(r_ids) + list(o_ids)), active=True)
 
 
-def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback_days):
+# retailers/helpers.py
+
+# retailers/helpers.py
+
+def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback_days, days_to_order):
     """
     Aggregates shelf metrics, expiration calculations, and logs anomalies for one product.
-    🛡️ Scans ALL historical records (No is_active flags constraints).
-    📊 CONSIDERS ONLY STABLE COMPLETED AND DELIVERED BALANCES VIA TIMEZONE-SAFE TIMESTAMPS.
+    🛡️ Scans ALL historical records (No is_active flag constraints).
+    📊 DUAL-TRACKS RECEIVED AND CURRENT QUANTITY TO EXTRACT LIFE VELOCITY.
+    🚀 INCORPORATES DAYS_TO_ORDER DIRECTLY INTO RUNWAY TARGET CALCS.
     """
     from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock
+    import datetime
+    from decimal import Decimal
+    from django.db.models import Sum, Min
 
     today = datetime.date.today()
     
-    # 📦 TRACKER 1: Sum current stock remaining across ALL matching historical lines
+    # 📦 TRACKER 1: Sum live on-hand stock remaining across ALL lines
     p_stock = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
     
-    # 📦 TRACKER 2: Sum initial intake volume delivered historically across ALL matches
+    # 📦 TRACKER 2: Sum initial intake volume delivered historically across ALL lines
     received_stock = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(r=Sum('received_unit_quantity'))['r'] or 0
+    
+    # 📊 INTAKE CONSUMPTION VOLUME: Total items drained from shelves over time
     consumed_volume_historical = max(0, received_stock - p_stock)
     
     # Expiry calculation scanning across all non-depleted logs
@@ -51,27 +61,32 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
         age = (today - o_date).days
         overstayed = age >= max_shelf_days
         
-    # 🚀 TIMEZONE SAFE-GUARD: Combine history date with absolute start-of-day time matrix boundaries
+    # Timezone-safe start-of-day boundary assignment
     start_of_history_datetime = datetime.datetime.combine(history_cutoff, datetime.time.min)
 
-    # 📊 VELOCITY AGGREGATOR: Filters strictly on your original verified completed targets
+    # Standard transaction-log velocity backup match
     sold = CustomerOrderItems.objects.filter(
         retailer_receipt__owner=owner, 
         retailer_receipt__product=product, 
-        customer_order__status__in=["COMPLETED", "DELIVERED"], # 🔒 Keeping strict operational definitions
-        customer_order__created__gte=start_of_history_datetime # ✅ Enforces precise timestamp matching
+        customer_order__status__in=["COMPLETED", "DELIVERED"], 
+        customer_order__created__gte=start_of_history_datetime 
     ).aggregate(t=Sum('purchased_quantity'))['t'] or 0
     
-    # Dynamic Velocity Adjuster fallback to consumption data if sales logs are flat
-    if sold == 0 and consumed_volume_historical > 0 and age > 0:
+    # 🚀 DUAL-QUANTITY VELOCITY MATRIX CALCULATOR:
+    # Prioritizes live batch drawdown metrics (Received vs Current) over flat sales transaction records
+    if consumed_volume_historical > 0 and age > 0:
         ads = Decimal(consumed_volume_historical) / Decimal(age)
-    else:
+    elif sold > 0:
         ads = Decimal(sold) / Decimal(lookback_days)
+    else:
+        ads = Decimal('0.00')
         
+    # Scan for unfulfilled, un-ordered shortages created inside active lookback windows
     raw_oos = OutOfStock.objects.filter(
         product=product, 
         owner=owner, 
-        is_ordered="false",
+        is_ordered="false",  
+        retailer_indent__isnull=True, 
         created__date__gte=history_cutoff
     ).aggregate(t=Sum('required_quantity'))['t'] or 0
     
@@ -82,7 +97,7 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
         if usable_stock > 0:
             disc = True
             val_oos = 0 if usable_stock >= raw_oos else max(0, raw_oos - usable_stock)
-            note = f"Discrepancy: Logged out of stock for {raw_oos} units, but {usable_stock} units are available."
+            note = f"Discrepancy: Logged shortage for {raw_oos} units, but {usable_stock} units remain sitting on shelf."
         else:
             val_oos = raw_oos
             
@@ -98,6 +113,7 @@ def calculate_single_product_metrics(product, owner, total_horizon_days, horizon
         "discrepancy_note": str(note),
         "pack_factor": 1
     }
+
 
 
 def find_wholesaler_procurement_offers(product, final_quantity_units, today):

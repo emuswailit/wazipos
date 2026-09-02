@@ -1598,6 +1598,17 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+# retailers/views.py
+
+import datetime
+from decimal import Decimal
+from django.db import transaction
+from django.db.models import Q
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
 # --- Custom App Relational Imports ---
 from authentication.models import Entities
 from retailers.models import RetailerReceipts
@@ -1615,9 +1626,9 @@ class VendorPurchasePredictionAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         """
-        Phase 1 Simulator & Requisition Synchronizer View:
-        Leverages unrestricted data scanning across all historical product records
-        to yield dynamically scaling procurement forecasting results.
+        Procurement Projections Engine View:
+        Calculates dynamic runway requirements based on historical data footprints,
+        automatically adding un-ordered out-of-stock backlogs directly into the forecast.
         """
         raw_params = request.query_params.dict()
         create_log("info", f"Raw Incoming Request Data Params Map: {raw_params}")
@@ -1630,12 +1641,11 @@ class VendorPurchasePredictionAPIView(APIView):
         v = query_serializer.validated_data
         today = datetime.date.today()
         
-        # 📊 Dynamic Cutoffs derived strictly from user query tokens
+        # Extract order timeline horizons
+        days_to_order = int(v['days_to_order'])
         history_cutoff = today - datetime.timedelta(days=v.get('lookback_window', 30))
-        total_horizon_days = v['days_to_order'] + v['lead_time_days']
+        total_horizon_days = days_to_order + v['lead_time_days']
         horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
-        
-        create_log("info", f"Calculated Timeline - Horizon Days: {total_horizon_days}, History Cutoff: {history_cutoff}")
 
         entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
         if not entity:
@@ -1644,16 +1654,13 @@ class VendorPurchasePredictionAPIView(APIView):
         try:
             active_indent = sync_or_create_active_indent(entity, request.user, v)
         except Exception as err:
-            create_log("error", f"Failed syncing indent parameters header: {str(err)}")
             return Response({"error": f"Indent synchronization failure: {str(err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         predictions = []
-        
-        # Gathers all products ever linked with the owner across total receipt history records
         master_products = get_entity_interacted_products(entity.owner)
 
         for product in master_products:
-            # 🚀 RUNS CORE MATHEMATICS (Removing is_active flag bottlenecks automatically inside helpers)
+            # 🚀 Passes days_to_order into the core metrics engine
             metric_data = calculate_single_product_metrics(
                 product=product,
                 owner=entity.owner,
@@ -1661,7 +1668,8 @@ class VendorPurchasePredictionAPIView(APIView):
                 horizon_expiry_threshold=horizon_expiry_threshold,
                 history_cutoff=history_cutoff,
                 max_shelf_days=active_indent.max_shelf_days,
-                lookback_days=active_indent.lookback_days
+                lookback_days=active_indent.lookback_days,
+                days_to_order=days_to_order # ✅ Passed safely down down the execution tree
             )
 
             if not metric_data or not isinstance(metric_data, dict):
@@ -1669,21 +1677,26 @@ class VendorPurchasePredictionAPIView(APIView):
 
             # Compute restock demand thresholds from intake consumption rates
             safety_buffer = 10 if not metric_data["has_overstayed"] else 0
-            base_demand = metric_data["avg_daily_sales"] * Decimal(total_horizon_days)
+            
+            # 🚀 REFACTORED MULTI-FIELD QUANTITY EQUATION RUNWAY:
+            # Multiplies your dual-quantity daily depletion velocity directly by your active order runway days parameter!
+            base_demand = metric_data["avg_daily_sales"] * Decimal(days_to_order)
+            
+            # Predict purchase units required to sustain shelf velocity coverage targets
             predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(metric_data["usable_stock_calculated"]))
             final_quantity_units = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
 
             if metric_data["has_overstayed"] and final_quantity_units > 0:
                 final_quantity_units = int(metric_data["validated_backlog_demand"])
-                recommendation_notes = "Overstayed stock blocker active."
+                recommendation_notes = "Overstayed stock blocker active. Restocking unfulfilled client shortfalls only."
             else:
                 final_quantity_units += int(metric_data["validated_backlog_demand"])
-                recommendation_notes = "Normal unit replenishment."
+                recommendation_notes = "Velocity runway matching with unfulfilled client backlog buffers appended."
 
             # Map available wholesaler procurement configurations
             proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
-            # Extract last product cost for bookkeeping valuation asset tracking lines
+            # Extract last product cost for bookkeeping valuation asset tracking lines (Unrestricted by active flags)
             last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product).order_by('-created').first()
             unit_cost = last_receipt.unit_buying_price if (last_receipt and last_receipt.unit_buying_price is not None) else Decimal('0.00')
             total_value = Decimal(metric_data["total_physical_stock"]) * unit_cost
@@ -1691,7 +1704,6 @@ class VendorPurchasePredictionAPIView(APIView):
             try:
                 rebuild_indent_item_row(entity, entity.owner, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today)
             except Exception as item_err:
-                create_log("error", f"Child lines populating breakdown step anomaly: {str(item_err)}")
                 return Response({"error": f"Child lines population breakdown: {str(item_err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             predictions.append({
