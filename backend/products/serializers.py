@@ -292,7 +292,6 @@ class ProductsSerializer(serializers.ModelSerializer):
             "bar_code",
             "category",
             "sub_category",
-            "is_drug",
             "is_vatable",
             "is_pom",
             "images",
