@@ -1589,6 +1589,15 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+import datetime
+from decimal import Decimal
+from django.db import transaction
+from django.db.models import Q
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
 # --- Custom App Relational Imports ---
 from authentication.models import Entities
 from retailers.models import RetailerReceipts
@@ -1597,7 +1606,7 @@ from .helpers import (
     get_entity_interacted_products, 
     calculate_single_product_metrics, 
     find_wholesaler_procurement_offers,
-    sync_or_create_active_indent,       # ➕ Imported Outsourced Helpers
+    sync_or_create_active_indent,       
     rebuild_indent_item_row
 )
 
@@ -1605,11 +1614,7 @@ class VendorPurchasePredictionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        """
-        Phase 1 Simulator & Requisition Synchronizer View:
-        Leverages modular helpers to maintain parameter syncs and child rows
-        re-populations, returning optimized base unit prediction matrices.
-        """
+        """Processes parameter tokens and outputs clean base unit tracking maps safely."""
         query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
         if not query_serializer.is_valid():
             return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1620,12 +1625,10 @@ class VendorPurchasePredictionAPIView(APIView):
         total_horizon_days = v['days_to_order'] + v['lead_time_days']
         horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
 
-        # Locate active retailer corporate context profile mapping header
         entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
         if not entity:
             return Response({"error": "No active retailer profiling instance recognized."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 🚀 REFACTORED PROCESSOR 1: Header Parameter Mapping Sync Handled in Single Line
         try:
             active_indent = sync_or_create_active_indent(entity, request.user, v)
         except Exception as err:
@@ -1634,9 +1637,9 @@ class VendorPurchasePredictionAPIView(APIView):
         predictions = []
         master_products = get_entity_interacted_products(entity.owner)
 
-        # Process calculation maps cleanly
         for product in master_products:
-            m = calculate_single_product_metrics(
+            # 🚀 Clean extraction call driven securely by helpers definition patterns
+            metric_data = calculate_single_product_metrics(
                 product=product,
                 owner=entity.owner,
                 total_horizon_days=total_horizon_days,
@@ -1646,26 +1649,28 @@ class VendorPurchasePredictionAPIView(APIView):
                 lookback_days=active_indent.lookback_days
             )
 
-            safety_buffer = 10 if not m["has_overstayed"] else 0
-            base_demand = m["avg_daily_sales"] * Decimal(total_horizon_days)
-            predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(m["usable_stock_calculated"]))
-            final_quantity_pieces = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
+            # Extra local defense fallback token layer
+            if not metric_data or not isinstance(metric_data, dict):
+                continue
 
-            if m["has_overstayed"] and final_quantity_pieces > 0:
-                final_quantity_units = int(m["validated_backlog_demand"])
+            safety_buffer = 10 if not metric_data["has_overstayed"] else 0
+            base_demand = metric_data["avg_daily_sales"] * Decimal(total_horizon_days)
+            predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(metric_data["usable_stock_calculated"]))
+            final_quantity_units = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
+
+            if metric_data["has_overstayed"] and final_quantity_units > 0:
+                final_quantity_units = int(metric_data["validated_backlog_demand"])
                 recommendation_notes = "Overstayed stock blocker active."
             else:
-                final_quantity_units = final_quantity_pieces + int(m["validated_backlog_demand"])
+                final_quantity_units += int(metric_data["validated_backlog_demand"])
                 recommendation_notes = "Normal unit replenishment."
 
-            final_quantity_units = int(math.ceil(final_quantity_units / m["pack_factor"]))
             proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
 
             last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product, is_active="true").order_by('-created').first()
             unit_cost = last_receipt.unit_buying_price if (last_receipt and last_receipt.unit_buying_price is not None) else Decimal('0.00')
-            total_value = Decimal(m["total_physical_stock"]) * unit_cost
+            total_value = Decimal(metric_data["total_physical_stock"]) * unit_cost
 
-            # 🚀 REFACTORED PROCESSOR 2: Child Re-population Handled Atomically per Row
             try:
                 rebuild_indent_item_row(entity, entity.owner, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today)
             except Exception as item_err:
@@ -1676,20 +1681,20 @@ class VendorPurchasePredictionAPIView(APIView):
                 "title": product.product_name(), 
                 "bar_code": product.bar_code, 
                 "metrics_in_units": {
-                    "total_physical_stock": m["total_physical_stock"], 
-                    "usable_stock_calculated": m["usable_stock_calculated"], 
-                    "shelf_age_days": m["shelf_age_days"],
-                    "average_daily_sales": round(float(m["avg_daily_sales"]), 2), 
-                    "validated_backlog_demand": m["validated_backlog_demand"],
+                    "total_physical_stock": metric_data["total_physical_stock"], 
+                    "usable_stock_calculated": metric_data["usable_stock_calculated"], 
+                    "shelf_age_days": metric_data["shelf_age_days"],
+                    "average_daily_sales": round(float(metric_data["avg_daily_sales"]), 2), 
+                    "validated_backlog_demand": metric_data["validated_backlog_demand"],
                     "unit_cost_price": float(unit_cost),
                     "total_value_calculated": float(total_value)
                 },
                 "flags": {
-                    "expiry_warning": m["expiring_stock_hidden"] > 0, 
-                    "has_overstayed_on_shelf": m["has_overstayed"], 
-                    "has_inventory_discrepancy": m["has_inventory_discrepancy"]
+                    "expiry_warning": metric_data["expiring_stock_hidden"] > 0, 
+                    "has_overstayed_on_shelf": metric_data["has_overstayed"], 
+                    "has_inventory_discrepancy": metric_data["has_inventory_discrepancy"]
                 },
-                "discrepancy_details": m["discrepancy_note"], 
+                "discrepancy_details": metric_data["discrepancy_note"], 
                 "recommendation_notes": recommendation_notes,
                 "predicted_purchase_units": final_quantity_units, 
                 "wholesaler_procurement_offers": proposed_offers
