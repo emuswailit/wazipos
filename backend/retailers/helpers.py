@@ -8,6 +8,46 @@ from rest_framework.exceptions import ValidationError
 from products.models import Products
 from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock, RetailerIndent, RetailerIndentItem
 from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
+import datetime
+import math
+from decimal import Decimal
+from django.db.models import Sum, Min
+from rest_framework.exceptions import ValidationError
+
+
+
+
+
+def find_wholesaler_procurement_offers(product, final_quantity_units, today):
+    """Scans live wholesale promotions catalog matching unit parameters directly."""
+    # 🚀 FIX: Inlined wholesale model lookups directly here to reveal the namespace to Python cleanly
+    from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts
+
+    receipts = WholesalerReceipts.objects.filter(product=product, current_unit_quantity__gt=0, in_placement='true').select_related('received_from')
+    
+    r = receipts.first()
+    if not r:
+        return None
+        
+    name = r.received_from.title if r.received_from else "Unknown Wholesaler"
+    p_disc = WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=r, is_active="true", start__lte=today, end__gte=today).first()
+    price = r.final_unit_selling_price if p_disc else r.unit_selling_price
+    p_txt = f"Promo Offer: Save {p_disc.percent}%! Unit price dropped to {p_disc.offer_price}" if p_disc else f"Standard Unit Price: {r.unit_selling_price}"
+    
+    return {
+        "wholesaler_receipt_id": str(r.id), 
+        "supplier_name": name, 
+        "batch": r.batch, 
+        "available_wholesaler_units": r.current_unit_quantity, 
+        "unit_pricing": {
+            "unit_selling_price": float(r.unit_selling_price), 
+            "final_unit_selling_price": float(price), 
+            "is_discounted": p_disc is not None
+        }, 
+        "promotions": {"price_promotion_details": p_txt, "quantity_promotion_details": []}
+    }
+
+
 
 
 # retailers/helpers.py
