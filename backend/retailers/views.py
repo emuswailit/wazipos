@@ -1781,7 +1781,7 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                     RetailerIndentItem.objects.update_or_create(
                         entity=entity,
                         retailer_indent=indent,
-                        wholesale_receipt=w_receipt,
+                        wholesaler_receipt=w_receipt,
                         defaults={
                             "owner": entity.owner,
                             "predicted_purchase_units": req_qty,
@@ -1849,7 +1849,7 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                             entity=entity,
                             owner=entity.owner,
                             retailer_order=retailer_order,
-                            wholesale_receipt=ln["w_receipt"],
+                            wholesaler_receipt=ln["w_receipt"],
                             purchased_quantity=ln["quantity"],
                             total_quantity=ln["quantity"],
                             discount_quantity=0,
