@@ -78,7 +78,7 @@ def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity
             target_receipt = WholesalerReceipts.objects.get(id=proposed_offers["wholesaler_receipt_id"])
             base_unit_price = Decimal(str(proposed_offers["unit_pricing"]["unit_selling_price"]))
             if proposed_offers["unit_pricing"]["is_discounted"]: p_disc = WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", start__lte=today, end__gte=today).first()
-            q_disc = WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", min_quantity__lte=final_quantity_units).order_by('-min_quantity').first()
+            q_disc = WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", limit_quantity__lte=final_quantity_units).order_by('-limit_quantity').first()
         except WholesalerReceipts.DoesNotExist: pass
     final_pack_price = base_unit_price - (base_unit_price * Decimal(str(p_disc.percent)) / Decimal('100.00')) if p_disc else base_unit_price
     item_gross_total_amount = Decimal(str(final_quantity_units)) * base_unit_price
