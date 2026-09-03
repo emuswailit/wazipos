@@ -9,7 +9,7 @@ def get_entity_interacted_products(owner):
     r_ids = RetailerReceipts.objects.filter(owner=owner).values_list('product_id', flat=True)
     o_ids = OutOfStock.objects.filter(owner=owner, is_ordered="false").values_list('product_id', flat=True)
     interacted_product_ids = set(list(r_ids) + list(o_ids))
-    active_ordered_product_ids = RetailerOrderItems.objects.filter(retailer_order__owner=owner, is_received="false").values_list('wholesale_receipt__product_id', flat=True)
+    active_ordered_product_ids = RetailerOrderItems.objects.filter(retailer_order__owner=owner, is_received="false").values_list('wholesaler_receipt__product_id', flat=True)
     final_eligible_ids = interacted_product_ids - set(list(active_ordered_product_ids))
     return Products.objects.filter(id__in=final_eligible_ids, active=True)
 
