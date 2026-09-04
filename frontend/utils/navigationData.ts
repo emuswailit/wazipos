@@ -195,6 +195,64 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         allowedRoles: ["Client", "Admin", "Vendor"],
         showInSidebar: true,
     },
+
+    {
+        id: 12,
+        title: "Retailers",
+        route: "/routes", // 🌟 FIXED: Pluralized to match your routes folder exactly
+        allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+        showInSidebar: true,
+        subRoutes: [
+            {
+                id: 1,
+                title: "New Customer Order",
+                route: "/newCustomerOrder?tab=newCustomerOrder", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 2,
+                title: "Customer Orders",
+                route: "/customerOrders?tab=customerOrders",
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 3,
+                title: "Retailer Inventory",
+                route: "/retailerInventory?tab=retailerInventory",
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 4,
+                title: "Payments",
+                route: "/customerOrderPayments?tab=customerOrderPayments", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 5,
+                title: "Requisitions",
+                route: "/retailerRequisitions?tab=retailerRequisitions", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            }, {
+                id: 6,
+                title: "Indenting",
+                route: "/indenting?tab=indenting", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 7,
+                title: "Stock Outs",
+                route: "/stockOuts?tab=stockOuts", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+        ]
+    }
 ];
 
 export const checkAccessPermission = (currentUserRole: string, routeAllowedRoles: string[]): boolean => {

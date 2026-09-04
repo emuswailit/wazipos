@@ -2,6 +2,10 @@ import "react-native-gesture-handler";
 import "../global.css";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+// 🌟 INJECTED: Centralized background tracking provider context layer
+import { InventorySyncProvider } from "@/context/InventorySyncContext";
+import { PaymentMethodsSyncProvider } from "@/context/PaymentMethodsSyncContext";
+import { ProductsSyncProvider } from "@/context/ProductsSyncContext ";
 import SidebarNavigationList from "@/utils/SidebarNavigationList";
 import WebTopNavbar from "@/utils/WebTopNavbar";
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -25,14 +29,10 @@ function GlobalAppShellLayout() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  // Navigation Panel Visibility States
   const isLargeScreen = width >= 768;
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-
-  // 🌟 FIXED: Sidebar is now explicitly initialized to TRUE (Always Visible on all viewports)
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Authentication Route Guard Logic
   React.useEffect(() => {
     const inAuthGroup = segments.includes("(auth)");
     if (!user && !inAuthGroup) {
@@ -42,7 +42,6 @@ function GlobalAppShellLayout() {
     }
   }, [user, segments]);
 
-  // Isolate login screen layouts away from core nav panels
   const isAuthScreen = segments.includes("(auth)");
   if (isAuthScreen) {
     return (
@@ -52,12 +51,10 @@ function GlobalAppShellLayout() {
     );
   }
 
-  // Parse User Metadata fields safely
   const userFullName = user?.name || "Anonymous User";
   const userUsername = user?.email ? user.email.split('@')[0] : "guest_user";
   const userEmail = user?.email || "no-email@wazipos.com";
 
-  // Dynamic Theme Structural Color Allocations
   const customBorderColor = isDarkMode ? "#334155" : theme.primary;
   const customTextColor = isDarkMode ? "#ffffff" : theme.primary;
 
@@ -83,7 +80,6 @@ function GlobalAppShellLayout() {
             />
           ) : (
             <View style={{ backgroundColor: theme.panel, borderBottomColor: theme.background }} className="h-14 w-full border-b px-4 flex-row justify-between items-center shadow-xs">
-              {/* Menu Toggle Trigger Button */}
               <TouchableOpacity onPress={() => setSidebarOpen(!sidebarOpen)} style={{ backgroundColor: theme.background }} className="p-2 rounded-xl">
                 <Text style={{ color: customTextColor }} className="font-extrabold text-xs">☰ Menu</Text>
               </TouchableOpacity>
@@ -115,7 +111,6 @@ function GlobalAppShellLayout() {
                 </View>
 
                 <View className="flex-1">
-                  {/* Fixed Navigation link layers */}
                   <SidebarNavigationList onCloseSidebarTrigger={() => setSidebarOpen(false)} />
                 </View>
               </View>
@@ -153,9 +148,16 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView className="flex-1">
       <AuthProvider>
-        <SafeAreaProvider>
-          <GlobalAppShellLayout />
-        </SafeAreaProvider>
+        {/* 🌟 FIXED: Nested InventorySyncProvider right here so background poller layers wrap safely around view channels */}
+        <InventorySyncProvider>
+          <PaymentMethodsSyncProvider>
+            <ProductsSyncProvider>
+              <SafeAreaProvider>
+                <GlobalAppShellLayout />
+              </SafeAreaProvider>
+            </ProductsSyncProvider>
+          </PaymentMethodsSyncProvider>
+        </InventorySyncProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

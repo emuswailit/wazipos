@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "jsx": "react-native",
     "paths": {
       "@/*": ["*"],
       "@/hooks/*": ["hooks/*"],
@@ -11,8 +12,12 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "nativewind-env.d.ts"
+    "nativewind-env.d.ts",
+    "app/(wholesalers)/wholesaleOrders/InvoiceLineItemsTable.jsx",
+    "app/(wholesalers)/wholesaleOrders/index.jsx"
   ]
 }

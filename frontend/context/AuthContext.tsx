@@ -2,7 +2,6 @@ import { jwtDecode } from "jwt-decode";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
 
-// Dynamically import Expo SecureStore only when running on native platforms to prevent Web bundle crashes
 let SecureStore: any = null;
 if (Platform.OS !== "web") {
     SecureStore = require("expo-secure-store");
@@ -29,13 +28,26 @@ export interface UserProfile {
 interface AuthContextType {
     user: UserProfile | null;
     isDarkMode: boolean;
-    isLoading: boolean; // Tracks background storage reading state on initial boot
+    isLoading: boolean;
     theme: {
         background: string;
         panel: string;
         primary: string;
         text: string;
         textDark: string;
+        font: {
+            regular: string;
+            medium: string;
+            bold: string;
+            mono: string;
+        };
+        fontSize: {
+            xs: number;
+            sm: number;
+            base: number;
+            lg: number;
+            xl: number;
+        };
     };
     login: (token: string) => Promise<void>;
     logout: () => Promise<void>;
@@ -43,7 +55,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 const TOKEN_KEY = "wazipos_auth_token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -56,29 +67,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         panel: isDarkMode ? "#1e293b" : "#ffffff",
         text: isDarkMode ? "#f8fafc" : "#0f172a",
         textDark: isDarkMode ? "#94a3b8" : "#334155",
-        primary: "#0056b3"
+        primary: "#0056b3",
+        font: {
+            regular: Platform.OS === 'web' ? 'Inter, sans-serif' : 'System',
+            medium: Platform.OS === 'web' ? 'Inter-Medium, sans-serif' : 'System',
+            bold: Platform.OS === 'web' ? 'Inter-Bold, sans-serif' : 'System',
+            mono: Platform.OS === 'web' ? 'JetBrains Mono, monospace' : 'Courier',
+        },
+        fontSize: {
+            xs: 10,
+            sm: 12,
+            base: 14,
+            lg: 16,
+            xl: 20,
+        }
     };
 
-    // ─── RUNTIME APP HYDRATION (STAYS LOGGED IN ON REFRESH/BOOT) ───
     useEffect(() => {
         async function bootstrapAsync() {
             try {
                 let token: string | null = null;
-
                 if (Platform.OS === "web") {
                     token = localStorage.getItem(TOKEN_KEY);
                 } else if (SecureStore) {
                     token = await SecureStore.getItemAsync(TOKEN_KEY);
                 }
-
                 if (token) {
-                    // Safe token evaluation decode step
                     const decoded: any = jwtDecode(token);
                     setUser(decoded);
                 }
             } catch (e) {
                 console.error("Failed to restore token from persistent storage layout layers:", e);
-                // Wipe clean if corrupted token found
                 setUser(null);
             } finally {
                 setIsLoading(false);
@@ -87,31 +106,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         bootstrapAsync();
     }, []);
 
-    // ─── LOGIN ACTION: RECEIVES, SAVES, AND DECODES THE JWT TOKEN ───
     const login = async (token: string) => {
         try {
             if (!token) throw new Error("Invalid string token incoming payload parameter.");
-
-            // 1. Decode token profile content details
             const decodedUser = jwtDecode<UserProfile>(token);
-
-            // 2. Persist token across appropriate hardware sandbox targets
             if (Platform.OS === "web") {
                 localStorage.setItem(TOKEN_KEY, token);
             } else if (SecureStore) {
                 await SecureStore.setItemAsync(TOKEN_KEY, token);
             }
-
-            // 3. Commit profile structural data arrays straight into reactive states
             setUser(decodedUser);
             console.log("Authentication profile session initialized successfully for:", decodedUser.name);
         } catch (error) {
             console.error("Login Engine Decode Processing Failure:", error);
-            throw error; // Propagate up to login view UI form catch states
+            throw error;
         }
     };
 
-    // ─── LOGOUT ACTION: WIPES STORES AND STATES CLEAN ───
     const logout = async () => {
         try {
             if (Platform.OS === "web") {
