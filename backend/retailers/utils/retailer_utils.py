@@ -3031,7 +3031,7 @@ def create_customer_order(data, user):
                 
                 purchased_quantity=item['purchased_quantity']
                 final_price_total+=final_unit_selling_price*float(purchased_quantity)
-                unit_of_issue=item['unit_of_issue']
+                # unit_of_issue=item['unit_of_issue']
                 item_price_total=float(purchased_quantity)*float(final_unit_selling_price)
                 if "discount_quantity" in item:
                     discount_quantity=item['discount_quantity']
@@ -3075,7 +3075,6 @@ def create_customer_order(data, user):
                     item_tax_total=float(item_tax_total),
                     owner=user,
                     entity=user.entity,
-                    unit_of_issue=unit_of_issue,
                     item_net_price=float(item_net_price),
                 )
             order_created.order_price_total=float(final_price_total)
