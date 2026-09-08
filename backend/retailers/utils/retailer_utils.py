@@ -2454,6 +2454,7 @@ def process_customer_order_payment(entity,customer_order, payment_method,user,mo
                 # print("payment", customer_order_payment)
                 update_stock(customer_order)
                 customer_order.status="COMPLETE"
+                customer_order.is_paid="true"
 
                 customer_order.save()
                 return [], customer_order
