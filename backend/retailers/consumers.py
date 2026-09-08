@@ -174,7 +174,7 @@ class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        retailer_receipts = RetailerReceipts.objects.filter(entity=self.user.entity,unit_quantity__gte=0)
+        retailer_receipts = RetailerReceipts.objects.filter(entity=self.user.entity,current_unit_quantity__gte=0)
         self.retailer_receipts = retailer_receipts
         sers =RetailerReceiptsSerializer(retailer_receipts,many=True,context={'request': None}).data
         data=json.dumps(sers,cls=UUIDEncoder)
