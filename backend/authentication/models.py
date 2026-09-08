@@ -741,12 +741,13 @@ class Entities(models.Model):
     offer_trial = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
-    offer_tial = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",null=True,blank=True
-    )
+    # offer_tial = models.CharField(
+    #     max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",null=True,blank=True
+    # )
     trial_done = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
+    order_days = models.IntegerField(default=30,null=True,blank=True)
     registration_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     commission_percentage = models.DecimalField(max_digits=10, decimal_places=2, default=3.00)
     is_active = models.BooleanField(default=True)

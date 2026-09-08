@@ -35,5 +35,7 @@ app.conf.beat_schedule = {
     "process_wifi_payments": {"task": "payments.tasks.process_wifi_payments", "schedule": 30.0,'args':None},
     "process_retailer_order_payments": {"task": "payments.tasks.process_retailer_order_payments", "schedule": 30.0,'args':None},
     "deactivate_expired_price_discounts": {"task": "wholesalers.tasks.deactivate_expired_price_discounts", "schedule": 60.0,'args':None},
+        "load_customer_orders": {"task": "retailers.tasks.load_customer_orders", "schedule": 30.0,'args':None},
+        "load_inventory_predictions": {"task": "retailers.tasks.load_inventory_predictions", "schedule": 60.0,'args':None},
 
 }

@@ -7,6 +7,7 @@ from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from retailers.models import OutOfStock, RetailerReceipts,CustomerOrders,Prescriptions
 from retailers.serializers import RetailerReceiptsSerializer,OutOfStocksSerializer,CustomerOrdersSerializer,MiniCustomerOrdersSerializer,RetailPrescriptionsSerializer
+from products.models import Products
 from authentication.serializers import UsersSerializer
 from authentication.models import Users
 from djangochannelsrestframework.generics import GenericAsyncAPIConsumer
@@ -828,3 +829,191 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
                     'customer_order_details': json.loads(self.datum)
                    
                 })
+
+
+import json, numpy as np, pandas as pd
+from decimal import Decimal
+from django.utils import timezone
+from django.db.models import Sum
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from asgiref.sync import sync_to_async
+from sklearn.linear_model import LinearRegression
+
+from products.models import Products
+from .models import RetailerReceipts, OutOfStock, CustomerOrderItems, RetailerOrders, RetailerOrderItems, WholesalerReceipts
+
+class InventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
+    
+    async def connect(self):
+        self.user = self.scope["user"]
+        # 1. Block connection instantly if user tenant bounds aren't authorized
+        if not self.user.is_authenticated:
+            return
+        
+        # Connect user session listener hook path parameters to the channel layer group
+        await self.channel_layer.group_add(
+            'inventory-predictions',
+            self.channel_name
+        )
+        await self.accept()
+
+        # Execute our structured helper processor method to calculate metrics
+        await self.helper_func()
+
+        # Stream out the generated initial context configuration maps cleanly
+        await self.send_json({
+            'status': 'completed',
+            'retailer_id': str(self.retailer_id),
+            'retailer_name': self.retailer_name,
+            'predictions': json.loads(self.predictions),
+        })
+
+    async def disconnect(self, close_code):
+        # Discard context handles safely upon pipeline connection termination
+        await self.channel_layer.group_discard(
+            'inventory-predictions',
+            self.channel_name
+        )
+        await self.close()
+
+    @sync_to_async
+    def helper_func(self):
+        """
+        Synchronous structural context helper method targeting database layers
+        and machine calculations. Matches your custom serialization architecture.
+        """
+        # Resolve target Entity profile contexts matching your standard conventions
+        entity = getattr(self.user, 'entity', None) or getattr(getattr(self.user, 'employee', None), 'entity', None)
+        
+        if not entity:
+            self.retailer_id = None
+            self.retailer_name = None
+            self.predictions = json.dumps([])
+            return
+
+        self.retailer_id = entity.id
+        self.retailer_name = getattr(entity, 'title', self.user.username)
+        order_cycle_days = getattr(entity, 'order_days', 30)
+        today = timezone.now().date()
+
+        # Look up distinct items linked to this tenant user workspace
+        receipt_pids = RetailerReceipts.objects.filter(owner=self.user, is_active="true").values_list('product_id', flat=True)
+        oos_pids = OutOfStock.objects.filter(owner=self.user).values_list('product_id', flat=True)
+        p_ids = set(list(receipt_pids) + list(oos_pids))
+
+        predictions_compiled_list = []
+
+        for p_id in p_ids:
+            try:
+                p = Products.objects.filter(id=p_id, active=True).first()
+                if not p:
+                    continue
+                
+                # --- HISTORICAL SALES REGRESSION ---
+                s_list = list(CustomerOrderItems.objects.filter(retailer_receipt__product_id=p.id, customer_order__owner=self.user, customer_order__status="COMPLETED").values('customer_order__created', 'purchased_quantity'))
+                o_list = list(OutOfStock.objects.filter(product_id=p.id, owner=self.user).values('created', 'required_quantity'))
+                if len(s_list) + len(o_list) < 3:
+                    continue
+
+                df_s = pd.DataFrame(s_list).rename(columns={'customer_order__created': 'd', 'purchased_quantity': 'q'}) if s_list else pd.DataFrame(columns=['d', 'q'])
+                df_o = pd.DataFrame(o_list).rename(columns={'created': 'd', 'required_quantity': 'q'}) if o_list else pd.DataFrame(columns=['d', 'q'])
+                df = pd.concat([df_s, df_o], ignore_index=True)
+                df['d'] = pd.to_datetime(df['d'])
+                df.set_index('d', inplace=True)
+                
+                m = df.resample('ME')['q'].sum().reset_index()
+                if len(m) < 3:
+                    continue
+                
+                m['idx'] = np.arange(len(m))
+                daily_demand = Decimal(str(max(0, int(round(LinearRegression().fit(m[['idx']].values, m['q'].values).predict(np.array([[len(m)]]))))))) / Decimal('30.4')
+                
+                weekly_series = df.resample('W')['q'].sum()
+                safety_stock = int(round((weekly_series.std() / 7) * 1.65)) if len(weekly_series) > 1 and not pd.isna(weekly_series.std()) else 0
+
+                # --- SUPPLIER PERFORMANCE ANALYSIS ---
+                sup = WholesalerReceipts.objects.filter(product=p, current_unit_quantity__gt=0).select_related('received_from').order_by('final_unit_selling_price').first()
+                l_days, l_var = 5, 2
+                if sup and sup.received_from:
+                    po = list(RetailerOrders.objects.filter(wholesaler=sup.received_from, owner=self.user, status="RECEIVED", is_received="true").values('created', 'received_at')[:10])
+                    if len(po) >= 2:
+                        durs = (pd.to_datetime(pd.DataFrame(po)['received_at']) - pd.to_datetime(pd.DataFrame(po)['created'])).dt.days
+                        if len(durs) > 1 and not pd.isna(durs.std()):
+                            l_days, l_var = max(1, int(round(durs.mean()))), max(0, int(round(durs.std())))
+
+                # --- HORIZON DEFICIT WINDOWS AND BATCH EXPIRIES ---
+                total_days = l_days + l_var + order_cycle_days
+                cutoff = today + timezone.timedelta(days=int(total_days))
+                
+                batches = RetailerReceipts.objects.filter(product=p, owner=self.user, is_active="true", current_unit_quantity__gt=0).order_by('expiry_date')
+                usable, expired, batch_log = 0, 0, []
+                
+                for b in batches:
+                    is_exp = b.expiry_date <= cutoff if b.expiry_date else False
+                    batch_log.append({
+                        "batch_number": b.batch, 
+                        "expiry_date": b.expiry_date.isoformat() if b.expiry_date else None, 
+                        "units_remaining": b.current_unit_quantity, 
+                        "will_expire_during_plan_period": is_exp
+                    })
+                    if is_exp:
+                        expired += b.current_unit_quantity
+                    else:
+                        usable += b.current_unit_quantity
+
+                # --- PIPELINE REALITIES AND STOCK OFFSETS ---
+                pending = RetailerOrderItems.objects.filter(wholesaler_receipt__product_id=p.id, retailer_order__owner=self.user, retailer_order__status__in=["SUBMITTED", "PROCESSING", "DISPATCHED"], is_received="false").aggregate(t=Sum('purchased_quantity'))['t'] or 0
+                backlog = OutOfStock.objects.filter(product=p, owner=self.user, is_ordered="false").aggregate(t=Sum('required_quantity'))['t'] or 0
+                
+                needed = int(round(daily_demand * total_days)) + safety_stock
+                suggested = max(0, (needed - usable - pending)) + backlog
+
+                predictions_compiled_list.append({
+                    "product_id": p.id,
+                    "product_title": p.product_name(),
+                    "sku": getattr(p, 'bar_code', None),
+                    "is_drug": p.check_is_drug,
+                    "calculated_metrics": {
+                        "average_daily_demand": float(round(daily_demand, 4)),
+                        "supplier_lead_time_days": l_days,
+                        "supplier_delay_days": l_var,
+                        "safety_stock_units": safety_stock,
+                        "total_days_planned_for": total_days,
+                        "total_units_needed": needed,
+                    },
+                    "current_stock_status": {
+                        "total_physical_on_hand": usable + expired,
+                        "good_usable_units": usable,
+                        "expiring_units_warning": expired,
+                        "units_already_ordered": pending,
+                        "customer_waitlist_units": backlog,
+                        "existing_expiries": batch_log
+                    },
+                    "order_suggestion": {
+                        "suggested_order_quantity": suggested,
+                        "supplier": {
+                            "id": sup.received_from.id if sup and sup.received_from else None,
+                            "name": sup.received_from.title if sup and sup.received_from else None,
+                            "unit_price": float(sup.final_unit_selling_price) if sup else None
+                        }
+                    }
+                })
+            except Exception:
+                continue # Protect iteration paths from individual row exceptions
+
+        # Stringify payload fields cleanly inside custom serializers context format markers
+        self.predictions = json.dumps(predictions_compiled_list, cls=UUIDEncoder)
+
+
+    async def send_inventory_predictions(self, event):
+        """
+        Asynchronous listener triggered when group events broadcast new updates.
+        """
+        await self.helper_func()
+
+        await self.send_json({
+            'status': 'completed',
+            'retailer_id': self.retailer_id,
+            'retailer_name': self.retailer_name,
+            'predictions': json.loads(self.predictions, cls=UUIDEncoder),
+        })

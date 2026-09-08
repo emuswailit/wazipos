@@ -1,5 +1,6 @@
 from intergrations.jambopay.jambopay_wallet import get_auth_token
 from .models import CustomerOrderPayment,CustomerOrderSettlement
+from utils.logging import create_log
 from decouple import config
 from . import models
 from .utils.inventory_utils import update_stock
@@ -101,7 +102,7 @@ def get_wholesaler_discounts():
 
 @app.task
 def load_out_of_stock_items():
-    print("Loading out of stock items.....")
+    create_log("INFO","Loading out of stock items.....")
 
     # items=OutOfStock.objects.filter(pack_quantity__gte=1).all()
 
@@ -180,6 +181,17 @@ def load_customer_orders():
             'customer-orders',
             {
                 "type": "send_customer_orders"
+            },
+        )
+    return result
+
+@app.task
+def load_inventory_predictions():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'inventory-predictions',
+            {
+                "type": "send_inventory-predictions"
             },
         )
     return result
