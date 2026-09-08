@@ -923,12 +923,14 @@ class InventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
                 needed = int(round(daily_demand * total_days)) + safety_stock
                 suggested = max(0, (needed - usable - pending)) + backlog
 
-                compiled.append({
-                    "product_id": p.id, "product_title": p.product_name(), "sku": getattr(p, 'bar_code', None), "is_drug": p.check_is_drug,
-                    "calculated_metrics": {"average_daily_demand": float(round(daily_demand, 4)), "supplier_lead_time_days": l_days, "supplier_delay_days": l_var, "safety_stock_units": safety_stock, "total_days_planned_for": total_days, "total_units_needed": needed},
-                    "current_stock_status": {"total_physical_on_hand": usable + expired, "good_usable_units": usable, "expiring_units_warning": expired, "units_already_ordered": pending, "customer_waitlist_units": backlog, "existing_expiries": batch_log},
-                    "order_suggestion": {"suggested_order_quantity": suggested, "supplier": {"id": sup.received_from.id if sup and sup.received_from else None, "name": sup.received_from.title if sup and sup.received_from else None, "unit_price": float(sup.final_unit_selling_price) if sup else None}}
-                })
+                # CRITICAL RESTOCK FILTER: Skip items completely if they don't need any new units purchased
+                if suggested > 0:
+                    compiled.append({
+                        "product_id": p.id, "product_title": p.product_name(), "sku": getattr(p, 'bar_code', None), "is_drug": p.check_is_drug,
+                        "calculated_metrics": {"average_daily_demand": float(round(daily_demand, 4)), "supplier_lead_time_days": l_days, "supplier_delay_days": l_var, "safety_stock_units": safety_stock, "total_days_planned_for": total_days, "total_units_needed": needed},
+                        "current_stock_status": {"total_physical_on_hand": usable + expired, "good_usable_units": usable, "expiring_units_warning": expired, "units_already_ordered": pending, "customer_waitlist_units": backlog, "existing_expiries": batch_log},
+                        "order_suggestion": {"suggested_order_quantity": suggested, "supplier": {"id": sup.received_from.id if sup and sup.received_from else None, "name": sup.received_from.title if sup and sup.received_from else None, "unit_price": float(sup.final_unit_selling_price) if sup else None}}
+                    })
             except: continue
         self.predictions = json.dumps(compiled, default=lambda o: str(o) if hasattr(o, 'hex') else o)
 
