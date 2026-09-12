@@ -1,3 +1,5 @@
+// types.ts
+
 export interface ProductItem {
     key: string;
     title: string;
@@ -19,7 +21,6 @@ export interface OrderLineItem {
     price?: number;
     calculatedLineAmount?: number;
 }
-
 
 export interface PaymentMethodItem {
     id: string;

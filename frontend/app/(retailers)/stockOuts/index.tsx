@@ -1,6 +1,6 @@
 import retailersApi from "@/api/retailersApi";
 import { useAuth } from "@/context/AuthContext";
-import { useProductsSync } from "@/context/ProductsSyncContext ";
+import { useProductsSync } from "@/context/ProductsSyncContext";
 import useApi from "@/hooks/useApi";
 import React, { useEffect } from 'react';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';

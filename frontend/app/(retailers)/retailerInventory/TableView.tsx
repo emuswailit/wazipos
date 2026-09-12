@@ -1,69 +1,255 @@
+// app/(retailers)/retailerInventory/TableView.tsx
+
 import React from 'react';
 import { Image, Text, View } from 'react-native';
 
-interface TableViewProps { dataList: any[]; isDarkMode: boolean; theme: any; }
+export default function TableView({
+    data,
+    isDarkMode,
+    theme,
+}: {
+    data?: any[];
+    isDarkMode: boolean;
+    theme: any;
+}) {
+    /* Defensive: never crash if data is undefined */
+    const dataList = Array.isArray(data) ? data : [];
 
-export default function TableView({ dataList, isDarkMode, theme }: TableViewProps) {
     return (
-        <View style={{ backgroundColor: theme.panel, borderColor: isDarkMode ? '#334155' : '#e2e8f0' }} className="w-full border rounded-2xl overflow-hidden shadow-sm">
-            {/* 🚀 FIXED PROPORTIONAL COLUMN HEADERS GRID */}
-            <View className="flex-row items-center border-b border-gray-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 py-3.5 px-4">
-                <Text style={{ color: theme.textDark, fontFamily: theme.font.bold }} className="flex-[3] text-xs font-bold uppercase tracking-wider">Product Details</Text>
-                <Text style={{ color: theme.textDark, fontFamily: theme.font.bold }} className="flex-[2] text-xs font-bold uppercase tracking-wider pl-2">Barcode / SKU</Text>
-                <Text style={{ color: theme.textDark, fontFamily: theme.font.bold }} className="flex-[1.5] text-xs font-bold uppercase tracking-wider text-right">Stock Qty</Text>
-                <Text style={{ color: theme.textDark, fontFamily: theme.font.bold }} className="flex-[1.5] text-xs font-bold uppercase tracking-wider text-right">Price</Text>
-                <Text style={{ color: theme.textDark, fontFamily: theme.font.bold }} className="flex-[2] text-xs font-bold uppercase tracking-wider text-center">Expiry Status</Text>
+        <View
+            style={{
+                backgroundColor: theme.panel,
+                borderColor: isDarkMode
+                    ? '#334155'
+                    : '#e2e8f0',
+            }}
+            className="w-full border rounded-xl overflow-hidden shadow-xs"
+        >
+            {/* Header */}
+            <View className="flex-row items-center border-b border-gray-200 dark:border-slate-700 bg-slate-50 py-2.5 px-4">
+                <Text
+                    style={{
+                        color: theme.textDark,
+                        flexBasis: '35%',
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                >
+                    Asset Details
+                </Text>
+                <Text
+                    style={{
+                        color: theme.textDark,
+                        flexBasis: '20%',
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider pl-2 flex-shrink-0"
+                >
+                    Barcode / SKU
+                </Text>
+                <Text
+                    style={{
+                        color: theme.textDark,
+                        flexBasis: '10%',
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider text-right flex-shrink-0"
+                >
+                    Stock Qty
+                </Text>
+                <Text
+                    style={{
+                        color: theme.textDark,
+                        flexBasis: '15%',
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider text-right flex-shrink-0"
+                >
+                    Pricing Base
+                </Text>
+                <Text
+                    style={{
+                        color: theme.textDark,
+                        flexBasis: '20%',
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider text-center flex-shrink-0"
+                >
+                    Tracking Status
+                </Text>
             </View>
 
-            {/* 🚀 FIXED PROPORTIONAL DATA ROW LAYOUT */}
-            {dataList.map((item, index) => {
-                const isExpired = item.days_to_expiry <= 0;
-                const hasImages = Array.isArray(item.images) && item.images.length > 0;
-                const thumbnailUrl = hasImages ? (item.images[0]?.thumbnail || item.images[0]?.image) : null;
+            {/* Rows */}
+            {dataList.map((i, idx) => {
+                const exp =
+                    (typeof i.days_to_expiry ===
+                        'number' &&
+                        i.days_to_expiry <= 0) ||
+                    i.expiry_status === 'EXPIRED';
+
+                const url =
+                    i.thumbnail_url ||
+                    i.image_url ||
+                    null;
+
+                const bp = parseFloat(
+                    i.unit_selling_price || '0'
+                );
+                const fp = parseFloat(
+                    i.final_unit_selling_price || '0'
+                );
 
                 return (
-                    <View key={item.key || item.id} className={`flex-row items-center py-3.5 px-4 border-b border-gray-100 dark:border-slate-800 last:border-b-0 ${index % 2 === 1 ? 'bg-slate-50/30 dark:bg-slate-800/10' : ''}`}>
-
-                        {/* Column 1 (flex-[3]): Thumbnail + Title Info Block */}
-                        <View className="flex-[3] flex-row items-center gap-3 pr-2">
-                            <View className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 flex-shrink-0">
-                                {thumbnailUrl ? <Image source={{ uri: thumbnailUrl }} className="w-full h-full object-cover" /> : <View className="w-full h-full items-center justify-center bg-slate-200 dark:bg-slate-700"><Text style={{ color: theme.textDark }} className="text-[14px]">📦</Text></View>}
+                    <View
+                        key={i.key || i.id || idx}
+                        className={`flex-row items-center py-2.5 px-4 border-b border-gray-100 dark:border-slate-800 last:border-b-0 ${idx % 2 === 1
+                                ? 'bg-slate-50/20'
+                                : ''
+                            }`}
+                    >
+                        {/* Asset details */}
+                        <View
+                            style={{ flexBasis: '35%' }}
+                            className="flex-row items-center gap-3 pr-2 flex-shrink-0 min-w-0"
+                        >
+                            <View
+                                style={{
+                                    width: 36,
+                                    height: 36,
+                                }}
+                                className="rounded bg-slate-100 border border-slate-200/60 flex-shrink-0 overflow-hidden"
+                            >
+                                {url ? (
+                                    <Image
+                                        source={{ uri: url }}
+                                        style={{
+                                            width: '100%',
+                                            height: '100%',
+                                        }}
+                                    />
+                                ) : (
+                                    <View className="w-full h-full items-center justify-center bg-slate-200">
+                                        <Text className="text-xs">
+                                            📦
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                             <View className="flex-1 min-w-0">
-                                <Text style={{ color: theme.text, fontFamily: theme.font.bold }} className="text-sm font-bold truncate" numberOfLines={1}>{item.title || item.product_title || 'Unnamed Asset'}</Text>
-                                <Text style={{ color: theme.textDark }} className="text-[10px] uppercase font-semibold text-slate-400 mt-0.5 truncate" numberOfLines={1}>{item.manufacturer_title || 'Unknown Manufacturer'}</Text>
+                                <Text
+                                    style={{
+                                        color: theme.text,
+                                    }}
+                                    className="text-xs font-bold truncate"
+                                    numberOfLines={1}
+                                >
+                                    {i.title ||
+                                        i.product_title ||
+                                        'Unnamed Asset'}
+                                </Text>
+                                <Text
+                                    style={{
+                                        color: theme.textDark,
+                                    }}
+                                    className="text-[9px] text-slate-400 mt-0.5 truncate"
+                                    numberOfLines={1}
+                                >
+                                    {i.manufacturer_title ||
+                                        'Unknown Manufacturer'}
+                                </Text>
                             </View>
                         </View>
 
-                        {/* Column 2 (flex-[2]): Barcode Segment */}
-                        <Text style={{ color: theme.text, fontFamily: theme.font.medium }} className="flex-[2] text-xs text-slate-600 dark:text-slate-300 pl-2 truncate" numberOfLines={1}>
-                            {item.bar_code || item.barcode || '---'}
+                        {/* Barcode */}
+                        <Text
+                            style={{
+                                color: theme.text,
+                                flexBasis: '20%',
+                            }}
+                            className="text-xs font-medium pl-2 truncate flex-shrink-0"
+                            numberOfLines={1}
+                        >
+                            {i.bar_code || '---'}
                         </Text>
 
-                        {/* Column 3 (flex-[1.5]): Stock Count Metric */}
-                        <Text style={{ color: item.current_unit_quantity <= 5 ? '#f43f5e' : theme.text, fontFamily: theme.font.bold }} className="flex-[1.5] text-xs font-bold text-right truncate" numberOfLines={1}>
-                            {item.current_unit_quantity ?? 0} {item.unit_of_receipt || 'Pcs'}
+                        {/* Stock qty */}
+                        <Text
+                            style={{
+                                color:
+                                    i.current_unit_quantity <=
+                                        5
+                                        ? '#f43f5e'
+                                        : theme.text,
+                                flexBasis: '10%',
+                            }}
+                            className="text-xs font-bold text-right truncate flex-shrink-0"
+                            numberOfLines={1}
+                        >
+                            {i.current_unit_quantity ?? 0}
                         </Text>
 
-                        {/* Column 4 (flex-[1.5]): Price Point Label */}
-                        <Text style={{ color: theme.primary, fontFamily: theme.font.bold }} className="flex-[1.5] text-xs font-black text-right truncate" numberOfLines={1}>
-                            KES {parseFloat(item.final_unit_selling_price || item.unit_selling_price || '0').toFixed(2)}
-                        </Text>
-
-                        {/* Column 5 (flex-[2]): Expiry Status Mode */}
-                        <View className="flex-[2] items-center justify-center pl-2">
+                        {/* Pricing */}
+                        <View
+                            style={{ flexBasis: '15%' }}
+                            className="items-end justify-center pr-1 flex-shrink-0 min-w-0"
+                        >
                             <Text
-                                style={{ color: isExpired ? '#f43f5e' : '#10b981', fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }}
-                                className="font-bold text-center uppercase tracking-wide truncate w-full"
+                                style={{
+                                    color: theme.primary,
+                                }}
+                                className="text-xs font-black truncate"
                                 numberOfLines={1}
                             >
-                                {item.expiry_status || (isExpired ? 'EXPIRED' : 'ACTIVE')}
+                                KES {fp.toFixed(2)}
                             </Text>
+                            {fp < bp && (
+                                <Text
+                                    style={{
+                                        color: '#94a3b8',
+                                        textDecorationLine:
+                                            'line-through',
+                                    }}
+                                    className="text-[9px] mt-0.5 truncate"
+                                    numberOfLines={1}
+                                >
+                                    KES {bp.toFixed(2)}
+                                </Text>
+                            )}
                         </View>
 
+                        {/* Status */}
+                        <View
+                            style={{ flexBasis: '20%' }}
+                            className="items-center justify-center pl-2 flex-shrink-0 min-w-0"
+                        >
+                            <Text
+                                style={{
+                                    color: exp
+                                        ? '#f43f5e'
+                                        : '#10b981',
+                                }}
+                                className="text-[10px] font-extrabold uppercase tracking-wide truncate w-full text-center"
+                                numberOfLines={1}
+                            >
+                                {i.expiry_status ===
+                                    'UNKNOWN'
+                                    ? exp
+                                        ? 'EXPIRED'
+                                        : 'ACTIVE'
+                                    : i.expiry_status ||
+                                    'ACTIVE'}
+                            </Text>
+                        </View>
                     </View>
                 );
             })}
+
+            {/* Empty state */}
+            {dataList.length === 0 && (
+                <View className="w-full py-10 items-center justify-center">
+                    <Text
+                        style={{ color: theme.textDark }}
+                        className="text-xs"
+                    >
+                        No items to display
+                    </Text>
+                </View>
+            )}
         </View>
     );
 }

@@ -1,48 +1,264 @@
+// app/(retailers)/retailerInventory/CardView.tsx
+
 import React from 'react';
 import { Image, Text, View } from 'react-native';
 
-interface CardViewProps { item: any; theme: any; isDarkMode: boolean; }
+interface CardViewProps {
+    item: any;
+    theme: any;
+    isDarkMode: boolean;
+}
 
-export default function CardView({ item, theme, isDarkMode }: CardViewProps) {
-    const isExpired = item.days_to_expiry <= 0;
-    const hasImages = Array.isArray(item.images) && item.images.length > 0;
-    const thumbnailUrl = hasImages ? (item.images[0]?.thumbnail || item.images[0]?.image) : null;
+export default function CardView({
+    item,
+    theme,
+    isDarkMode,
+}: CardViewProps) {
+    const exp =
+        (typeof item.days_to_expiry === 'number' &&
+            item.days_to_expiry <= 0) ||
+        item.expiry_status === 'EXPIRED';
+
+    const url =
+        item.thumbnail_url || item.image_url || null;
+
+    const bp = parseFloat(
+        item.unit_selling_price || '0'
+    );
+    const fp = parseFloat(
+        item.final_unit_selling_price || '0'
+    );
+    const hasDiscount = fp < bp;
+
+    const qty = Number(item.current_unit_quantity ?? 0);
+    const unitPrice = Number.isFinite(fp) ? fp : 0;
+    const totalValue = qty * unitPrice;
+
+    /* Shared font helpers */
+    const fRegular = theme?.font?.regular;
+    const fMedium = theme?.font?.medium;
+    const fBold = theme?.font?.bold;
+
+    /* Shared colors */
+    const cText = theme?.text;
+    const cMuted = theme?.textDark;
+    const cAccent = theme?.primary;
 
     return (
-        <View style={{ backgroundColor: theme.panel, borderColor: isDarkMode ? '#334155' : '#e2e8f0' }} className="w-full border rounded-2xl p-4 shadow-sm flex-col gap-3 relative overflow-hidden">
+        <View
+            style={{
+                backgroundColor: theme?.panel,
+                borderColor: cAccent,
+            }}
+            className="w-full border rounded-xl p-3 flex-col mb-1"
+        >
+            {/* Title row */}
             <View className="w-full flex-row items-center gap-3">
-                <View className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60">
-                    {thumbnailUrl ? <Image source={{ uri: thumbnailUrl }} className="w-full h-full object-cover" /> : <View className="w-full h-full items-center justify-center bg-slate-200 dark:bg-slate-700"><Text className="text-base">📦</Text></View>}
+                <View
+                    style={{
+                        width: 48,
+                        height: 48,
+                        backgroundColor: theme?.background,
+                        borderColor: cAccent,
+                    }}
+                    className="rounded-lg overflow-hidden border flex-shrink-0"
+                >
+                    {url ? (
+                        <Image
+                            source={{ uri: url }}
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                            }}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <View
+                            style={{
+                                backgroundColor:
+                                    theme?.background,
+                            }}
+                            className="w-full h-full items-center justify-center"
+                        >
+                            <Text className="text-base">
+                                📦
+                            </Text>
+                        </View>
+                    )}
                 </View>
+
                 <View className="flex-1 min-w-0">
-                    <Text style={{ color: theme.text, fontFamily: theme.font.bold }} className="text-base font-bold tracking-tight truncate" numberOfLines={1}>{item.title || item.product_title}</Text>
-                    <Text style={{ color: theme.textDark }} className="text-xs font-medium text-slate-400 mt-0.5 truncate" numberOfLines={1}>{item.manufacturer_title || 'Unknown Manufacturer'}</Text>
+                    <Text
+                        style={{
+                            color: cText,
+                            fontFamily: fBold,
+                            lineHeight: 18,
+                        }}
+                        className="text-sm"
+                        numberOfLines={2}
+                    >
+                        {item.title ||
+                            item.product_title ||
+                            'Unnamed'}
+                    </Text>
+                    <Text
+                        style={{
+                            color: cMuted,
+                            fontFamily: fMedium,
+                        }}
+                        className="text-[11px] mt-0.5"
+                        numberOfLines={1}
+                    >
+                        {item.manufacturer_title ||
+                            'Unknown Manufacturer'}
+                    </Text>
                 </View>
             </View>
 
-            <View className="w-full h-[1px] bg-slate-100 dark:bg-slate-800/60 my-0.5" />
+            {/* Divider */}
+            <View
+                style={{ backgroundColor: cAccent }}
+                className="w-full h-[1px] my-2 opacity-20"
+            />
 
-            <View className="w-full flex-row justify-between items-center flex-wrap gap-y-2">
+            {/* Barcode / Qty / Unit Price */}
+            <View className="w-full flex-row justify-between items-center">
                 <View className="flex-col">
-                    <Text style={{ color: theme.textDark }} className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Barcode</Text>
-                    <Text style={{ color: theme.text, fontFamily: theme.font.medium }} className="text-xs font-semibold mt-0.5">{item.bar_code || '---'}</Text>
+                    <Text
+                        style={{
+                            color: cMuted,
+                            fontFamily: fBold,
+                        }}
+                        className="text-[9px] uppercase tracking-wider"
+                    >
+                        Barcode
+                    </Text>
+                    <Text
+                        style={{
+                            color: cText,
+                            fontFamily: fMedium,
+                        }}
+                        className="text-xs mt-0.5"
+                    >
+                        {item.bar_code || '---'}
+                    </Text>
                 </View>
-                <View className="flex-col items-center">
-                    <Text style={{ color: theme.textDark }} className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stock Available</Text>
-                    <Text style={{ color: item.current_unit_quantity <= 5 ? '#f43f5e' : theme.text, fontFamily: theme.font.bold }} className="text-xs font-bold mt-0.5">{item.current_unit_quantity} {item.unit_of_receipt || 'Pcs'}</Text>
+
+                <View className="items-center">
+                    <Text
+                        style={{
+                            color: cMuted,
+                            fontFamily: fBold,
+                        }}
+                        className="text-[9px] uppercase tracking-wider"
+                    >
+                        Qty
+                    </Text>
+                    <Text
+                        style={{
+                            color:
+                                qty <= 5
+                                    ? cAccent
+                                    : cText,
+                            fontFamily: fBold,
+                        }}
+                        className="text-xs mt-0.5"
+                    >
+                        {qty}
+                    </Text>
                 </View>
-                <View className="flex-col items-end">
-                    <Text style={{ color: theme.textDark }} className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Price Point</Text>
-                    <Text style={{ color: theme.primary, fontFamily: theme.font.bold }} className="text-xs font-black mt-0.5">KES {parseFloat(item.final_unit_selling_price || item.unit_selling_price || '0').toFixed(2)}</Text>
+
+                <View className="items-end">
+                    <Text
+                        style={{
+                            color: cMuted,
+                            fontFamily: fBold,
+                        }}
+                        className="text-[9px] uppercase tracking-wider"
+                    >
+                        Unit Price
+                    </Text>
+                    <View className="items-end mt-0.5">
+                        <Text
+                            style={{
+                                color: cText,
+                                fontFamily: fMedium,
+                            }}
+                            className="text-xs"
+                        >
+                            KES {unitPrice.toFixed(2)}
+                        </Text>
+                        {hasDiscount && (
+                            <Text
+                                style={{
+                                    color: cMuted,
+                                    fontFamily: fRegular,
+                                    textDecorationLine:
+                                        'line-through',
+                                }}
+                                className="text-[9px] mt-0.5"
+                            >
+                                KES {bp.toFixed(2)}
+                            </Text>
+                        )}
+                    </View>
                 </View>
             </View>
 
-            {/* 🚀 EXPIRY STATUS DISPLAY STRATEGY: PURE COLORED TEXT WITHOUT PILLS */}
-            <View className="w-full mt-1 flex-row items-center justify-between">
-                <Text style={{ color: theme.textDark }} className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tracking Status</Text>
-                <Text style={{ color: isExpired ? '#f43f5e' : '#10b981', fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="font-bold uppercase tracking-wider text-right">
-                    {item.expiry_status || (isExpired ? 'EXPIRED' : 'ACTIVE')}
-                </Text>
+            {/* Divider */}
+            <View
+                style={{ backgroundColor: cAccent }}
+                className="w-full h-[1px] my-2 opacity-20"
+            />
+
+            {/* Total Value + Status */}
+            <View className="w-full flex-row justify-between items-center">
+                <View className="flex-col">
+                    <Text
+                        style={{
+                            color: cMuted,
+                            fontFamily: fBold,
+                        }}
+                        className="text-[9px] uppercase tracking-wider"
+                    >
+                        Total Value
+                    </Text>
+                    <Text
+                        style={{
+                            color: cAccent,
+                            fontFamily: fBold,
+                        }}
+                        className="text-sm mt-0.5"
+                    >
+                        KES {totalValue.toFixed(2)}
+                    </Text>
+                </View>
+
+                <View className="items-end">
+                    <Text
+                        style={{
+                            color: cMuted,
+                            fontFamily: fBold,
+                        }}
+                        className="text-[9px] uppercase tracking-wider"
+                    >
+                        Status
+                    </Text>
+                    <Text
+                        style={{
+                            color: exp ? cAccent : cText,
+                            fontFamily: fBold,
+                        }}
+                        className="text-xs uppercase mt-0.5"
+                    >
+                        {item.expiry_status === 'UNKNOWN'
+                            ? exp
+                                ? 'EXPIRED'
+                                : 'ACTIVE'
+                            : item.expiry_status ||
+                            'ACTIVE'}
+                    </Text>
+                </View>
             </View>
         </View>
     );

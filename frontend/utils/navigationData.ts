@@ -251,6 +251,13 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
+            {
+                id: 8,
+                title: "Wholesale Marketplace",
+                route: "/wholesaleMarketplace?tab=wholesaleMarketplace", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
         ]
     }
 ];

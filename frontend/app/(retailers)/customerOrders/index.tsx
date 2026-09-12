@@ -1,139 +1,136 @@
-import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
-import { useApi } from '@/hooks/useApi';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
-import OrderInvoiceModal from './OrderInvoiceModal';
-import OrderListDesktopRow from './OrderListDesktopRow';
-import OrderListMobileCard from './OrderListMobileCard';
-import OrderListSearchBar from './OrderListSearchBar';
-import { localCache } from './storage';
-import { OrderRecord } from './types';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { InvoiceModal } from './InvoiceModal';
+import { RowItem } from './RowItem';
+import { CustomerOrder } from './types';
+import { useOrdersData } from './useOrdersData';
 
-export default function OrderListConsole() {
-    const [searchQuery, setSearchQuery] = useState<string>('');
-    const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
-    const [lastSynced, setLastSynced] = useState<string>('--:--');
-    const [isRetryingPayment, setIsRetryingPayment] = useState<boolean>(false);
-    const { theme, isDarkMode } = useAuth();
-    const getCustomerOrdersApi = useApi(retailersApi.retailerOrdersAction);
-    const isFetchingRef = useRef<boolean>(false);
+export default function CustomerOrdersRoute() {
+    const { token, isLoading: isAuthLoading } = useAuth();
+    const { width } = useWindowDimensions();
+    const isLarge = width >= 768;
 
-    useEffect(() => {
-        console.log("🎯 getCustomerOrdersApi.data updated:", getCustomerOrdersApi.data);
-    }, [getCustomerOrdersApi.data]);
+    const { orders, isConnected, isRefreshing, lastSynced, refetch } = useOrdersData(token);
+    const [search, setSearch] = useState('');
+    const [selected, setSelected] = useState<CustomerOrder | null>(null);
 
-    useEffect(() => {
-        const hydrateCachedData = async () => {
-            const savedOrders = await localCache.load();
-            if (savedOrders && Array.isArray(savedOrders)) {
-                getCustomerOrdersApi.setData(savedOrders);
-            }
-        };
-        hydrateCachedData();
-    }, []);
+    const filtered = useMemo(() => orders.filter(o =>
+        (o.order_number || '').toLowerCase().includes(search.toLowerCase()) ||
+        (o.customer_name || '').toLowerCase().includes(search.toLowerCase())
+    ), [orders, search]);
 
-    const getCustomerOrders = async () => {
-        if (isFetchingRef.current) return;
-        isFetchingRef.current = true;
-        try {
-            const response = await getCustomerOrdersApi.request({ "action": "RetrieveOwnOrders" });
-            if (response && response.ok && response.data) {
-                const incomingOrders = ('results' in response.data) ? (response.data as any).results : response.data;
-                if (incomingOrders && Array.isArray(incomingOrders)) {
-                    await localCache.save(incomingOrders);
-                }
-                const now = new Date();
-                setLastSynced(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
-            }
-        } catch (error) {
-            console.error("Local data cache persistence write failed:", error);
-        } finally {
-            isFetchingRef.current = false;
-        }
-    };
+    const totalVal = useMemo(() => filtered.reduce((sum, o) => {
+        const val = parseFloat(o.order_price_total);
+        return sum + (isNaN(val) ? 0 : val);
+    }, 0), [filtered]);
 
-    useEffect(() => {
-        getCustomerOrders();
-        const pollingInterval = setInterval(() => getCustomerOrders(), 300000);
-        return () => clearInterval(pollingInterval);
-    }, []);
+    if (isAuthLoading) {
+        return (
+            <View className="flex-1 justify-center items-center bg-gray-50">
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text className="text-gray-500 text-xs font-semibold mt-3">Validating Session Registers...</Text>
+            </View>
+        );
+    }
 
-    const handleRetryPayment = async (order: OrderRecord) => {
-        setIsRetryingPayment(true);
-        try {
-            console.log(`Initiating payment retry flow for Order Ref: ${order.order_number}`);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            alert(`Payment request dispatched for order ${order.order_number}`);
-        } catch (err) {
-            console.error("Retry flow fault:", err);
-        } finally {
-            setIsRetryingPayment(false);
-        }
-    };
-
-    const ordersList: OrderRecord[] = (getCustomerOrdersApi.data as OrderRecord[]) || [];
-    const filteredOrders = useMemo(() => {
-        const cleanQuery = searchQuery.trim().toLowerCase();
-        if (!cleanQuery) return ordersList;
-        return ordersList.filter(order => order.order_number?.toLowerCase().includes(cleanQuery) || order.customer_name?.toLowerCase().includes(cleanQuery));
-    }, [searchQuery, ordersList]);
-
-    const getStatusStyle = (status: string) => {
-        const s = String(status || '').toUpperCase();
-        if (s === 'PROCESSING' || s === 'PENDING') return { bg: isDarkMode ? 'bg-amber-500/10' : 'bg-amber-50', text: 'text-amber-600', dot: 'bg-amber-500' };
-        if (s === 'SUCCESS' || s === 'COMPLETED') return { bg: isDarkMode ? 'bg-emerald-500/10' : 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-500' };
-        return { bg: isDarkMode ? 'bg-rose-500/10' : 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-500' };
-    };
-
-    const getOrderItemsCount = (order: OrderRecord) => {
-        return order.order_items?.reduce((acc, curr) => acc + (Number(curr.purchased_quantity) || 0), 0) || 0;
-    };
-
-    return (
-        <View style={{ backgroundColor: theme?.background || '#f8fafc' }} className="w-full flex-col px-4 py-6 md:px-8">
-            <View className="w-full flex-row justify-between items-end mb-6">
-                <View className="flex-col">
-                    <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xl || 20, color: theme?.text || '#0f172a' }} className="tracking-tight">Orders</Text>
-                    <Text style={{ fontFamily: theme?.font?.medium || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="mt-0.5">Manage and track live shipments</Text>
+    // 📡 Streamlined Header Group Wrapper Component to safely seed native FlatList contexts
+    const renderListHeader = () => (
+        <View className="w-full bg-gray-50 pt-4">
+            {/* Header Info Block */}
+            <View className="p-4 rounded-2xl mb-4 border-l-4 border-l-blue-600 bg-white shadow-xs flex-row justify-between items-center">
+                <View className="flex-1">
+                    <Text className="text-lg font-bold text-gray-900 tracking-tight">Internal Order Registers</Text>
+                    <Text className="text-gray-500 text-[11px] mt-0.5">
+                        {isConnected ? 'Live WebSockets Connected' : 'Offline Mode Active'} {lastSynced && `• Checked: ${lastSynced}`}
+                    </Text>
+                    {!isConnected && (
+                        <View className="mt-1.5 bg-amber-50 px-2 py-0.5 rounded self-start border border-amber-200">
+                            <Text className="text-amber-700 text-[9px] font-bold">⚠️ INTERNET IS REQUIRED FOR UPDATE</Text>
+                        </View>
+                    )}
                 </View>
-                <View className="flex-row items-center space-x-2">
-                    {getCustomerOrdersApi.loading && <ActivityIndicator size="small" color={theme?.text || '#0f172a'} className="mr-2" />}
-                    <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="uppercase tracking-widest opacity-60">Synced {lastSynced}</Text>
+                {!isLarge && (
+                    <View className="items-end pl-2">
+                        <Text className="text-[9px] font-bold text-gray-400 tracking-wider">VALUE</Text>
+                        <Text className="text-sm font-black text-green-700 mt-0.5">KES {totalVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                    </View>
+                )}
+            </View>
+
+            {/* Input Utility Controls */}
+            <View className="flex-row items-center justify-between mb-3 gap-3">
+                <TextInput
+                    placeholder="Search registrations..."
+                    placeholderTextColor="#9CA3AF"
+                    className="flex-1 border border-gray-200 rounded-xl px-3 h-9 bg-white text-gray-900 text-xs shadow-xs"
+                    value={search}
+                    onChangeText={setSearch}
+                />
+                <View className="px-2.5 py-1.5 bg-white border border-gray-100 rounded-xl shadow-xs">
+                    <Text className={`text-[10px] font-bold ${isRefreshing ? 'text-blue-500' : isConnected ? 'text-green-600' : 'text-amber-500'}`}>
+                        • {isRefreshing ? 'Syncing...' : isConnected ? 'Live' : 'Offline'}
+                    </Text>
                 </View>
             </View>
-            <OrderListSearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-            {filteredOrders.length === 0 ? (
-                <View className="w-full py-16 items-center justify-center rounded-3xl border border-dashed" style={{ backgroundColor: theme?.panel || '#ffffff', borderColor: `${theme?.textDark || '#334155'}15` }}>
-                    <Text style={{ fontSize: theme?.fontSize?.xl || 20 }} className="mb-2">📦</Text>
-                    <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.base || 14, color: theme?.text || '#0f172a' }} className="tracking-tight">No matching records found</Text>
-                    <Text style={{ fontFamily: theme?.font?.regular || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="mt-1">Try refining your search keyword</Text>
-                </View>
-            ) : (
-                <View className="w-full mt-4">
-                    <View className="flex flex-col md:hidden space-y-4 w-full">
-                        {filteredOrders.map((order) => (
-                            <OrderListMobileCard key={order.id} order={order} onOpenInvoice={() => setSelectedOrder(order)} statusConfig={getStatusStyle(order.status)} totalItemsCount={getOrderItemsCount(order)} />
-                        ))}
-                    </View>
-                    <View className="hidden md:flex w-full rounded-2xl border overflow-hidden shadow-sm border-neutral-100 dark:border-neutral-800" style={{ backgroundColor: theme?.panel || '#ffffff', borderColor: `${theme?.textDark || '#334155'}10` }}>
-                        <View className="flex-row items-center px-6 h-12 border-b" style={{ backgroundColor: theme?.panel || '#ffffff', borderBottomColor: `${theme?.textDark || '#334155'}10` }}>
-                            <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="flex-[1.2] uppercase tracking-widest">Reference</Text>
-                            <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="flex-[1.5] uppercase tracking-widest">Customer Account</Text>
-                            <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="flex-1 uppercase tracking-widest text-center">Items Scope</Text>
-                            <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="flex-1 uppercase tracking-widest text-right">Value Total</Text>
-                            <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="flex-1 uppercase tracking-widest text-center">Transit</Text>
-                            <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: theme?.fontSize?.xs || 10, color: theme?.textDark || '#334155' }} className="w-24 uppercase tracking-widest text-center">Action</Text>
+        </View>
+    );
+
+    return (
+        <View className="flex-1 bg-gray-50 relative">
+            {isLarge ? (
+                // 💻 LARGE SCREEN VIEWPORT (DESKTOP/WEB GRID SCROLLER CHANNEL)
+                <ScrollView
+                    className="flex-1 p-6"
+                    refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refetch} tintColor="#007AFF" />}
+                >
+                    {renderListHeader()}
+                    <View className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-2 mb-8">
+                        <View className="flex-row p-4 bg-gray-50 border-b border-gray-200 items-center">
+                            <View className="w-2/12 px-1"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider">Order Number</Text></View>
+                            <View className="w-2/12 px-1"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider">Customer</Text></View>
+                            <View className="w-2/12 px-1"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider">Status</Text></View>
+                            <View className="w-[12.5%] px-1"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider">Method</Text></View>
+                            <View className="w-[12.5%] px-1"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider">Provider Ref</Text></View>
+                            <View className="w-[12.5%] px-1"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider">Amount</Text></View>
+                            <View className="w-[12.5%] px-1 text-right"><Text className="text-gray-500 font-bold text-xs uppercase tracking-wider text-right pr-4">Action</Text></View>
                         </View>
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            {filteredOrders.map((order) => (
-                                <OrderListDesktopRow key={order.id} order={order} onOpenInvoice={() => setSelectedOrder(order)} onRetryPayment={handleRetryPayment} statusConfig={getStatusStyle(order.status)} totalItemsCount={getOrderItemsCount(order)} isRetryingPayment={isRetryingPayment} />
-                            ))}
-                        </ScrollView>
+                        {filtered.length === 0 ? (
+                            <View className="p-12 items-center"><Text className="text-gray-400 text-sm font-medium">No order files match your search criteria.</Text></View>
+                        ) : (
+                            filtered.map(o => <RowItem key={o.id} order={o} isLarge={true} onSelect={setSelected} />)
+                        )}
                     </View>
-                </View>
+                </ScrollView>
+            ) : (
+                // 📱 SMALL NATIVE VIEWPORT (VIRTUALIZED NATIVE FLATLIST FOR PERFECT MOMENTUM SCROLLING)
+                <FlatList
+                    data={filtered}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => <RowItem order={item} isLarge={false} onSelect={setSelected} />}
+                    ListHeaderComponent={renderListHeader}
+                    contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+                    keyboardShouldPersistTaps="handled"
+                    removeClippedSubviews={true} // Reclaims memory footprint of off-screen list items immediately
+                    maxToRenderPerBatch={10}     // Controls background thread layout thresholds
+                    windowSize={5}               // Tightens active rendering buffer area bounds
+                    initialNumToRender={8}       // Powers quick screen navigation bootstrap
+                    refreshControl={
+                        <RefreshControl refreshing={isRefreshing} onRefresh={refetch} tintColor="#007AFF" colors={["#007AFF"]} />
+                    }
+                    ListEmptyComponent={
+                        <View className="py-20 items-center justify-center">
+                            <Text className="text-gray-400 text-xs text-center font-medium">No system sales order logs match filters.</Text>
+                        </View>
+                    }
+                />
             )}
-            <OrderInvoiceModal order={selectedOrder} onClose={() => setSelectedOrder(null)} isDarkMode={isDarkMode} isRetryingPayment={isRetryingPayment} onRetryPayment={handleRetryPayment} theme={theme} />
+
+            {/* Context-Free Overlay Dialog Window */}
+            <InvoiceModal
+                order={selected}
+                onClose={() => setSelected(null)}
+            />
         </View>
     );
 }

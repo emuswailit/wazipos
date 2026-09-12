@@ -1,5 +1,5 @@
 
-import { useProductsSync } from "@/context/ProductsSyncContext ";
+import { useProductsSync } from "@/context/ProductsSyncContext";
 import { OutOfStockRecord } from "@/databases/types";
 import { useOutOfStockRepository } from "@/databases/useOutOfStockRepository";
 import { useCallback, useEffect, useMemo, useState } from 'react';
