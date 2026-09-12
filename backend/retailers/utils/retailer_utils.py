@@ -839,18 +839,22 @@ def validate_retailer_receipt_data(data, user):
     #         pass
     # else:
     #     pass
-
-    try:
-        
+    if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
         draft_id = data["retailer_receipt_details"]["draft_id"]
-        if data["retailer_receipt_details"]["draft_id"] == "":
-            errors.append("Pack draft ID cannot be empty")
-        else:
-            if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
-                errors.append("Item is already synced")
+        if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
+            created = RetailerReceipts.objects.filter(draft_id=draft_id).first()
+            return [], created
+    # try:
+        
+        # draft_id = data["retailer_receipt_details"]["draft_id"]
+        # if data["retailer_receipt_details"]["draft_id"] == "":
+        #     errors.append("Pack draft ID cannot be empty")
+        # else:
+        #     if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
+        #         errors.append("Item is already synced")
 
-    except KeyError:
-        errors.append("Draft ID is required")
+    # except KeyError:
+    #     errors.append("Draft ID is required")
 
  
     
