@@ -796,21 +796,21 @@ def validate_retailer_receipt_data(data, user):
     except KeyError:
         errors.append("Received unit quantity is required")
 
-    # try:
-    #     product_id = data["retailer_receipt_details"]["product"]
-    #     if product_id == "":
-    #         errors.append("Product ID cannot be empty")
-    #     if Products.objects.filter(id=product_id).exists():
-    #         product = Products.objects.filter(id=product_id).first()
-    #         if not product.category in user.entity.categories.all():
-    #             raise exceptions.ValidationError(
-    #                 f"{product.title} is not under any of your authorized categories"
-    #             )
-    #     else:
-    #         raise exceptions.ValidationError("Product with supplied ID does not exist")
+    try:
+        product_id = data["retailer_receipt_details"]["product"]
+        if product_id == "":
+            errors.append("Product ID cannot be empty")
+        if Products.objects.filter(id=product_id).exists():
+            product = Products.objects.filter(id=product_id).first()
+            # if not product.category in user.entity.categories.all():
+            #     raise exceptions.ValidationError(
+            #         f"{product.title} is not under any of your authorized categories"
+            #     )
+        else:
+            raise exceptions.ValidationError("Product with supplied ID does not exist")
 
-    # except KeyError:
-    #     errors.append("Product ID is required")
+    except KeyError:
+        errors.append("Product ID is required")
 
     if product.preparation:
         try:
