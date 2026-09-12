@@ -170,7 +170,9 @@ class WholesalerInvoiceItems(EntityRelatedModel):
     )
 
 class RetailerReceipts(EntityRelatedModel):
-
+    draft_id = models.CharField(
+        max_length=256, null=True, blank=True,
+    )
     product = models.ForeignKey("products.Products", on_delete=models.CASCADE)
     received_from = models.ForeignKey(
         Entities,

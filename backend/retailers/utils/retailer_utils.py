@@ -193,6 +193,7 @@ def create_retailer_receipts(item, retailer_order_obj, user):
             * item.wholesaler_receipt.product.units_per_pack,
             entity=user.entity,
             owner=user,
+            draft_id=item.draft_id,
             product=item.wholesaler_receipt.product,
             retailer_order=retailer_order_obj,
            
@@ -838,13 +839,17 @@ def validate_retailer_receipt_data(data, user):
     # else:
     #     pass
 
-    # try:
-    #     pack_quantity = data["retailer_receipt_details"]["pack_quantity"]
-    #     if data["retailer_receipt_details"]["pack_quantity"] == "":
-    #         errors.append("Pack quantity cannot be empty")
+    try:
+        
+        draft_id = data["retailer_receipt_details"]["draft_id"]
+        if data["retailer_receipt_details"]["draft_id"] == "":
+            errors.append("Pack draft ID cannot be empty")
+        else:
+            if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
+                errors.append("Item is already synced")
 
-    # except KeyError:
-    #     errors.append("Pack quantity is required")
+    except KeyError:
+        errors.append("Draft ID is required")
 
  
     
@@ -880,6 +885,7 @@ def create_retailer_receipt_directly(data, user):
     received_from = None
     employee = None
     bar_code=""
+    draft_id=""
     retailer_order_item=None
     unit_of_receipt=None
     unit_selling_price=0
@@ -966,6 +972,9 @@ def create_retailer_receipt_directly(data, user):
     if "bar_code" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["bar_code"]=="":
         bar_code = data["retailer_receipt_details"]["bar_code"]
 
+    if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
+        draft_id = data["retailer_receipt_details"]["draft_id"]
+
 
 
     try:
@@ -999,6 +1008,7 @@ def create_retailer_receipt_directly(data, user):
                 batch=batch,
                 bar_code=bar_code,
                 employee=employee,
+                draft_id=draft_id,
                 retailer_order_item=retailer_order_item,
                 unit_selling_price=unit_selling_price,
                 units_per_pack=product.units_per_pack,

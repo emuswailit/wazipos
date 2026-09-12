@@ -1807,6 +1807,7 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             "entity",
             "entity_title",
             "product",
+            "draft_id",
             "preparation_title",
             "product_title",
             "formulation_title",
