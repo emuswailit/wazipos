@@ -84,7 +84,7 @@ def retailerReceiptsAdminAPIView(request):
         raise exceptions.ValidationError("Action is not supplied")
 
     if request.data["action"] == "CreateRetailerReceipt":
-        retailer_utils.validate_retailer_receipt_data(request.data, request.user)
+        # retailer_utils.validate_retailer_receipt_data(request.data, request.user)
 
         errors,retailer_receipt = retailer_utils.create_retailer_receipt_directly(
             request.data, request.user
