@@ -893,6 +893,12 @@ def create_retailer_receipt_directly(data, user):
     batch=None
     unit_price_discount=0
     final_unit_selling_price=0.00
+
+    if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
+        draft_id = data["retailer_receipt_details"]["draft_id"]
+        if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
+            created = RetailerReceipts.objects.filter(draft_id=draft_id).first()
+            return [], created
     if Employees.objects.filter(
         user=user, entity=user.entity, is_active="true"
     ).exists():
@@ -973,8 +979,8 @@ def create_retailer_receipt_directly(data, user):
     if "bar_code" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["bar_code"]=="":
         bar_code = data["retailer_receipt_details"]["bar_code"]
 
-    if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
-        draft_id = data["retailer_receipt_details"]["draft_id"]
+
+
 
 
 
