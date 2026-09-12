@@ -841,8 +841,8 @@ def validate_retailer_receipt_data(data, user):
     #     pass
     if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
         draft_id = data["retailer_receipt_details"]["draft_id"]
-        if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
-            created = RetailerReceipts.objects.filter(draft_id=draft_id).first()
+        if RetailerReceipts.objects.filter(draft_id=draft_id,entity=user.entity).exists():
+            created = RetailerReceipts.objects.filter(draft_id=draft_id,entity=user.entity).first()
             return [], created
     # try:
         
