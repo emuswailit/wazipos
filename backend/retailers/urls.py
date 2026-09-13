@@ -68,10 +68,46 @@ urlpatterns = [
         views.VendorPurchasePredictionAPIView.as_view(), 
         name='inventory-prediction-simulator'
     ),
+
+        path(
+        "indents/current/",
+        views.RetailerIndentDetailView.as_view(),
+        name="retailer-indent-current",
+    ),
+    path(
+        "indents/<uuid:indent_id>/params/",
+        views.RetailerIndentParamsUpdateView.as_view(),
+        name="retailer-indent-params-update",
+    ),
     path(
         'procurement/ordering', 
         views.RetailerCloseAndOrderIndentAPIView.as_view(), 
         name='inventory-prediction-ordering'
+    ),
+        path(
+        "indents/current/",
+        views.RetailerIndentDetailView.as_view(),
+        name="retailer-indent-current",
+    ),
+    path(
+        "indents/<uuid:indent_id>/params/",
+        views.RetailerIndentParamsUpdateView.as_view(),
+        name="retailer-indent-params-update",
+    ),
+    path(
+        "indents/<uuid:indent_id>/items/",
+        views.RetailerIndentItemCreateView.as_view(),
+        name="retailer-indent-item-create",
+    ),
+    path(
+        "indent-items/<uuid:item_id>/",
+        views.RetailerIndentItemUpdateView.as_view(),
+        name="retailer-indent-item-update",
+    ),
+    path(
+        "indent-items/<uuid:item_id>/delete/",
+        views.RetailerIndentItemDeleteView.as_view(),
+        name="retailer-indent-item-delete",
     ),
       # Phase 2: The Final Order Execution Lock (POST)
     # Retailer passes the selected payload array to turn recommendations into real DB rows

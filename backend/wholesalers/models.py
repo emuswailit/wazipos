@@ -101,56 +101,156 @@ class WholesalerVariations(EntityRelatedModel):
         super(WholesalerVariations, self).save(*args, **kwargs)
 
 
-from decimal import Decimal
-from django.db import models
-from django.utils import timezone
-from django.core.validators import MinValueValidator
-
 class WholesalerReceipts(EntityRelatedModel):
-    product = models.ForeignKey("products.Products", on_delete=models.CASCADE)
-    wholesaler_variation = models.ForeignKey(WholesalerVariations, on_delete=models.CASCADE)
+    product = models.ForeignKey(
+        "products.Products",
+        on_delete=models.CASCADE,
+    )
+    wholesaler_variation = models.ForeignKey(
+        WholesalerVariations,
+        on_delete=models.CASCADE,
+    )
     received_from = models.ForeignKey(
-        Entities, related_name="variationReceiptDistributor", on_delete=models.CASCADE, null=True, blank=True
+        "authentication.Entities",
+        related_name="variationReceiptDistributor",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
     wholesaler_order_item = models.ForeignKey(
-        WholesalerOrderItems, related_name="wholesalerDistributorOrder", null=True, blank=True, on_delete=models.CASCADE
+        WholesalerOrderItems,
+        related_name="wholesalerDistributorOrder",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
     )
-    unit_of_receipt = models.CharField(max_length=20, choices=UNIT_OF_RECEIPT, default="Pack")
-    batch = models.CharField(max_length=50, null=True, blank=True)
-    bar_code = models.CharField(max_length=100, null=True, blank=True)
-    manufacture_date = models.DateField(default=None, null=True, blank=True)
-    expiry_date = models.DateField(default=None, null=True, blank=True)
+    unit_of_receipt = models.CharField(
+        max_length=20,
+        choices=UNIT_OF_RECEIPT,
+        default="Pack",
+    )
+    batch = models.CharField(
+        max_length=50, null=True, blank=True,
+    )
+    bar_code = models.CharField(
+        max_length=100, null=True, blank=True,
+    )
+    manufacture_date = models.DateField(
+        default=None, null=True, blank=True,
+    )
+    expiry_date = models.DateField(
+        default=None, null=True, blank=True,
+    )
     current_unit_quantity = models.BigIntegerField(default=0)
     received_unit_quantity = models.BigIntegerField(default=0)
-    received_pack_quantity = models.BigIntegerField(default=0)  # Added default
-    unit_buying_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    unit_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    discount_unit_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    final_unit_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-   
-    employee = models.ForeignKey(Employees, related_name="employee_creating_wholesaler_receipt", on_delete=models.CASCADE)
-    in_placement = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default='true')
+    received_pack_quantity = models.BigIntegerField(default=0)
+    unit_buying_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+    )
+    unit_selling_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+    )
+    discount_unit_selling_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+    )
+    final_unit_selling_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+    )
+
+    # ➕ Recommended retail price — used to compute tentative
+    #    profit on the retailer side. Optional. When set, it
+    #    overrides the retailer's markup when pricing the
+    #    suggested order.
+    recommended_retail_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Suggested price for the retailer to sell at. "
+            "If empty, the retailer's indent markup applies."
+        ),
+    )
+
+    employee = models.ForeignKey(
+        Employees,
+        related_name="employee_creating_wholesaler_receipt",
+        on_delete=models.CASCADE,
+    )
+    in_placement = models.CharField(
+        max_length=50,
+        choices=TRUE_FALSE_OPTIONS,
+        default='true',
+    )
     description = models.TextField(max_length=300)
     created = models.DateTimeField(default=timezone.now)
     updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(User, related_name="wholesalerReceiptOwner", on_delete=models.CASCADE)
+    owner = models.ForeignKey(
+        User,
+        related_name="wholesalerReceiptOwner",
+        on_delete=models.CASCADE,
+    )
 
     def __str__(self):
         return self.product.title
 
     def save(self, *args, **kwargs):
-        # 1. Cache product to avoid multiple database hits
         product = self.product
-        
-        # 2. Sync barcodes safely
+
         if product and product.bar_code:
             self.bar_code = product.bar_code
         elif self.bar_code and product and not product.bar_code:
             product.bar_code = self.bar_code
-            product.save(update_fields=['bar_code'])  # Safe: limits save to one column
+            product.save(update_fields=['bar_code'])
+
+        super(WholesalerReceipts, self).save(*args, **kwargs)
+
+# class WholesalerReceipts(EntityRelatedModel):
+#     product = models.ForeignKey("products.Products", on_delete=models.CASCADE)
+#     wholesaler_variation = models.ForeignKey(WholesalerVariations, on_delete=models.CASCADE)
+#     received_from = models.ForeignKey(
+#         Entities, related_name="variationReceiptDistributor", on_delete=models.CASCADE, null=True, blank=True
+#     )
+#     wholesaler_order_item = models.ForeignKey(
+#         WholesalerOrderItems, related_name="wholesalerDistributorOrder", null=True, blank=True, on_delete=models.CASCADE
+#     )
+#     unit_of_receipt = models.CharField(max_length=20, choices=UNIT_OF_RECEIPT, default="Pack")
+#     batch = models.CharField(max_length=50, null=True, blank=True)
+#     bar_code = models.CharField(max_length=100, null=True, blank=True)
+#     manufacture_date = models.DateField(default=None, null=True, blank=True)
+#     expiry_date = models.DateField(default=None, null=True, blank=True)
+#     current_unit_quantity = models.BigIntegerField(default=0)
+#     received_unit_quantity = models.BigIntegerField(default=0)
+#     received_pack_quantity = models.BigIntegerField(default=0)  # Added default
+#     unit_buying_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+#     unit_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+#     discount_unit_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+#     final_unit_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+   
+#     employee = models.ForeignKey(Employees, related_name="employee_creating_wholesaler_receipt", on_delete=models.CASCADE)
+#     in_placement = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default='true')
+#     description = models.TextField(max_length=300)
+#     created = models.DateTimeField(default=timezone.now)
+#     updated = models.DateTimeField(auto_now=True)
+#     owner = models.ForeignKey(User, related_name="wholesalerReceiptOwner", on_delete=models.CASCADE)
+
+#     def __str__(self):
+#         return self.product.title
+
+#     def save(self, *args, **kwargs):
+#         # 1. Cache product to avoid multiple database hits
+#         product = self.product
+        
+#         # 2. Sync barcodes safely
+#         if product and product.bar_code:
+#             self.bar_code = product.bar_code
+#         elif self.bar_code and product and not product.bar_code:
+#             product.bar_code = self.bar_code
+#             product.save(update_fields=['bar_code'])  # Safe: limits save to one column
 
       
-        super(WholesalerReceipts, self).save(*args, **kwargs)
+#         super(WholesalerReceipts, self).save(*args, **kwargs)
 
 
 class WholesalerPriceDiscountBanners(EntityRelatedModel):

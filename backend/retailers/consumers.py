@@ -143,26 +143,48 @@ class RetailerOutOfStocksConsumer(AsyncJsonWebsocketConsumer):
                     'out_of_stocks': json.loads(self.datum)
                    
                 })
-
-
 # retailers/consumers.py
 
-import datetime
-import decimal
 import json
-import uuid
+import time
+from datetime import timedelta
+from decimal import Decimal
 
+import numpy as np
+import pandas as pd
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.db import transaction
+from django.db.models import Sum
+from django.utils import timezone
+from sklearn.linear_model import LinearRegression
 
-from .models import RetailerReceipts
-from .serializers import RetailerReceiptsSerializer
+from products.models import Products
+from retailers.models import (
+    CustomerOrderItems,
+    IndentItemSource,
+    OutOfStock,
+    RetailerIndent,
+    RetailerIndentItem,
+    RetailerOrderItems,
+    RetailerReceipts,
+)
+from wholesalers.models import (
+    WholesalerPriceDiscounts,
+    WholesalerQuantityDiscounts,
+    WholesalerReceipts,
+)
 
 
 class UUIDEncoder(json.JSONEncoder):
     """Encoder for UUID / date / datetime / Decimal."""
 
     def default(self, obj):
+        import datetime
+        import decimal
+        import uuid
+
         if isinstance(obj, uuid.UUID):
             return str(obj)
         if isinstance(obj, (datetime.date, datetime.datetime)):
@@ -172,113 +194,1095 @@ class UUIDEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
+class RetailerInventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
     """
-    Live inventory feed for one retailer entity.
+    Real-time inventory prediction feed.
 
-    Group:  retail-inventory-<entity_id>
-    Event:  send_retailer_receipts
+    Mirrors the structure of RetailerInventoryConsumer:
+      - connect()             → join group, run helper_func, push
+      - disconnect()          → leave group
+      - send_retailer_predictions(event)
+                              → re-run helper_func, push
+      - helper_func()         → compute + serialize into self.datum
     """
+
+    # =========================================================
+    # Lifecycle
+    # =========================================================
+
+    @database_sync_to_async
+    def _resolve_entity(self, user):
+        """
+        Resolve the user's entity inside a thread pool.
+        `connect` runs on the async event loop; accessing
+        `user.entity` triggers a lazy sync FK query.
+        """
+        if not user or not user.is_authenticated:
+            return None
+        return getattr(user, "entity", None)
 
     async def connect(self):
-        self.user = self.scope.get('user')
+        self.user = self.scope["user"]
+        print("User at connect", self.user)
 
-        if not self.user or not self.user.is_authenticated:
+        if not self.user.is_authenticated:
             await self.close()
             return
 
-        entity_id = getattr(self.user, 'entity_id', None)
-        if not entity_id:
+        entity = await self._resolve_entity(self.user)
+        if not entity:
             await self.close()
             return
 
-        self.entity_id = str(entity_id)
-        self.group_name = f'retail-inventory-{self.entity_id}'
+        self.entity = entity
+        self.entity_id = str(entity.id)
+        self.group_name = f"retailer-predictions-{self.entity_id}"
 
         await self.channel_layer.group_add(
             self.group_name,
             self.channel_name,
         )
         await self.accept()
-        await self._send_current_inventory()
+
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+            "predictions": json.loads(self.datum),
+        })
 
     async def disconnect(self, close_code):
-        if hasattr(self, 'group_name'):
+        if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(
                 self.group_name,
                 self.channel_name,
             )
+        await self.close()
 
-    async def send_retailer_receipts(self, event):
-        await self._send_current_inventory()
+    # =========================================================
+    # Broadcast handler
+    # =========================================================
 
-    async def _send_current_inventory(self):
-        payload = await self._fetch_inventory()
-        await self.send_json({'inventory': payload})
+    async def send_retailer_predictions(self, event):
+        # Re-run the helper to refresh self.datum
+        await self.helper_func()
 
-    @database_sync_to_async
-    def _fetch_inventory(self):
-        qs = RetailerReceipts.objects.filter(
-            entity_id=self.entity_id,
-            current_unit_quantity__gte=0,
+        # Broadcast result to the group
+        await self.send_json({
+            "predictions": json.loads(self.datum),
+        })
+
+    # =========================================================
+    # Main computation
+    # =========================================================
+
+    @sync_to_async
+    def helper_func(self):
+        started = time.time()
+
+        # Use the cached entity — no sync FK lookup
+        entity = getattr(self, "entity", None)
+        if not entity:
+            self.datum = json.dumps([])
+            return
+
+        print(
+            f"[PREDICTION] START entity={entity.id} "
+            f"user={self.user.id}"
         )
 
-        sers = RetailerReceiptsSerializer(
-            qs,
-            many=True,
-            context={'request': None},
-        ).data
+        # ---- 1. Open indent ----
+        indent = (
+            RetailerIndent.objects
+            .filter(entity=entity, is_open="true")
+            .order_by("-created")
+            .first()
+        )
 
-        return json.loads(json.dumps(sers, cls=UUIDEncoder))
+        if not indent:
+            indent = RetailerIndent.objects.create(
+                entity=entity,
+                owner=self.user,
+                order_days=getattr(entity, "order_days", 30) or 30,
+                lead_time=0,
+                is_open="true",
+            )
 
-# class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
+        cycle_days = int(indent.order_days or 30)
+        budget_amount = indent.budget_amount
+        budget_enforced = indent.budget_enforced == "true"
+        pricing_percentage = float(
+            indent.pricing_percentage or 30
+        )
+        indent_lead_override = int(indent.lead_time or 0)
+
+        self.cycle_days = cycle_days
+        self.budget_amount = (
+            float(budget_amount) if budget_amount else None
+        )
+        self.budget_enforced = budget_enforced
+        self.pricing_percentage = pricing_percentage
+
+        today = timezone.now().date()
+
+        # ---- 2. Candidate products ----
+        r_pids = list(
+            RetailerReceipts.objects
+            .filter(entity=entity, is_active="true")
+            .values_list("product_id", flat=True)
+        )
+        o_pids = list(
+            OutOfStock.objects
+            .filter(entity=entity)
+            .values_list("product_id", flat=True)
+        )
+        pending_pids = set(
+            RetailerOrderItems.objects
+            .filter(
+                retailer_order__retailer=entity,
+                is_received="false",
+            )
+            .values_list(
+                "wholesaler_receipt__product_id", flat=True
+            )
+        )
+
+        candidate_pids = (set(r_pids) | set(o_pids)) - pending_pids
+
+        # ---- 3. Compute predictions ----
+        compiled = []
+        failed = 0
+
+        for p_id in candidate_pids:
+            try:
+                result = self._predict_product(
+                    p_id,
+                    entity,
+                    cycle_days,
+                    today,
+                    indent_lead_override,
+                )
+                if result:
+                    compiled.append(result)
+            except Exception as e:
+                failed += 1
+                print(
+                    f"[PREDICTION] FAILED product={p_id}: "
+                    f"{type(e).__name__}: {e}"
+                )
+
+        # ---- 4. Sort by urgency ----
+        compiled = self._sort_by_urgency(compiled)
+
+        # ---- 5. Sync indent + budget ----
+        try:
+            indent, budget_info = self._sync_indent(
+                entity, indent, cycle_days, compiled, today
+            )
+            self.retailer_indent_id = str(indent.id)
+            self.budget_info = budget_info
+        except Exception as e:
+            print(
+                f"[PREDICTION] INDENT SYNC FAILED: "
+                f"{type(e).__name__}: {e}"
+            )
+            self.retailer_indent_id = None
+            self.budget_info = None
+
+        # ---- 6. Lead time aggregate ----
+        lead_time_summary = self._compute_lead_time_summary(
+            compiled
+        )
+
+        try:
+            indent.average_lead_time_days = (
+                lead_time_summary["average_lead_time_days"]
+            )
+            indent.lead_time_updated_at = timezone.now()
+            indent.save(update_fields=[
+                "average_lead_time_days",
+                "lead_time_updated_at",
+            ])
+        except Exception:
+            pass
+
+        # ---- 7. Serialize ----
+        payload = {
+            "retailer_id": str(entity.id),
+            "retailer_name": getattr(
+                entity, "title", self.user.email
+            ),
+            "retailer_indent_id": self.retailer_indent_id,
+            "config": {
+                "order_days": cycle_days,
+                "lead_time_override": indent_lead_override,
+                "budget_amount": self.budget_amount,
+                "budget_enforced": budget_enforced,
+                "pricing_percentage": pricing_percentage,
+            },
+            "lead_time_summary": lead_time_summary,
+            "budget": self.budget_info,
+            "predictions": compiled,
+        }
+
+        self.datum = json.dumps(payload, cls=UUIDEncoder)
+
+        print(
+            f"[PREDICTION] DONE entity={entity.id} "
+            f"candidates={len(candidate_pids)} "
+            f"compiled={len(compiled)} failed={failed} "
+            f"avg_lead={lead_time_summary['average_lead_time_days']} "
+            f"in {time.time() - started:.2f}s"
+        )
+
+    # =========================================================
+    # Lead time
+    # =========================================================
+
+    def _estimate_supplier_lead_time(
+        self, entity, product=None, supplier=None,
+        lookback_days=365,
+    ):
+        since = timezone.now() - timedelta(days=lookback_days)
+
+        qs = RetailerReceipts.objects.filter(
+            entity=entity,
+            is_active="true",
+            retailer_order__isnull=False,
+            retailer_order__created__gte=since,
+        )
+        if product is not None:
+            qs = qs.filter(product=product)
+        if supplier is not None:
+            qs = qs.filter(received_from=supplier)
+
+        rows = qs.values("created", "retailer_order__created")
+
+        deltas = []
+        for r in rows:
+            placed = r["retailer_order__created"]
+            delivered = r["created"]
+            if placed and delivered and delivered > placed:
+                days = (delivered - placed).days
+                if 0 <= days <= 90:
+                    deltas.append(days)
+
+        if len(deltas) < 3:
+            return None
+
+        mean = sum(deltas) / len(deltas)
+        variance = (
+            sum((d - mean) ** 2 for d in deltas) / len(deltas)
+            if len(deltas) > 1 else 0
+        )
+
+        return {
+            "mean": round(mean, 2),
+            "stddev": round(variance ** 0.5, 2),
+            "samples": len(deltas),
+        }
+
+    def _resolve_lead_time(
+        self, entity, product, supplier,
+        indent_lead_override,
+    ):
+        learned = self._estimate_supplier_lead_time(
+            entity, product=product, supplier=supplier
+        )
+        source = "per_sku_supplier"
+
+        if not learned:
+            learned = self._estimate_supplier_lead_time(
+                entity, product=product
+            )
+            source = "per_sku"
+
+        if not learned:
+            learned = self._estimate_supplier_lead_time(
+                entity, supplier=supplier
+            )
+            source = "per_supplier"
+
+        if indent_lead_override and indent_lead_override > 0:
+            return (
+                int(indent_lead_override),
+                int(round(learned["stddev"])) if learned else 2,
+                "indent_override",
+            )
+
+        if not learned:
+            return (5, 2, "default")
+
+        return (
+            max(1, int(round(learned["mean"]))),
+            max(0, int(round(learned["stddev"]))),
+            source,
+        )
+
+    def _compute_lead_time_summary(self, compiled):
+        if not compiled:
+            return {
+                "average_lead_time_days": 0.0,
+                "average_variance_days": 0.0,
+                "min_lead_time_days": 0,
+                "max_lead_time_days": 0,
+                "item_count": 0,
+            }
+
+        lead_days_list = []
+        variance_list = []
+        weights = []
+
+        for p in compiled:
+            metrics = p.get("calculated_metrics", {})
+            lead_days_list.append(
+                metrics.get("supplier_lead_time_days", 0)
+            )
+            variance_list.append(
+                metrics.get("supplier_delay_days", 0)
+            )
+
+            suggested = (
+                p.get("order_suggestion", {})
+                .get("suggested_order_quantity", 0) or 0
+            )
+            unit_price = (
+                p.get("order_suggestion", {})
+                .get("supplier", {})
+                .get("unit_price") or 0
+            )
+            weights.append(suggested * unit_price)
+
+        total_weight = sum(weights) or 1
+
+        avg_lead = sum(
+            d * w for d, w in zip(lead_days_list, weights)
+        ) / total_weight
+        avg_var = sum(
+            v * w for v, w in zip(variance_list, weights)
+        ) / total_weight
+
+        return {
+            "average_lead_time_days": round(avg_lead, 2),
+            "average_variance_days": round(avg_var, 2),
+            "min_lead_time_days": min(lead_days_list),
+            "max_lead_time_days": max(lead_days_list),
+            "item_count": len(lead_days_list),
+        }
+
+    # =========================================================
+    # Urgency sort
+    # =========================================================
+
+    def _sort_by_urgency(self, predictions):
+        def key(p):
+            metrics = p.get("calculated_metrics", {})
+            daily = metrics.get("average_daily_demand", 0) or 0
+            lead = metrics.get("supplier_lead_time_days", 5) or 5
+            stock = (
+                p.get("current_stock_status", {})
+                .get("good_usable_units", 0) or 0
+            )
+            if daily <= 0:
+                return 999
+            days_left = stock / daily
+            return days_left / max(lead, 1)
+
+        return sorted(predictions, key=key)
+
+    # =========================================================
+    # Indent sync + budget
+    # =========================================================
+
+    def _sync_indent(
+        self, entity, indent, cycle_days, compiled, today,
+    ):
+        with transaction.atomic():
+            indent.order_days = cycle_days
+            indent.save(update_fields=["order_days"])
+
+            RetailerIndentItem.objects.filter(
+                retailer_indent=indent,
+                entity=entity,
+                source=IndentItemSource.PREDICTION,
+            ).delete()
+
+            budget_amount = (
+                Decimal(str(indent.budget_amount))
+                if indent.budget_amount else None
+            )
+            budget_enforced = indent.budget_enforced == "true"
+
+            included, excluded = self._apply_budget(
+                compiled, budget_amount, budget_enforced
+            )
+
+            for p in included:
+                metrics = p.get("calculated_metrics", {})
+                self._persist_indent_item(
+                    entity=entity,
+                    indent=indent,
+                    prediction=p,
+                    today=today,
+                    lead_days=metrics.get(
+                        "supplier_lead_time_days", 0
+                    ),
+                    lead_var=metrics.get(
+                        "supplier_delay_days", 0
+                    ),
+                    lead_source=metrics.get(
+                        "supplier_lead_time_source", "default"
+                    ),
+                )
+
+            total_cost = sum(
+                self._line_cost(p) for p in included
+            )
+            total_profit = Decimal("0")
+            total_revenue = Decimal("0")
+
+            for p in included:
+                est = (
+                    p.get("order_suggestion", {})
+                    .get("profit_estimate") or {}
+                )
+                if est:
+                    total_profit += Decimal(
+                        str(est.get("total_profit", 0))
+                    )
+                    total_revenue += Decimal(
+                        str(est.get("total_revenue", 0))
+                    )
+
+            budget_info = None
+            if budget_amount is not None:
+                budget_info = {
+                    "amount": float(budget_amount),
+                    "enforced": budget_enforced,
+                    "used": round(float(total_cost), 2),
+                    "remaining": round(
+                        float(
+                            max(
+                                Decimal("0"),
+                                budget_amount - total_cost,
+                            )
+                        ),
+                        2,
+                    ),
+                    "over_budget": total_cost > budget_amount,
+                    "included_count": len(included),
+                    "excluded_count": len(excluded),
+                    "projected_revenue": round(
+                        float(total_revenue), 2
+                    ),
+                    "projected_profit": round(
+                        float(total_profit), 2
+                    ),
+                }
+
+        return indent, budget_info
+
+    def _apply_budget(
+        self, predictions, budget_amount, enforce,
+    ):
+        if (
+            budget_amount is None
+            or budget_amount <= 0
+            or not enforce
+        ):
+            return predictions, []
+
+        included = []
+        excluded = []
+        running = Decimal("0")
+
+        for p in predictions:
+            cost = self._line_cost(p)
+            if running + cost <= budget_amount:
+                included.append(p)
+                running += cost
+            else:
+                excluded.append(p)
+
+        return included, excluded
+
+    def _line_cost(self, prediction):
+        suggested = (
+            prediction.get("order_suggestion", {})
+            .get("suggested_order_quantity", 0) or 0
+        )
+        unit_price = (
+            prediction.get("order_suggestion", {})
+            .get("supplier", {})
+            .get("unit_price") or 0
+        )
+        return Decimal(str(suggested)) * Decimal(str(unit_price))
+
+    # =========================================================
+    # Persist indent item
+    # =========================================================
+
+    def _persist_indent_item(
+        self, entity, indent, prediction, today,
+        lead_days, lead_var, lead_source,
+    ):
+        product_id = prediction.get("product_id")
+        if not product_id:
+            return
+
+        product = Products.objects.filter(id=product_id).first()
+        if not product:
+            return
+
+        suggestion = prediction.get("order_suggestion", {})
+        supplier_info = suggestion.get("supplier", {})
+
+        quantity = int(
+            suggestion.get("suggested_order_quantity", 0) or 0
+        )
+        if quantity <= 0:
+            return
+
+        target_receipt = None
+        supplier_id = supplier_info.get("id")
+        if supplier_id:
+            target_receipt = (
+                WholesalerReceipts.objects
+                .filter(
+                    product=product,
+                    entity_id=supplier_id,
+                    current_unit_quantity__gt=0,
+                )
+                .order_by("final_unit_selling_price")
+                .first()
+            )
+
+        base_price = Decimal("0.00")
+        if target_receipt:
+            base_price = Decimal(
+                str(target_receipt.unit_selling_price or 0)
+            )
+        else:
+            last_receipt = (
+                RetailerReceipts.objects
+                .filter(entity=entity, product=product)
+                .order_by("-created")
+                .first()
+            )
+            if last_receipt and last_receipt.unit_buying_price:
+                base_price = Decimal(
+                    str(last_receipt.unit_buying_price)
+                )
+
+        p_disc = self._resolve_active_price_discount(
+            target_receipt, today
+        )
+
+        final_unit_price = (
+            Decimal(str(p_disc.offer_price))
+            if p_disc else base_price
+        )
+
+        q_disc = self._resolve_active_quantity_discount(
+            target_receipt, quantity, today
+        )
+        total_quantity, _, _ = self._compute_bonus_quantity(
+            quantity, q_disc
+        )
+
+        gross = Decimal(str(quantity)) * base_price
+        net = Decimal(str(quantity)) * final_unit_price
+
+        profit = self._compute_profit(
+            receipt=target_receipt,
+            quantity=quantity,
+            final_unit_price=float(final_unit_price),
+        )
+
+        RetailerIndentItem.objects.create(
+            entity=entity,
+            owner=self.user,
+            retailer_indent=indent,
+            wholesale_receipt=target_receipt,
+            wholesaler_price_discount=p_disc,
+            wholesaler_quantity_discount=q_disc,
+            required_quantity=quantity,
+            total_quantity=total_quantity,
+            final_unit_price=final_unit_price,
+            item_gross_total_amount=gross,
+            item_net_total_amount=net,
+            profit_estimate=profit,
+            source=IndentItemSource.PREDICTION,
+            lead_time_days=lead_days,
+            lead_time_variance_days=lead_var,
+            lead_time_source=lead_source,
+        )
+
+    # =========================================================
+    # Discount resolution
+    # =========================================================
+
+    def _resolve_active_price_discount(self, receipt, today):
+        if not receipt:
+            return None
+        return (
+            WholesalerPriceDiscounts.objects
+            .filter(
+                wholesaler_receipt=receipt,
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+            )
+            .order_by("-percent")
+            .first()
+        )
+
+    def _resolve_active_quantity_discount(
+        self, receipt, quantity, today,
+    ):
+        if not receipt or quantity <= 0:
+            return None
+        return (
+            WholesalerQuantityDiscounts.objects
+            .filter(
+                wholesaler_receipt=receipt,
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+                limit_quantity__lte=quantity,
+            )
+            .prefetch_related("quantity_discount_banners")
+            .order_by("-limit_quantity")
+            .first()
+        )
+
+    def _compute_bonus_quantity(self, quantity, discount):
+        if not discount or not discount.limit_quantity:
+            return quantity, 0, 0
+
+        full_blocks = quantity // discount.limit_quantity
+        bonus = full_blocks * discount.awarded_quantity
+
+        return quantity + bonus, bonus, full_blocks
+
+    # =========================================================
+    # Profit
+    # =========================================================
+
+    def _compute_profit(
+        self, receipt, quantity, final_unit_price,
+    ):
+        cost_per_unit = Decimal(str(final_unit_price or 0))
+
+        if receipt and receipt.recommended_retail_price:
+            sell_per_unit = Decimal(
+                str(receipt.recommended_retail_price)
+            )
+            pricing_source = "recommended_retail_price"
+        else:
+            markup = (
+                Decimal(str(self.pricing_percentage or 30))
+                / Decimal("100")
+            )
+            sell_per_unit = cost_per_unit * (
+                Decimal("1") + markup
+            )
+            pricing_source = "retailer_markup"
+
+        profit_per_unit = sell_per_unit - cost_per_unit
+
+        total_cost = cost_per_unit * Decimal(str(quantity))
+        total_revenue = sell_per_unit * Decimal(str(quantity))
+        total_profit = total_revenue - total_cost
+
+        margin_percent = Decimal("0")
+        if sell_per_unit > 0:
+            margin_percent = (
+                profit_per_unit / sell_per_unit
+            ) * Decimal("100")
+
+        return {
+            "cost_per_unit": float(cost_per_unit),
+            "sell_per_unit": float(sell_per_unit),
+            "pricing_source": pricing_source,
+            "profit_per_unit": float(
+                round(profit_per_unit, 2)
+            ),
+            "margin_percent": float(
+                round(margin_percent, 2)
+            ),
+            "total_cost": float(round(total_cost, 2)),
+            "total_revenue": float(
+                round(total_revenue, 2)
+            ),
+            "total_profit": float(
+                round(total_profit, 2)
+            ),
+        }
+
+    # =========================================================
+    # Per-product prediction
+    # =========================================================
+
+    def _predict_product(
+        self, p_id, entity, cycle_days, today,
+        indent_lead_override,
+    ):
+        product = Products.objects.filter(
+            id=p_id, active=True
+        ).first()
+        if not product:
+            return None
+
+        sales_rows = list(
+            CustomerOrderItems.objects
+            .filter(
+                retailer_receipt__product_id=product.id,
+                customer_order__entity=entity,
+                customer_order__status="COMPLETED",
+            )
+            .values(
+                "customer_order__created",
+                "purchased_quantity",
+            )
+        )
+
+        oos_rows = list(
+            OutOfStock.objects
+            .filter(product_id=product.id, entity=entity)
+            .values("created", "required_quantity")
+        )
+
+        daily_demand = self._estimate_daily_demand(
+            sales_rows, oos_rows
+        )
+        if daily_demand is None:
+            return None
+
+        supplier_receipt = (
+            WholesalerReceipts.objects
+            .filter(
+                product=product,
+                current_unit_quantity__gt=0,
+            )
+            .select_related("received_from")
+            .order_by("final_unit_selling_price")
+            .first()
+        )
+
+        supplier_entity = (
+            supplier_receipt.received_from
+            if supplier_receipt
+            and supplier_receipt.received_from
+            else None
+        )
+
+        lead_days, lead_var, lead_source = (
+            self._resolve_lead_time(
+                entity=entity,
+                product=product,
+                supplier=supplier_entity,
+                indent_lead_override=indent_lead_override,
+            )
+        )
+
+        total_days = lead_days + lead_var + cycle_days
+        cutoff = today + timedelta(days=int(total_days))
+
+        batches = (
+            RetailerReceipts.objects
+            .filter(
+                product=product,
+                entity=entity,
+                is_active="true",
+                current_unit_quantity__gt=0,
+            )
+            .order_by("expiry_date")
+        )
+
+        usable = 0
+        expiring = 0
+        batch_log = []
+
+        for b in batches:
+            will_expire = bool(
+                b.expiry_date and b.expiry_date <= cutoff
+            )
+            batch_log.append({
+                "batch_number": b.batch,
+                "expiry_date": (
+                    b.expiry_date.isoformat()
+                    if b.expiry_date else None
+                ),
+                "units_remaining": b.current_unit_quantity,
+                "will_expire_during_plan_period": will_expire,
+            })
+            if will_expire:
+                expiring += b.current_unit_quantity
+            else:
+                usable += b.current_unit_quantity
+
+        pending = (
+            RetailerOrderItems.objects
+            .filter(
+                wholesaler_receipt__product_id=product.id,
+                retailer_order__retailer=entity,
+                retailer_order__status__in=[
+                    "SUBMITTED", "PROCESSING", "DISPATCHED",
+                ],
+                is_received="false",
+            )
+            .aggregate(t=Sum("purchased_quantity"))["t"]
+            or 0
+        )
+
+        backlog = (
+            OutOfStock.objects
+            .filter(
+                product=product,
+                entity=entity,
+                is_ordered="false",
+                created__gte=(
+                    today - timedelta(days=int(cycle_days))
+                ),
+            )
+            .aggregate(t=Sum("required_quantity"))["t"]
+            or 0
+        )
+
+        safety_stock = self._estimate_safety_stock(
+            sales_rows, oos_rows
+        )
+
+        needed = (
+            int(round(daily_demand * total_days)) + safety_stock
+        )
+        suggested = max(
+            0, (needed - usable - pending)
+        ) + backlog
+
+        if suggested <= 0:
+            return None
+
+        active_price_disc = self._resolve_active_price_discount(
+            supplier_receipt, today
+        )
+        active_qty_disc = self._resolve_active_quantity_discount(
+            supplier_receipt, int(suggested), today
+        )
+        total_quantity, bonus_quantity, full_blocks = (
+            self._compute_bonus_quantity(
+                int(suggested), active_qty_disc
+            )
+        )
+
+        effective_purchase_price = 0.0
+        if active_price_disc:
+            effective_purchase_price = float(
+                active_price_disc.offer_price
+            )
+        elif supplier_receipt:
+            effective_purchase_price = float(
+                supplier_receipt.unit_selling_price
+            )
+
+        profit = self._compute_profit(
+            receipt=supplier_receipt,
+            quantity=int(suggested),
+            final_unit_price=effective_purchase_price,
+        )
+
+        supplier_payload = {
+            "id": (
+                str(supplier_receipt.received_from.id)
+                if supplier_receipt
+                and supplier_receipt.received_from
+                else None
+            ),
+            "name": (
+                supplier_receipt.received_from.title
+                if supplier_receipt
+                and supplier_receipt.received_from
+                else None
+            ),
+            "unit_price": effective_purchase_price,
+            "normal_price": (
+                float(supplier_receipt.unit_selling_price)
+                if supplier_receipt else None
+            ),
+            "is_discounted": active_price_disc is not None,
+            "discount_percent": (
+                float(active_price_disc.percent)
+                if active_price_disc else 0.0
+            ),
+            "price_promotion": (
+                {
+                    "title": active_price_disc.title,
+                    "start": active_price_disc.start.isoformat(),
+                    "end": active_price_disc.end.isoformat(),
+                }
+                if active_price_disc else None
+            ),
+            "quantity_promotion": (
+                {
+                    "id": str(active_qty_disc.id),
+                    "title": active_qty_disc.title,
+                    "buy_quantity": active_qty_disc.limit_quantity,
+                    "free_quantity": active_qty_disc.awarded_quantity,
+                    "start": active_qty_disc.start.isoformat(),
+                    "end": active_qty_disc.end.isoformat(),
+                    "blocks_earned": full_blocks,
+                }
+                if active_qty_disc else None
+            ),
+        }
+
+        return {
+            "product_id": str(product.id),
+            "product_title": product.product_name(),
+            "sku": getattr(product, "bar_code", None),
+            "is_drug": product.check_is_drug,
+            "calculated_metrics": {
+                "average_daily_demand": float(
+                    round(daily_demand, 4)
+                ),
+                "supplier_lead_time_days": lead_days,
+                "supplier_lead_time_source": lead_source,
+                "supplier_delay_days": lead_var,
+                "safety_stock_units": safety_stock,
+                "total_days_planned_for": total_days,
+                "total_units_needed": needed,
+            },
+            "current_stock_status": {
+                "total_physical_on_hand": usable + expiring,
+                "good_usable_units": usable,
+                "expiring_units_warning": expiring,
+                "units_already_ordered": int(pending),
+                "customer_waitlist_units": int(backlog),
+                "existing_expiries": batch_log,
+            },
+            "order_suggestion": {
+                "suggested_order_quantity": int(suggested),
+                "total_quantity_after_bonus": total_quantity,
+                "bonus_quantity_earned": bonus_quantity,
+                "supplier": supplier_payload,
+                "profit_estimate": profit,
+            },
+        }
+
+    # =========================================================
+    # Demand + safety stock helpers
+    # =========================================================
+
+    def _estimate_daily_demand(self, sales_rows, oos_rows):
+        daily = self._combine_daily(sales_rows, oos_rows)
+        if len(daily) < 3:
+            return None
+
+        df = pd.DataFrame(daily)
+        df["d"] = pd.to_datetime(df["d"])
+        df.set_index("d", inplace=True)
+
+        monthly = df.resample("ME")["q"].sum().reset_index()
+        if len(monthly) < 3:
+            return None
+
+        monthly["idx"] = np.arange(len(monthly))
+
+        model = LinearRegression().fit(
+            monthly[["idx"]].values,
+            monthly["q"].values,
+        )
+
+        next_total = max(
+            0,
+            float(model.predict(np.array([[len(monthly)]]))[0]),
+        )
+        return next_total / 30.4
+
+    def _estimate_safety_stock(self, sales_rows, oos_rows):
+        daily = self._combine_daily(sales_rows, oos_rows)
+        if len(daily) < 2:
+            return 0
+
+        df = pd.DataFrame(daily)
+        df["d"] = pd.to_datetime(df["d"])
+        df.set_index("d", inplace=True)
+
+        weekly = df.resample("W")["q"].sum()
+        if len(weekly) < 2 or pd.isna(weekly.std()):
+            return 0
+
+        return int(round((weekly.std() / 7) * 1.65))
+
+    def _combine_daily(self, sales_rows, oos_rows):
+        combined = []
+        for r in sales_rows:
+            dt = r["customer_order__created"]
+            if dt is None:
+                continue
+            combined.append({
+                "d": dt.date() if hasattr(dt, "date") else dt,
+                "q": int(r["purchased_quantity"] or 0),
+            })
+        for r in oos_rows:
+            dt = r["created"]
+            if dt is None:
+                continue
+            combined.append({
+                "d": dt.date() if hasattr(dt, "date") else dt,
+                "q": int(r["required_quantity"] or 0),
+            })
+        return combined
+
+class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
     
-#     async def connect(self):
-#         self.user = self.scope["user"]
-#         print("User at connect", self.user)
-#         if not self.user.is_authenticated:
-#             return
+    async def connect(self):
+        self.user = self.scope["user"]
+        print("User at connect", self.user)
+        if not self.user.is_authenticated:
+            return
         
-#         await self.channel_layer.group_add(
-#             f'retail-inventory',
-#             self.channel_name
-#         )
-#         await self.accept()
-#         await self.helper_func()
+        await self.channel_layer.group_add(
+            f'retail-inventory',
+            self.channel_name
+        )
+        await self.accept()
+        await self.helper_func()
 
-#         # Broadcast result to the group
-#         await self.send_json({
-#                     'inventory': json.loads(self.datum),
+        # Broadcast result to the group
+        await self.send_json({
+                    'inventory': json.loads(self.datum),
                     
-#                 })
+                })
 
-#     async def disconnect(self, close_code):
-#         await self.channel_layer.group_discard(
-#             'retail-inventory',
-#             self.channel_name
-#         )
-#         await self.close()
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            'retail-inventory',
+            self.channel_name
+        )
+        await self.close()
 
-#     @sync_to_async
-#     def helper_func(self):
-#         retailer_receipts = RetailerReceipts.objects.filter(entity=self.user.entity,current_unit_quantity__gte=0)
-#         self.retailer_receipts = retailer_receipts
-#         sers =RetailerReceiptsSerializer(retailer_receipts,many=True,context={'request': None}).data
-#         data=json.dumps(sers,cls=UUIDEncoder)
+    @sync_to_async
+    def helper_func(self):
+        retailer_receipts = RetailerReceipts.objects.filter(entity=self.user.entity,current_unit_quantity__gte=0)
+        self.retailer_receipts = retailer_receipts
+        sers =RetailerReceiptsSerializer(retailer_receipts,many=True,context={'request': None}).data
+        data=json.dumps(sers,cls=UUIDEncoder)
  
         
-#         self.datum=data
+        self.datum=data
 
 
-#     async def send_retailer_receipts(self, event):
-#         # Call the heper async Function
-#         await self.helper_func()
+    async def send_retailer_receipts(self, event):
+        # Call the heper async Function
+        await self.helper_func()
 
-#         # Broadcast result to the group
-#         await self.send_json({
-#                     'inventory': json.loads(self.datum),
+        # Broadcast result to the group
+        await self.send_json({
+                    'inventory': json.loads(self.datum),
                     
-#                 })
+                })
         
 class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
     
@@ -917,111 +1921,1222 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
                 })
 
 
-import json, numpy as np, pandas as pd
-from decimal import Decimal
-from django.utils import timezone
-from django.db.models import Sum
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from asgiref.sync import sync_to_async
-from sklearn.linear_model import LinearRegression
-from products.models import Products
-from .models import RetailerReceipts, OutOfStock, CustomerOrderItems, RetailerOrders, RetailerOrderItems, WholesalerReceipts
+# retailers/consumers.py
 
-class InventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
+import datetime
+import decimal
+import json
+import time
+import uuid
+from datetime import timedelta
+from decimal import Decimal
+
+import numpy as np
+import pandas as pd
+from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.db import transaction
+from django.db.models import Sum
+from django.utils import timezone
+from sklearn.linear_model import LinearRegression
+
+from products.models import Products
+from retailers.models import (
+    CustomerOrderItems,
+    IndentItemSource,
+    OutOfStock,
+    RetailerIndent,
+    RetailerIndentItem,
+    RetailerOrderItems,
+    RetailerReceipts,
+)
+from wholesalers.models import (
+    WholesalerPriceDiscounts,
+    WholesalerQuantityDiscounts,
+    WholesalerReceipts,
+)
+
+
+class UUIDEncoder(json.JSONEncoder):
+    """Encoder for UUID / date / datetime / Decimal."""
+
+    def default(self, obj):
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        if isinstance(obj, decimal.Decimal):
+            return str(obj)
+        return super().default(obj)
+
+
+class RetailerInventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Real-time inventory prediction feed.
+
+    Mirrors the structure of RetailerInventoryConsumer:
+      - connect()             → join group, run helper_func, push
+      - disconnect()          → leave group
+      - send_retailer_predictions(event)
+                              → re-run helper_func, push
+      - helper_func()         → compute + serialize into self.datum
+    """
+
+    # =========================================================
+    # Lifecycle
+    # =========================================================
+
+    @database_sync_to_async
+    def _resolve_entity(self, user):
+        """
+        Resolve the user's entity inside a thread pool.
+        Accessing `user.entity` triggers a lazy sync FK query,
+        which is not allowed on the async event loop.
+        """
+        if not user or not user.is_authenticated:
+            return None
+        return getattr(user, "entity", None)
+
     async def connect(self):
         self.user = self.scope["user"]
-        if not self.user.is_authenticated: return
-        await self.channel_layer.group_add('inventory-predictions', self.channel_name)
+        print("User at connect", self.user)
+
+        if not self.user.is_authenticated:
+            await self.close()
+            return
+
+        entity = await self._resolve_entity(self.user)
+        if not entity:
+            await self.close()
+            return
+
+        self.entity = entity
+        self.entity_id = str(entity.id)
+        self.group_name = f"retailer-predictions-{self.entity_id}"
+
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name,
+        )
         await self.accept()
+
         await self.helper_func()
-        await self.send_json({'status': 'completed', 'retailer_id': str(self.retailer_id) if self.retailer_id else None, 'retailer_name': self.retailer_name, 'predictions': json.loads(self.predictions)})
+
+        # Broadcast result to the group
+        await self.send_json({
+            "predictions": json.loads(self.datum),
+        })
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard('inventory-predictions', self.channel_name)
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name,
+            )
         await self.close()
+
+    # =========================================================
+    # Broadcast handler
+    # =========================================================
+
+    async def send_retailer_predictions(self, event):
+        # Re-run the helper to refresh self.datum
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+            "predictions": json.loads(self.datum),
+        })
+
+    # =========================================================
+    # Main computation
+    # =========================================================
 
     @sync_to_async
     def helper_func(self):
-        ent = getattr(self.user, 'entity', None) or getattr(getattr(self.user, 'employee', None), 'entity', None)
-        if not ent:
-            self.retailer_id, self.retailer_name, self.predictions = None, None, json.dumps([])
+        started = time.time()
+
+        entity = getattr(self, "entity", None)
+        if not entity:
+            self.datum = json.dumps({"predictions": []})
             return
-        self.retailer_id, self.retailer_name, cycle_days, today = ent.id, getattr(ent, 'title', self.user.username), getattr(ent, 'order_days', 30), timezone.now().date()
-        
-        r_pids = list(RetailerReceipts.objects.filter(received_from=ent, is_active="true").values_list('product_id', flat=True))
-        if not r_pids: r_pids = list(RetailerReceipts.objects.filter(owner=self.user, is_active="true").values_list('product_id', flat=True))
-        o_pids = list(OutOfStock.objects.filter(owner_id=self.user.id).values_list('product_id', flat=True))
-        p_ids = set(r_pids + o_pids)
+
+        print(
+            f"[PREDICTION] START entity={entity.id} "
+            f"user={self.user.id}"
+        )
+
+        # ---- 1. Open indent ----
+        indent = (
+            RetailerIndent.objects
+            .filter(entity=entity, is_open="true")
+            .order_by("-created")
+            .first()
+        )
+
+        if not indent:
+            indent = RetailerIndent.objects.create(
+                entity=entity,
+                owner=self.user,
+                order_days=30,          # ← hard default
+                lead_time=0,
+                is_open="true",
+            )
+
+        cycle_days = int(indent.order_days or 30)
+        budget_amount = indent.budget_amount
+        budget_enforced = indent.budget_enforced == "true"
+        pricing_percentage = float(
+            indent.pricing_percentage or 30
+        )
+        indent_lead_override = int(indent.lead_time or 0)
+
+        self.cycle_days = cycle_days
+        self.budget_amount = (
+            float(budget_amount) if budget_amount else None
+        )
+        self.budget_enforced = budget_enforced
+        self.pricing_percentage = pricing_percentage
+
+        today = timezone.now().date()
+
+        # ---- 2. Candidate products ----
+        r_pids = list(
+            RetailerReceipts.objects
+            .filter(entity=entity, is_active="true")
+            .values_list("product_id", flat=True)
+        )
+        o_pids = list(
+            OutOfStock.objects
+            .filter(entity=entity)
+            .values_list("product_id", flat=True)
+        )
+        pending_pids = set(
+            RetailerOrderItems.objects
+            .filter(
+                retailer_order__retailer=entity,
+                is_received="false",
+            )
+            .values_list(
+                "wholesaler_receipt__product_id", flat=True
+            )
+        )
+
+        candidate_pids = (set(r_pids) | set(o_pids)) - pending_pids
+
+        # ---- 3. Compute predictions ----
         compiled = []
+        failed = 0
 
-        for p_id in p_ids:
+        for p_id in candidate_pids:
             try:
-                p = Products.objects.filter(id=p_id, active=True).first()
-                if not p: continue
+                result = self._predict_product(
+                    p_id,
+                    entity,
+                    cycle_days,
+                    today,
+                    indent_lead_override,
+                )
+                if result:
+                    compiled.append(result)
+            except Exception as e:
+                failed += 1
+                print(
+                    f"[PREDICTION] FAILED product={p_id}: "
+                    f"{type(e).__name__}: {e}"
+                )
+
+        # ---- 4. Sort by urgency ----
+        compiled = self._sort_by_urgency(compiled)
+
+        # ---- 5. Sync indent + budget ----
+        try:
+            indent, budget_info = self._sync_indent(
+                entity, indent, cycle_days, compiled, today
+            )
+            self.retailer_indent_id = str(indent.id)
+            self.budget_info = budget_info
+        except Exception as e:
+            print(
+                f"[PREDICTION] INDENT SYNC FAILED: "
+                f"{type(e).__name__}: {e}"
+            )
+            self.retailer_indent_id = None
+            self.budget_info = None
+
+        # ---- 6. Lead time aggregate ----
+        lead_time_summary = self._compute_lead_time_summary(
+            compiled
+        )
+
+        try:
+            indent.average_lead_time_days = (
+                lead_time_summary["average_lead_time_days"]
+            )
+            indent.lead_time_updated_at = timezone.now()
+            indent.save(update_fields=[
+                "average_lead_time_days",
+                "lead_time_updated_at",
+            ])
+        except Exception:
+            pass
+
+        # ---- 7. Serialize into self.datum ----
+        payload = {
+            "retailer_id": str(entity.id),
+            "retailer_name": getattr(
+                entity, "title", self.user.email
+            ),
+            "retailer_indent_id": self.retailer_indent_id,
+            "config": {
+                "order_days": cycle_days,
+                "lead_time_override": indent_lead_override,
+                "budget_amount": self.budget_amount,
+                "budget_enforced": budget_enforced,
+                "pricing_percentage": pricing_percentage,
+            },
+            "lead_time_summary": lead_time_summary,
+            "budget": self.budget_info,
+            "predictions": compiled,
+        }
+
+        self.datum = json.dumps(payload, cls=UUIDEncoder)
+
+        print(
+            f"[PREDICTION] DONE entity={entity.id} "
+            f"candidates={len(candidate_pids)} "
+            f"compiled={len(compiled)} failed={failed} "
+            f"avg_lead={lead_time_summary['average_lead_time_days']} "
+            f"in {time.time() - started:.2f}s"
+        )
+
+    # =========================================================
+    # Lead time
+    # =========================================================
+
+    def _estimate_supplier_lead_time(
+        self, entity, product=None, supplier=None,
+        lookback_days=365,
+    ):
+        since = timezone.now() - timedelta(days=lookback_days)
+
+        qs = RetailerReceipts.objects.filter(
+            entity=entity,
+            is_active="true",
+            retailer_order__isnull=False,
+            retailer_order__created__gte=since,
+        )
+        if product is not None:
+            qs = qs.filter(product=product)
+        if supplier is not None:
+            qs = qs.filter(received_from=supplier)
+
+        rows = qs.values("created", "retailer_order__created")
+
+        deltas = []
+        for r in rows:
+            placed = r["retailer_order__created"]
+            delivered = r["created"]
+            if placed and delivered and delivered > placed:
+                days = (delivered - placed).days
+                if 0 <= days <= 90:
+                    deltas.append(days)
+
+        if len(deltas) < 3:
+            return None
+
+        mean = sum(deltas) / len(deltas)
+        variance = (
+            sum((d - mean) ** 2 for d in deltas) / len(deltas)
+            if len(deltas) > 1 else 0
+        )
+
+        return {
+            "mean": round(mean, 2),
+            "stddev": round(variance ** 0.5, 2),
+            "samples": len(deltas),
+        }
+
+    def _resolve_lead_time(
+        self, entity, product, supplier,
+        indent_lead_override,
+    ):
+        learned = self._estimate_supplier_lead_time(
+            entity, product=product, supplier=supplier
+        )
+        source = "per_sku_supplier"
+
+        if not learned:
+            learned = self._estimate_supplier_lead_time(
+                entity, product=product
+            )
+            source = "per_sku"
+
+        if not learned:
+            learned = self._estimate_supplier_lead_time(
+                entity, supplier=supplier
+            )
+            source = "per_supplier"
+
+        if indent_lead_override and indent_lead_override > 0:
+            return (
+                int(indent_lead_override),
+                int(round(learned["stddev"])) if learned else 2,
+                "indent_override",
+            )
+
+        if not learned:
+            return (5, 2, "default")
+
+        return (
+            max(1, int(round(learned["mean"]))),
+            max(0, int(round(learned["stddev"]))),
+            source,
+        )
+
+    def _compute_lead_time_summary(self, compiled):
+        if not compiled:
+            return {
+                "average_lead_time_days": 0.0,
+                "average_variance_days": 0.0,
+                "min_lead_time_days": 0,
+                "max_lead_time_days": 0,
+                "item_count": 0,
+            }
+
+        lead_days_list = []
+        variance_list = []
+        weights = []
+
+        for p in compiled:
+            metrics = p.get("calculated_metrics", {})
+            lead_days_list.append(
+                metrics.get("supplier_lead_time_days", 0)
+            )
+            variance_list.append(
+                metrics.get("supplier_delay_days", 0)
+            )
+
+            suggested = (
+                p.get("order_suggestion", {})
+                .get("suggested_order_quantity", 0) or 0
+            )
+            unit_price = (
+                p.get("order_suggestion", {})
+                .get("supplier", {})
+                .get("unit_price") or 0
+            )
+            weights.append(suggested * unit_price)
+
+        total_weight = sum(weights) or 1
+
+        avg_lead = sum(
+            d * w for d, w in zip(lead_days_list, weights)
+        ) / total_weight
+        avg_var = sum(
+            v * w for v, w in zip(variance_list, weights)
+        ) / total_weight
+
+        return {
+            "average_lead_time_days": round(avg_lead, 2),
+            "average_variance_days": round(avg_var, 2),
+            "min_lead_time_days": min(lead_days_list),
+            "max_lead_time_days": max(lead_days_list),
+            "item_count": len(lead_days_list),
+        }
+
+    # =========================================================
+    # Urgency sort
+    # =========================================================
+
+    def _sort_by_urgency(self, predictions):
+        def key(p):
+            metrics = p.get("calculated_metrics", {})
+            daily = metrics.get("average_daily_demand", 0) or 0
+            lead = metrics.get("supplier_lead_time_days", 5) or 5
+            stock = (
+                p.get("current_stock_status", {})
+                .get("good_usable_units", 0) or 0
+            )
+            if daily <= 0:
+                return 999
+            days_left = stock / daily
+            return days_left / max(lead, 1)
+
+        return sorted(predictions, key=key)
+
+    # =========================================================
+    # Indent sync + budget
+    # =========================================================
+
+    def _sync_indent(
+        self, entity, indent, cycle_days, compiled, today,
+    ):
+        with transaction.atomic():
+            indent.order_days = cycle_days
+            indent.save(update_fields=["order_days"])
+
+            # Only rebuild PREDICTION-sourced lines.
+            # PREDICTION_EDITED, USER_ADDED, WHOLESALER_ADDED
+            # and IMPORTED lines survive.
+            RetailerIndentItem.objects.filter(
+                retailer_indent=indent,
+                entity=entity,
+                source=IndentItemSource.PREDICTION,
+            ).delete()
+
+            budget_amount = (
+                Decimal(str(indent.budget_amount))
+                if indent.budget_amount else None
+            )
+            budget_enforced = indent.budget_enforced == "true"
+
+            # Apply budget to the *new* prediction lines only.
+            # Existing user-added/edited lines are assumed to be
+            # intentional and are not trimmed.
+            included, excluded = self._apply_budget(
+                compiled, budget_amount, budget_enforced
+            )
+
+            for p in included:
+                metrics = p.get("calculated_metrics", {})
+                self._persist_indent_item(
+                    entity=entity,
+                    indent=indent,
+                    prediction=p,
+                    today=today,
+                    lead_days=metrics.get(
+                        "supplier_lead_time_days", 0
+                    ),
+                    lead_var=metrics.get(
+                        "supplier_delay_days", 0
+                    ),
+                    lead_source=metrics.get(
+                        "supplier_lead_time_source", "default"
+                    ),
+                )
+
+            # ---------------------------------------------------
+            # Recompute totals from the DB so user-edited
+            # quantities are counted.
+            # ---------------------------------------------------
+            db_items = RetailerIndentItem.objects.filter(
+                retailer_indent=indent,
+                entity=entity,
+            )
+
+            total_cost = Decimal("0")
+            total_profit = Decimal("0")
+            total_revenue = Decimal("0")
+
+            for item in db_items:
+                total_cost += Decimal(
+                    str(item.item_net_total_amount or 0)
+                )
+                if item.profit_estimate:
+                    total_profit += Decimal(
+                        str(
+                            item.profit_estimate.get(
+                                "total_profit", 0
+                            )
+                        )
+                    )
+                    total_revenue += Decimal(
+                        str(
+                            item.profit_estimate.get(
+                                "total_revenue", 0
+                            )
+                        )
+                    )
+
+            budget_info = None
+            if budget_amount is not None:
+                budget_info = {
+                    "amount": float(budget_amount),
+                    "enforced": budget_enforced,
+                    "used": round(float(total_cost), 2),
+                    "remaining": round(
+                        float(
+                            max(
+                                Decimal("0"),
+                                budget_amount - total_cost,
+                            )
+                        ),
+                        2,
+                    ),
+                    "over_budget": total_cost > budget_amount,
+                    "included_count": db_items.count(),
+                    "excluded_count": len(excluded),
+                    "projected_revenue": round(
+                        float(total_revenue), 2
+                    ),
+                    "projected_profit": round(
+                        float(total_profit), 2
+                    ),
+                }
+
+        return indent, budget_info
+
+    def _apply_budget(
+        self, predictions, budget_amount, enforce,
+    ):
+        if (
+            budget_amount is None
+            or budget_amount <= 0
+            or not enforce
+        ):
+            return predictions, []
+
+        included = []
+        excluded = []
+        running = Decimal("0")
+
+        for p in predictions:
+            cost = self._line_cost(p)
+            if running + cost <= budget_amount:
+                included.append(p)
+                running += cost
+            else:
+                excluded.append(p)
+
+        return included, excluded
+
+    def _line_cost(self, prediction):
+        suggested = (
+            prediction.get("order_suggestion", {})
+            .get("suggested_order_quantity", 0) or 0
+        )
+        unit_price = (
+            prediction.get("order_suggestion", {})
+            .get("supplier", {})
+            .get("unit_price") or 0
+        )
+        return Decimal(str(suggested)) * Decimal(str(unit_price))
+
+    # =========================================================
+    # Persist indent item
+    # =========================================================
+
+    def _persist_indent_item(
+        self, entity, indent, prediction, today,
+        lead_days, lead_var, lead_source,
+    ):
+        product_id = prediction.get("product_id")
+        if not product_id:
+            return
+
+        product = Products.objects.filter(id=product_id).first()
+        if not product:
+            return
+
+        suggestion = prediction.get("order_suggestion", {})
+        supplier_info = suggestion.get("supplier", {})
+
+        quantity = int(
+            suggestion.get("suggested_order_quantity", 0) or 0
+        )
+        if quantity <= 0:
+            return
+
+        target_receipt = None
+        supplier_id = supplier_info.get("id")
+        if supplier_id:
+            target_receipt = (
+                WholesalerReceipts.objects
+                .filter(
+                    product=product,
+                    entity_id=supplier_id,
+                    current_unit_quantity__gt=0,
+                )
+                .order_by("final_unit_selling_price")
+                .first()
+            )
+
+        base_price = Decimal("0.00")
+        if target_receipt:
+            base_price = Decimal(
+                str(target_receipt.unit_selling_price or 0)
+            )
+        else:
+            last_receipt = (
+                RetailerReceipts.objects
+                .filter(entity=entity, product=product)
+                .order_by("-created")
+                .first()
+            )
+            if last_receipt and last_receipt.unit_buying_price:
+                base_price = Decimal(
+                    str(last_receipt.unit_buying_price)
+                )
+
+        p_disc = self._resolve_active_price_discount(
+            target_receipt, today
+        )
+
+        final_unit_price = (
+            Decimal(str(p_disc.offer_price))
+            if p_disc else base_price
+        )
+
+        q_disc = self._resolve_active_quantity_discount(
+            target_receipt, quantity, today
+        )
+        total_quantity, _, _ = self._compute_bonus_quantity(
+            quantity, q_disc
+        )
+
+        gross = Decimal(str(quantity)) * base_price
+        net = Decimal(str(quantity)) * final_unit_price
+
+        profit = self._compute_profit(
+            receipt=target_receipt,
+            quantity=quantity,
+            final_unit_price=float(final_unit_price),
+        )
+
+        RetailerIndentItem.objects.create(
+            entity=entity,
+            owner=self.user,
+            retailer_indent=indent,
+            wholesale_receipt=target_receipt,
+            wholesaler_price_discount=p_disc,
+            wholesaler_quantity_discount=q_disc,
+            required_quantity=quantity,
+            total_quantity=total_quantity,
+            final_unit_price=final_unit_price,
+            item_gross_total_amount=gross,
+            item_net_total_amount=net,
+            profit_estimate=profit,
+            source=IndentItemSource.PREDICTION,
+            lead_time_days=lead_days,
+            lead_time_variance_days=lead_var,
+            lead_time_source=lead_source,
+        )
+
+    # =========================================================
+    # Discount resolution
+    # =========================================================
+
+    def _resolve_active_price_discount(self, receipt, today):
+        if not receipt:
+            return None
+        return (
+            WholesalerPriceDiscounts.objects
+            .filter(
+                wholesaler_receipt=receipt,
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+            )
+            .order_by("-percent")
+            .first()
+        )
+
+    def _resolve_active_quantity_discount(
+        self, receipt, quantity, today,
+    ):
+        if not receipt or quantity <= 0:
+            return None
+        return (
+            WholesalerQuantityDiscounts.objects
+            .filter(
+                wholesaler_receipt=receipt,
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+                limit_quantity__lte=quantity,
+            )
+            .order_by("-limit_quantity")
+            .first()
+        )
+
+    def _compute_bonus_quantity(self, quantity, discount):
+        if not discount or not discount.limit_quantity:
+            return quantity, 0, 0
+
+        full_blocks = quantity // discount.limit_quantity
+        bonus = full_blocks * discount.awarded_quantity
+
+        return quantity + bonus, bonus, full_blocks
+
+    # =========================================================
+    # Profit
+    # =========================================================
+
+    def _compute_profit(
+        self, receipt, quantity, final_unit_price,
+    ):
+        cost_per_unit = Decimal(str(final_unit_price or 0))
+
+        if receipt and receipt.recommended_retail_price:
+            sell_per_unit = Decimal(
+                str(receipt.recommended_retail_price)
+            )
+            pricing_source = "recommended_retail_price"
+        else:
+            markup = (
+                Decimal(str(self.pricing_percentage or 30))
+                / Decimal("100")
+            )
+            sell_per_unit = cost_per_unit * (
+                Decimal("1") + markup
+            )
+            pricing_source = "retailer_markup"
+
+        profit_per_unit = sell_per_unit - cost_per_unit
+
+        total_cost = cost_per_unit * Decimal(str(quantity))
+        total_revenue = sell_per_unit * Decimal(str(quantity))
+        total_profit = total_revenue - total_cost
+
+        margin_percent = Decimal("0")
+        if sell_per_unit > 0:
+            margin_percent = (
+                profit_per_unit / sell_per_unit
+            ) * Decimal("100")
+
+        return {
+            "cost_per_unit": float(cost_per_unit),
+            "sell_per_unit": float(sell_per_unit),
+            "pricing_source": pricing_source,
+            "profit_per_unit": float(
+                round(profit_per_unit, 2)
+            ),
+            "margin_percent": float(
+                round(margin_percent, 2)
+            ),
+            "total_cost": float(round(total_cost, 2)),
+            "total_revenue": float(
+                round(total_revenue, 2)
+            ),
+            "total_profit": float(
+                round(total_profit, 2)
+            ),
+        }
+
+    # =========================================================
+    # Per-product prediction
+    # =========================================================
+
+    def _predict_product(
+        self, p_id, entity, cycle_days, today,
+        indent_lead_override,
+    ):
+        product = Products.objects.filter(
+            id=p_id, active=True
+        ).first()
+        if not product:
+            return None
+
+        sales_rows = list(
+            CustomerOrderItems.objects
+            .filter(
+                retailer_receipt__product_id=product.id,
+                customer_order__entity=entity,
+                customer_order__status="COMPLETED",
+            )
+            .values(
+                "customer_order__created",
+                "purchased_quantity",
+            )
+        )
+
+        oos_rows = list(
+            OutOfStock.objects
+            .filter(product_id=product.id, entity=entity)
+            .values("created", "required_quantity")
+        )
+
+        daily_demand = self._estimate_daily_demand(
+            sales_rows, oos_rows
+        )
+        if daily_demand is None:
+            return None
+
+        supplier_receipt = (
+            WholesalerReceipts.objects
+            .filter(
+                product=product,
+                current_unit_quantity__gt=0,
+            )
+            .select_related("received_from")
+            .order_by("final_unit_selling_price")
+            .first()
+        )
+
+        supplier_entity = (
+            supplier_receipt.received_from
+            if supplier_receipt
+            and supplier_receipt.received_from
+            else None
+        )
+
+        lead_days, lead_var, lead_source = (
+            self._resolve_lead_time(
+                entity=entity,
+                product=product,
+                supplier=supplier_entity,
+                indent_lead_override=indent_lead_override,
+            )
+        )
+
+        total_days = lead_days + lead_var + cycle_days
+        cutoff = today + timedelta(days=int(total_days))
+
+        batches = (
+            RetailerReceipts.objects
+            .filter(
+                product=product,
+                entity=entity,
+                is_active="true",
+                current_unit_quantity__gt=0,
+            )
+            .order_by("expiry_date")
+        )
+
+        usable = 0
+        expiring = 0
+        batch_log = []
+
+        for b in batches:
+            will_expire = bool(
+                b.expiry_date and b.expiry_date <= cutoff
+            )
+            batch_log.append({
+                "batch_number": b.batch,
+                "expiry_date": (
+                    b.expiry_date.isoformat()
+                    if b.expiry_date else None
+                ),
+                "units_remaining": b.current_unit_quantity,
+                "will_expire_during_plan_period": will_expire,
+            })
+            if will_expire:
+                expiring += b.current_unit_quantity
+            else:
+                usable += b.current_unit_quantity
+
+        pending = (
+            RetailerOrderItems.objects
+            .filter(
+                wholesaler_receipt__product_id=product.id,
+                retailer_order__retailer=entity,
+                retailer_order__status__in=[
+                    "SUBMITTED", "PROCESSING", "DISPATCHED",
+                ],
+                is_received="false",
+            )
+            .aggregate(t=Sum("purchased_quantity"))["t"]
+            or 0
+        )
+
+        backlog = (
+            OutOfStock.objects
+            .filter(
+                product=product,
+                entity=entity,
+                is_ordered="false",
+                created__gte=(
+                    today - timedelta(days=int(cycle_days))
+                ),
+            )
+            .aggregate(t=Sum("required_quantity"))["t"]
+            or 0
+        )
+
+        safety_stock = self._estimate_safety_stock(
+            sales_rows, oos_rows
+        )
+
+        needed = (
+            int(round(daily_demand * total_days)) + safety_stock
+        )
+        suggested = max(
+            0, (needed - usable - pending)
+        ) + backlog
+
+        if suggested <= 0:
+            return None
+
+        active_price_disc = self._resolve_active_price_discount(
+            supplier_receipt, today
+        )
+        active_qty_disc = self._resolve_active_quantity_discount(
+            supplier_receipt, int(suggested), today
+        )
+        total_quantity, bonus_quantity, full_blocks = (
+            self._compute_bonus_quantity(
+                int(suggested), active_qty_disc
+            )
+        )
+
+        effective_purchase_price = 0.0
+        if active_price_disc:
+            effective_purchase_price = float(
+                active_price_disc.offer_price
+            )
+        elif supplier_receipt:
+            effective_purchase_price = float(
+                supplier_receipt.unit_selling_price
+            )
+
+        profit = self._compute_profit(
+            receipt=supplier_receipt,
+            quantity=int(suggested),
+            final_unit_price=effective_purchase_price,
+        )
+
+        supplier_payload = {
+            "id": (
+                str(supplier_receipt.received_from.id)
+                if supplier_receipt
+                and supplier_receipt.received_from
+                else None
+            ),
+            "name": (
+                supplier_receipt.received_from.title
+                if supplier_receipt
+                and supplier_receipt.received_from
+                else None
+            ),
+            "unit_price": effective_purchase_price,
+            "normal_price": (
+                float(supplier_receipt.unit_selling_price)
+                if supplier_receipt else None
+            ),
+            "is_discounted": active_price_disc is not None,
+            "discount_percent": (
+                float(active_price_disc.percent)
+                if active_price_disc else 0.0
+            ),
+            "price_promotion": (
+                {
+                    "title": active_price_disc.title,
+                    "start": active_price_disc.start.isoformat(),
+                    "end": active_price_disc.end.isoformat(),
+                }
+                if active_price_disc else None
+            ),
+            "quantity_promotion": (
+                {
+                    "id": str(active_qty_disc.id),
+                    "title": active_qty_disc.title,
+                    "buy_quantity": active_qty_disc.limit_quantity,
+                    "free_quantity": active_qty_disc.awarded_quantity,
+                    "start": active_qty_disc.start.isoformat(),
+                    "end": active_qty_disc.end.isoformat(),
+                    "blocks_earned": full_blocks,
+                }
+                if active_qty_disc else None
+            ),
+        }
+
+        return {
+            "product_id": str(product.id),
+            "product_title": product.product_name(),
+            "sku": getattr(product, "bar_code", None),
+            "is_drug": product.check_is_drug,
+            "calculated_metrics": {
+                "average_daily_demand": float(
+                    round(daily_demand, 4)
+                ),
+                "supplier_lead_time_days": lead_days,
+                "supplier_lead_time_source": lead_source,
+                "supplier_delay_days": lead_var,
+                "safety_stock_units": safety_stock,
+                "total_days_planned_for": total_days,
+                "total_units_needed": needed,
+            },
+            "current_stock_status": {
+                "total_physical_on_hand": usable + expiring,
+                "good_usable_units": usable,
+                "expiring_units_warning": expiring,
+                "units_already_ordered": int(pending),
+                "customer_waitlist_units": int(backlog),
+                "existing_expiries": batch_log,
+            },
+            "order_suggestion": {
+                "suggested_order_quantity": int(suggested),
+                "total_quantity_after_bonus": total_quantity,
+                "bonus_quantity_earned": bonus_quantity,
+                "supplier": supplier_payload,
+                "profit_estimate": profit,
+            },
+        }
+
+    # =========================================================
+    # Demand + safety stock helpers
+    # =========================================================
+
+    def _estimate_daily_demand(self, sales_rows, oos_rows):
+        daily = self._combine_daily(sales_rows, oos_rows)
+        if len(daily) < 3:
+            return None
+
+        df = pd.DataFrame(daily)
+        df["d"] = pd.to_datetime(df["d"])
+        df.set_index("d", inplace=True)
+
+        monthly = df.resample("ME")["q"].sum().reset_index()
+        if len(monthly) < 3:
+            return None
+
+        monthly["idx"] = np.arange(len(monthly))
+
+        model = LinearRegression().fit(
+            monthly[["idx"]].values,
+            monthly["q"].values,
+        )
+
+        next_total = max(
+            0,
+            float(model.predict(np.array([[len(monthly)]]))[0]),
+        )
+        return next_total / 30.4
+
+    def _estimate_safety_stock(self, sales_rows, oos_rows):
+        daily = self._combine_daily(sales_rows, oos_rows)
+        if len(daily) < 2:
+            return 0
+
+        df = pd.DataFrame(daily)
+        df["d"] = pd.to_datetime(df["d"])
+        df.set_index("d", inplace=True)
+
+        weekly = df.resample("W")["q"].sum()
+        if len(weekly) < 2 or pd.isna(weekly.std()):
+            return 0
+
+        return int(round((weekly.std() / 7) * 1.65))
+
+    def _combine_daily(self, sales_rows, oos_rows):
+        combined = []
+        for r in sales_rows:
+            dt = r["customer_order__created"]
+            if dt is None:
+                continue
+            combined.append({
+                "d": dt.date() if hasattr(dt, "date") else dt,
+                "q": int(r["purchased_quantity"] or 0),
+            })
+        for r in oos_rows:
+            dt = r["created"]
+            if dt is None:
+                continue
+            combined.append({
+                "d": dt.date() if hasattr(dt, "date") else dt,
+                "q": int(r["required_quantity"] or 0),
+            })
+        return combined
+
+
+# import json, numpy as np, pandas as pd
+# from decimal import Decimal
+# from django.utils import timezone
+# from django.db.models import Sum
+# from channels.generic.websocket import AsyncJsonWebsocketConsumer
+# from asgiref.sync import sync_to_async
+# from sklearn.linear_model import LinearRegression
+# from products.models import Products
+# from .models import RetailerReceipts, OutOfStock, CustomerOrderItems, RetailerOrders, RetailerOrderItems, WholesalerReceipts
+
+# class InventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
+#     async def connect(self):
+#         self.user = self.scope["user"]
+#         print(f"User at connect {self.user}")
+#         if not self.user.is_authenticated: return
+#         await self.channel_layer.group_add('inventory-predictions', self.channel_name)
+#         await self.accept()
+#         await self.helper_func()
+#         await self.send_json({'status': 'completed', 'retailer_id': str(self.retailer_id) if self.retailer_id else None, 'retailer_name': self.retailer_name, 'predictions': json.loads(self.predictions)})
+
+#     async def disconnect(self, close_code):
+#         await self.channel_layer.group_discard('inventory-predictions', self.channel_name)
+#         await self.close()
+
+#     @sync_to_async
+#     def helper_func(self):
+#         ent = getattr(self.user, 'entity', None) or getattr(getattr(self.user, 'employee', None), 'entity', None)
+#         if not ent:
+#             self.retailer_id, self.retailer_name, self.predictions = None, None, json.dumps([])
+#             return
+#         self.retailer_id, self.retailer_name, cycle_days, today = ent.id, getattr(ent, 'title', self.user.username), getattr(ent, 'order_days', 30), timezone.now().date()
+        
+#         r_pids = list(RetailerReceipts.objects.filter(received_from=ent, is_active="true").values_list('product_id', flat=True))
+#         if not r_pids: r_pids = list(RetailerReceipts.objects.filter(owner=self.user, is_active="true").values_list('product_id', flat=True))
+#         o_pids = list(OutOfStock.objects.filter(owner_id=self.user.id).values_list('product_id', flat=True))
+#         p_ids = set(r_pids + o_pids)
+#         compiled = []
+
+#         for p_id in p_ids:
+#             try:
+#                 p = Products.objects.filter(id=p_id, active=True).first()
+#                 if not p: continue
                 
-                s_qs = list(CustomerOrderItems.objects.filter(retailer_receipt__product_id=p.id, customer_order__entity=ent, customer_order__status="COMPLETED").values('customer_order__created', 'purchased_quantity'))
-                if not s_qs: s_qs = list(CustomerOrderItems.objects.filter(retailer_receipt__product_id=p.id, customer_order__owner=self.user, customer_order__status="COMPLETED").values('customer_order__created', 'purchased_quantity'))
-                o_qs = list(OutOfStock.objects.filter(product_id=p.id, owner_id=self.user.id).values('created', 'required_quantity'))
+#                 s_qs = list(CustomerOrderItems.objects.filter(retailer_receipt__product_id=p.id, customer_order__entity=ent, customer_order__status="COMPLETED").values('customer_order__created', 'purchased_quantity'))
+#                 if not s_qs: s_qs = list(CustomerOrderItems.objects.filter(retailer_receipt__product_id=p.id, customer_order__owner=self.user, customer_order__status="COMPLETED").values('customer_order__created', 'purchased_quantity'))
+#                 o_qs = list(OutOfStock.objects.filter(product_id=p.id, owner_id=self.user.id).values('created', 'required_quantity'))
 
-                cl_s = [{'d': i['customer_order__created'].date() if hasattr(i['customer_order__created'], 'date') else pd.to_datetime(i['customer_order__created']).date(), 'q': int(i['purchased_quantity'])} for i in s_qs]
-                cl_o = [{'d': i['created'].date() if hasattr(i['created'], 'date') else pd.to_datetime(i['created']).date(), 'q': int(i['required_quantity'])} for i in o_qs]
+#                 cl_s = [{'d': i['customer_order__created'].date() if hasattr(i['customer_order__created'], 'date') else pd.to_datetime(i['customer_order__created']).date(), 'q': int(i['purchased_quantity'])} for i in s_qs]
+#                 cl_o = [{'d': i['created'].date() if hasattr(i['created'], 'date') else pd.to_datetime(i['created']).date(), 'q': int(i['required_quantity'])} for i in o_qs]
 
-                if len(cl_s) + len(cl_o) < 3: daily_demand, safety_stock = Decimal('0.0000'), 0
-                else:
-                    df = pd.concat([pd.DataFrame(cl_s) if cl_s else pd.DataFrame(columns=['d','q']), pd.DataFrame(cl_o) if cl_o else pd.DataFrame(columns=['d','q'])], ignore_index=True)
-                    df['d'] = pd.to_datetime(df['d'])
-                    df.set_index('d', inplace=True)
-                    m = df.resample('ME')['q'].sum().reset_index()
-                    if len(m) < 3: daily_demand, safety_stock = Decimal('0.0000'), 0
-                    else:
-                        m['idx'] = np.arange(len(m))
-                        daily_demand = Decimal(str(max(0, int(round(LinearRegression().fit(m[['idx']].values, m['q'].values).predict(np.array([[len(m)]]))))))) / Decimal('30.4')
-                        w = df.resample('W')['q'].sum()
-                        safety_stock = int(round((w.std() / 7) * 1.65)) if len(w) > 1 and not pd.isna(w.std()) else 0
+#                 if len(cl_s) + len(cl_o) < 3: daily_demand, safety_stock = Decimal('0.0000'), 0
+#                 else:
+#                     df = pd.concat([pd.DataFrame(cl_s) if cl_s else pd.DataFrame(columns=['d','q']), pd.DataFrame(cl_o) if cl_o else pd.DataFrame(columns=['d','q'])], ignore_index=True)
+#                     df['d'] = pd.to_datetime(df['d'])
+#                     df.set_index('d', inplace=True)
+#                     m = df.resample('ME')['q'].sum().reset_index()
+#                     if len(m) < 3: daily_demand, safety_stock = Decimal('0.0000'), 0
+#                     else:
+#                         m['idx'] = np.arange(len(m))
+#                         daily_demand = Decimal(str(max(0, int(round(LinearRegression().fit(m[['idx']].values, m['q'].values).predict(np.array([[len(m)]]))))))) / Decimal('30.4')
+#                         w = df.resample('W')['q'].sum()
+#                         safety_stock = int(round((w.std() / 7) * 1.65)) if len(w) > 1 and not pd.isna(w.std()) else 0
 
-                sup = WholesalerReceipts.objects.filter(product=p, current_unit_quantity__gt=0).select_related('received_from').order_by('final_unit_selling_price').first()
-                l_days, l_var = 5, 2
-                if sup and sup.received_from:
-                    po = list(RetailerOrders.objects.filter(wholesaler=sup.received_from, retailer=ent, status="RECEIVED", is_received="true").values('created', 'received_at')[:10])
-                    if not po: po = list(RetailerOrders.objects.filter(wholesaler=sup.received_from, owner=self.user, status="RECEIVED", is_received="true").values('created', 'received_at')[:10])
-                    if len(po) >= 2:
-                        durs = pd.Series([(o['received_at'].date() - o['created'].date()).days if hasattr(o['received_at'], 'date') else (o['received_at'] - o['created']).days for o in po])
-                        if len(durs) > 1 and not pd.isna(durs.std()): l_days, l_var = max(1, int(round(durs.mean()))), max(0, int(round(durs.std())))
+#                 sup = WholesalerReceipts.objects.filter(product=p, current_unit_quantity__gt=0).select_related('received_from').order_by('final_unit_selling_price').first()
+#                 l_days, l_var = 5, 2
+#                 if sup and sup.received_from:
+#                     po = list(RetailerOrders.objects.filter(wholesaler=sup.received_from, retailer=ent, status="RECEIVED", is_received="true").values('created', 'received_at')[:10])
+#                     if not po: po = list(RetailerOrders.objects.filter(wholesaler=sup.received_from, owner=self.user, status="RECEIVED", is_received="true").values('created', 'received_at')[:10])
+#                     if len(po) >= 2:
+#                         durs = pd.Series([(o['received_at'].date() - o['created'].date()).days if hasattr(o['received_at'], 'date') else (o['received_at'] - o['created']).days for o in po])
+#                         if len(durs) > 1 and not pd.isna(durs.std()): l_days, l_var = max(1, int(round(durs.mean()))), max(0, int(round(durs.std())))
 
-                total_days = l_days + l_var + cycle_days
-                cutoff = today + timezone.timedelta(days=int(total_days))
+#                 total_days = l_days + l_var + cycle_days
+#                 cutoff = today + timezone.timedelta(days=int(total_days))
                 
-                batches = RetailerReceipts.objects.filter(product=p, owner=self.user, is_active="true", current_unit_quantity__gt=0).order_by('expiry_date')
-                if not batches.exists(): batches = RetailerReceipts.objects.filter(product=p, received_from=ent, is_active="true", current_unit_quantity__gt=0).order_by('expiry_date')
-                usable, expired, batch_log = 0, 0, []
+#                 batches = RetailerReceipts.objects.filter(product=p, owner=self.user, is_active="true", current_unit_quantity__gt=0).order_by('expiry_date')
+#                 if not batches.exists(): batches = RetailerReceipts.objects.filter(product=p, received_from=ent, is_active="true", current_unit_quantity__gt=0).order_by('expiry_date')
+#                 usable, expired, batch_log = 0, 0, []
                 
-                for b in batches:
-                    is_exp = b.expiry_date <= cutoff if b.expiry_date else False
-                    batch_log.append({"batch_number": b.batch, "expiry_date": b.expiry_date.isoformat() if b.expiry_date else None, "units_remaining": b.current_unit_quantity, "will_expire_during_plan_period": is_exp})
-                    if is_exp: expired += b.current_unit_quantity
-                    else: usable += b.current_unit_quantity
+#                 for b in batches:
+#                     is_exp = b.expiry_date <= cutoff if b.expiry_date else False
+#                     batch_log.append({"batch_number": b.batch, "expiry_date": b.expiry_date.isoformat() if b.expiry_date else None, "units_remaining": b.current_unit_quantity, "will_expire_during_plan_period": is_exp})
+#                     if is_exp: expired += b.current_unit_quantity
+#                     else: usable += b.current_unit_quantity
 
-                pending = RetailerOrderItems.objects.filter(wholesaler_receipt__product_id=p.id, retailer_order__retailer=ent, retailer_order__status__in=["SUBMITTED", "PROCESSING", "DISPATCHED"], is_received="false").aggregate(t=Sum('purchased_quantity'))['t'] or 0
-                if pending == 0: pending = RetailerOrderItems.objects.filter(wholesaler_receipt__product_id=p.id, retailer_order__owner=self.user, retailer_order__status__in=["SUBMITTED", "PROCESSING", "DISPATCHED"], is_received="false").aggregate(t=Sum('purchased_quantity'))['t'] or 0
+#                 pending = RetailerOrderItems.objects.filter(wholesaler_receipt__product_id=p.id, retailer_order__retailer=ent, retailer_order__status__in=["SUBMITTED", "PROCESSING", "DISPATCHED"], is_received="false").aggregate(t=Sum('purchased_quantity'))['t'] or 0
+#                 if pending == 0: pending = RetailerOrderItems.objects.filter(wholesaler_receipt__product_id=p.id, retailer_order__owner=self.user, retailer_order__status__in=["SUBMITTED", "PROCESSING", "DISPATCHED"], is_received="false").aggregate(t=Sum('purchased_quantity'))['t'] or 0
                 
-                backlog = OutOfStock.objects.filter(product=p, owner_id=self.user.id, is_ordered="false", created__gte=today - timezone.timedelta(days=int(cycle_days))).aggregate(t=Sum('required_quantity'))['t'] or 0
+#                 backlog = OutOfStock.objects.filter(product=p, owner_id=self.user.id, is_ordered="false", created__gte=today - timezone.timedelta(days=int(cycle_days))).aggregate(t=Sum('required_quantity'))['t'] or 0
                 
-                needed = int(round(daily_demand * total_days)) + safety_stock
-                suggested = max(0, (needed - usable - pending)) + backlog
+#                 needed = int(round(daily_demand * total_days)) + safety_stock
+#                 suggested = max(0, (needed - usable - pending)) + backlog
 
-                # CRITICAL RESTOCK FILTER: Skip items completely if they don't need any new units purchased
-                if suggested > 0:
-                    compiled.append({
-                        "product_id": p.id, "product_title": p.product_name(), "sku": getattr(p, 'bar_code', None), "is_drug": p.check_is_drug,
-                        "calculated_metrics": {"average_daily_demand": float(round(daily_demand, 4)), "supplier_lead_time_days": l_days, "supplier_delay_days": l_var, "safety_stock_units": safety_stock, "total_days_planned_for": total_days, "total_units_needed": needed},
-                        "current_stock_status": {"total_physical_on_hand": usable + expired, "good_usable_units": usable, "expiring_units_warning": expired, "units_already_ordered": pending, "customer_waitlist_units": backlog, "existing_expiries": batch_log},
-                        "order_suggestion": {"suggested_order_quantity": suggested, "supplier": {"id": sup.received_from.id if sup and sup.received_from else None, "name": sup.received_from.title if sup and sup.received_from else None, "unit_price": float(sup.final_unit_selling_price) if sup else None}}
-                    })
-            except: continue
-        self.predictions = json.dumps(compiled, default=lambda o: str(o) if hasattr(o, 'hex') else o)
+#                 # CRITICAL RESTOCK FILTER: Skip items completely if they don't need any new units purchased
+#                 if suggested > 0:
+#                     compiled.append({
+#                         "product_id": p.id, "product_title": p.product_name(), "sku": getattr(p, 'bar_code', None), "is_drug": p.check_is_drug,
+#                         "calculated_metrics": {"average_daily_demand": float(round(daily_demand, 4)), "supplier_lead_time_days": l_days, "supplier_delay_days": l_var, "safety_stock_units": safety_stock, "total_days_planned_for": total_days, "total_units_needed": needed},
+#                         "current_stock_status": {"total_physical_on_hand": usable + expired, "good_usable_units": usable, "expiring_units_warning": expired, "units_already_ordered": pending, "customer_waitlist_units": backlog, "existing_expiries": batch_log},
+#                         "order_suggestion": {"suggested_order_quantity": suggested, "supplier": {"id": sup.received_from.id if sup and sup.received_from else None, "name": sup.received_from.title if sup and sup.received_from else None, "unit_price": float(sup.final_unit_selling_price) if sup else None}}
+#                     })
+#             except: continue
+#         self.predictions = json.dumps(compiled, default=lambda o: str(o) if hasattr(o, 'hex') else o)
 
-    async def send_inventory_predictions(self, event):
-        await self.helper_func()
-        await self.send_json({'status': 'completed', 'retailer_id': str(self.retailer_id) if self.retailer_id else None, 'retailer_name': self.retailer_name, 'predictions': json.loads(self.predictions)})
+#     async def send_inventory_predictions(self, event):
+#         await self.helper_func()
+#         await self.send_json({'status': 'completed', 'retailer_id': str(self.retailer_id) if self.retailer_id else None, 'retailer_name': self.retailer_name, 'predictions': json.loads(self.predictions)})
 
-    locals()["send_inventory-predictions"] = send_inventory_predictions
+#     locals()["send_inventory-predictions"] = send_inventory_predictions

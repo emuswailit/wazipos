@@ -266,11 +266,11 @@ class RetailerReceipts(EntityRelatedModel):
 
 
 
-class IndentingCriteria(models.TextChoices):
-        OUT_OF_STOCK = "OUT_OF_STOCK", _("OUT_OF_STOCK")
-        TOP_UP = "TOP_UP", _("TOP_UP")
-        SPECIAL_ORDER = "SPECIAL_ORDER", _("SPECIAL_ORDER")
-        ON_OFFER = "ON_OFFER", _("ON_OFFER")
+# class IndentingCriteria(models.TextChoices):
+#         OUT_OF_STOCK = "OUT_OF_STOCK", _("OUT_OF_STOCK")
+#         TOP_UP = "TOP_UP", _("TOP_UP")
+#         SPECIAL_ORDER = "SPECIAL_ORDER", _("SPECIAL_ORDER")
+#         ON_OFFER = "ON_OFFER", _("ON_OFFER")
 
 class RetailQuantityDiscounts(EntityRelatedModel):
     class Meta:
@@ -296,6 +296,210 @@ class RetailQuantityDiscounts(EntityRelatedModel):
         on_delete=models.CASCADE,
     )
 
+# retailers/models.py
+
+from decimal import Decimal
+
+from django.db import models
+from django.utils import timezone
+
+
+class IndentItemSource(models.TextChoices):
+    PREDICTION = "PREDICTION", "Auto-suggested by the prediction engine"
+    USER_ADDED = "USER_ADDED", "Manually added by the retailer"
+    WHOLESALER_ADDED = "WHOLESALER_ADDED", "Added from a wholesaler's catalogue"
+    IMPORTED = "IMPORTED", "Imported from an external source"
+
+
+class RetailerIndent(EntityRelatedModel):
+    class Meta:
+        verbose_name_plural = "Retailer Indent"
+
+    indent_number = models.ForeignKey(
+        DocumentNumbers,
+        related_name="indent_number",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    order_days = models.IntegerField()
+    lead_time = models.IntegerField()
+
+    is_open = models.CharField(
+        max_length=50,
+        choices=TRUE_FALSE_OPTIONS,
+        default="true",
+    )
+
+    # ---- Budget ----
+    budget_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional cap on the total indent cost.",
+    )
+    budget_enforced = models.CharField(
+        max_length=50,
+        choices=TRUE_FALSE_OPTIONS,
+        default="true",
+        help_text=(
+            "If true, the estimator trims lines to fit the "
+            "budget. If false, the budget is advisory only."
+        ),
+    )
+
+    # ---- Pricing ----
+    pricing_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("30.00"),
+        help_text=(
+            "Markup applied when the wholesaler has no RRP. "
+            "30.00 = 30%% markup."
+        ),
+    )
+
+    # ---- Lead time aggregate ----
+    average_lead_time_days = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0.00,
+        help_text="Weighted average lead time across indent items.",
+    )
+    lead_time_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        Users,
+        related_name="retailer_indent_owner",
+        on_delete=models.CASCADE,
+    )
+
+    def __str__(self):
+        return f"Indent #{self.id} — {self.entity.title}"
+
+
+class RetailerIndentItem(EntityRelatedModel):
+    class Meta:
+        verbose_name_plural = "Retailer Indent Items"
+        unique_together = (
+            "wholesale_receipt",
+            "retailer_indent",
+            "entity",
+        )
+
+    source = models.CharField(
+        max_length=20,
+        choices=IndentItemSource.choices,
+        default=IndentItemSource.PREDICTION,
+    )
+
+    retailer_indent = models.ForeignKey(
+        RetailerIndent,
+        on_delete=models.CASCADE,
+        related_name="indent_for_item",
+        null=True,
+        blank=True,
+    )
+
+    wholesale_receipt = models.ForeignKey(
+        WholesalerReceipts,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    wholesaler_price_discount = models.ForeignKey(
+        WholesalerPriceDiscounts,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    wholesaler_quantity_discount = models.ForeignKey(
+        WholesalerQuantityDiscounts,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    required_quantity = models.IntegerField()
+    total_quantity = models.IntegerField()
+
+    final_unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+    )
+    item_gross_total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+    )
+    item_net_total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+    )
+
+    profit_estimate = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Profit calculation captured at indent creation."
+        ),
+    )
+
+    # ---- Per-line lead time ----
+    lead_time_days = models.IntegerField(default=0)
+    lead_time_variance_days = models.IntegerField(default=0)
+    lead_time_source = models.CharField(
+        max_length=32,
+        default="default",
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        Users,
+        related_name="retailer_indent_item_owner",
+        on_delete=models.CASCADE,
+    )
+
+    def __str__(self):
+        return (
+            f"{self.wholesale_receipt.product.title} "
+            f"× {self.required_quantity}"
+        )
+
+    @property
+    def total_profit(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("total_profit")
+        return None
+
+    @property
+    def total_revenue(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("total_revenue")
+        return None
+
+    @property
+    def margin_percent(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("margin_percent")
+        return None
+
+    @property
+    def pricing_source(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("pricing_source")
+        return None
 
 # class RetailerIndent(EntityRelatedModel):
 #     class Meta:
@@ -317,84 +521,84 @@ class RetailQuantityDiscounts(EntityRelatedModel):
 #         related_name="retailer_indent_owner",
 #         on_delete=models.CASCADE,
 #     )
-class RetailerIndent(EntityRelatedModel):
-    class Meta:
-        verbose_name_plural="Retailer Indent"
+# class RetailerIndent(EntityRelatedModel):
+#     class Meta:
+#         verbose_name_plural="Retailer Indent"
         
-    indent_number = models.ForeignKey(
-        DocumentNumbers,
-        related_name="indent_number",
-        on_delete=models.CASCADE, null=True, blank=True
-    )
-    order_days = models.IntegerField()
-    lead_time = models.IntegerField()
+#     indent_number = models.ForeignKey(
+#         DocumentNumbers,
+#         related_name="indent_number",
+#         on_delete=models.CASCADE, null=True, blank=True
+#     )
+#     order_days = models.IntegerField()
+#     lead_time = models.IntegerField()
     
-    # ➕ ADDED MODEL SIMULATION PARAMETERS TRACKING FIELDS
-    lookback_days = models.IntegerField(default=30)
-    max_shelf_days = models.IntegerField(default=90)
+#     # ➕ ADDED MODEL SIMULATION PARAMETERS TRACKING FIELDS
+#     lookback_days = models.IntegerField(default=30)
+#     max_shelf_days = models.IntegerField(default=90)
     
-    is_open = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
-    )
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(
-        Users,
-        related_name="retailer_indent_owner",
-        on_delete=models.CASCADE,
-    )
+#     is_open = models.CharField(
+#         max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
+#     )
+#     created = models.DateTimeField(auto_now_add=True)
+#     updated = models.DateTimeField(auto_now=True)
+#     owner = models.ForeignKey(
+#         Users,
+#         related_name="retailer_indent_owner",
+#         on_delete=models.CASCADE,
+#     )
 
-class RetailerIndentItem(EntityRelatedModel):
-    class Meta:
-        verbose_name_plural="Retailer Indent Items"
-        unique_together=("wholesale_receipt","retailer_indent","entity")
-    indenting_criteria = models.CharField(
-        verbose_name=_("Indenting Criteria"),
-        choices=IndentingCriteria.choices,
-        max_length=20,null=True, blank=True
-    )
+# class RetailerIndentItem(EntityRelatedModel):
+#     class Meta:
+#         verbose_name_plural="Retailer Indent Items"
+#         unique_together=("wholesale_receipt","retailer_indent","entity")
+#     indenting_criteria = models.CharField(
+#         verbose_name=_("Indenting Criteria"),
+#         choices=IndentingCriteria.choices,
+#         max_length=20,null=True, blank=True
+#     )
    
-    retailer_indent = models.ForeignKey(
-        RetailerIndent,
-        on_delete=models.CASCADE,
-        related_name="indent_for_item",
-        null=True,
-        blank=True,
-    )
+#     retailer_indent = models.ForeignKey(
+#         RetailerIndent,
+#         on_delete=models.CASCADE,
+#         related_name="indent_for_item",
+#         null=True,
+#         blank=True,
+#     )
 
-    wholesale_receipt = models.ForeignKey(WholesalerReceipts, on_delete=models.CASCADE,null=True,blank=True)
-    wholesaler_price_discount = models.ForeignKey(WholesalerReceipts, on_delete=models.CASCADE,null=True,blank=True)
-    wholesaler_price_discount = models.ForeignKey(WholesalerPriceDiscounts, on_delete=models.CASCADE,null=True,blank=True)
-    wholesaler_quantity_discount = models.ForeignKey(WholesalerQuantityDiscounts, on_delete=models.CASCADE,null=True,blank=True)
-    required_quantity = models.IntegerField()
-    total_quantity = models.IntegerField()
-    final_pack_price = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-    item_gross_total_amount = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-    item_net_total_amount = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(
-        Users,
-        related_name="retailer_indent_item_owner",
-        on_delete=models.CASCADE,
-    )
+#     wholesale_receipt = models.ForeignKey(WholesalerReceipts, on_delete=models.CASCADE,null=True,blank=True)
+#     wholesaler_price_discount = models.ForeignKey(WholesalerReceipts, on_delete=models.CASCADE,null=True,blank=True)
+#     wholesaler_price_discount = models.ForeignKey(WholesalerPriceDiscounts, on_delete=models.CASCADE,null=True,blank=True)
+#     wholesaler_quantity_discount = models.ForeignKey(WholesalerQuantityDiscounts, on_delete=models.CASCADE,null=True,blank=True)
+#     required_quantity = models.IntegerField()
+#     total_quantity = models.IntegerField()
+#     final_pack_price = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
+#     item_gross_total_amount = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
+#     item_net_total_amount = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
+#     created = models.DateTimeField(auto_now_add=True)
+#     updated = models.DateTimeField(auto_now=True)
+#     owner = models.ForeignKey(
+#         Users,
+#         related_name="retailer_indent_item_owner",
+#         on_delete=models.CASCADE,
+#     )
 
-    # def save(self, *args, **kwargs):
-    #     if self.wholesaler_price_discount:
-    #         self.final_pack_price =self.wholesale_receipt.pack_selling_price - (self.wholesale_receipt.pack_selling_price*self.wholesaler_price_discount.percent/100)
-    #         self.item_gross_total_amount =self.required_quantity * self.wholesale_receipt.pack_selling_price
-    #         self.item_net_total_amount =self.final_pack_price * self.required_quantity
-    #     else:
-    #         self.final_pack_price=self.wholesale_receipt.pack_selling_price
-    #         self.item_gross_total_amount =float(self.required_quantity) * float(self.wholesale_receipt.pack_selling_price)
-    #         self.item_net_total_amount =float(self.final_pack_price) * float(self.required_quantity)
+#     # def save(self, *args, **kwargs):
+#     #     if self.wholesaler_price_discount:
+#     #         self.final_pack_price =self.wholesale_receipt.pack_selling_price - (self.wholesale_receipt.pack_selling_price*self.wholesaler_price_discount.percent/100)
+#     #         self.item_gross_total_amount =self.required_quantity * self.wholesale_receipt.pack_selling_price
+#     #         self.item_net_total_amount =self.final_pack_price * self.required_quantity
+#     #     else:
+#     #         self.final_pack_price=self.wholesale_receipt.pack_selling_price
+#     #         self.item_gross_total_amount =float(self.required_quantity) * float(self.wholesale_receipt.pack_selling_price)
+#     #         self.item_net_total_amount =float(self.final_pack_price) * float(self.required_quantity)
         
-    #     if self.wholesaler_quantity_discount:
-    #         self.total_quantity=self.required_quantity+ self.wholesaler_quantity_discount.awarded_quantity
-    #     else:
-    #         self.total_quantity=self.required_quantity
+#     #     if self.wholesaler_quantity_discount:
+#     #         self.total_quantity=self.required_quantity+ self.wholesaler_quantity_discount.awarded_quantity
+#     #     else:
+#     #         self.total_quantity=self.required_quantity
 
-    #     super(RetailerIndentItem, self).save(*args, **kwargs)
+#     #     super(RetailerIndentItem, self).save(*args, **kwargs)
 
 class OutOfStock(EntityRelatedModel):
     class Meta:

@@ -1884,3 +1884,377 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                 {"error": f"Full-stack atomic generation sequence failed execution: {str(transaction_error)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+# retailers/views.py
+
+from decimal import Decimal
+
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from employees.models import Employees
+from retailers.models import (
+    IndentItemSource,
+    RetailerIndent,
+    RetailerIndentItem,
+)
+from wholesalers.models import WholesalerReceipts
+
+from .serializers import (
+    RetailerIndentItemEditSerializer,
+    RetailerIndentItemsSerializer,
+    RetailerIndentParamsSerializer,
+    RetailerIndentSerializer,
+)
+
+
+def _fire_refresh(entity_id):
+    try:
+        from retailers.tasks import refresh_entity_predictions
+        refresh_entity_predictions.delay(str(entity_id))
+    except Exception as e:
+        print(f"[INDENT] Failed to schedule refresh: {e}")
+
+
+# =========================================================
+# Indent header
+# =========================================================
+
+class RetailerIndentDetailView(APIView):
+    """
+    GET /api/v1/retailers/indents/current/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        entity = getattr(request.user, "entity", None)
+        if not entity or not entity.is_active:
+            return Response(
+                {"error": "No active entity for this user."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        indent = (
+            RetailerIndent.objects
+            .filter(entity=entity, is_open="true")
+            .prefetch_related(
+                "indent_for_item__wholesale_receipt__product",
+                "indent_for_item__wholesale_receipt__entity",
+                "indent_for_item__wholesaler_price_discount",
+                "indent_for_item__wholesaler_quantity_discount",
+            )
+            .order_by("-created")
+            .first()
+        )
+
+        if not indent:
+            return Response(
+                {"error": "No open indent for this entity."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RetailerIndentSerializer(indent)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RetailerIndentParamsUpdateView(APIView):
+    """
+    PATCH /api/v1/retailers/indents/<indent_id>/params/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, indent_id, *args, **kwargs):
+        entity = getattr(request.user, "entity", None)
+        if not entity or not entity.is_active:
+            return Response(
+                {"error": "No active entity for this user."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not Employees.objects.filter(
+            user=request.user,
+            entity=entity,
+            is_active="true",
+        ).exists():
+            return Response(
+                {"error": "You are not an active employee at this entity."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            indent = RetailerIndent.objects.get(
+                id=indent_id,
+                entity=entity,
+                is_open="true",
+            )
+        except RetailerIndent.DoesNotExist:
+            return Response(
+                {"error": "No open indent found for this entity."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RetailerIndentParamsSerializer(
+            indent, data=request.data, partial=True
+        )
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer.save()
+        _fire_refresh(entity.id)
+
+        return Response(
+            {
+                "status": "accepted",
+                "indent_id": str(indent.id),
+                "params": serializer.data,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+# =========================================================
+# Indent item operations
+# =========================================================
+
+class RetailerIndentItemUpdateView(APIView):
+    """
+    PATCH /api/v1/retailers/indent-items/<item_id>/
+    Body: { "required_quantity": 15 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, item_id, *args, **kwargs):
+        entity = getattr(request.user, "entity", None)
+        if not entity or not entity.is_active:
+            return Response(
+                {"error": "No active entity."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            item = RetailerIndentItem.objects.get(
+                id=item_id,
+                entity=entity,
+                retailer_indent__is_open="true",
+            )
+        except RetailerIndentItem.DoesNotExist:
+            return Response(
+                {"error": "Indent item not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RetailerIndentItemEditSerializer(
+            item, data=request.data, partial=True
+        )
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item = serializer.save()
+
+        if item.source == IndentItemSource.PREDICTION:
+            item.source = IndentItemSource.PREDICTION_EDITED
+            item.save(update_fields=["source"])
+
+        self._recompute_amounts(item)
+        _fire_refresh(entity.id)
+
+        return Response(
+            RetailerIndentItemsSerializer(item).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def _recompute_amounts(self, item):
+        indent = item.retailer_indent
+        pricing_percentage = float(
+            indent.pricing_percentage or 30
+        )
+
+        receipt = item.wholesale_receipt
+        cost_per_unit = Decimal(str(item.final_unit_price or 0))
+
+        if receipt and receipt.recommended_retail_price:
+            sell_per_unit = Decimal(
+                str(receipt.recommended_retail_price)
+            )
+            pricing_source = "recommended_retail_price"
+        else:
+            markup = (
+                Decimal(str(pricing_percentage)) / Decimal("100")
+            )
+            sell_per_unit = cost_per_unit * (
+                Decimal("1") + markup
+            )
+            pricing_source = "retailer_markup"
+
+        qty = Decimal(str(item.required_quantity))
+        total_cost = cost_per_unit * qty
+        total_revenue = sell_per_unit * qty
+        total_profit = total_revenue - total_cost
+
+        margin = Decimal("0")
+        if sell_per_unit > 0:
+            margin = (
+                (sell_per_unit - cost_per_unit)
+                / sell_per_unit
+            ) * Decimal("100")
+
+        item.item_gross_total_amount = cost_per_unit * qty
+        item.item_net_total_amount = total_cost
+        item.profit_estimate = {
+            "cost_per_unit": float(cost_per_unit),
+            "sell_per_unit": float(sell_per_unit),
+            "pricing_source": pricing_source,
+            "profit_per_unit": float(
+                sell_per_unit - cost_per_unit
+            ),
+            "margin_percent": float(round(margin, 2)),
+            "total_cost": float(round(total_cost, 2)),
+            "total_revenue": float(round(total_revenue, 2)),
+            "total_profit": float(round(total_profit, 2)),
+        }
+        item.save(update_fields=[
+            "item_gross_total_amount",
+            "item_net_total_amount",
+            "profit_estimate",
+        ])
+
+
+class RetailerIndentItemDeleteView(APIView):
+    """
+    DELETE /api/v1/retailers/indent-items/<item_id>/delete/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, item_id, *args, **kwargs):
+        entity = getattr(request.user, "entity", None)
+        if not entity or not entity.is_active:
+            return Response(
+                {"error": "No active entity."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            item = RetailerIndentItem.objects.get(
+                id=item_id,
+                entity=entity,
+                retailer_indent__is_open="true",
+            )
+        except RetailerIndentItem.DoesNotExist:
+            return Response(
+                {"error": "Indent item not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        item.delete()
+        _fire_refresh(entity.id)
+
+        return Response(
+            {"status": "deleted", "id": str(item_id)},
+            status=status.HTTP_200_OK,
+        )
+
+
+class RetailerIndentItemCreateView(APIView):
+    """
+    POST /api/v1/retailers/indents/<indent_id>/items/
+    Body: {
+        "wholesale_receipt": "<uuid>",
+        "required_quantity": 10
+    }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, indent_id, *args, **kwargs):
+        entity = getattr(request.user, "entity", None)
+        if not entity or not entity.is_active:
+            return Response(
+                {"error": "No active entity."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            indent = RetailerIndent.objects.get(
+                id=indent_id,
+                entity=entity,
+                is_open="true",
+            )
+        except RetailerIndent.DoesNotExist:
+            return Response(
+                {"error": "Indent not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        receipt_id = request.data.get("wholesale_receipt")
+        try:
+            quantity = int(
+                request.data.get("required_quantity", 0)
+            )
+        except (TypeError, ValueError):
+            quantity = 0
+
+        if quantity <= 0:
+            return Response(
+                {"error": "required_quantity must be > 0"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        receipt = WholesalerReceipts.objects.filter(
+            id=receipt_id,
+            current_unit_quantity__gt=0,
+        ).first()
+        if not receipt:
+            return Response(
+                {"error": "Wholesale receipt not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        existing = RetailerIndentItem.objects.filter(
+            retailer_indent=indent,
+            wholesale_receipt=receipt,
+            entity=entity,
+        ).first()
+
+        if existing:
+            existing.required_quantity = quantity
+            existing.total_quantity = quantity
+            existing.source = IndentItemSource.USER_ADDED
+            existing.save(update_fields=[
+                "required_quantity",
+                "total_quantity",
+                "source",
+            ])
+            _fire_refresh(entity.id)
+            return Response(
+                RetailerIndentItemsSerializer(existing).data,
+                status=status.HTTP_200_OK,
+            )
+
+        unit_price = receipt.final_unit_selling_price or 0
+
+        item = RetailerIndentItem.objects.create(
+            entity=entity,
+            owner=request.user,
+            retailer_indent=indent,
+            wholesale_receipt=receipt,
+            required_quantity=quantity,
+            total_quantity=quantity,
+            final_unit_price=unit_price,
+            item_gross_total_amount=unit_price * quantity,
+            item_net_total_amount=unit_price * quantity,
+            source=IndentItemSource.USER_ADDED,
+        )
+
+        _fire_refresh(entity.id)
+
+        return Response(
+            RetailerIndentItemsSerializer(item).data,
+            status=status.HTTP_201_CREATED,
+        )

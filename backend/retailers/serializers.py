@@ -34,8 +34,34 @@ from payments.models import PaymentMethods
 
 from . import models
 
-# Retailer variations receipts serializer
 
+# retailers/views.py
+
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from employees.models import Employees
+from retailers.models import RetailerIndent
+
+class RetailerIndentItemEditSerializer(serializers.ModelSerializer):
+    """
+    Only the editable quantity. Everything else is derived
+    from the wholesale receipt at creation time.
+    """
+    required_quantity = serializers.IntegerField(min_value=1)
+
+    class Meta:
+        model = models.RetailerIndentItem
+        fields = ["required_quantity"]
+
+    def validate_required_quantity(self, value):
+        if value > 100000:
+            raise serializers.ValidationError(
+                "Quantity cannot exceed 100,000."
+            )
+        return value
 
 class ReviewsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1597,86 +1623,102 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
         if ProductImages.objects.filter(product=obj.product).exists():
             images = ProductImages.objects.filter(product=obj.product).all()
         return ProductImageSerializer(images, context=self.context, many=True).data
-    
-class RetailerIndentSerializer(serializers.ModelSerializer):
-    retailer_indent_items = serializers.SerializerMethodField(read_only=True)
-    indent_number = serializers.SerializerMethodField(read_only=True)
-    entity_title = serializers.SerializerMethodField(read_only=True)
-    class Meta:
-        model = models.RetailerIndent
-        fields = (
-            "id",
-            "is_open",
-            "indent_number",
-            "entity_title",
-            "lead_time",
-            "order_days",
-            "retailer_indent_items",
-            "created",
-            "updated",
-            "owner",
-        )
-        read_only_fields = (
-            "id",
-            "indent_number",
-            "created",
-            "updated",
-            "owner",
-        )
+# retailers/serializers.py
 
-    def get_retailer_indent_items(self,obj):
-        items =[]
-        if models.RetailerIndentItem.objects.filter(retailer_indent=obj).exists():
-            items = models.RetailerIndentItem.objects.filter(retailer_indent=obj).all()
-        return RetailerIndentItemsSerializer(items, context=self.context, many=True).data
-        
-    def get_indent_number(self,obj):
-        if obj.indent_number:
-            return obj.indent_number.document_number
-        else:
-            return ""
-    def get_entity_title(self,obj):
-        if obj.entity:
-            return obj.entity.title
-        else:
-            return ""
-        
+from rest_framework import serializers
+
+from products.models import ProductImages
+from .models import RetailerIndent, RetailerIndentItem
+
+
+class InventoryPredictionQuerySerializer(serializers.Serializer):
+    """Sanitises the input params for the simulator playground endpoint."""
+    days_to_order = serializers.IntegerField(min_value=1, max_value=365)
+    lead_time_days = serializers.IntegerField(min_value=0, max_value=90, default=0)
+    lookback_window = serializers.IntegerField(default=30, min_value=7, max_value=90, required=False)
+    max_shelf_days = serializers.IntegerField(default=90, min_value=15, max_value=365, required=False)
+# =========================================================
+# Indent item
+# =========================================================
+
 class RetailerIndentItemsSerializer(serializers.ModelSerializer):
-    wholesaler = serializers.SerializerMethodField(read_only=True)
-    wholesaler_title = serializers.SerializerMethodField(read_only=True)
-    wholesaler_title = serializers.SerializerMethodField(read_only=True)
-    manufacture_date = serializers.SerializerMethodField(read_only=True)
-    expiry_date = serializers.SerializerMethodField(read_only=True)
-    entity_title = serializers.SerializerMethodField(read_only=True)
-    wholesaler_price_discount_title = serializers.SerializerMethodField(read_only=True)
-    wholesaler_quantity_discount_title = serializers.SerializerMethodField(read_only=True)
-    wholesale_receipt_title = serializers.SerializerMethodField(read_only=True)
-  
-    images = serializers.SerializerMethodField(read_only=True)
+    # Product / wholesaler info
+    wholesale_receipt_title = serializers.SerializerMethodField()
+    wholesaler = serializers.SerializerMethodField()
+    wholesaler_title = serializers.SerializerMethodField()
+    manufacture_date = serializers.SerializerMethodField()
+    expiry_date = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
+
+    # Discount info
+    wholesaler_price_discount_title = serializers.SerializerMethodField()
+    wholesaler_quantity_discount_title = serializers.SerializerMethodField()
+
+    # Entity info
+    entity_title = serializers.SerializerMethodField()
+
+    # Source
+    source_label = serializers.CharField(
+        source="get_source_display", read_only=True
+    )
+
+    # Profit accessors (from model properties)
+    total_profit = serializers.FloatField(read_only=True)
+    total_revenue = serializers.FloatField(read_only=True)
+    margin_percent = serializers.FloatField(read_only=True)
+    pricing_source = serializers.CharField(read_only=True)
+
     class Meta:
-        model = models.RetailerIndentItem
+        model = RetailerIndentItem
         fields = (
             "id",
             "entity",
             "entity_title",
-            "indenting_criteria",
+
+            # Source
+            "source",
+            "source_label",
+
+            # Relationships
             "retailer_indent",
             "wholesale_receipt",
             "wholesale_receipt_title",
             "wholesaler",
             "wholesaler_title",
+
+            # Discounts
             "wholesaler_price_discount",
             "wholesaler_price_discount_title",
             "wholesaler_quantity_discount",
             "wholesaler_quantity_discount_title",
+
+            # Quantities
             "required_quantity",
             "total_quantity",
+
+            # Pricing
+            "final_unit_price",
             "item_gross_total_amount",
             "item_net_total_amount",
-            "final_pack_price",
+
+            # Profit
+            "profit_estimate",
+            "total_profit",
+            "total_revenue",
+            "margin_percent",
+            "pricing_source",
+
+            # Lead time
+            "lead_time_days",
+            "lead_time_variance_days",
+            "lead_time_source",
+
+            # Product metadata
             "manufacture_date",
             "expiry_date",
             "images",
+
+            # Timestamps / audit
             "created",
             "updated",
             "owner",
@@ -1688,42 +1730,254 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
             "updated",
             "owner",
         )
-    def get_entity_title(self,obj):
-        return obj.retailer_indent.entity.title
-    
-    def get_wholesale_receipt_title(self,obj):
-        return obj.wholesale_receipt.product.title
-    
-    def get_manufacture_date(self,obj):
-        return obj.wholesale_receipt.manufacture_date
-    
-    def get_expiry_date(self,obj):
-        return obj.wholesale_receipt.expiry_date
-    
-    def get_wholesaler(self,obj):
-        return obj.wholesale_receipt.entity.id
-    
-    def get_images(self,obj):
-        images =[]
-        if ProductImages.objects.filter(product=obj.wholesale_receipt.product).exists():
-            images = ProductImages.objects.filter(product=obj.wholesale_receipt.product).all()
-        return ProductImageSerializer(images, context=self.context, many=True).data
-    
-    def get_wholesaler_title(self,obj):
-        return obj.wholesale_receipt.entity.title
-    
-    
-    def get_wholesaler_price_discount_title(self,obj):
+
+    # ---- Method fields ----
+
+    def get_entity_title(self, obj):
+        if obj.retailer_indent and obj.retailer_indent.entity:
+            return obj.retailer_indent.entity.title
+        return ""
+
+    def get_wholesale_receipt_title(self, obj):
+        if obj.wholesale_receipt:
+            return obj.wholesale_receipt.product.title
+        return ""
+
+    def get_manufacture_date(self, obj):
+        if obj.wholesale_receipt:
+            return obj.wholesale_receipt.manufacture_date
+        return None
+
+    def get_expiry_date(self, obj):
+        if obj.wholesale_receipt:
+            return obj.wholesale_receipt.expiry_date
+        return None
+
+    def get_wholesaler(self, obj):
+        if obj.wholesale_receipt and obj.wholesale_receipt.entity:
+            return obj.wholesale_receipt.entity.id
+        return None
+
+    def get_wholesaler_title(self, obj):
+        if obj.wholesale_receipt and obj.wholesale_receipt.entity:
+            return obj.wholesale_receipt.entity.title
+        return ""
+
+    def get_images(self, obj):
+        if not obj.wholesale_receipt:
+            return []
+        images = ProductImages.objects.filter(
+            product=obj.wholesale_receipt.product
+        )
+        return ProductImageSerializer(
+            images, context=self.context, many=True
+        ).data
+
+    def get_wholesaler_price_discount_title(self, obj):
         if obj.wholesaler_price_discount:
             return obj.wholesaler_price_discount.title
-        else:
-            return ""
-        
-    def get_wholesaler_quantity_discount_title(self,obj):
+        return ""
+
+    def get_wholesaler_quantity_discount_title(self, obj):
         if obj.wholesaler_quantity_discount:
             return obj.wholesaler_quantity_discount.title
-        else:
-            return ""
+        return ""
+
+
+# =========================================================
+# Indent header
+# =========================================================
+
+class RetailerIndentSerializer(serializers.ModelSerializer):
+    retailer_indent_items = serializers.SerializerMethodField()
+    indent_number = serializers.SerializerMethodField()
+    entity_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RetailerIndent
+        fields = (
+            "id",
+            "is_open",
+            "indent_number",
+            "entity",
+            "entity_title",
+
+            # Ordering parameters
+            "lead_time",
+            "order_days",
+            "budget_amount",
+            "budget_enforced",
+            "pricing_percentage",
+
+            # Aggregate lead time
+            "average_lead_time_days",
+            "lead_time_updated_at",
+
+            # Nested items
+            "retailer_indent_items",
+
+            # Timestamps / audit
+            "created",
+            "updated",
+            "owner",
+        )
+        read_only_fields = (
+            "id",
+            "indent_number",
+            "average_lead_time_days",
+            "lead_time_updated_at",
+            "created",
+            "updated",
+            "owner",
+        )
+
+    def get_retailer_indent_items(self, obj):
+        items = RetailerIndentItem.objects.filter(
+            retailer_indent=obj
+        )
+        return RetailerIndentItemsSerializer(
+            items, context=self.context, many=True
+        ).data
+
+    def get_indent_number(self, obj):
+        if obj.indent_number:
+            return obj.indent_number.document_number
+        return ""
+
+    def get_entity_title(self, obj):
+        if obj.entity:
+            return obj.entity.title
+        return ""
+
+
+    
+# class RetailerIndentSerializer(serializers.ModelSerializer):
+#     retailer_indent_items = serializers.SerializerMethodField(read_only=True)
+#     indent_number = serializers.SerializerMethodField(read_only=True)
+#     entity_title = serializers.SerializerMethodField(read_only=True)
+#     class Meta:
+#         model = models.RetailerIndent
+#         fields = (
+#             "id",
+#             "is_open",
+#             "indent_number",
+#             "entity_title",
+#             "lead_time",
+#             "order_days",
+#             "retailer_indent_items",
+#             "created",
+#             "updated",
+#             "owner",
+#         )
+#         read_only_fields = (
+#             "id",
+#             "indent_number",
+#             "created",
+#             "updated",
+#             "owner",
+#         )
+
+#     def get_retailer_indent_items(self,obj):
+#         items =[]
+#         if models.RetailerIndentItem.objects.filter(retailer_indent=obj).exists():
+#             items = models.RetailerIndentItem.objects.filter(retailer_indent=obj).all()
+#         return RetailerIndentItemsSerializer(items, context=self.context, many=True).data
+        
+#     def get_indent_number(self,obj):
+#         if obj.indent_number:
+#             return obj.indent_number.document_number
+#         else:
+#             return ""
+#     def get_entity_title(self,obj):
+#         if obj.entity:
+#             return obj.entity.title
+#         else:
+#             return ""
+        
+# class RetailerIndentItemsSerializer(serializers.ModelSerializer):
+#     wholesaler = serializers.SerializerMethodField(read_only=True)
+#     wholesaler_title = serializers.SerializerMethodField(read_only=True)
+#     wholesaler_title = serializers.SerializerMethodField(read_only=True)
+#     manufacture_date = serializers.SerializerMethodField(read_only=True)
+#     expiry_date = serializers.SerializerMethodField(read_only=True)
+#     entity_title = serializers.SerializerMethodField(read_only=True)
+#     wholesaler_price_discount_title = serializers.SerializerMethodField(read_only=True)
+#     wholesaler_quantity_discount_title = serializers.SerializerMethodField(read_only=True)
+#     wholesale_receipt_title = serializers.SerializerMethodField(read_only=True)
+  
+#     images = serializers.SerializerMethodField(read_only=True)
+#     class Meta:
+#         model = models.RetailerIndentItem
+#         fields = (
+#             "id",
+#             "entity",
+#             "entity_title",
+#             "indenting_criteria",
+#             "retailer_indent",
+#             "wholesale_receipt",
+#             "wholesale_receipt_title",
+#             "wholesaler",
+#             "wholesaler_title",
+#             "wholesaler_price_discount",
+#             "wholesaler_price_discount_title",
+#             "wholesaler_quantity_discount",
+#             "wholesaler_quantity_discount_title",
+#             "required_quantity",
+#             "total_quantity",
+#             "item_gross_total_amount",
+#             "item_net_total_amount",
+#             "final_pack_price",
+#             "manufacture_date",
+#             "expiry_date",
+#             "images",
+#             "created",
+#             "updated",
+#             "owner",
+#         )
+#         read_only_fields = (
+#             "id",
+#             "entity",
+#             "created",
+#             "updated",
+#             "owner",
+#         )
+#     def get_entity_title(self,obj):
+#         return obj.retailer_indent.entity.title
+    
+#     def get_wholesale_receipt_title(self,obj):
+#         return obj.wholesale_receipt.product.title
+    
+#     def get_manufacture_date(self,obj):
+#         return obj.wholesale_receipt.manufacture_date
+    
+#     def get_expiry_date(self,obj):
+#         return obj.wholesale_receipt.expiry_date
+    
+#     def get_wholesaler(self,obj):
+#         return obj.wholesale_receipt.entity.id
+    
+#     def get_images(self,obj):
+#         images =[]
+#         if ProductImages.objects.filter(product=obj.wholesale_receipt.product).exists():
+#             images = ProductImages.objects.filter(product=obj.wholesale_receipt.product).all()
+#         return ProductImageSerializer(images, context=self.context, many=True).data
+    
+#     def get_wholesaler_title(self,obj):
+#         return obj.wholesale_receipt.entity.title
+    
+    
+#     def get_wholesaler_price_discount_title(self,obj):
+#         if obj.wholesaler_price_discount:
+#             return obj.wholesaler_price_discount.title
+#         else:
+#             return ""
+        
+#     def get_wholesaler_quantity_discount_title(self,obj):
+#         if obj.wholesaler_quantity_discount:
+#             return obj.wholesaler_quantity_discount.title
+#         else:
+#             return ""
+
 # class CustomerOrderFailedPaymentsSerializer(serializers.ModelSerializer):
 
 #     class Meta:
@@ -2550,12 +2804,23 @@ class StockAdjustmentsSerializer(serializers.ModelSerializer):
 
 from rest_framework import serializers
 
-class InventoryPredictionQuerySerializer(serializers.Serializer):
-    """Sanitises the input params for the simulator playground endpoint."""
-    days_to_order = serializers.IntegerField(min_value=1, max_value=365)
-    lead_time_days = serializers.IntegerField(min_value=0, max_value=90, default=0)
-    lookback_window = serializers.IntegerField(default=30, min_value=7, max_value=90, required=False)
-    max_shelf_days = serializers.IntegerField(default=90, min_value=15, max_value=365, required=False)
+# retailers/serializers.py
+
+class RetailerIndentParamsSerializer(serializers.ModelSerializer):
+    """
+    Only the parameters a retailer is allowed to edit on their
+    own indent.
+    """
+
+    class Meta:
+        model = RetailerIndent
+        fields = [
+            "order_days",           # ← replaces days_to_order
+            "lead_time",            # ← replaces lead_time_days
+            "budget_amount",        # ← new
+            "budget_enforced",      # ← new
+            "pricing_percentage",   # ← new
+        ]
 
 
 from rest_framework import serializers
