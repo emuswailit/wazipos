@@ -38,5 +38,6 @@ app.conf.beat_schedule = {
         "load_customer_orders": {"task": "retailers.tasks.load_customer_orders", "schedule": 30.0,'args':None},
         "load_inventory_predictions": {"task": "retailers.tasks.load_inventory_predictions", "schedule": 120.0,'args':None},
         "load_retailer_receipts": {"task": "retailers.tasks.load_retailer_receipts", "schedule": 300.0,'args':None},
+        "load_retailer-indents": {"task": "retailers.tasks.load_retailer-indents", "schedule": 300.0,'args':None},
 
 }

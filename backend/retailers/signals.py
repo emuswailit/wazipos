@@ -43,3 +43,46 @@ def on_retailer_receipt_deleted(sender, instance, **kwargs):
     _broadcast_inventory_change(
         getattr(instance, 'entity_id', None)
     )
+
+# apps/retailers/signals.py
+
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+from .models import RetailerIndent, RetailerIndentItem
+
+GROUP_NAME = "retailer-indents"
+
+
+def _broadcast_indents_changed():
+    layer = get_channel_layer()
+    if layer is None:
+        return
+    async_to_sync(layer.group_send)(
+        GROUP_NAME,
+        {
+            "type": "send.retailer.indents",
+        },
+    )
+
+
+@receiver(post_save, sender=RetailerIndent)
+def retailer_indent_saved(sender, instance, created, **kwargs):
+    _broadcast_indents_changed()
+
+
+@receiver(post_delete, sender=RetailerIndent)
+def retailer_indent_deleted(sender, instance, **kwargs):
+    _broadcast_indents_changed()
+
+
+@receiver(post_save, sender=RetailerIndentItem)
+def retailer_indent_item_saved(sender, instance, created, **kwargs):
+    _broadcast_indents_changed()
+
+
+@receiver(post_delete, sender=RetailerIndentItem)
+def retailer_indent_item_deleted(sender, instance, **kwargs):
+    _broadcast_indents_changed()

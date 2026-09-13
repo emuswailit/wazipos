@@ -148,6 +148,19 @@ def load_retailer_receipts():
         )
     return result
 
+
+
+@app.task
+def load_retailer_indents():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'retailer-indents',
+            {
+                "type": "send_retailer-indents"
+            },
+        )
+    return result
+
 @app.task
 def load_shop_inventory():
 

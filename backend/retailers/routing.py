@@ -6,6 +6,7 @@ retailers_websocket_urlpatterns = [
 
     path("ws/retailers/inventory/predictions/",consumers.RetailerInventoryPredictionConsumer.as_asgi()),
     path("ws/retailers/inventory/",consumers.RetailerInventoryConsumer.as_asgi()),
+    path("ws/retailers/indents/",consumers.RetailerIndentsConsumer.as_asgi()),
     path("ws/retailers/inventory/shopping/",consumers.ShopInventoryConsumer.as_asgi()),
     path("ws/retailers/discounts/",consumers.WholesaleDiscountsConsumer.as_asgi()),
     path("ws/retailers/out-of-stocks/",consumers.RetailerOutOfStocksConsumer.as_asgi()),
