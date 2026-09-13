@@ -2823,7 +2823,6 @@ class RetailerIndentParamsSerializer(serializers.ModelSerializer):
         ]
 
 
-from rest_framework import serializers
 
 class RetailerOrderCheckoutItemSerializer(serializers.Serializer):
     """Validates individual items inside the bulk checkout array payload."""

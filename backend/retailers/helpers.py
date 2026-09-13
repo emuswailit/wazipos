@@ -3,6 +3,439 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum, Min
 
+# retailers/helpers.py
+
+"""
+Pure helpers for the inventory prediction pipeline.
+
+No DB access, no async, no Channels. Everything here is a
+function of its arguments, which makes it easy to test and
+easy to reuse outside the consumer.
+"""
+
+import datetime
+import decimal
+import json
+import uuid
+from datetime import timedelta
+from decimal import Decimal
+
+import numpy as np
+import pandas as pd
+from django.utils import timezone
+from sklearn.linear_model import LinearRegression
+
+
+# =========================================================
+# JSON encoder
+# =========================================================
+
+class UUIDEncoder(json.JSONEncoder):
+    """Encoder for UUID / date / datetime / Decimal."""
+
+    def default(self, obj):
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        if isinstance(obj, decimal.Decimal):
+            return str(obj)
+        return super().default(obj)
+
+
+# =========================================================
+# Daily series
+# =========================================================
+
+def combine_daily(sales_rows, oos_rows):
+    """
+    Merge sales and out-of-stock rows into a flat list of
+    { d: date, q: int } dicts.
+    """
+    combined = []
+
+    for r in sales_rows:
+        dt = r["customer_order__created"]
+        if dt is None:
+            continue
+        combined.append({
+            "d": dt.date() if hasattr(dt, "date") else dt,
+            "q": int(r["purchased_quantity"] or 0),
+        })
+
+    for r in oos_rows:
+        dt = r["created"]
+        if dt is None:
+            continue
+        combined.append({
+            "d": dt.date() if hasattr(dt, "date") else dt,
+            "q": int(r["required_quantity"] or 0),
+        })
+
+    return combined
+
+
+# =========================================================
+# Demand estimation
+# =========================================================
+
+def estimate_daily_demand(sales_rows, oos_rows):
+    """
+    Estimate daily demand from history.
+
+    Strategy:
+      - 3+ months of history → linear regression on monthly totals
+      - 1–2 months          → simple average over the elapsed window
+      - 0 events            → None (caller drops the product)
+
+    Returns:
+      float  → daily demand estimate
+      None   → not enough signal
+    """
+    daily = combine_daily(sales_rows, oos_rows)
+
+    if len(daily) < 1:
+        return None
+
+    df = pd.DataFrame(daily)
+    df["d"] = pd.to_datetime(df["d"])
+    df.set_index("d", inplace=True)
+
+    monthly = df.resample("ME")["q"].sum().reset_index()
+
+    # ---- Path A: regression ----
+    if len(monthly) >= 3:
+        monthly["idx"] = np.arange(len(monthly))
+
+        model = LinearRegression().fit(
+            monthly[["idx"]].values,
+            monthly["q"].values,
+        )
+
+        next_total = max(
+            0,
+            float(
+                model.predict(
+                    np.array([[len(monthly)]])
+                )[0]
+            ),
+        )
+        return next_total / 30.4
+
+    # ---- Path B: simple average over elapsed window ----
+    total_units = float(monthly["q"].sum())
+
+    first_date = df.index.min().date()
+    today = timezone.now().date()
+    span_days = max(1, (today - first_date).days)
+
+    daily_rate = total_units / span_days
+
+    return max(daily_rate, 0.01)
+
+
+# =========================================================
+# Safety stock
+# =========================================================
+
+def estimate_safety_stock(sales_rows, oos_rows):
+    """
+    Weekly stddev / 7 × z(95%) = 1.65.
+    Returns 0 when there's less than two weeks of history.
+    """
+    daily = combine_daily(sales_rows, oos_rows)
+    if len(daily) < 2:
+        return 0
+
+    df = pd.DataFrame(daily)
+    df["d"] = pd.to_datetime(df["d"])
+    df.set_index("d", inplace=True)
+
+    weekly = df.resample("W")["q"].sum()
+    if len(weekly) < 2 or pd.isna(weekly.std()):
+        return 0
+
+    return int(round((weekly.std() / 7) * 1.65))
+
+
+# =========================================================
+# Profit
+# =========================================================
+
+def compute_profit(
+    receipt,
+    quantity,
+    final_unit_price,
+    pricing_percentage,
+):
+    """
+    Compute tentative profit for a single line.
+
+    Selling price priority:
+      1. receipt.recommended_retail_price (if set)
+      2. cost × (1 + pricing_percentage/100)
+
+    Returns a dict with per-unit and total figures.
+    """
+    cost_per_unit = Decimal(str(final_unit_price or 0))
+
+    if receipt and receipt.recommended_retail_price:
+        sell_per_unit = Decimal(
+            str(receipt.recommended_retail_price)
+        )
+        pricing_source = "recommended_retail_price"
+    else:
+        markup = (
+            Decimal(str(pricing_percentage or 30))
+            / Decimal("100")
+        )
+        sell_per_unit = cost_per_unit * (
+            Decimal("1") + markup
+        )
+        pricing_source = "retailer_markup"
+
+    profit_per_unit = sell_per_unit - cost_per_unit
+
+    total_cost = cost_per_unit * Decimal(str(quantity))
+    total_revenue = sell_per_unit * Decimal(str(quantity))
+    total_profit = total_revenue - total_cost
+
+    margin_percent = Decimal("0")
+    if sell_per_unit > 0:
+        margin_percent = (
+            profit_per_unit / sell_per_unit
+        ) * Decimal("100")
+
+    return {
+        "cost_per_unit": float(cost_per_unit),
+        "sell_per_unit": float(sell_per_unit),
+        "pricing_source": pricing_source,
+        "profit_per_unit": float(
+            round(profit_per_unit, 2)
+        ),
+        "margin_percent": float(
+            round(margin_percent, 2)
+        ),
+        "total_cost": float(round(total_cost, 2)),
+        "total_revenue": float(
+            round(total_revenue, 2)
+        ),
+        "total_profit": float(
+            round(total_profit, 2)
+        ),
+    }
+
+
+# =========================================================
+# Quantity discount bonus
+# =========================================================
+
+def compute_bonus_quantity(quantity, discount):
+    """
+    Returns (total_quantity, bonus_quantity, full_blocks).
+
+    Formula: floor(qty / limit) × awarded
+    """
+    if not discount or not discount.limit_quantity:
+        return quantity, 0, 0
+
+    full_blocks = quantity // discount.limit_quantity
+    bonus = full_blocks * discount.awarded_quantity
+
+    return quantity + bonus, bonus, full_blocks
+
+
+# =========================================================
+# Lead time
+# =========================================================
+
+def resolve_lead_time(
+    learned_per_sku_supplier,
+    learned_per_sku,
+    learned_per_supplier,
+    indent_lead_override,
+):
+    """
+    Priority chain:
+
+      1. per_sku_supplier  — this SKU, this supplier
+      2. per_sku           — this SKU, any supplier
+      3. per_supplier      — this supplier, any SKU
+      4. indent_override   — user-set value on the indent
+      5. default           — (5, 2) cold start
+
+    Each `learned_*` argument is either a dict
+    {"mean": float, "stddev": float, "samples": int} or None.
+    """
+    learned = learned_per_sku_supplier
+    source = "per_sku_supplier"
+
+    if not learned:
+        learned = learned_per_sku
+        source = "per_sku"
+
+    if not learned:
+        learned = learned_per_supplier
+        source = "per_supplier"
+
+    if indent_lead_override and indent_lead_override > 0:
+        return (
+            int(indent_lead_override),
+            int(round(learned["stddev"])) if learned else 2,
+            "indent_override",
+        )
+
+    if not learned:
+        return (5, 2, "default")
+
+    return (
+        max(1, int(round(learned["mean"]))),
+        max(0, int(round(learned["stddev"]))),
+        source,
+    )
+
+
+# =========================================================
+# Lead time summary
+# =========================================================
+
+def compute_lead_time_summary(compiled):
+    """
+    Weighted average lead time across predictions, weighted by
+    line cost (qty × unit price).
+    """
+    if not compiled:
+        return {
+            "average_lead_time_days": 0.0,
+            "average_variance_days": 0.0,
+            "min_lead_time_days": 0,
+            "max_lead_time_days": 0,
+            "item_count": 0,
+        }
+
+    lead_days_list = []
+    variance_list = []
+    weights = []
+
+    for p in compiled:
+        metrics = p.get("calculated_metrics", {})
+        lead_days_list.append(
+            metrics.get("supplier_lead_time_days", 0)
+        )
+        variance_list.append(
+            metrics.get("supplier_delay_days", 0)
+        )
+
+        suggested = (
+            p.get("order_suggestion", {})
+            .get("suggested_order_quantity", 0) or 0
+        )
+        unit_price = (
+            p.get("order_suggestion", {})
+            .get("supplier", {})
+            .get("unit_price") or 0
+        )
+        weights.append(suggested * unit_price)
+
+    total_weight = sum(weights) or 1
+
+    avg_lead = sum(
+        d * w for d, w in zip(lead_days_list, weights)
+    ) / total_weight
+    avg_var = sum(
+        v * w for v, w in zip(variance_list, weights)
+    ) / total_weight
+
+    return {
+        "average_lead_time_days": round(avg_lead, 2),
+        "average_variance_days": round(avg_var, 2),
+        "min_lead_time_days": min(lead_days_list),
+        "max_lead_time_days": max(lead_days_list),
+        "item_count": len(lead_days_list),
+    }
+
+
+# =========================================================
+# Urgency sort
+# =========================================================
+
+def sort_by_urgency(predictions):
+    """
+    Lower ratio = more urgent.
+    ratio = days_of_stock_left / lead_time
+    """
+    def key(p):
+        metrics = p.get("calculated_metrics", {})
+        daily = metrics.get("average_daily_demand", 0) or 0
+        lead = metrics.get("supplier_lead_time_days", 5) or 5
+        stock = (
+            p.get("current_stock_status", {})
+            .get("good_usable_units", 0) or 0
+        )
+        if daily <= 0:
+            return 999
+        days_left = stock / daily
+        return days_left / max(lead, 1)
+
+    return sorted(predictions, key=key)
+
+
+# =========================================================
+# Line cost
+# =========================================================
+
+def line_cost(prediction):
+    """
+    Cost of a single prediction line: qty × unit_price.
+    Returns a Decimal so totals stay precise.
+    """
+    suggested = (
+        prediction.get("order_suggestion", {})
+        .get("suggested_order_quantity", 0) or 0
+    )
+    unit_price = (
+        prediction.get("order_suggestion", {})
+        .get("supplier", {})
+        .get("unit_price") or 0
+    )
+    return Decimal(str(suggested)) * Decimal(str(unit_price))
+
+
+# =========================================================
+# Budget
+# =========================================================
+
+def apply_budget(predictions, budget_amount, enforce):
+    """
+    Greedy pass: keep lines (already sorted by urgency)
+    until the budget is spent.
+
+    When `enforce` is False, all lines are kept and the
+    budget is advisory only.
+
+    Returns (included, excluded).
+    """
+    if (
+        budget_amount is None
+        or budget_amount <= 0
+        or not enforce
+    ):
+        return predictions, []
+
+    included = []
+    excluded = []
+    running = Decimal("0")
+
+    for p in predictions:
+        cost = line_cost(p)
+        if running + cost <= budget_amount:
+            included.append(p)
+            running += cost
+        else:
+            excluded.append(p)
+
+    return included, excluded
+
 def get_entity_interacted_products(owner):
     from products.models import Products
     from retailers.models import RetailerReceipts, OutOfStock, RetailerOrderItems
