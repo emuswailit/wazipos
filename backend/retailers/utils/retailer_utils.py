@@ -1614,46 +1614,179 @@ def create_estimate_indent(data,user):
 
 
 
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
+
+
+
 @transaction.atomic
 def create_retailer_indent(data, user):
-    errors=[]
-    lead_time=None
-    order_days=None
-    existing = None
+    """
+    Create or update the retailer's open indent.
 
-    if not "order_days" in data or data["order_days"]==None:
-        errors.append("Number of days the order inventory is projected to last is required")
+    Accepts an optional set of header config values. Fields not
+    provided fall back to the model defaults on create, or are
+    left untouched on update.
+
+    Note: the aggregates on RetailerIndent (total_cost,
+    total_revenue, total_profit, average_lead_time_days,
+    over_budget, ...) are not set here. They're populated by
+    the prediction run and by the post_save signal on items.
+    """
+    errors = []
+
+    # ---- Required: order_days ----
+    order_days = data.get("order_days")
+    if order_days is None:
+        errors.append(
+            "Number of days the order inventory is projected "
+            "to last is required"
+        )
         return errors, None
-    else:
-        order_days=data['order_days']
 
+    try:
+        order_days = int(order_days)
+    except (TypeError, ValueError):
+        errors.append("order_days must be an integer")
+        return errors, None
 
-    if not "lead_time" in data or data["lead_time"]==None:
+    if order_days <= 0:
+        errors.append("order_days must be greater than zero")
+        return errors, None
+
+    # ---- Required: lead_time ----
+    lead_time = data.get("lead_time")
+    if lead_time is None:
         errors.append("Lead time is required")
         return errors, None
-    else:
-        lead_time = data['lead_time']
 
-    order_days=data["order_days"]
-    if RetailerIndent.objects.filter(owner=user,is_open="true",entity=user.entity).exists():
-        existing = RetailerIndent.objects.filter(owner=user,is_open="true",entity=user.entity).first()
-        existing.lead_time= lead_time
-        existing.order_days= order_days
-        existing.save()
-        
-        return [], existing
-    else:
-        indent_number = generate_document_number(user.entity, user,"INDENT")
-        created = RetailerIndent.objects.create(
-            indent_number=indent_number,
-            owner=user, 
-            is_open ="true",
-            order_days=order_days,
-            lead_time=lead_time,
-            entity=user.entity
+    try:
+        lead_time = int(lead_time)
+    except (TypeError, ValueError):
+        errors.append("lead_time must be an integer")
+        return errors, None
+
+    if lead_time < 0:
+        errors.append("lead_time must be zero or greater")
+        return errors, None
+
+    # ---- Optional header config ----
+    # Only applied when present in `data`. On create, missing
+    # values fall through to the model's defaults. On update,
+    # missing values keep their current value.
+    optional_updates = {}
+
+    if "budget_amount" in data:
+        raw = data.get("budget_amount")
+        if raw in (None, "",):
+            optional_updates["budget_amount"] = None
+        else:
+            try:
+                optional_updates["budget_amount"] = Decimal(
+                    str(raw)
+                )
+            except (TypeError, ValueError, InvalidOperation):
+                errors.append(
+                    "budget_amount must be a valid number"
+                )
+                return errors, None
+
+    if "budget_enforced" in data:
+        raw = data.get("budget_enforced")
+        # Accept bool or string "true"/"false"
+        if isinstance(raw, bool):
+            optional_updates["budget_enforced"] = (
+                "true" if raw else "false"
             )
-        return [], created
-    
+        else:
+            s = str(raw).strip().lower()
+            if s in ("true", "false"):
+                optional_updates["budget_enforced"] = s
+            else:
+                errors.append(
+                    "budget_enforced must be true or false"
+                )
+                return errors, None
+
+    if "pricing_percentage" in data:
+        raw = data.get("pricing_percentage")
+        if raw in (None, ""):
+            optional_updates["pricing_percentage"] = Decimal(
+                "0.00"
+            )
+        else:
+            try:
+                optional_updates["pricing_percentage"] = Decimal(
+                    str(raw)
+                )
+            except (TypeError, ValueError, InvalidOperation):
+                errors.append(
+                    "pricing_percentage must be a valid number"
+                )
+                return errors, None
+
+    if "is_open" in data:
+        raw = data.get("is_open")
+        if isinstance(raw, bool):
+            optional_updates["is_open"] = (
+                "true" if raw else "false"
+            )
+        else:
+            s = str(raw).strip().lower()
+            if s in ("true", "false"):
+                optional_updates["is_open"] = s
+            else:
+                errors.append(
+                    "is_open must be true or false"
+                )
+                return errors, None
+
+    # ---- Find the retailer's existing open indent ----
+    existing = (
+        RetailerIndent.objects
+        .filter(
+            owner=user,
+            entity=user.entity,
+            is_open="true",
+        )
+        .order_by("-created")
+        .first()
+    )
+
+    if existing:
+        existing.lead_time = lead_time
+        existing.order_days = order_days
+
+        for field, value in optional_updates.items():
+            setattr(existing, field, value)
+
+        # Save with explicit update_fields so the aggregates
+        # computed elsewhere are not overwritten with stale
+        # in-memory values.
+        existing.save(update_fields=[
+            "lead_time",
+            "order_days",
+            *optional_updates.keys(),
+        ])
+
+        return [], existing
+
+    # ---- Create ----
+    # `indent_number` is auto-generated by RetailerIndent.save(),
+    # so we don't need generate_document_number here unless your
+    # numbering scheme lives outside the model.
+    created = RetailerIndent.objects.create(
+        owner=user,
+        entity=user.entity,
+        is_open="true",
+        order_days=order_days,
+        lead_time=lead_time,
+        **optional_updates,
+    )
+
+    return [], created
+
 
 def get_wholesaler_from_indent_item(indent_item):
     return indent_item.wholesale_receipt.entity
@@ -1788,80 +1921,227 @@ def create_retail_indent(user):
     )
     return created
 
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
+
+from retailers import models as retailers_models
+from retailers.models import (
+    IndentItemSource,
+    RetailerIndent,
+    RetailerIndentItem,
+)
+from wholesalers import (
+    models as wholesalers_models,
+    validators as wholesalers_models_validators,
+)
+
+
 @transaction.atomic
 def create_retailer_indent_item(data, user):
-    errors=[]
-    required_quantity=None
-    retailer_indent =None
-    indenting_criteria=None
+    """
+    Create or update a line on the retailer's open indent.
+
+    The line's pricing, bonus, and profit are NOT set here —
+    `RetailerIndentItem.recalculate()` derives them on save
+    from the supplier chain and `required_quantity`. The
+    parent's aggregates are updated by the item post_save
+    signal.
+    """
+    errors = []
+
+    # -----------------------------------------------------------------
+    # retailer_indent
+    # -----------------------------------------------------------------
+    retailer_indent = None
+    raw_indent_id = data.get("retailer_indent")
+
+    if not raw_indent_id:
+        errors.append("Indent ID is required")
+    else:
+        retailer_indent = (
+            RetailerIndent.objects
+            .filter(id=raw_indent_id)
+            .first()
+        )
+
+        if retailer_indent is None:
+            # Missing ID → create a fresh open indent.
+            retailer_indent = _create_open_indent(user)
+        elif retailer_indent.is_open == "false":
+            # Existing indent is closed → start a new open one.
+            retailer_indent = _create_open_indent(user)
+
+    # -----------------------------------------------------------------
+    # wholesale_receipt
+    # -----------------------------------------------------------------
     wholesale_receipt = None
-    wholesaler_price_discount=None
-    wholesaler_quantity_discount=None
+    raw_receipt_id = data.get("wholesale_receipt")
 
-    if not "retailer_indent" in data or data["retailer_indent"]=="":
-        errors.append("Indent  ID is required")
-
-    else:
-       
-        if RetailerIndent.objects.filter(id=data["retailer_indent"]).exists():
-            retailer_indent = RetailerIndent.objects.filter(id=data["retailer_indent"]).first()
-            if retailer_indent.is_open=="false":
-                retailer_indent=create_retail_indent(user)  
-        else:
-            retailer_indent=create_retail_indent(user)
-            
-    
-    if not "wholesale_receipt" in data or data["wholesale_receipt"]=="":
+    if not raw_receipt_id:
         errors.append("Wholesale product ID is required")
-       
     else:
-        wholesale_receipt=wholesalers_models_validators.validate_wholesaler_receipt(data["wholesale_receipt"])
-    
-    
-    if not "required_quantity" in data or data["required_quantity"]==0:
-        errors.append("Quantity is required")  
-       
+        wholesale_receipt = (
+            wholesalers_models_validators
+            .validate_wholesaler_receipt(raw_receipt_id)
+        )
+        if wholesale_receipt is None:
+            errors.append("Wholesale product not found")
+
+    # -----------------------------------------------------------------
+    # required_quantity
+    # -----------------------------------------------------------------
+    required_quantity = None
+    raw_qty = data.get("required_quantity")
+
+    if raw_qty in (None, 0, "0", ""):
+        errors.append("Quantity is required")
     else:
-        required_quantity=data["required_quantity"]  
-
-    if "indenting_criteria" in data:
-        indenting_criteria=data["indenting_criteria"]
-
-    # if  "wholesaler_price_discount" in data and  not data["wholesaler_price_discount"]=="":
-    #     wholesaler_price_discount= wholesalers_models_validators.validate_wholesaler_price_discount(data["wholesaler_price_discount"])
-
-    # if  "wholesaler_quantity_discount" in data and  not data["wholesaler_quantity_discount"]=="":
-    #     wholesaler_quantity_discount= wholesalers_models_validators.validate_wholesaler_quantity_discount(data["wholesaler_quantity_discount"])
-        
-    
-    if len(errors)>0:
-        return errors, None
-    else:
-        # If a similar product is in indent then update quantity
-        if RetailerIndentItem.objects.filter(
-                                                    wholesale_receipt=wholesale_receipt, 
-                                                    retailer_indent=retailer_indent,
-                                                    entity=user.entity).exists():
-            rii= RetailerIndentItem.objects.filter(owner=user,
-                                                    wholesale_receipt=wholesale_receipt, 
-
-                                                    retailer_indent=retailer_indent,
-                                                    entity=user.entity).first()
-            rii.required_quantity=required_quantity
-            rii.save()
-            print("Updated indent items", rii)
-            return [], rii
+        try:
+            required_quantity = int(raw_qty)
+        except (TypeError, ValueError):
+            errors.append("Quantity must be an integer")
         else:
-            created = RetailerIndentItem.objects.create(owner=user,
-                
-                                                    wholesale_receipt=wholesale_receipt, 
-                                                    required_quantity =required_quantity, 
-                                                    retailer_indent=retailer_indent,
-                                                    wholesaler_price_discount=wholesaler_price_discount,
-                                                    wholesaler_quantity_discount=wholesaler_quantity_discount,
-                                                    indenting_criteria=indenting_criteria,entity=user.entity)
-            print("Created new indent items", created)
-            return [], created
+            if required_quantity <= 0:
+                errors.append(
+                    "Quantity must be greater than zero"
+                )
+
+    # -----------------------------------------------------------------
+    # source (was indenting_criteria)
+    # -----------------------------------------------------------------
+    source = IndentItemSource.MANUAL
+    raw_source = data.get("source") or data.get(
+        "indenting_criteria"
+    )
+    if raw_source:
+        raw_source = str(raw_source).upper()
+        valid_sources = {c[0] for c in IndentItemSource.choices}
+        if raw_source in valid_sources:
+            source = raw_source
+        else:
+            errors.append(
+                f"source must be one of {sorted(valid_sources)}"
+            )
+
+    # -----------------------------------------------------------------
+    # Discounts — optional. If the client doesn't pass them,
+    # the model's recalculate() will still derive pricing from
+    # the receipt's list price.
+    # -----------------------------------------------------------------
+    wholesaler_price_discount = None
+    raw_pd = data.get("wholesaler_price_discount")
+    if raw_pd:
+        wholesaler_price_discount = (
+            wholesalers_models_validators
+            .validate_wholesaler_price_discount(raw_pd)
+        )
+        if wholesaler_price_discount is None:
+            errors.append(
+                "Price discount not found"
+            )
+
+    wholesaler_quantity_discount = None
+    raw_qd = data.get("wholesaler_quantity_discount")
+    if raw_qd:
+        wholesaler_quantity_discount = (
+            wholesalers_models_validators
+            .validate_wholesaler_quantity_discount(raw_qd)
+        )
+        if wholesaler_quantity_discount is None:
+            errors.append(
+                "Quantity discount not found"
+            )
+
+    if errors:
+        return errors, None
+
+    # -----------------------------------------------------------------
+    # Upsert
+    #
+    # The line's `total_quantity`, `profit_estimate`,
+    # `bonus_*`, `supplier_unit_selling_price`,
+    # `recommended_retail_price`, and `markup_percentage_used`
+    # are filled in by `RetailerIndentItem.save()`.
+    # -----------------------------------------------------------------
+    existing = (
+        RetailerIndentItem.objects
+        .filter(
+            wholesale_receipt=wholesale_receipt,
+            retailer_indent=retailer_indent,
+            entity=user.entity,
+        )
+        .first()
+    )
+
+    if existing:
+        existing.required_quantity = required_quantity
+        existing.source = source
+        existing.wholesaler_price_discount = (
+            wholesaler_price_discount
+        )
+        existing.wholesaler_quantity_discount = (
+            wholesaler_quantity_discount
+        )
+        existing.save(update_fields=[
+            "required_quantity",
+            "source",
+            "wholesaler_price_discount",
+            "wholesaler_quantity_discount",
+            "updated",
+        ])
+        print("Updated indent item", existing.id)
+        return [], existing
+
+    created = RetailerIndentItem.objects.create(
+        owner=user,
+        entity=user.entity,
+        retailer_indent=retailer_indent,
+        wholesale_receipt=wholesale_receipt,
+        required_quantity=required_quantity,
+        source=source,
+        wholesaler_price_discount=wholesaler_price_discount,
+        wholesaler_quantity_discount=wholesaler_quantity_discount,
+    )
+    print("Created indent item", created.id)
+    return [], created
+
+
+# =====================================================================
+# Helper — a fresh open indent for the current user
+# =====================================================================
+
+def _create_open_indent(user):
+    """
+    Reuse an existing open indent if one is already there;
+    otherwise create a new one. Kept separate so the item
+    service doesn't duplicate the logic the header service
+    owns.
+    """
+    existing = (
+        RetailerIndent.objects
+        .filter(
+            owner=user,
+            entity=user.entity,
+            is_open="true",
+        )
+        .order_by("-created")
+        .first()
+    )
+    if existing:
+        return existing
+
+    return RetailerIndent.objects.create(
+        owner=user,
+        entity=user.entity,
+        is_open="true",
+        # Reasonable defaults if the caller hasn't set config.
+        # If your RetailerIndent model already carries a
+        # `lead_time` default of 0 and `order_days` default
+        # of 30, you can drop these two lines.
+        lead_time=0,
+        order_days=getattr(user.entity, "order_days", 30) or 30,
+    )
 
 @transaction.atomic
 def update_out_of_stock_item(data, user):

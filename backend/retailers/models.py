@@ -306,85 +306,270 @@ from django.utils import timezone
 
 class IndentItemSource(models.TextChoices):
     PREDICTION = "PREDICTION", "Auto-suggested by the prediction engine"
+    PREDICTION_EDITED = "PREDICTION_EDITED", "Auto-suggested, then adjusted by the retailer"
     USER_ADDED = "USER_ADDED", "Manually added by the retailer"
     WHOLESALER_ADDED = "WHOLESALER_ADDED", "Added from a wholesaler's catalogue"
     IMPORTED = "IMPORTED", "Imported from an external source"
 
 
-class RetailerIndent(EntityRelatedModel):
-    class Meta:
-        verbose_name_plural = "Retailer Indent"
 
-    indent_number = models.ForeignKey(
-        DocumentNumbers,
-        related_name="indent_number",
-        on_delete=models.CASCADE,
+# apps/retailers/models.py
+
+from decimal import Decimal, ROUND_HALF_UP
+
+
+
+TWO_PLACES = Decimal("0.01")
+
+
+def _q(value) -> Decimal:
+    """Quantize to 2 dp, half-up. `None` → 0.00."""
+    if value is None:
+        return Decimal("0.00")
+    return Decimal(str(value)).quantize(
+        TWO_PLACES, rounding=ROUND_HALF_UP
+    )
+
+
+class IndentItemSource(models.TextChoices):
+    PREDICTION = "PREDICTION", "Auto-suggested by the prediction engine"
+    MANUAL = "MANUAL", "Added manually by the retailer"
+    IMPORTED = "IMPORTED", "Imported from another source"
+
+
+# ===========================================================================
+# Retailer Indent
+# ===========================================================================
+
+class RetailerIndent(EntityRelatedModel):
+    """
+    A replenishment plan for a retailer.
+
+    Field defaults / nullability
+    ----------------------------
+    Every field added since the initial schema is either
+    nullable, has a default, or both, so:
+      * `migrate` never asks for a backfill,
+      * existing rows keep working untouched,
+      * service code and the prediction consumer can omit
+        any of the aggregates and rely on the model to fill
+        them in on save / signal.
+    """
+
+    class Meta:
+        verbose_name_plural = "Retailer Indents"
+        ordering = ["-created"]
+
+    # ---- Config (required to exist, but defaulted) ----
+    is_open = models.CharField(
+        max_length=10,
+        default="true",
+    )
+    indent_number = models.CharField(
+        max_length=32,
+        unique=True,
         null=True,
         blank=True,
     )
-    order_days = models.IntegerField()
-    lead_time = models.IntegerField()
+    lead_time = models.IntegerField(default=0)
+    order_days = models.IntegerField(default=30)
 
-    is_open = models.CharField(
-        max_length=50,
-        choices=TRUE_FALSE_OPTIONS,
-        default="true",
-    )
-
-    # ---- Budget ----
     budget_amount = models.DecimalField(
-        max_digits=12,
+        max_digits=14,
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Optional cap on the total indent cost.",
     )
     budget_enforced = models.CharField(
-        max_length=50,
-        choices=TRUE_FALSE_OPTIONS,
+        max_length=10,
         default="true",
-        help_text=(
-            "If true, the estimator trims lines to fit the "
-            "budget. If false, the budget is advisory only."
-        ),
     )
-
-    # ---- Pricing ----
     pricing_percentage = models.DecimalField(
-        max_digits=5,
+        max_digits=6,
         decimal_places=2,
-        default=Decimal("30.00"),
+        default=30.00,
         help_text=(
-            "Markup applied when the wholesaler has no RRP. "
-            "30.00 = 30%% markup."
+            "Markup % applied when a supplier has no "
+            "recommended retail price."
         ),
     )
 
-    # ---- Lead time aggregate ----
+    # ---- Lead-time aggregate (all defaulted) ----
     average_lead_time_days = models.DecimalField(
         max_digits=6,
         decimal_places=2,
         default=0.00,
-        help_text="Weighted average lead time across indent items.",
     )
+    average_variance_days = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=0.00,
+    )
+    min_lead_time_days = models.IntegerField(default=0)
+    max_lead_time_days = models.IntegerField(default=0)
     lead_time_updated_at = models.DateTimeField(
         null=True,
         blank=True,
     )
 
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
+    # ---- Projected aggregates (all defaulted) ----
+    total_cost = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0.00,
+    )
+    total_revenue = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0.00,
+    )
+    total_profit = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0.00,
+    )
+    included_item_count = models.IntegerField(default=0)
+    excluded_item_count = models.IntegerField(default=0)
+    over_budget = models.BooleanField(default=False)
+
+    # ---- Config snapshot (nullable) ----
+    config_snapshot = models.JSONField(
+        null=True,
+        blank=True,
+    )
+
     owner = models.ForeignKey(
         Users,
         related_name="retailer_indent_owner",
         on_delete=models.CASCADE,
     )
 
-    def __str__(self):
-        return f"Indent #{self.id} — {self.entity.title}"
+    # ---- Timestamps ----
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return (
+            f"{self.indent_number or '(unsaved)'} "
+            f"· {self.entity_title}"
+        )
+
+    def save(self, *args, **kwargs):
+        if not self.indent_number:
+            self.indent_number = self._generate_indent_number()
+        super().save(*args, **kwargs)
+
+    def _generate_indent_number(self):
+        if not self.entity_id:
+            return None
+
+        prefix = getattr(self.entity, "code", "TRA")
+        prefix = (prefix or "TRA")[:5].upper()
+
+        last = (
+            RetailerIndent.objects
+            .filter(entity=self.entity)
+            .exclude(indent_number__isnull=True)
+            .order_by("-created")
+            .values_list("indent_number", flat=True)
+            .first()
+        )
+
+        if last and last.startswith(prefix):
+            try:
+                seq = int(last[len(prefix):]) + 1
+            except (ValueError, TypeError):
+                seq = 1
+        else:
+            seq = 1
+
+        return f"{prefix}{seq:010d}"
+
+    # =======================================================================
+    # Aggregates — recomputed from child items
+    # =======================================================================
+
+    def recalculate(self, save: bool = True):
+        """
+        Roll up item-level profit JSON into the header
+        aggregates. Called automatically by the item
+        post_save / post_delete signal.
+        """
+        items = self.indent_for_item.all()
+
+        total_cost = Decimal("0.00")
+        total_revenue = Decimal("0.00")
+        total_profit = Decimal("0.00")
+        included_count = 0
+
+        for it in items:
+            est = it.profit_estimate or {}
+            cost = est.get("total_cost")
+            revenue = est.get("total_revenue")
+            profit = est.get("total_profit")
+
+            if cost is not None:
+                total_cost += Decimal(str(cost))
+            if revenue is not None:
+                total_revenue += Decimal(str(revenue))
+            if profit is not None:
+                total_profit += Decimal(str(profit))
+
+            included_count += 1
+
+        self.total_cost = _q(total_cost)
+        self.total_revenue = _q(total_revenue)
+        self.total_profit = _q(total_profit)
+        self.included_item_count = included_count
+
+        # excluded_item_count is written by the prediction
+        # consumer based on its budget filter. Preserve it.
+        self.excluded_item_count = (
+            self.excluded_item_count or 0
+        )
+
+        budget = self.budget_amount
+        if budget is not None:
+            self.over_budget = (
+                self.total_cost > Decimal(str(budget))
+            )
+        else:
+            self.over_budget = False
+
+        if save:
+            super().save(update_fields=[
+                "total_cost",
+                "total_revenue",
+                "total_profit",
+                "included_item_count",
+                "excluded_item_count",
+                "over_budget",
+                "updated",
+            ])
+# ===========================================================================
+# Retailer Indent Item
+# ===========================================================================
 
 class RetailerIndentItem(EntityRelatedModel):
+    """
+    One line on a retailer indent.
+
+    Field defaults / nullability
+    ----------------------------
+    Every snapshot field added for the pricing / bonus chain
+    is either nullable or has a default. This means:
+      * old rows migrate without a backfill,
+      * the manual create service can omit every derived field,
+      * `recalculate()` (called from save) will populate them
+        whenever a `required_quantity` or supplier change
+        occurs.
+
+    The three flat pricing columns (`final_unit_price`,
+    `item_gross_total_amount`, `item_net_total_amount`) are
+    deliberately *not* model fields — they're `@property`
+    accessors that read out of `profit_estimate`.
+    """
+
     class Meta:
         verbose_name_plural = "Retailer Indent Items"
         unique_together = (
@@ -393,12 +578,14 @@ class RetailerIndentItem(EntityRelatedModel):
             "entity",
         )
 
+    # ---- Source (defaulted) ----
     source = models.CharField(
         max_length=20,
         choices=IndentItemSource.choices,
         default=IndentItemSource.PREDICTION,
     )
 
+    # ---- FKs (all nullable) ----
     retailer_indent = models.ForeignKey(
         RetailerIndent,
         on_delete=models.CASCADE,
@@ -406,21 +593,18 @@ class RetailerIndentItem(EntityRelatedModel):
         null=True,
         blank=True,
     )
-
     wholesale_receipt = models.ForeignKey(
         WholesalerReceipts,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
-
     wholesaler_price_discount = models.ForeignKey(
         WholesalerPriceDiscounts,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
-
     wholesaler_quantity_discount = models.ForeignKey(
         WholesalerQuantityDiscounts,
         on_delete=models.CASCADE,
@@ -428,34 +612,49 @@ class RetailerIndentItem(EntityRelatedModel):
         blank=True,
     )
 
-    required_quantity = models.IntegerField()
-    total_quantity = models.IntegerField()
+    # ---- Quantities (required, but defaulted) ----
+    required_quantity = models.IntegerField(default=0)
+    total_quantity = models.IntegerField(default=0)
 
-    final_unit_price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0.00,
+    # ---- Bonus snapshot (all defaulted / nullable) ----
+    bonus_quantity_earned = models.IntegerField(default=0)
+    bonus_blocks_earned = models.IntegerField(default=0)
+    bonus_rule_buy_quantity = models.IntegerField(
+        null=True,
+        blank=True,
     )
-    item_gross_total_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0.00,
-    )
-    item_net_total_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0.00,
+    bonus_rule_free_quantity = models.IntegerField(
+        null=True,
+        blank=True,
     )
 
+    # ---- Price snapshot chain (all nullable) ----
+    supplier_unit_selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    recommended_retail_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    markup_percentage_used = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    # ---- Profit JSON (nullable) ----
     profit_estimate = models.JSONField(
         null=True,
         blank=True,
-        help_text=(
-            "Profit calculation captured at indent creation."
-        ),
     )
 
-    # ---- Per-line lead time ----
+    # ---- Lead time (defaulted) ----
     lead_time_days = models.IntegerField(default=0)
     lead_time_variance_days = models.IntegerField(default=0)
     lead_time_source = models.CharField(
@@ -463,6 +662,17 @@ class RetailerIndentItem(EntityRelatedModel):
         default="default",
     )
 
+    # ---- Batch dates (nullable) ----
+    manufacture_date = models.DateField(
+        null=True,
+        blank=True,
+    )
+    expiry_date = models.DateField(
+        null=True,
+        blank=True,
+    )
+
+    # ---- Timestamps (auto) ----
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(
@@ -472,10 +682,274 @@ class RetailerIndentItem(EntityRelatedModel):
     )
 
     def __str__(self):
-        return (
-            f"{self.wholesale_receipt.product.title} "
-            f"× {self.required_quantity}"
+        title = (
+            self.wholesale_receipt.product.title
+            if self.wholesale_receipt
+            and self.wholesale_receipt.product
+            else "(no product)"
         )
+        return f"{title} × {self.required_quantity}"
+
+    # =======================================================================
+    # Save → recalculate
+    # =======================================================================
+
+    def save(self, *args, **kwargs):
+        self.recalculate()
+        super().save(*args, **kwargs)
+
+    # =======================================================================
+    # Recalculation — single source of truth for derived values
+    # =======================================================================
+
+    def recalculate(self):
+        """
+        Derive pricing + bonus + profit from the current
+        supplier chain and `required_quantity`.
+
+        Safe to call on any save. Also resolves an active
+        quantity discount on the receipt when the FK is null,
+        so the bonus math applies even for manually-added
+        items that didn't pass a discount.
+        """
+        qty = int(self.required_quantity or 0)
+
+        receipt = self.wholesale_receipt
+        base_price = Decimal("0.00")
+        recommended_rrp = None
+
+        if receipt:
+            base_price = _q(
+                getattr(receipt, "unit_selling_price", 0) or 0
+            )
+            rrp = getattr(
+                receipt, "recommended_retail_price", None
+            )
+            if rrp is not None:
+                recommended_rrp = _q(rrp)
+
+        # ---- Resolve quantity discount ----
+        # 1. Prefer the FK that was set on the item.
+        # 2. Otherwise look up the currently active one on the
+        #    receipt, and persist it so subsequent reads skip
+        #    the query.
+        qd = self.wholesaler_quantity_discount
+        if not qd and receipt and qty > 0:
+            today = timezone.now().date()
+            qd = (
+                WholesalerQuantityDiscounts.objects
+                .filter(
+                    wholesaler_receipt=receipt,
+                    is_active="true",
+                    start__lte=today,
+                    end__gte=today,
+                    limit_quantity__lte=qty,
+                )
+                .order_by("-limit_quantity")
+                .first()
+            )
+            if qd:
+                self.wholesaler_quantity_discount = qd
+
+        # ---- Resolve price discount (same pattern) ----
+        pd = self.wholesaler_price_discount
+        if not pd and receipt:
+            today = timezone.now().date()
+            pd = (
+                WholesalerPriceDiscounts.objects
+                .filter(
+                    wholesaler_receipt=receipt,
+                    is_active="true",
+                    start__lte=today,
+                    end__gte=today,
+                )
+                .order_by("-percent")
+                .first()
+            )
+            if pd:
+                self.wholesaler_price_discount = pd
+
+        # ---- Final unit price ----
+        final_unit_price = base_price
+        if pd:
+            offer = getattr(pd, "offer_price", None)
+            if offer is not None:
+                final_unit_price = _q(offer)
+
+        # ---- Bonus blocks ----
+        bonus_qty = 0
+        bonus_blocks = 0
+        buy_qty = None
+        free_qty = None
+
+        if qd and qd.limit_quantity and qd.limit_quantity > 0:
+            buy_qty = int(qd.limit_quantity)
+            free_qty = int(qd.awarded_quantity or 0)
+            bonus_blocks = qty // buy_qty
+            bonus_qty = bonus_blocks * free_qty
+
+        total_quantity = qty + bonus_qty
+
+        # ---- Profit ----
+        cost_per_unit = final_unit_price
+
+        if recommended_rrp is not None:
+            sell_per_unit = recommended_rrp
+            pricing_source = "recommended_retail_price"
+            markup_used = None
+        else:
+            markup_pct = _q(
+                self._retailer_markup_percentage()
+            )
+            sell_per_unit = _q(
+                cost_per_unit
+                * (Decimal("1") + markup_pct / Decimal("100"))
+            )
+            pricing_source = "retailer_markup"
+            markup_used = markup_pct
+
+        profit_per_unit = sell_per_unit - cost_per_unit
+        total_cost = _q(cost_per_unit * qty)
+        total_revenue = _q(sell_per_unit * qty)
+        total_profit = total_revenue - total_cost
+
+        margin_percent = Decimal("0.00")
+        if sell_per_unit > 0:
+            margin_percent = _q(
+                profit_per_unit / sell_per_unit
+                * Decimal("100")
+            )
+
+        # ---- Write back ----
+        self.supplier_unit_selling_price = base_price
+        self.recommended_retail_price = recommended_rrp
+        self.markup_percentage_used = markup_used
+
+        self.bonus_quantity_earned = bonus_qty
+        self.bonus_blocks_earned = bonus_blocks
+        self.bonus_rule_buy_quantity = buy_qty
+        self.bonus_rule_free_quantity = free_qty
+
+        self.total_quantity = total_quantity
+
+        self.profit_estimate = {
+            "cost_per_unit": float(cost_per_unit),
+            "sell_per_unit": float(sell_per_unit),
+            "pricing_source": pricing_source,
+            "profit_per_unit": float(_q(profit_per_unit)),
+            "margin_percent": float(margin_percent),
+            "total_cost": float(total_cost),
+            "total_revenue": float(total_revenue),
+            "total_profit": float(total_profit),
+        }
+
+    def _retailer_markup_percentage(self) -> Decimal:
+        parent = self.retailer_indent
+        if (
+            parent is not None
+            and parent.pricing_percentage is not None
+        ):
+            return Decimal(str(parent.pricing_percentage))
+        return Decimal("30.00")
+
+    # =======================================================================
+    # Derived pricing — read out of the profit_estimate JSON
+    # =======================================================================
+
+    @property
+    def final_unit_price(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("cost_per_unit")
+        return None
+
+    @property
+    def item_net_total_amount(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("total_cost")
+        return None
+
+    @property
+    def item_gross_total_amount(self):
+        if (
+            self.supplier_unit_selling_price is not None
+            and self.required_quantity is not None
+        ):
+            return (
+                Decimal(str(self.supplier_unit_selling_price))
+                * Decimal(str(self.required_quantity))
+            )
+        return None
+
+    # =======================================================================
+    # Display helpers — used by the serializer
+    # =======================================================================
+
+    @property
+    def wholesale_receipt_title(self):
+        if (
+            self.wholesale_receipt
+            and self.wholesale_receipt.product
+        ):
+            return self.wholesale_receipt.product.product_name()
+        return ""
+
+    @property
+    def wholesaler_title(self):
+        if (
+            self.wholesale_receipt
+            and self.wholesale_receipt.received_from
+        ):
+            return self.wholesale_receipt.received_from.title
+        return ""
+
+    @property
+    def wholesaler(self):
+        if (
+            self.wholesale_receipt
+            and self.wholesale_receipt.received_from
+        ):
+            return str(
+                self.wholesale_receipt.received_from.id
+            )
+        return None
+
+    @property
+    def wholesaler_price_discount_title(self):
+        if self.wholesaler_price_discount:
+            return self.wholesaler_price_discount.title
+        return ""
+
+    @property
+    def wholesaler_quantity_discount_title(self):
+        if self.wholesaler_quantity_discount:
+            return self.wholesaler_quantity_discount.title
+        return ""
+
+    @property
+    def source_label(self):
+        return self.get_source_display()
+
+    # =======================================================================
+    # Profit accessors (convenience reads)
+    # =======================================================================
+
+    @property
+    def cost_per_unit(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("cost_per_unit")
+        return None
+
+    @property
+    def sell_per_unit(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("sell_per_unit")
+        return None
+
+    @property
+    def profit_per_unit(self):
+        if self.profit_estimate:
+            return self.profit_estimate.get("profit_per_unit")
+        return None
 
     @property
     def total_profit(self):
@@ -500,6 +974,7 @@ class RetailerIndentItem(EntityRelatedModel):
         if self.profit_estimate:
             return self.profit_estimate.get("pricing_source")
         return None
+
 
 # class RetailerIndent(EntityRelatedModel):
 #     class Meta:

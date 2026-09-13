@@ -1641,32 +1641,103 @@ class InventoryPredictionQuerySerializer(serializers.Serializer):
 # Indent item
 # =========================================================
 
+# apps/retailers/serializers.py
+
+from rest_framework import serializers
+
+from products.models import ProductImages  # adjust import
+from products.serializers import (
+    ProductImageSerializer,
+)  # adjust import
+
+from .models import RetailerIndent, RetailerIndentItem
+
+
+# =========================================================
+# Retailer indent item
+# =========================================================
+
 class RetailerIndentItemsSerializer(serializers.ModelSerializer):
-    # Product / wholesaler info
+    # ---- Product / wholesaler info ----
     wholesale_receipt_title = serializers.SerializerMethodField()
     wholesaler = serializers.SerializerMethodField()
     wholesaler_title = serializers.SerializerMethodField()
+
+    # ---- Batch dates (prefer item snapshot, fall back) ----
     manufacture_date = serializers.SerializerMethodField()
     expiry_date = serializers.SerializerMethodField()
+
+    # ---- Images of the underlying product ----
     images = serializers.SerializerMethodField()
 
-    # Discount info
+    # ---- Discount titles ----
     wholesaler_price_discount_title = serializers.SerializerMethodField()
     wholesaler_quantity_discount_title = serializers.SerializerMethodField()
 
-    # Entity info
+    # ---- Entity info ----
     entity_title = serializers.SerializerMethodField()
 
-    # Source
+    # ---- Source label ----
     source_label = serializers.CharField(
         source="get_source_display", read_only=True
     )
 
-    # Profit accessors (from model properties)
-    total_profit = serializers.FloatField(read_only=True)
-    total_revenue = serializers.FloatField(read_only=True)
-    margin_percent = serializers.FloatField(read_only=True)
-    pricing_source = serializers.CharField(read_only=True)
+    # ---- Snapshot fields (persisted) ----
+    supplier_unit_selling_price = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+    recommended_retail_price = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+    markup_percentage_used = serializers.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+
+    # ---- Bonus rule snapshot ----
+    bonus_quantity_earned = serializers.IntegerField(
+        read_only=True
+    )
+    bonus_blocks_earned = serializers.IntegerField(
+        read_only=True
+    )
+    bonus_rule_buy_quantity = serializers.IntegerField(
+        read_only=True, allow_null=True
+    )
+    bonus_rule_free_quantity = serializers.IntegerField(
+        read_only=True, allow_null=True
+    )
+
+    # ---- Profit accessors (model @property, flattened) ----
+    cost_per_unit = serializers.FloatField(
+        read_only=True, allow_null=True
+    )
+    sell_per_unit = serializers.FloatField(
+        read_only=True, allow_null=True
+    )
+    profit_per_unit = serializers.FloatField(
+        read_only=True, allow_null=True
+    )
+    total_profit = serializers.FloatField(
+        read_only=True, allow_null=True
+    )
+    total_revenue = serializers.FloatField(
+        read_only=True, allow_null=True
+    )
+    margin_percent = serializers.FloatField(
+        read_only=True, allow_null=True
+    )
+    pricing_source = serializers.CharField(
+        read_only=True, allow_null=True
+    )
 
     class Meta:
         model = RetailerIndentItem
@@ -1696,13 +1767,29 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
             "required_quantity",
             "total_quantity",
 
-            # Pricing
+            # Bonus snapshot
+            "bonus_quantity_earned",
+            "bonus_blocks_earned",
+            "bonus_rule_buy_quantity",
+            "bonus_rule_free_quantity",
+
+            # Price snapshot chain
+            "supplier_unit_selling_price",
+            "recommended_retail_price",
+            "markup_percentage_used",
+
+            # Derived pricing — served via model @property.
+            # No serializer field declaration needed; DRF
+            # falls through to the attribute on the model.
             "final_unit_price",
             "item_gross_total_amount",
             "item_net_total_amount",
 
             # Profit
             "profit_estimate",
+            "cost_per_unit",
+            "sell_per_unit",
+            "profit_per_unit",
             "total_profit",
             "total_revenue",
             "margin_percent",
@@ -1729,9 +1816,37 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
             "created",
             "updated",
             "owner",
+
+            # Bonus snapshot
+            "bonus_quantity_earned",
+            "bonus_blocks_earned",
+            "bonus_rule_buy_quantity",
+            "bonus_rule_free_quantity",
+
+            # Price snapshot chain
+            "supplier_unit_selling_price",
+            "recommended_retail_price",
+            "markup_percentage_used",
+
+            # Derived pricing
+            "final_unit_price",
+            "item_gross_total_amount",
+            "item_net_total_amount",
+
+            # Profit
+            "profit_estimate",
+            "cost_per_unit",
+            "sell_per_unit",
+            "profit_per_unit",
+            "total_profit",
+            "total_revenue",
+            "margin_percent",
+            "pricing_source",
         )
 
-    # ---- Method fields ----
+    # -----------------------------------------------------
+    # Method fields
+    # -----------------------------------------------------
 
     def get_entity_title(self, obj):
         if obj.retailer_indent and obj.retailer_indent.entity:
@@ -1739,29 +1854,39 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
         return ""
 
     def get_wholesale_receipt_title(self, obj):
-        if obj.wholesale_receipt:
+        if obj.wholesale_receipt and obj.wholesale_receipt.product:
             return obj.wholesale_receipt.product.title
         return ""
 
+    def get_wholesaler(self, obj):
+        if (
+            obj.wholesale_receipt
+            and obj.wholesale_receipt.received_from
+        ):
+            return str(obj.wholesale_receipt.received_from.id)
+        return None
+
+    def get_wholesaler_title(self, obj):
+        if (
+            obj.wholesale_receipt
+            and obj.wholesale_receipt.received_from
+        ):
+            return obj.wholesale_receipt.received_from.title
+        return ""
+
     def get_manufacture_date(self, obj):
+        if obj.manufacture_date:
+            return obj.manufacture_date
         if obj.wholesale_receipt:
             return obj.wholesale_receipt.manufacture_date
         return None
 
     def get_expiry_date(self, obj):
+        if obj.expiry_date:
+            return obj.expiry_date
         if obj.wholesale_receipt:
             return obj.wholesale_receipt.expiry_date
         return None
-
-    def get_wholesaler(self, obj):
-        if obj.wholesale_receipt and obj.wholesale_receipt.entity:
-            return obj.wholesale_receipt.entity.id
-        return None
-
-    def get_wholesaler_title(self, obj):
-        if obj.wholesale_receipt and obj.wholesale_receipt.entity:
-            return obj.wholesale_receipt.entity.title
-        return ""
 
     def get_images(self, obj):
         if not obj.wholesale_receipt:
@@ -1785,13 +1910,43 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
 
 
 # =========================================================
-# Indent header
+# Retailer indent header
 # =========================================================
 
 class RetailerIndentSerializer(serializers.ModelSerializer):
     retailer_indent_items = serializers.SerializerMethodField()
-    indent_number = serializers.SerializerMethodField()
     entity_title = serializers.SerializerMethodField()
+
+    # ---- Lead-time aggregate ----
+    average_lead_time_days = serializers.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+    average_variance_days = serializers.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+
+    # ---- Projected aggregates ----
+    total_cost = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        read_only=True,
+    )
+    total_revenue = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        read_only=True,
+    )
+    total_profit = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        read_only=True,
+    )
 
     class Meta:
         model = RetailerIndent
@@ -1811,7 +1966,21 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
 
             # Aggregate lead time
             "average_lead_time_days",
+            "average_variance_days",
+            "min_lead_time_days",
+            "max_lead_time_days",
             "lead_time_updated_at",
+
+            # Projected aggregates
+            "total_cost",
+            "total_revenue",
+            "total_profit",
+            "included_item_count",
+            "excluded_item_count",
+            "over_budget",
+
+            # Snapshot of the config used to generate
+            "config_snapshot",
 
             # Nested items
             "retailer_indent_items",
@@ -1825,11 +1994,26 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
             "id",
             "indent_number",
             "average_lead_time_days",
+            "average_variance_days",
+            "min_lead_time_days",
+            "max_lead_time_days",
             "lead_time_updated_at",
+            "total_cost",
+            "total_revenue",
+            "total_profit",
+            "included_item_count",
+            "excluded_item_count",
+            "over_budget",
+            "config_snapshot",
             "created",
             "updated",
             "owner",
         )
+
+    def get_entity_title(self, obj):
+        if obj.entity:
+            return obj.entity.title
+        return ""
 
     def get_retailer_indent_items(self, obj):
         items = RetailerIndentItem.objects.filter(
@@ -1838,18 +2022,6 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
         return RetailerIndentItemsSerializer(
             items, context=self.context, many=True
         ).data
-
-    def get_indent_number(self, obj):
-        if obj.indent_number:
-            return obj.indent_number.document_number
-        return ""
-
-    def get_entity_title(self, obj):
-        if obj.entity:
-            return obj.entity.title
-        return ""
-
-
     
 # class RetailerIndentSerializer(serializers.ModelSerializer):
 #     retailer_indent_items = serializers.SerializerMethodField(read_only=True)
