@@ -1,5 +1,6 @@
 // app/(wholesalers)/wholesaleInventory/InventoryAddForm.tsx
 
+import { EntityItem, ProductItem } from '@/databases/types';
 import DateTimePicker, {
     DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
@@ -28,8 +29,8 @@ interface InventoryAddFormProps {
     formik: any;
     isDarkMode: boolean;
     theme: any;
-    products: any[];
-    entities: any[];
+    products: ProductItem[];
+    entities: EntityItem[];
 }
 
 const UNIT_OF_RECEIPT_OPTIONS = [
@@ -40,6 +41,14 @@ const UNIT_OF_RECEIPT_OPTIONS = [
     'Millilitre',
     'Litre',
 ];
+
+/* =========================================================
+ * Debug logging
+ * ======================================================= */
+
+const log = (...args: any[]) => {
+    if (__DEV__) console.log('[InventoryAddForm]', ...args);
+};
 
 /* =========================================================
  * Universal Date Picker
@@ -66,9 +75,7 @@ function UniversalDatePicker({
 }: UniversalDatePickerProps) {
     const [showPicker, setShowPicker] = useState(false);
 
-    const backgroundColor = isDarkMode
-        ? '#1e293b'
-        : '#f8fafc';
+    const backgroundColor = isDarkMode ? '#1e293b' : '#f8fafc';
     const textColor = theme?.text || '#0f172a';
     const borderColor = hasError
         ? '#ef4444'
@@ -76,14 +83,11 @@ function UniversalDatePicker({
             ? '#475569'
             : '#cbd5e1';
 
-    const parseDate = (
-        dateString?: string | null
-    ): Date => {
+    const parseDate = (dateString?: string | null): Date => {
         if (!dateString) return minDate ?? new Date();
 
         const parts = dateString.split('-');
-        if (parts.length !== 3)
-            return minDate ?? new Date();
+        if (parts.length !== 3) return minDate ?? new Date();
 
         const year = Number(parts[0]);
         const month = Number(parts[1]) - 1;
@@ -98,28 +102,16 @@ function UniversalDatePicker({
 
     const formatDate = (date: Date): string => {
         const year = date.getFullYear();
-        const month = String(
-            date.getMonth() + 1
-        ).padStart(2, '0');
-        const day = String(date.getDate()).padStart(
-            2,
-            '0'
-        );
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     };
 
-    const formatMinForWeb = (
-        min?: Date
-    ): string | undefined => {
+    const formatMinForWeb = (min?: Date): string | undefined => {
         if (!min) return undefined;
         const year = min.getFullYear();
-        const month = String(
-            min.getMonth() + 1
-        ).padStart(2, '0');
-        const day = String(min.getDate()).padStart(
-            2,
-            '0'
-        );
+        const month = String(min.getMonth() + 1).padStart(2, '0');
+        const day = String(min.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     };
 
@@ -130,10 +122,7 @@ function UniversalDatePicker({
                     value: parseDate(value),
                     mode: 'date',
                     minimumDate: minDate,
-                    onChange: (
-                        event,
-                        selectedDate
-                    ) => {
+                    onChange: (event, selectedDate) => {
                         if (
                             event.type !== 'set' ||
                             !selectedDate
@@ -145,9 +134,7 @@ function UniversalDatePicker({
                             minDate.getTime()
                         )
                             return;
-                        onChange(
-                            formatDate(selectedDate)
-                        );
+                        onChange(formatDate(selectedDate));
                     },
                 });
             } catch (err) {
@@ -171,8 +158,7 @@ function UniversalDatePicker({
                 value={value || ''}
                 min={minWeb}
                 onChange={(event) => {
-                    const nextValue =
-                        event.target.value || null;
+                    const nextValue = event.target.value || null;
                     if (nextValue && minWeb) {
                         if (nextValue < minWeb) return;
                     }
@@ -218,11 +204,8 @@ function UniversalDatePicker({
             >
                 <Text
                     style={{
-                        color: value
-                            ? textColor
-                            : '#94a3b8',
-                        fontFamily:
-                            theme?.font?.medium,
+                        color: value ? textColor : '#94a3b8',
+                        fontFamily: theme?.font?.medium,
                         flexShrink: 1,
                     }}
                     className="text-sm font-medium"
@@ -251,14 +234,8 @@ function UniversalDatePicker({
                         mode="date"
                         display="spinner"
                         minimumDate={minDate}
-                        onChange={(
-                            event,
-                            selectedDate
-                        ) => {
-                            if (
-                                event.type ===
-                                'dismissed'
-                            )
+                        onChange={(event, selectedDate) => {
+                            if (event.type === 'dismissed')
                                 return;
                             if (selectedDate) {
                                 if (
@@ -268,32 +245,26 @@ function UniversalDatePicker({
                                 )
                                     return;
                                 onChange(
-                                    formatDate(
-                                        selectedDate
-                                    )
+                                    formatDate(selectedDate)
                                 );
                             }
                         }}
                     />
                     <Pressable
-                        onPress={() =>
-                            setShowPicker(false)
-                        }
+                        onPress={() => setShowPicker(false)}
                         style={{
                             marginTop: 8,
                             alignSelf: 'flex-end',
                             paddingHorizontal: 12,
                             paddingVertical: 8,
                             borderRadius: 8,
-                            backgroundColor:
-                                theme?.primary,
+                            backgroundColor: theme?.primary,
                         }}
                     >
                         <Text
                             style={{
                                 color: '#ffffff',
-                                fontFamily:
-                                    theme?.font?.bold,
+                                fontFamily: theme?.font?.bold,
                             }}
                             className="text-xs font-bold"
                         >
@@ -307,7 +278,7 @@ function UniversalDatePicker({
 }
 
 /* =========================================================
- * Universal Select — with optional search filtering
+ * Universal Select
  * ======================================================= */
 
 interface UniversalSelectProps {
@@ -334,9 +305,7 @@ function UniversalSelect({
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
 
-    const backgroundColor = isDarkMode
-        ? '#1e293b'
-        : '#f8fafc';
+    const backgroundColor = isDarkMode ? '#1e293b' : '#f8fafc';
     const dropdownBackground = isDarkMode
         ? '#0f172a'
         : '#ffffff';
@@ -370,9 +339,7 @@ function UniversalSelect({
             }}
         >
             <Pressable
-                onPress={() =>
-                    setOpen((current) => !current)
-                }
+                onPress={() => setOpen((current) => !current)}
                 className="w-full h-11 rounded-xl border px-3.5 flex-row items-center justify-between"
                 style={{
                     backgroundColor,
@@ -383,11 +350,8 @@ function UniversalSelect({
                 <Text
                     numberOfLines={1}
                     style={{
-                        color: value
-                            ? textColor
-                            : '#94a3b8',
-                        fontFamily:
-                            theme?.font?.medium,
+                        color: value ? textColor : '#94a3b8',
+                        fontFamily: theme?.font?.medium,
                     }}
                     className="text-sm font-medium flex-1"
                 >
@@ -415,8 +379,7 @@ function UniversalSelect({
                     className="absolute left-0 right-0 rounded-xl border overflow-hidden"
                     style={{
                         top: 48,
-                        backgroundColor:
-                            dropdownBackground,
+                        backgroundColor: dropdownBackground,
                         borderColor: selectedColor,
                         borderWidth: 1,
                         zIndex: 10000,
@@ -427,8 +390,7 @@ function UniversalSelect({
                     {searchable && (
                         <View
                             style={{
-                                borderBottomColor:
-                                    borderColor,
+                                borderBottomColor: borderColor,
                                 borderBottomWidth: 1,
                                 paddingHorizontal: 10,
                                 paddingVertical: 8,
@@ -438,9 +400,7 @@ function UniversalSelect({
                                 value={query}
                                 onChangeText={setQuery}
                                 placeholder="Search..."
-                                placeholderTextColor={
-                                    '#94a3b8'
-                                }
+                                placeholderTextColor="#94a3b8"
                                 autoCorrect={false}
                                 autoCapitalize="none"
                                 style={{
@@ -450,8 +410,7 @@ function UniversalSelect({
                                             : '#f1f5f9',
                                     color: textColor,
                                     fontFamily:
-                                        theme?.font
-                                            ?.medium,
+                                        theme?.font?.medium,
                                     height: 36,
                                     borderRadius: 8,
                                     paddingHorizontal: 10,
@@ -468,17 +427,12 @@ function UniversalSelect({
                         style={{ maxHeight: 260 }}
                     >
                         {filteredOptions.length === 0 ? (
-                            <View
-                                style={{
-                                    padding: 16,
-                                }}
-                            >
+                            <View style={{ padding: 16 }}>
                                 <Text
                                     style={{
                                         color: theme?.textDark,
                                         fontFamily:
-                                            theme?.font
-                                                ?.medium,
+                                            theme?.font?.medium,
                                     }}
                                     className="text-xs text-center"
                                 >
@@ -497,9 +451,7 @@ function UniversalSelect({
                                             setOpen(false);
                                         }}
                                         className="min-h-[44px] px-3.5 flex-row items-center justify-between border-b border-slate-700/10"
-                                        style={({
-                                            pressed,
-                                        }) => ({
+                                        style={({ pressed }) => ({
                                             backgroundColor:
                                                 pressed
                                                     ? isDarkMode
@@ -514,10 +466,9 @@ function UniversalSelect({
                                     >
                                         <Text
                                             style={{
-                                                color:
-                                                    selected
-                                                        ? selectedColor
-                                                        : textColor,
+                                                color: selected
+                                                    ? selectedColor
+                                                    : textColor,
                                                 fontFamily:
                                                     selected
                                                         ? theme
@@ -567,11 +518,71 @@ export default function InventoryAddForm({
     const bg = isDarkMode ? '#1e293b' : '#f8fafc';
     const tc = theme?.text || '#0f172a';
 
-    const [isScanning, setIsScanning] =
-        useState(false);
-    const [hasPermission, setHasPermission] =
-        useState<boolean | null>(null);
+    const [isScanning, setIsScanning] = useState(false);
+    const [hasPermission, setHasPermission] = useState<
+        boolean | null
+    >(null);
     const [scanned, setScanned] = useState(false);
+
+    /* ---------------------------------------------------------
+     * Log the products prop so we can trace where the list
+     * breaks between context → parent → form.
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!__DEV__) return;
+
+        log(
+            'products prop:',
+            JSON.stringify(
+                {
+                    isArray: Array.isArray(products),
+                    length: products?.length ?? 0,
+                    firstSample: products?.[0]
+                        ? {
+                            remote_id:
+                                products[0].remote_id,
+                            id: products[0].id,
+                            title: products[0].title,
+                            long_title:
+                                products[0].long_title,
+                            bar_code: products[0].bar_code,
+                            category: products[0].category,
+                        }
+                        : null,
+                },
+                null,
+                2
+            )
+        );
+
+        if (
+            Array.isArray(products) &&
+            products.length > 0
+        ) {
+            log(
+                'first 5 products:',
+                products.slice(0, 5).map((p) => ({
+                    remote_id: p.remote_id,
+                    id: p.id,
+                    title: p.title,
+                    bar_code: p.bar_code,
+                }))
+            );
+
+            const missingRemoteId = products.filter(
+                (p) => !p.remote_id
+            ).length;
+            if (missingRemoteId > 0) {
+                console.warn(
+                    `[InventoryAddForm] ${missingRemoteId}/${products.length} products have no remote_id — normalizer likely did not run`
+                );
+            }
+        } else if (Array.isArray(products)) {
+            console.warn(
+                '[InventoryAddForm] products array is empty'
+            );
+        }
+    }, [products]);
 
     const openScanner = async () => {
         if (Platform.OS !== 'web') {
@@ -610,10 +621,7 @@ export default function InventoryAddForm({
                 typeof navigator !== 'undefined'
                     ? navigator
                     : null;
-            if (
-                nav &&
-                typeof nav.vibrate === 'function'
-            ) {
+            if (nav && typeof nav.vibrate === 'function') {
                 try {
                     nav.vibrate(60);
                 } catch { }
@@ -624,11 +632,7 @@ export default function InventoryAddForm({
 
         setScanned(true);
         formik.setFieldValue('bar_code', data);
-        formik.setFieldTouched(
-            'bar_code',
-            true,
-            false
-        );
+        formik.setFieldTouched('bar_code', true, false);
 
         setTimeout(() => {
             setIsScanning(false);
@@ -637,8 +641,7 @@ export default function InventoryAddForm({
     };
 
     const bc = (field: string) =>
-        formik.errors?.[field] &&
-            formik.touched?.[field]
+        formik.errors?.[field] && formik.touched?.[field]
             ? '#ef4444'
             : isDarkMode
                 ? '#475569'
@@ -656,10 +659,7 @@ export default function InventoryAddForm({
     };
 
     const renderError = (field: string) => {
-        if (
-            !formik.errors?.[field] ||
-            !formik.touched?.[field]
-        )
+        if (!formik.errors?.[field] || !formik.touched?.[field])
             return null;
         return (
             <Text className="text-red-500 text-[10px] pl-1 font-semibold">
@@ -668,23 +668,29 @@ export default function InventoryAddForm({
         );
     };
 
+    /* ---------------------------------------------------------
+     * Product selection — the autocomplete hands back the
+     * server UUID (`remote_id`), never the local Dexie `id`.
+     * ------------------------------------------------------- */
     const handleProductSelect = (
-        id: string,
+        remoteId: string,
         title: string
     ) => {
-        formik.setFieldValue('product', id);
+        log('Product selected:', { remoteId, title });
+        formik.setFieldValue('product', remoteId);
         formik.setFieldValue('product_title', title);
     };
 
+    /* ---------------------------------------------------------
+     * Entity selection — same rule.
+     * ------------------------------------------------------- */
     const handleReceivedFromSelect = (
-        id: string,
+        remoteId: string,
         title: string
     ) => {
-        formik.setFieldValue('received_from', id);
-        formik.setFieldValue(
-            'received_from_title',
-            title
-        );
+        log('Entity selected:', { remoteId, title });
+        formik.setFieldValue('received_from', remoteId);
+        formik.setFieldValue('received_from_title', title);
     };
 
     const minExpiryDate = (() => {
@@ -711,10 +717,7 @@ export default function InventoryAddForm({
         >
             <View className="w-full gap-y-4">
                 {/* PRODUCT */}
-                <View
-                    className="w-full"
-                    style={{ zIndex: 100 }}
-                >
+                <View className="w-full" style={{ zIndex: 100 }}>
                     <ProductAutocomplete
                         theme={theme}
                         isDarkMode={isDarkMode}
@@ -726,8 +729,7 @@ export default function InventoryAddForm({
                             !!formik.touched?.product
                         }
                         initialTitle={
-                            formik.values
-                                ?.product_title ?? ''
+                            formik.values?.product_title ?? ''
                         }
                         onSelect={handleProductSelect}
                         zIndexValue={100}
@@ -737,34 +739,24 @@ export default function InventoryAddForm({
                 </View>
 
                 {/* RECEIVED FROM */}
-                <View
-                    className="w-full"
-                    style={{ zIndex: 90 }}
-                >
+                <View className="w-full" style={{ zIndex: 90 }}>
                     <EntityAutocomplete
                         theme={theme}
                         isDarkMode={isDarkMode}
                         name="received_from"
                         selectedValue={
-                            formik.values
-                                ?.received_from ?? ''
+                            formik.values?.received_from ?? ''
                         }
-                        entityTypes={[
-                            'GeneralWholesaler',
-                        ]}
+                        entityTypes={['GeneralWholesaler']}
                         hasError={
-                            !!formik.errors
-                                ?.received_from &&
-                            !!formik.touched
-                                ?.received_from
+                            !!formik.errors?.received_from &&
+                            !!formik.touched?.received_from
                         }
                         initialTitle={
                             formik.values
                                 ?.received_from_title ?? ''
                         }
-                        onSelect={
-                            handleReceivedFromSelect
-                        }
+                        onSelect={handleReceivedFromSelect}
                         zIndexValue={90}
                         entities={entities}
                     />
@@ -791,9 +783,7 @@ export default function InventoryAddForm({
                                 formik.values
                                     ?.unit_of_receipt ?? ''
                             }
-                            options={
-                                UNIT_OF_RECEIPT_OPTIONS
-                            }
+                            options={UNIT_OF_RECEIPT_OPTIONS}
                             onChange={(value) => {
                                 formik.setFieldValue(
                                     'unit_of_receipt',
@@ -829,8 +819,8 @@ export default function InventoryAddForm({
                         <TextInput
                             keyboardType="number-pad"
                             value={
-                                formik.values
-                                    ?.unit_quantity ?? ''
+                                formik.values?.unit_quantity ??
+                                ''
                             }
                             onChangeText={formik.handleChange(
                                 'unit_quantity'
@@ -862,8 +852,7 @@ export default function InventoryAddForm({
                             keyboardType="decimal-pad"
                             value={
                                 formik.values
-                                    ?.unit_buying_price ??
-                                ''
+                                    ?.unit_buying_price ?? ''
                             }
                             onChangeText={formik.handleChange(
                                 'unit_buying_price'
@@ -882,9 +871,7 @@ export default function InventoryAddForm({
                                 borderWidth: 1,
                             }}
                         />
-                        {renderError(
-                            'unit_buying_price'
-                        )}
+                        {renderError('unit_buying_price')}
                     </View>
                 </View>
 
@@ -904,8 +891,7 @@ export default function InventoryAddForm({
                             keyboardType="decimal-pad"
                             value={
                                 formik.values
-                                    ?.unit_selling_price ??
-                                ''
+                                    ?.unit_selling_price ?? ''
                             }
                             onChangeText={formik.handleChange(
                                 'unit_selling_price'
@@ -924,9 +910,7 @@ export default function InventoryAddForm({
                                 borderWidth: 1,
                             }}
                         />
-                        {renderError(
-                            'unit_selling_price'
-                        )}
+                        {renderError('unit_selling_price')}
                     </View>
 
                     {/* BARCODE + SCAN */}
@@ -941,8 +925,8 @@ export default function InventoryAddForm({
                         <View className="w-full flex-row items-center gap-2">
                             <TextInput
                                 value={
-                                    formik.values
-                                        ?.bar_code ?? ''
+                                    formik.values?.bar_code ??
+                                    ''
                                 }
                                 onChangeText={formik.handleChange(
                                     'bar_code'
@@ -971,8 +955,7 @@ export default function InventoryAddForm({
                                     height: 44,
                                     borderRadius: 12,
                                     alignItems: 'center',
-                                    justifyContent:
-                                        'center',
+                                    justifyContent: 'center',
                                 }}
                             >
                                 <Text
@@ -989,19 +972,13 @@ export default function InventoryAddForm({
                         {isScanning && (
                             <View className="mt-3">
                                 <ScannerViewfinder
-                                    isScanning={
-                                        isScanning
-                                    }
-                                    hasPermission={
-                                        hasPermission
-                                    }
+                                    isScanning={isScanning}
+                                    hasPermission={hasPermission}
                                     scanned={scanned}
                                     onBarcodeScanned={
                                         handleBarcodeScanned
                                     }
-                                    onCancel={
-                                        closeScanner
-                                    }
+                                    onCancel={closeScanner}
                                 />
                             </View>
                         )}
@@ -1015,15 +992,11 @@ export default function InventoryAddForm({
                             Batch Ref No.
                         </Text>
                         <TextInput
-                            value={
-                                formik.values?.batch ?? ''
-                            }
+                            value={formik.values?.batch ?? ''}
                             onChangeText={formik.handleChange(
                                 'batch'
                             )}
-                            onBlur={formik.handleBlur(
-                                'batch'
-                            )}
+                            onBlur={formik.handleBlur('batch')}
                             placeholder="Optional batch code..."
                             placeholderTextColor="#94a3b8"
                             className="w-full px-3.5 h-11 rounded-xl border text-sm font-medium"
@@ -1051,8 +1024,7 @@ export default function InventoryAddForm({
                         <UniversalDatePicker
                             value={
                                 formik.values
-                                    ?.manufacture_date ??
-                                null
+                                    ?.manufacture_date ?? null
                             }
                             onChange={(value) => {
                                 formik.setFieldValue(
@@ -1075,9 +1047,7 @@ export default function InventoryAddForm({
                             }
                             placeholder="Select manufacture date..."
                         />
-                        {renderError(
-                            'manufacture_date'
-                        )}
+                        {renderError('manufacture_date')}
                     </View>
 
                     <View className="w-full md:flex-1">
@@ -1089,8 +1059,8 @@ export default function InventoryAddForm({
                         </Text>
                         <UniversalDatePicker
                             value={
-                                formik.values
-                                    ?.expiry_date ?? null
+                                formik.values?.expiry_date ??
+                                null
                             }
                             onChange={(value) => {
                                 formik.setFieldValue(
@@ -1108,8 +1078,7 @@ export default function InventoryAddForm({
                             hasError={
                                 !!formik.errors
                                     ?.expiry_date &&
-                                !!formik.touched
-                                    ?.expiry_date
+                                !!formik.touched?.expiry_date
                             }
                             placeholder="Select expiry date..."
                             minDate={minExpiryDate}

@@ -19,7 +19,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 2,
         title: "Admin Panel",
         route: "/routes", // 🌟 FIXED: Pluralized to match your routes folder exactly
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
         showInSidebar: true,
         subRoutes: [
             {
@@ -83,7 +83,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 id: 9,
                 title: "Products",
                 route: "/products?tab=products", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             }
         ]

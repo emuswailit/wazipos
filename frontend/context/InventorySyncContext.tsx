@@ -4,7 +4,7 @@ import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { dbInstance } from '@/databases/db';
-import { CachedReceipt } from '@/databases/types';
+import { RetailerReceipt } from '@/databases/types';
 import { useApi } from '@/hooks/useApi';
 import {
     backfillDraftIds,
@@ -36,7 +36,7 @@ interface InventorySyncContextType {
     forceManualRefresh: () => Promise<void>;
     pushPending: () => Promise<void>;
     lastSyncedTime: string;
-    retailerReceipts: CachedReceipt[];
+    retailerReceipts: RetailerReceipt[];
 }
 
 const InventorySyncContext = createContext<
@@ -54,11 +54,35 @@ const IMAGE_BASE_URL = 'https://api.wazipos.co.ke';
 
 const WS_RECONNECT_DELAY_MS = 5 * 60 * 1000;
 const INVENTORY_POLL_INTERVAL_MS = 5 * 60 * 1000;
-const DRAFT_RECONCILE_COOLDOWN_MS = 5 * 60 * 1000;
 
 /* =========================================================
- * Alert helper
+ * Logging
  * ======================================================= */
+
+const log = (...args: any[]) => {
+    if (__DEV__) console.log('[InventorySync]', ...args);
+};
+const warn = (...args: any[]) => {
+    if (__DEV__) console.warn('[InventorySync]', ...args);
+};
+
+/* =========================================================
+ * Helpers
+ * ======================================================= */
+
+const firstDefined = (...vals: any[]) =>
+    vals.find((v) => v !== undefined && v !== null);
+
+/**
+ * Normalizes the `synced` flag which may appear as:
+ *   false (boolean), 'false' (string), 'FALSE' (string), 0
+ */
+const isPendingSync = (raw: any): boolean =>
+    raw === false ||
+    raw === 'false' ||
+    raw === 'FALSE' ||
+    raw === 0 ||
+    raw === '0';
 
 function notify(title: string, message: string) {
     if (Platform.OS === 'web') {
@@ -70,7 +94,6 @@ function notify(title: string, message: string) {
         }
         return;
     }
-
     Alert.alert(title, message, [{ text: 'OK' }], {
         cancelable: true,
     });
@@ -121,154 +144,180 @@ export function computeExpiryStatus(
 }
 
 /* =========================================================
- * normalizeItem
- *
- * Handles every shape the server has returned:
- *
- *   API       → absolute URLs  (https://api.wazipos.co.ke/media/...)
- *   WebSocket → relative paths (/media/...)
- *
- * Both are converted into a single absolute URL stored on
- * `thumbnail_url` / `image_url` so CardView and TableView
- * can render identically regardless of transport.
+ * Image URL resolver
  * ======================================================= */
 
-function normalizeItem(
-    item: any,
-    ts: string
-): CachedReceipt {
-    const uPrice = String(
-        item.unit_selling_price || item.price || '0.00'
-    );
+function resolveImageUrl(rawPath: any): string | null {
+    let path: string | null = null;
 
-    /* ---------------------------------------------------------
-     * Resolve image URL
-     * ------------------------------------------------------- */
-    let rawPath: string | null = null;
-
-    if (
-        Array.isArray(item.images) &&
-        item.images.length > 0
-    ) {
-        const first = item.images[0];
-
+    if (Array.isArray(rawPath) && rawPath.length > 0) {
+        const first = rawPath[0];
         if (typeof first === 'string') {
-            rawPath = first;
+            path = first;
         } else if (first && typeof first === 'object') {
-            rawPath =
+            path =
                 first.thumbnail ||
                 first.image ||
                 first.url ||
                 null;
         }
     } else if (
-        item.images &&
-        typeof item.images === 'object'
+        rawPath &&
+        typeof rawPath === 'object' &&
+        !Array.isArray(rawPath)
     ) {
-        rawPath =
-            item.images.thumbnail ||
-            item.images.image ||
-            item.images.url ||
+        path =
+            rawPath.thumbnail ||
+            rawPath.image ||
+            rawPath.url ||
             null;
-    } else if (typeof item.image === 'string') {
-        rawPath = item.image;
-    } else if (typeof item.thumbnail === 'string') {
-        rawPath = item.thumbnail;
+    } else if (typeof rawPath === 'string') {
+        path = rawPath;
     }
 
-    let resolvedUrl: string | null = null;
+    if (!path || typeof path !== 'string') return null;
 
-    if (rawPath && typeof rawPath === 'string') {
-        const trimmed = rawPath.trim();
+    const trimmed = path.trim();
+    if (!trimmed) return null;
 
-        if (trimmed) {
-            if (
-                trimmed.startsWith('http://') ||
-                trimmed.startsWith('https://')
-            ) {
-                /* Already absolute */
-                resolvedUrl = trimmed;
-            } else {
-                /* Relative — prefix with API base */
-                const cleanPath = trimmed.startsWith('/')
-                    ? trimmed.substring(1)
-                    : trimmed;
-
-                resolvedUrl = `${IMAGE_BASE_URL}/${cleanPath
-                    .split('/')
-                    .map((seg) =>
-                        encodeURIComponent(seg)
-                    )
-                    .join('/')}`;
-            }
-        }
+    if (
+        trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://')
+    ) {
+        return trimmed;
     }
 
-    const manufactureDate =
-        item.manufacture_date || '';
-    const expiryDate = item.expiry_date || '';
+    const cleanPath = trimmed.startsWith('/')
+        ? trimmed.substring(1)
+        : trimmed;
+
+    return `${IMAGE_BASE_URL}/${cleanPath
+        .split('/')
+        .map((seg) => encodeURIComponent(seg))
+        .join('/')}`;
+}
+
+/* =========================================================
+ * normalizeItem — wire receipt → RetailerReceipt
+ *
+ * RULE: the server's `id` (or `key`) goes into `remote_id`.
+ * `id` is left undefined so Dexie assigns `++id`.
+ * ======================================================= */
+
+function normalizeItem(
+    item: any,
+    ts: string
+): RetailerReceipt {
+    const uPrice = String(
+        firstDefined(item.unit_selling_price, item.price, '0.00')
+    );
+
+    const resolvedUrl = resolveImageUrl(item.images);
+
+    const manufactureDate = item.manufacture_date ?? null;
+    const expiryDate = item.expiry_date ?? null;
     const days = computeDaysToExpiry(expiryDate);
 
+    const remoteId = String(
+        firstDefined(item.id, item.key, '')
+    );
+
     return {
-        id: String(item.id || item.key || ''),
-        key: String(item.key || item.id || ''),
+        cached_at: String(firstDefined(item.cached_at, ts)),
 
-        title: item.title || item.product_title || '',
-        long_title:
-            item.long_title || item.product_title || '',
-        product_name:
-            item.product_name || item.title || '',
+        remote_id: remoteId,
+        remote_key: item.key ? String(item.key) : undefined,
 
-        unit_buying_price: String(
-            item.unit_buying_price || '0.00'
-        ),
-        unit_selling_price: uPrice,
-        final_unit_selling_price: String(
-            item.final_unit_selling_price || uPrice
-        ),
-        unit_price_discount: String(
-            item.unit_price_discount || '0.00'
-        ),
+        synced: !isPendingSync(item.synced),
+        sync_error: item.sync_error ?? null,
 
-        current_unit_quantity: Number(
-            item.current_unit_quantity ||
-            item.available ||
-            0
-        ),
-        received_unit_quantity: Number(
-            item.received_unit_quantity ||
-            item.unit_quantity ||
-            0
-        ),
+        thumbnail_url: resolvedUrl,
+        image_url: resolvedUrl,
 
-        bar_code: item.bar_code || item.barcode || '',
+        title: String(
+            firstDefined(item.title, item.product_title, '')
+        ),
+        long_title: String(
+            firstDefined(item.long_title, item.product_title, '')
+        ),
+        product_title: String(
+            firstDefined(item.product_title, item.title, '')
+        ),
+        product: String(item.product ?? ''),
+        entity: String(item.entity ?? ''),
+        entity_title: String(item.entity_title ?? ''),
+        draft_id: item.draft_id ?? null,
+        preparation_title: String(item.preparation_title ?? ''),
+        formulation_title: String(item.formulation_title ?? ''),
+        received_from: item.received_from ?? null,
+        received_from_title: String(
+            item.received_from_title ?? ''
+        ),
+        unit_of_receipt: String(item.unit_of_receipt ?? ''),
+        retailer_order: item.retailer_order ?? null,
+        retailer_order_item: item.retailer_order_item ?? null,
+        batch: item.batch ?? null,
+
+        bar_code: String(
+            firstDefined(item.bar_code, item.barcode, '')
+        ),
 
         manufacture_date: manufactureDate,
         expiry_date: expiryDate,
-        days_to_expiry: days ?? 0,
+        days_to_expiry: days,
         expiry_status: computeExpiryStatus(days),
 
-        manufacturer_title:
-            item.manufacturer_title || '',
-        origin_country_title:
-            item.origin_country_title || '',
+        unit_buying_price: item.unit_buying_price
+            ? String(item.unit_buying_price)
+            : null,
+        unit_selling_price: uPrice,
+        final_unit_selling_price: String(
+            firstDefined(item.final_unit_selling_price, uPrice)
+        ),
+        unit_price_discount: String(
+            item.unit_price_discount ?? '0.00'
+        ),
 
-        images: Array.isArray(item.images)
-            ? item.images
-            : [],
-        thumbnail_url: resolvedUrl,
-        image_url: resolvedUrl,
-        cached_at: item.cached_at || ts,
+        current_unit_quantity: Number(
+            firstDefined(
+                item.current_unit_quantity,
+                item.available,
+                0
+            )
+        ),
+        received_unit_quantity: Number(
+            firstDefined(
+                item.received_unit_quantity,
+                item.unit_quantity,
+                0
+            )
+        ),
 
-        synced: true,
-        server_id: String(item.id || item.key || ''),
-        draft_id: item.draft_id ?? null,
-        created: item.created,
-        updated: item.updated,
-        batch: item.batch || '',
-        product: item.product || '',
-        unit_of_receipt: item.unit_of_receipt || '',
-    } as CachedReceipt;
+        in_placement: !!item.in_placement,
+        is_active: String(item.is_active ?? 'true'),
+        is_pom: !!item.is_pom,
+        supplier_invoice: item.supplier_invoice ?? null,
+
+        origin_country: String(item.origin_country ?? ''),
+        origin_country_title: String(
+            item.origin_country_title ?? ''
+        ),
+
+        manufacturer: String(item.manufacturer ?? ''),
+        manufacturer_title: String(item.manufacturer_title ?? ''),
+
+        packaging: String(item.packaging ?? ''),
+        units_per_pack: Number(
+            firstDefined(item.units_per_pack, 1)
+        ),
+
+        images: Array.isArray(item.images) ? item.images : [],
+
+        created: String(firstDefined(item.created, ts)),
+        updated: String(firstDefined(item.updated, ts)),
+        employee: String(item.employee ?? ''),
+        owner: String(item.owner ?? ''),
+    };
 }
 
 /* =========================================================
@@ -276,8 +325,8 @@ function normalizeItem(
  * ======================================================= */
 
 function areReceiptsEqual(
-    a: CachedReceipt[],
-    b: CachedReceipt[]
+    a: RetailerReceipt[],
+    b: RetailerReceipt[]
 ): boolean {
     if (a === b) return true;
     if (a.length !== b.length) return false;
@@ -287,13 +336,10 @@ function areReceiptsEqual(
         const y = b[i];
 
         if (
-            x.id !== y.id ||
-            x.current_unit_quantity !==
-            y.current_unit_quantity ||
-            x.received_unit_quantity !==
-            y.received_unit_quantity ||
-            x.unit_selling_price !==
-            y.unit_selling_price ||
+            x.remote_id !== y.remote_id ||
+            x.current_unit_quantity !== y.current_unit_quantity ||
+            x.received_unit_quantity !== y.received_unit_quantity ||
+            x.unit_selling_price !== y.unit_selling_price ||
             x.final_unit_selling_price !==
             y.final_unit_selling_price ||
             x.days_to_expiry !== y.days_to_expiry ||
@@ -301,7 +347,6 @@ function areReceiptsEqual(
             x.title !== y.title ||
             x.bar_code !== y.bar_code ||
             x.synced !== y.synced ||
-            x.server_id !== y.server_id ||
             x.batch !== y.batch ||
             x.draft_id !== y.draft_id ||
             x.thumbnail_url !== y.thumbnail_url
@@ -325,18 +370,15 @@ export const InventorySyncProvider: React.FC<{
 
     const { isOnline } = useNetworkStatus();
 
-    const [retailerReceipts, setRetailerReceipts] =
-        useState<CachedReceipt[]>([]);
-    const [lastSyncedTime, setLastSyncedTime] =
-        useState('');
+    const [retailerReceipts, setRetailerReceipts] = useState<
+        RetailerReceipt[]
+    >([]);
+    const [lastSyncedTime, setLastSyncedTime] = useState('');
     const [isManualRefreshing, setIsManualRefreshing] =
         useState(false);
-    const [isLiveConnected, setIsLiveConnected] =
-        useState(false);
-    const [isPushSyncing, setIsPushSyncing] =
-        useState(false);
+    const [isLiveConnected, setIsLiveConnected] = useState(false);
+    const [isPushSyncing, setIsPushSyncing] = useState(false);
 
-    /* -------- Two API hooks -------- */
     const getInventoryReadApi = useApi(
         retailersApi.retailerReceiptsAction
     );
@@ -345,18 +387,15 @@ export const InventorySyncProvider: React.FC<{
     );
 
     const wsRef = useRef<WebSocket | null>(null);
-    const receiptsStateRef = useRef<CachedReceipt[]>([]);
-    const reconnectTimeoutRef =
-        useRef<NodeJS.Timeout | null>(null);
-    const pollIntervalRef =
-        useRef<NodeJS.Timeout | null>(null);
+    const receiptsStateRef = useRef<RetailerReceipt[]>([]);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const pushGuardRef = useRef(false);
-    const draftReconcileGuardRef = useRef(false);
-    const lastReconcileAtRef = useRef(0);
 
     const isOnlineRef = useRef(isOnline);
     useEffect(() => {
         isOnlineRef.current = isOnline;
+        log('Network state changed — isOnline:', isOnline);
     }, [isOnline]);
 
     useEffect(() => {
@@ -366,9 +405,10 @@ export const InventorySyncProvider: React.FC<{
     /* ---------------------------------------------------------
      * Storage — writes to BOTH stores
      * ------------------------------------------------------- */
-
     const commitToStorage = useCallback(
-        async (data: CachedReceipt[]) => {
+        async (data: RetailerReceipt[]) => {
+            log(`commitToStorage — ${data.length} rows`);
+
             const tasks: Promise<any>[] = [];
 
             tasks.push(
@@ -376,10 +416,7 @@ export const InventorySyncProvider: React.FC<{
                     NATIVE_INVENTORY_KEY,
                     JSON.stringify(data)
                 ).catch((err) =>
-                    console.warn(
-                        '[InventorySync] AsyncStorage write failed:',
-                        err
-                    )
+                    warn('AsyncStorage write failed:', err)
                 )
             );
 
@@ -398,63 +435,61 @@ export const InventorySyncProvider: React.FC<{
                                 }
                             );
                         } catch (err) {
-                            console.warn(
-                                '[InventorySync] Dexie write failed:',
-                                err
-                            );
+                            warn('Dexie write failed:', err);
                         }
                     })()
                 );
             }
 
             await Promise.allSettled(tasks);
+            log('commitToStorage done');
         },
         []
     );
 
     const readLocalRecords = useCallback(
-        async (): Promise<CachedReceipt[]> => {
-            const [asyncData, dexieData] =
-                await Promise.all([
-                    AsyncStorage.getItem(
-                        NATIVE_INVENTORY_KEY
-                    )
-                        .then((raw) =>
-                            raw ? JSON.parse(raw) : []
-                        )
-                        .catch(() => []),
-                    (async () => {
-                        try {
-                            if (
-                                dbInstance?.retailerReceipts
-                            ) {
-                                return await dbInstance.retailerReceipts.toArray();
-                            }
-                        } catch { }
-                        return [];
-                    })(),
-                ]);
+        async (): Promise<RetailerReceipt[]> => {
+            const [asyncData, dexieData] = await Promise.all([
+                AsyncStorage.getItem(NATIVE_INVENTORY_KEY)
+                    .then((raw) => (raw ? JSON.parse(raw) : []))
+                    .catch(() => []),
+                (async () => {
+                    try {
+                        if (dbInstance?.retailerReceipts) {
+                            return await dbInstance.retailerReceipts.toArray();
+                        }
+                    } catch { }
+                    return [];
+                })(),
+            ]);
 
-            return asyncData.length >= dexieData.length
-                ? asyncData
-                : dexieData;
+            const chosen =
+                asyncData.length >= dexieData.length
+                    ? asyncData
+                    : dexieData;
+
+            log(
+                `readLocalRecords — async: ${asyncData.length}, dexie: ${dexieData.length}, using: ${chosen.length}`
+            );
+            return chosen;
         },
         []
     );
 
     const hydrateFromLocalDB = useCallback(async () => {
         try {
+            log('hydrateFromLocalDB — starting');
             const cached = await readLocalRecords();
 
             if (cached?.length > 0) {
                 const refreshed = cached.map(
-                    (r: CachedReceipt) => {
+                    (r: RetailerReceipt) => {
                         const days = computeDaysToExpiry(
                             r.expiry_date
                         );
                         return {
                             ...r,
-                            days_to_expiry: days ?? 0,
+                            days_to_expiry: days,
                             expiry_status:
                                 computeExpiryStatus(days),
                         };
@@ -467,121 +502,133 @@ export const InventorySyncProvider: React.FC<{
                         : refreshed
                 );
 
-                if (cached?.cached_at) {
-                    setLastSyncedTime(
-                        new Date(
-                            cached.cached_at
-                        ).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                        })
-                    );
-                }
-
+                log(`hydrateFromLocalDB — loaded ${refreshed.length}`);
                 return refreshed;
             }
 
+            log('hydrateFromLocalDB — no cached rows');
             return cached;
         } catch (e) {
+            warn('hydrateFromLocalDB threw:', e);
             return [];
         }
     }, [readLocalRecords]);
 
     /* ---------------------------------------------------------
-     * Local migration — backfill draft_ids
+     * Local migration
      * ------------------------------------------------------- */
-
     const runLocalMigration = useCallback(async () => {
-        if (!currentUserId) return;
+        if (!currentUserId) {
+            log('runLocalMigration — skipped (no userId)');
+            return;
+        }
         try {
+            log('runLocalMigration — running');
             await backfillDraftIds(currentUserId);
+            log('runLocalMigration — done');
         } catch (e) {
-            console.warn(
-                '[InventorySync] Local migration failed:',
-                e
-            );
+            warn('runLocalMigration threw:', e);
         }
     }, [currentUserId]);
 
     /* ---------------------------------------------------------
-     * Remote GET — uses READ hook
+     * Pull — remote GET
      * ------------------------------------------------------- */
+    const runRemoteInventorySynchronizer = useCallback(
+        async () => {
+            log('=== Pull starting ===');
+            log('  token:', !!token);
+            log('  isOnline:', isOnlineRef.current);
 
-    const runRemoteInventorySynchronizer =
-        useCallback(async () => {
-            if (!token) return;
-            if (!isOnlineRef.current) return;
+            if (!token) {
+                warn('  pull skipped — no token');
+                return;
+            }
+            if (!isOnlineRef.current) {
+                warn('  pull skipped — offline');
+                return;
+            }
 
             try {
                 const res = await getInventoryReadApi
-                    .request({
-                        action: 'GetRetailerReceipts',
-                    })
-                    .catch(() => null);
+                    .request({ action: 'GetRetailerReceipts' })
+                    .catch((e) => {
+                        warn('  request threw:', e);
+                        return null;
+                    });
+
+                log('  response ok:', res?.ok);
+                log('  response status:', res?.status);
+                log('  response problem:', res?.problem);
+                log(
+                    '  response data type:',
+                    Array.isArray(res?.data)
+                        ? 'array'
+                        : typeof res?.data
+                );
 
                 const raw = res?.data;
                 const data = raw?.results || raw;
-
-                console.log(
-                    '[InventorySync] API raw shape:',
-                    {
-                        isArray: Array.isArray(raw),
-                        hasResults: Array.isArray(
-                            raw?.results
-                        ),
-                        count: raw?.count,
-                    }
+                log(
+                    '  resolved item count:',
+                    Array.isArray(data) ? data.length : 0
                 );
 
                 if (res?.ok && Array.isArray(data)) {
-                    const nowStr =
-                        new Date().toISOString();
+                    const nowStr = new Date().toISOString();
 
-                    const normalized = data.map(
-                        (item: any) =>
-                            normalizeItem(item, nowStr)
+                    const normalized = data.map((item: any) =>
+                        normalizeItem(item, nowStr)
                     );
 
-                    const existing =
-                        receiptsStateRef.current;
-                    const pendingLocal =
-                        existing.filter(
-                            (r) => r.synced === false
-                        );
+                    log('  normalized count:', normalized.length);
+                    log(
+                        '  first normalized:',
+                        normalized[0]
+                            ? {
+                                remote_id: normalized[0].remote_id,
+                                title: normalized[0].title,
+                                qty: normalized[0]
+                                    .current_unit_quantity,
+                            }
+                            : null
+                    );
+
+                    const existing = receiptsStateRef.current;
+                    const pendingLocal = existing.filter((r) =>
+                        isPendingSync(r.synced)
+                    );
 
                     const serverIds = new Set(
-                        normalized.map((r) => r.id)
+                        normalized.map((r) => r.remote_id)
                     );
 
                     const localById = new Map(
-                        existing.map((r) => [r.id, r])
+                        existing.map((r) => [r.remote_id, r])
                     );
 
-                    const merged = [
+                    const merged: RetailerReceipt[] = [
                         ...pendingLocal.filter(
-                            (r) => !serverIds.has(r.id)
+                            (r) => !serverIds.has(r.remote_id)
                         ),
                         ...normalized.map((serverRec) => {
-                            const localRec =
-                                localById.get(
-                                    serverRec.id
-                                );
+                            const localRec = localById.get(
+                                serverRec.remote_id
+                            );
                             return {
                                 ...serverRec,
+                                id: localRec?.id,
                                 draft_id:
                                     localRec?.draft_id ??
                                     serverRec.draft_id,
                                 synced: true,
-                                server_id:
-                                    localRec?.server_id ??
-                                    serverRec.server_id ??
-                                    serverRec.id,
                             };
                         }),
                     ];
 
-                    await commitToStorage(merged);
+                    log(`  merged count: ${merged.length}`);
 
+                    await commitToStorage(merged);
                     setRetailerReceipts((prev) =>
                         areReceiptsEqual(prev, merged)
                             ? prev
@@ -594,24 +641,45 @@ export const InventorySyncProvider: React.FC<{
                             minute: '2-digit',
                         })
                     );
+
+                    log('Pull complete');
+                } else {
+                    warn(
+                        '  pull aborted — response not ok or data not array'
+                    );
                 }
             } catch (e) {
-                // silent
+                warn('runRemoteInventorySynchronizer threw:', e);
             }
-        }, [
+        },
+        [
             token,
             getInventoryReadApi,
             commitToStorage,
-        ]);
+        ]
+    );
 
     /* ---------------------------------------------------------
-     * Push pending — uses WRITE (admin) hook
+     * Push — local → remote
      * ------------------------------------------------------- */
-
     const pushPending = useCallback(async () => {
-        if (!token) return;
-        if (!isOnlineRef.current) return;
-        if (pushGuardRef.current) return;
+        log('=== Push starting ===');
+        log('  token:', !!token);
+        log('  isOnline:', isOnlineRef.current);
+        log('  pushGuard:', pushGuardRef.current);
+
+        if (!token) {
+            warn('  push skipped — no token');
+            return;
+        }
+        if (!isOnlineRef.current) {
+            warn('  push skipped — offline');
+            return;
+        }
+        if (pushGuardRef.current) {
+            warn('  push skipped — already in flight');
+            return;
+        }
 
         pushGuardRef.current = true;
         setIsPushSyncing(true);
@@ -622,32 +690,37 @@ export const InventorySyncProvider: React.FC<{
 
         try {
             const all = await readLocalRecords();
-
-            const pending = all.filter(
-                (r) => r.synced === false
+            const pending = all.filter((r) =>
+                isPendingSync(r.synced)
             );
 
-            console.log(
-                '[pushPending] state:',
-                JSON.stringify(
-                    {
-                        totalRecords: all.length,
-                        pendingCount: pending.length,
-                        pendingIds: pending.map(
-                            (r) => r.id
-                        ),
-                    },
-                    null,
-                    2
-                )
+            log(
+                `  local rows: ${all.length}, pending: ${pending.length}`
             );
 
-            if (pending.length === 0) return;
+            if (pending.length > 0) {
+                log(
+                    '  pending synced values:',
+                    pending.map((p) => ({
+                        draft_id: p.draft_id,
+                        synced: p.synced,
+                        type: typeof p.synced,
+                    }))
+                );
+            }
+
+            if (pending.length === 0) {
+                log('  nothing to push');
+                return;
+            }
 
             let madeAChange = false;
 
             for (const record of pending) {
-                if (!isOnlineRef.current) break;
+                if (!isOnlineRef.current) {
+                    warn('  went offline mid-loop — stopping');
+                    break;
+                }
 
                 const draftId =
                     record.draft_id ||
@@ -664,15 +737,13 @@ export const InventorySyncProvider: React.FC<{
                     unit_buying_price: String(
                         record.unit_buying_price || ''
                     ),
-                    expiry_date:
-                        record.expiry_date || '',
+                    expiry_date: record.expiry_date || '',
                     manufacture_date:
                         record.manufacture_date || '',
                     product: record.product || '',
                     quantity_discount: '',
                     supplier_invoice: '',
-                    received_from:
-                        record.received_from || '',
+                    received_from: record.received_from || '',
                     unit_of_receipt: String(
                         record.unit_of_receipt || ''
                     ),
@@ -694,39 +765,29 @@ export const InventorySyncProvider: React.FC<{
                     retailer_receipt_details: details,
                 };
 
-                console.log(
-                    '\n[pushPending] REQUEST body (raw JSON):\n' +
-                    JSON.stringify(body, null, 2)
-                );
+                log(`  → pushing draft=${draftId}`);
 
                 let res: any = null;
                 try {
-                    res = await getInventoryWriteApi.request(
-                        body
-                    );
+                    res = await getInventoryWriteApi.request(body);
                 } catch (e: any) {
-                    console.warn(
-                        '[pushPending] request threw:',
-                        e
-                    );
+                    warn('  request threw:', e);
                     res = {
                         ok: false,
                         problem: 'exception',
                         data: {
                             message:
-                                e?.message ||
-                                'Request threw',
+                                e?.message || 'Request threw',
                         },
                     };
                 }
 
-                console.log(
-                    '\n[pushPending] RESPONSE (raw JSON):\n' +
-                    JSON.stringify(res, null, 2)
+                log(
+                    `  ← response ok=${res?.ok} status=${res?.status}`
                 );
 
                 const idx = all.findIndex(
-                    (r) => r.id === record.id
+                    (r) => r.remote_id === record.remote_id
                 );
 
                 if (res?.ok) {
@@ -736,95 +797,41 @@ export const InventorySyncProvider: React.FC<{
                     const serverRecord =
                         res?.data?.retailer_receipt;
 
+                    log(
+                        `  ✓ ${draftId} → server id: ${serverRecord?.id}`
+                    );
+
                     if (idx >= 0) {
                         all[idx] = {
                             ...all[idx],
                             synced: true,
                             sync_error: null,
-                            server_id:
+                            remote_id: String(
                                 serverRecord?.id ??
-                                all[idx].server_id ??
-                                null,
+                                all[idx].remote_id
+                            ),
                             draft_id: draftId,
-                            ...(serverRecord
-                                ? {
-                                    current_unit_quantity:
-                                        Number(
-                                            serverRecord.current_unit_quantity ??
-                                            all[
-                                                idx
-                                            ]
-                                                .current_unit_quantity ??
-                                            0
-                                        ),
-                                    received_unit_quantity:
-                                        Number(
-                                            serverRecord.received_unit_quantity ??
-                                            all[
-                                                idx
-                                            ]
-                                                .received_unit_quantity ??
-                                            0
-                                        ),
-                                    unit_selling_price:
-                                        String(
-                                            serverRecord.unit_selling_price ??
-                                            all[
-                                                idx
-                                            ]
-                                                .unit_selling_price ??
-                                            ''
-                                        ),
-                                    final_unit_selling_price:
-                                        String(
-                                            serverRecord.final_unit_selling_price ??
-                                            all[
-                                                idx
-                                            ]
-                                                .final_unit_selling_price ??
-                                            ''
-                                        ),
-                                    days_to_expiry:
-                                        Number(
-                                            serverRecord.days_to_expiry ??
-                                            all[
-                                                idx
-                                            ]
-                                                .days_to_expiry ??
-                                            0
-                                        ),
-                                    expiry_status:
-                                        String(
-                                            serverRecord.expiry_status ??
-                                            all[
-                                                idx
-                                            ]
-                                                .expiry_status ??
-                                            'UNKNOWN'
-                                        ),
-                                    updated:
-                                        serverRecord.updated ??
-                                        all[idx].updated,
-                                    cached_at:
-                                        new Date().toISOString(),
-                                }
-                                : {}),
+                            cached_at:
+                                new Date().toISOString(),
                         };
                     }
-                    console.log(
-                        '[pushPending] push OK:',
-                        record.id
-                    );
                 } else {
                     failed++;
                     madeAChange = true;
 
                     if (!firstFailure) {
                         firstFailure = {
-                            id: record.id,
+                            id: record.remote_id,
                             response: res,
                         };
                     }
+
+                    warn(
+                        `  ✗ ${draftId} — ${res?.data?.message ||
+                        res?.problem ||
+                        'unknown'
+                        }`
+                    );
 
                     if (idx >= 0) {
                         all[idx] = {
@@ -841,17 +848,18 @@ export const InventorySyncProvider: React.FC<{
 
             if (madeAChange) {
                 await commitToStorage(all);
-
                 const verify = await readLocalRecords();
-
                 setRetailerReceipts((prev) =>
                     areReceiptsEqual(prev, verify)
                         ? prev
                         : verify
                 );
+                log('  queue updated after push');
             }
 
-            /* ---------- Alerts ---------- */
+            log(
+                `Push complete — ${succeeded} ok, ${failed} failed`
+            );
 
             if (succeeded > 0 && failed === 0) {
                 notify(
@@ -882,14 +890,10 @@ export const InventorySyncProvider: React.FC<{
                 );
             }
         } catch (err: any) {
-            console.warn(
-                '[pushPending] outer error:',
-                err
-            );
+            warn('pushPending outer error:', err);
             notify(
                 'Sync Error',
-                err?.message ||
-                'Unexpected error during sync.'
+                err?.message || 'Unexpected error during sync.'
             );
         } finally {
             pushGuardRef.current = false;
@@ -904,224 +908,94 @@ export const InventorySyncProvider: React.FC<{
     ]);
 
     /* ---------------------------------------------------------
-     * Draft ID reconciliation
+     * WebSocket
      * ------------------------------------------------------- */
-
-    const reconcileServerDraftIds = useCallback(async () => {
-        const now = Date.now();
-
-        if (
-            now - lastReconcileAtRef.current <
-            DRAFT_RECONCILE_COOLDOWN_MS
-        ) {
-            return;
-        }
-        if (!token) return;
-        if (!isOnlineRef.current) return;
-        if (draftReconcileGuardRef.current) return;
-
-        draftReconcileGuardRef.current = true;
-        lastReconcileAtRef.current = now;
-
-        try {
-            const res = await getInventoryReadApi
-                .request({
-                    action:
-                        'GetRetailerReceiptsMissingDraftId',
-                })
-                .catch(() => null);
-
-            const missing: any[] = Array.isArray(
-                res?.data?.results
-            )
-                ? res.data.results
-                : [];
-
-            if (missing.length === 0) {
-                console.log(
-                    '[draftReconcile] nothing to do'
-                );
-                return;
-            }
-
-            console.log(
-                `[draftReconcile] reconciling ${missing.length} record(s)`
-            );
-
-            for (const serverRec of missing) {
-                if (!isOnlineRef.current) break;
-
-                const productId = String(
-                    serverRec.product ||
-                    serverRec.id ||
-                    ''
-                );
-
-                const createdMs = (() => {
-                    const c = serverRec.created;
-                    if (!c) return Date.now();
-                    const n = Date.parse(String(c));
-                    return isNaN(n) ? Date.now() : n;
-                })();
-
-                const draftId = buildDraftId(
-                    currentUserId,
-                    productId,
-                    createdMs
-                );
-
-                const body = {
-                    action: 'UpdateRetailerReceipt',
-                    retailer_receipt: serverRec.id,
-                    retailer_receipt_details: {
-                        batch: serverRec.batch || '',
-                        id: Number(serverRec.id) || 0,
-                        current_unit_quantity: Number(
-                            serverRec.current_unit_quantity
-                        ) || 0,
-                        draft_id: draftId,
-                    },
-                };
-
-                console.log(
-                    '[draftReconcile] PATCH draft_id:',
-                    serverRec.id,
-                    '→',
-                    draftId
-                );
-
-                const updateRes =
-                    await getInventoryWriteApi
-                        .request(body)
-                        .catch(() => null);
-
-                if (!updateRes?.ok) {
-                    console.warn(
-                        '[draftReconcile] update failed:',
-                        serverRec.id,
-                        updateRes?.data
-                    );
-                }
-            }
-        } catch (e) {
-            console.warn(
-                '[draftReconcile] threw:',
-                e
-            );
-        } finally {
-            draftReconcileGuardRef.current = false;
-        }
-    }, [
-        token,
-        currentUserId,
-        getInventoryReadApi,
-        getInventoryWriteApi,
-    ]);
-
-    /* ---------------------------------------------------------
-     * WebSocket — with image URL resolution
-     * ------------------------------------------------------- */
-
     const establishLiveWebSocketSync = useCallback(
         (currentToken: string) => {
+            log('WebSocket — establishing');
+
             if (reconnectTimeoutRef.current)
                 clearTimeout(reconnectTimeoutRef.current);
 
-            if (wsRef.current) wsRef.current.close();
+            if (wsRef.current) {
+                try {
+                    wsRef.current.onclose = null;
+                    wsRef.current.close();
+                } catch { }
+                wsRef.current = null;
+            }
 
             if (!currentToken || !isOnlineRef.current) {
+                warn('WebSocket — skipped (no token or offline)');
                 setIsLiveConnected(false);
                 return;
             }
 
             try {
-                const ws = new WebSocket(
-                    `wss://api.wazipos.co.ke/ws/retailers/inventory/?token=${currentToken}`
-                );
+                const url = `wss://api.wazipos.co.ke/ws/retailers/inventory/?token=${currentToken}`;
+                log('WebSocket — connecting to', url.slice(0, 80) + '…');
 
+                const ws = new WebSocket(url);
                 wsRef.current = ws;
 
-                ws.onopen = () =>
+                ws.onopen = () => {
+                    log('WebSocket — connected');
                     setIsLiveConnected(true);
+                };
 
                 ws.onmessage = async (event) => {
+                    log('WebSocket — message received');
                     try {
-                        const incoming =
-                            JSON.parse(event.data)
-                                ?.inventory;
+                        const parsed = JSON.parse(event.data);
+                        const incoming = parsed?.inventory;
+                        log(
+                            '  incoming inventory count:',
+                            Array.isArray(incoming)
+                                ? incoming.length
+                                : 0
+                        );
 
                         if (
                             !incoming ||
                             !Array.isArray(incoming)
-                        ) {
+                        )
                             return;
-                        }
 
-                        const nowStr =
-                            new Date().toISOString();
-
-                        /* Diagnostic — sample the raw thumbnail path */
-                        console.log(
-                            '[InventorySync] WS incoming sample:',
-                            {
-                                id: incoming[0]?.id,
-                                rawThumb:
-                                    incoming[0]?.images?.[0]
-                                        ?.thumbnail,
-                            }
-                        );
-
-                        const currentMap = new Map(
+                        const nowStr = new Date().toISOString();
+                        const currentMap = new Map<
+                            string,
+                            RetailerReceipt
+                        >(
                             receiptsStateRef.current.map(
-                                (item) => [item.id, item]
+                                (item) => [item.remote_id, item]
                             )
                         );
 
                         incoming.forEach((raw: any) => {
-                            const id = String(
-                                raw.id || raw.key || ''
+                            const rid = String(
+                                firstDefined(raw.id, raw.key, '')
                             );
-                            if (!id) return;
+                            if (!rid) return;
 
-                            const existing =
-                                currentMap.get(id);
-
-                            /* Never overwrite a pending
-                             * local record */
+                            const existing = currentMap.get(rid);
                             if (
                                 existing &&
-                                existing.synced === false
+                                isPendingSync(existing.synced)
                             ) {
                                 return;
                             }
 
-                            /* Normalize — this resolves
-                             * relative paths into absolute
-                             * URLs. */
-                            const normalized =
-                                normalizeItem(
-                                    raw,
-                                    nowStr
-                                );
-
-                            /* Diagnostic — confirm the
-                             * resolved URL */
-                            console.log(
-                                '[InventorySync] WS image resolved:',
-                                normalized.id,
-                                '→',
-                                normalized.thumbnail_url
+                            const normalized = normalizeItem(
+                                raw,
+                                nowStr
                             );
+                            normalized.id = existing?.id;
 
-                            currentMap.set(id, {
+                            currentMap.set(rid, {
                                 ...normalized,
                                 draft_id:
                                     existing?.draft_id ??
                                     normalized.draft_id,
-                                server_id:
-                                    existing?.server_id ??
-                                    normalized.server_id ??
-                                    normalized.id,
                                 synced: true,
                             });
                         });
@@ -1137,15 +1011,16 @@ export const InventorySyncProvider: React.FC<{
                         );
 
                         await commitToStorage(updated);
-                    } catch (e) {
-                        console.warn(
-                            '[InventorySync] WS merge failed:',
-                            e
+                        log(
+                            `WebSocket — merged, total now ${updated.length}`
                         );
+                    } catch (e) {
+                        warn('WebSocket — message parse failed:', e);
                     }
                 };
 
                 ws.onclose = () => {
+                    log('WebSocket — closed');
                     setIsLiveConnected(false);
                     wsRef.current = null;
 
@@ -1153,19 +1028,25 @@ export const InventorySyncProvider: React.FC<{
                         currentToken &&
                         isOnlineRef.current
                     ) {
-                        reconnectTimeoutRef.current =
-                            setTimeout(
-                                () =>
-                                    establishLiveWebSocketSync(
-                                        currentToken
-                                    ),
-                                WS_RECONNECT_DELAY_MS
-                            );
+                        log(
+                            `WebSocket — reconnecting in ${WS_RECONNECT_DELAY_MS}ms`
+                        );
+                        reconnectTimeoutRef.current = setTimeout(
+                            () =>
+                                establishLiveWebSocketSync(
+                                    currentToken
+                                ),
+                            WS_RECONNECT_DELAY_MS
+                        );
                     }
                 };
 
-                ws.onerror = () => { };
-            } catch (err) { }
+                ws.onerror = (e) => {
+                    warn('WebSocket — error', e);
+                };
+            } catch (err) {
+                warn('WebSocket — establishment threw:', err);
+            }
         },
         [commitToStorage]
     );
@@ -1173,35 +1054,29 @@ export const InventorySyncProvider: React.FC<{
     /* ---------------------------------------------------------
      * Manual refresh
      * ------------------------------------------------------- */
-
     const forceManualRefresh = useCallback(async () => {
+        log('=== Manual refresh ===');
         setIsManualRefreshing(true);
         try {
             await pushPending();
             await runRemoteInventorySynchronizer();
-            await reconcileServerDraftIds();
         } catch (e) {
-            // silent
+            warn('Manual refresh threw:', e);
         } finally {
             setIsManualRefreshing(false);
+            log('Manual refresh done');
         }
-    }, [
-        runRemoteInventorySynchronizer,
-        pushPending,
-        reconcileServerDraftIds,
-    ]);
+    }, [runRemoteInventorySynchronizer, pushPending]);
 
     /* ---------------------------------------------------------
      * Stable refs
      * ------------------------------------------------------- */
-
     const actionsRef = useRef({
         hydrateFromLocalDB,
         runLocalMigration,
         runRemoteInventorySynchronizer,
         establishLiveWebSocketSync,
         pushPending,
-        reconcileServerDraftIds,
     });
 
     useEffect(() => {
@@ -1211,59 +1086,56 @@ export const InventorySyncProvider: React.FC<{
             runRemoteInventorySynchronizer,
             establishLiveWebSocketSync,
             pushPending,
-            reconcileServerDraftIds,
         };
     });
 
     /* ---------------------------------------------------------
-     * Bootstrap — one run per token
+     * Bootstrap
      * ------------------------------------------------------- */
-
     useEffect(() => {
         let cancelled = false;
 
         const init = async () => {
+            log('=== Bootstrap ===');
+            log('  token present:', !!token);
+            log('  token length:', token ? String(token).length : 0);
+            log('  platform:', Platform.OS);
+            log('  userId:', currentUserId || '(empty)');
+
             await actionsRef.current.hydrateFromLocalDB();
+            if (cancelled) return;
 
             await actionsRef.current.runLocalMigration();
-
             if (cancelled) return;
 
             if (token) {
-                /* 1. Flush pending */
+                log('Bootstrap — pushing pending');
                 await actionsRef.current.pushPending();
                 if (cancelled) return;
 
-                /* 2. Pull server changes */
+                log('Bootstrap — pulling remote');
                 await actionsRef.current.runRemoteInventorySynchronizer();
                 if (cancelled) return;
 
-                /* 3. Attach WebSocket */
-                actionsRef.current.establishLiveWebSocketSync(
-                    token
+                log('Bootstrap — opening WebSocket');
+                actionsRef.current.establishLiveWebSocketSync(token);
+
+                log(
+                    `Bootstrap — arming poll every ${INVENTORY_POLL_INTERVAL_MS}ms`
                 );
-
-                /* 4. Draft-ID reconciliation */
-                await actionsRef.current.reconcileServerDraftIds();
-
-                if (cancelled) return;
-
-                /* 5. Poll every 5 min */
                 if (pollIntervalRef.current)
                     clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = setInterval(() => {
+                    log('Poll tick');
+                    actionsRef.current.pushPending();
+                    actionsRef.current.runRemoteInventorySynchronizer();
+                }, INVENTORY_POLL_INTERVAL_MS);
 
-                pollIntervalRef.current = setInterval(
-                    async () => {
-                        await actionsRef.current.pushPending();
-                        await actionsRef.current.runRemoteInventorySynchronizer();
-                    },
-                    INVENTORY_POLL_INTERVAL_MS
-                );
+                log('Bootstrap complete');
             } else {
-                setRetailerReceipts([]);
-                if (wsRef.current) wsRef.current.close();
-                if (pollIntervalRef.current)
-                    clearInterval(pollIntervalRef.current);
+                warn(
+                    'Bootstrap — no token yet, waiting for auth to hydrate'
+                );
             }
         };
 
@@ -1271,12 +1143,11 @@ export const InventorySyncProvider: React.FC<{
 
         return () => {
             cancelled = true;
-
+            log('Bootstrap cleanup — closing ws + poll');
             if (reconnectTimeoutRef.current)
                 clearTimeout(reconnectTimeoutRef.current);
             if (pollIntervalRef.current)
                 clearInterval(pollIntervalRef.current);
-
             if (wsRef.current) {
                 wsRef.current.onclose = null;
                 wsRef.current.close();
@@ -1286,29 +1157,20 @@ export const InventorySyncProvider: React.FC<{
     }, [token]);
 
     /* ---------------------------------------------------------
-     * Online / offline transition
+     * Online/offline transition
      * ------------------------------------------------------- */
-
     useEffect(() => {
         if (!token) return;
 
         if (isOnline) {
-            console.log(
-                '[InventorySync] Back online — running full sync'
-            );
-
+            log('Back online — running full sync');
             (async () => {
                 await actionsRef.current.pushPending();
                 await actionsRef.current.runRemoteInventorySynchronizer();
-                actionsRef.current.establishLiveWebSocketSync(
-                    token
-                );
-                await actionsRef.current.reconcileServerDraftIds();
+                actionsRef.current.establishLiveWebSocketSync(token);
             })();
         } else {
-            console.log(
-                '[InventorySync] Went offline — pausing sync'
-            );
+            log('Went offline — pausing');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOnline, token]);
@@ -1316,11 +1178,10 @@ export const InventorySyncProvider: React.FC<{
     /* ---------------------------------------------------------
      * Memoized value
      * ------------------------------------------------------- */
-
     const pendingCount = useMemo(
         () =>
-            retailerReceipts.filter(
-                (r) => r.synced === false
+            retailerReceipts.filter((r) =>
+                isPendingSync(r.synced)
             ).length,
         [retailerReceipts]
     );
@@ -1332,8 +1193,7 @@ export const InventorySyncProvider: React.FC<{
             isLiveConnected,
             isPushSyncing,
             pendingCount,
-            triggerManualFetch:
-                runRemoteInventorySynchronizer,
+            triggerManualFetch: runRemoteInventorySynchronizer,
             forceManualRefresh,
             pushPending,
             lastSyncedTime,

@@ -1,9 +1,19 @@
+// context/PaymentMethodsSyncContext.tsx
+
 import paymentMethodsApi from '@/api/paymentMethodsApi';
-import { dbInstance } from '@/databases/db'; // ✅ Imported your authentic dbInstance variable
+import { dbInstance } from '@/databases/db';
 import { PaymentMethodItem } from '@/databases/types';
 import { useApi } from '@/hooks/useApi';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Safe native fallback store
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { Platform } from 'react-native';
 
 interface PaymentMethodsContextType {
@@ -14,121 +24,290 @@ interface PaymentMethodsContextType {
     forcePaymentMethodsRefresh: () => Promise<void>;
 }
 
-const PaymentMethodsSyncContext = createContext<PaymentMethodsContextType | undefined>(undefined);
+const PaymentMethodsSyncContext = createContext<
+    PaymentMethodsContextType | undefined
+>(undefined);
+
 const ONE_HOUR_MS = 60 * 60 * 1000;
-const NATIVE_PAYMENT_METHODS_KEY = 'wazipos_native_payment_methods';
+const NATIVE_PAYMENT_METHODS_KEY =
+    'wazipos_native_payment_methods';
+const isWeb = Platform.OS === 'web';
 
-export const PaymentMethodsSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [paymentMethodsList, setPaymentMethodsList] = useState<PaymentMethodItem[]>([]);
-    const [isPaymentRefreshing, setIsPaymentRefreshing] = useState(false);
-    const getMethodsApi = useApi(paymentMethodsApi.getPaymentMethodsAction);
+/* ---------------------------------------------------------
+ * Unwrap response shapes
+ * ------------------------------------------------------- */
 
-    // 1. Unified Normalizer and Local Cache Writer Loop
-    useEffect(() => {
-        const rawData = getMethodsApi.data?.results || getMethodsApi.data;
-        if (Array.isArray(rawData) && rawData.length > 0) {
-            const normalized: PaymentMethodItem[] = rawData.map(i => ({
-                id: String(i.id),
-                title: String(i.title || ''),
-                description: i.description ? String(i.description) : undefined,
-                active: !!i.active,
-                updatedAt: new Date().toISOString()
-            }));
+function resolvePaymentMethodsArray(raw: any): any[] {
+    if (Array.isArray(raw)) return raw;
 
-            setPaymentMethodsList(normalized);
+    if (raw && typeof raw === 'object') {
+        if (Array.isArray(raw.results)) return raw.results;
+        if (Array.isArray(raw.data)) return raw.data;
+        if (Array.isArray(raw.payment_methods))
+            return raw.payment_methods;
 
-            // Async block to update local platform caches safely
-            (async () => {
-                try {
-                    if (Platform.OS === 'web' && dbInstance?.paymentMethods) {
-                        // ✅ Fix: Uses dbInstance to wipe and upsert rows to IndexedDB securely
-                        await dbInstance.paymentMethods.clear();
-                        for (const row of normalized) {
-                            await dbInstance.paymentMethods.put(row);
-                        }
-                    } else {
-                        // 📱 Mobile safe fallback serialization to preserve lines past runtime boundaries
-                        await AsyncStorage.setItem(NATIVE_PAYMENT_METHODS_KEY, JSON.stringify(normalized));
-                    }
-                } catch (e) {
-                    console.error("❌ [Payment Context Cache Write Fail]", e);
-                }
-            })();
+        if (raw.data && typeof raw.data === 'object') {
+            if (Array.isArray(raw.data.results))
+                return raw.data.results;
+            if (Array.isArray(raw.data.data))
+                return raw.data.data;
         }
-    }, [getMethodsApi?.data]);
+    }
 
-    const runRemotePaymentMethodsSynchronizer = async () => {
-        try {
-            await getMethodsApi.request({ action: "GetAllPaymentMethods" });
-        } catch (e) {
-            console.error("❌ [Payment Remote Sync Network Exception]", e);
-        }
+    return [];
+}
+
+/* ---------------------------------------------------------
+ * Normalizer — wire payment method → PaymentMethodItem
+ *
+ * `PaymentMethodItem` keeps `id` as the server UUID. No
+ * local auto-increment / remote_id split for this table.
+ * ------------------------------------------------------- */
+
+function normalizePaymentMethod(i: any): PaymentMethodItem {
+    return {
+        id: String(i.id ?? i.key ?? ''),
+        title: String(i.title || ''),
+        description: i.description
+            ? String(i.description)
+            : undefined,
+        active: !!i.active,
+        updatedAt: new Date().toISOString(),
     };
+}
 
-    const forcePaymentMethodsRefresh = async () => {
-        setIsPaymentRefreshing(true);
-        try {
-            if (Platform.OS === 'web' && dbInstance?.paymentMethods) {
-                await dbInstance.paymentMethods.clear();
-            } else {
-                await AsyncStorage.removeItem(NATIVE_PAYMENT_METHODS_KEY);
+/* ---------------------------------------------------------
+ * Provider
+ * ------------------------------------------------------- */
+
+export const PaymentMethodsSyncProvider: React.FC<{
+    children: React.ReactNode;
+}> = ({ children }) => {
+    const [paymentMethodsList, setPaymentMethodsList] = useState<
+        PaymentMethodItem[]
+    >([]);
+    const [isPaymentRefreshing, setIsPaymentRefreshing] =
+        useState(false);
+
+    const getMethodsApi = useApi(
+        paymentMethodsApi.getPaymentMethodsAction
+    );
+
+    /* Guards */
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const lastProcessedDataRef = useRef<any>(null);
+
+    /* ---------------------------------------------------------
+     * Remote fetch
+     * ------------------------------------------------------- */
+
+    const runRemotePaymentMethodsSynchronizer = useCallback(
+        async () => {
+            try {
+                await getMethodsApi.request({
+                    action: 'GetAllPaymentMethods',
+                });
+            } catch (e) {
+                console.error(
+                    '❌ [Payment Remote Sync Network Exception]',
+                    e
+                );
             }
-            setPaymentMethodsList([]);
-            await runRemotePaymentMethodsSynchronizer();
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsPaymentRefreshing(false);
-        }
-    };
+        },
+        [getMethodsApi]
+    );
 
-    // 2. Unified Multi-Platform Hydration Execution on Startup
+    /* ---------------------------------------------------------
+     * Normalize + persist — guarded by identity check
+     * ------------------------------------------------------- */
+
     useEffect(() => {
-        let intervalId: NodeJS.Timeout;
+        const rawData = getMethodsApi.data;
+
+        const list = resolvePaymentMethodsArray(rawData);
+
+        if (
+            list.length === 0 ||
+            list === lastProcessedDataRef.current
+        ) {
+            return;
+        }
+
+        lastProcessedDataRef.current = list;
+
+        const normalized: PaymentMethodItem[] = list.map(
+            normalizePaymentMethod
+        );
+
+        /* Only update state if content actually changed */
+        setPaymentMethodsList((prev) => {
+            if (prev.length === normalized.length) {
+                const same = prev.every(
+                    (p, idx) =>
+                        p.id === normalized[idx].id &&
+                        p.title === normalized[idx].title &&
+                        p.active === normalized[idx].active
+                );
+                if (same) return prev;
+            }
+            return normalized;
+        });
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                if (isWeb && dbInstance?.paymentMethods) {
+                    await dbInstance.paymentMethods.clear();
+                    await dbInstance.paymentMethods.bulkPut(
+                        normalized
+                    );
+                } else {
+                    await AsyncStorage.setItem(
+                        NATIVE_PAYMENT_METHODS_KEY,
+                        JSON.stringify(normalized)
+                    );
+                }
+
+                if (cancelled) return;
+            } catch (e) {
+                console.error(
+                    '❌ [Payment Context Cache Write Fail]',
+                    e
+                );
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [getMethodsApi.data]);
+
+    /* ---------------------------------------------------------
+     * Force refresh
+     * ------------------------------------------------------- */
+
+    const forcePaymentMethodsRefresh = useCallback(
+        async () => {
+            setIsPaymentRefreshing(true);
+            try {
+                if (isWeb && dbInstance?.paymentMethods) {
+                    await dbInstance.paymentMethods.clear();
+                } else {
+                    await AsyncStorage.removeItem(
+                        NATIVE_PAYMENT_METHODS_KEY
+                    );
+                }
+                setPaymentMethodsList([]);
+                lastProcessedDataRef.current = null;
+                await runRemotePaymentMethodsSynchronizer();
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setIsPaymentRefreshing(false);
+            }
+        },
+        [runRemotePaymentMethodsSynchronizer]
+    );
+
+    /* ---------------------------------------------------------
+     * Stable-ref pattern
+     * ------------------------------------------------------- */
+
+    const actionsRef = useRef({
+        runRemotePaymentMethodsSynchronizer,
+    });
+
+    useEffect(() => {
+        actionsRef.current = {
+            runRemotePaymentMethodsSynchronizer,
+        };
+    });
+
+    /* ---------------------------------------------------------
+     * Bootstrap — one-shot hydrate + fetch, then hourly refresh
+     * ------------------------------------------------------- */
+
+    useEffect(() => {
+        let cancelled = false;
 
         const initSync = async () => {
             try {
                 let cached: PaymentMethodItem[] = [];
 
-                // ✅ Corrected Web local hydration using dbInstance
-                if (Platform.OS === 'web' && dbInstance?.paymentMethods) {
-                    cached = await dbInstance.paymentMethods.toArray();
-                }
-                // ✅ Corrected Native mobile safe re-hydration lookup
-                else {
-                    const rawData = await AsyncStorage.getItem(NATIVE_PAYMENT_METHODS_KEY);
+                if (isWeb && dbInstance?.paymentMethods) {
+                    cached =
+                        await dbInstance.paymentMethods.toArray();
+                } else {
+                    const rawData = await AsyncStorage.getItem(
+                        NATIVE_PAYMENT_METHODS_KEY
+                    );
                     cached = rawData ? JSON.parse(rawData) : [];
                 }
 
-                if (cached && cached.length > 0) {
-                    console.log(`💾 [Payment Context] Re-hydrated ${cached.length} settlement systems from database.`);
+                if (!cancelled && cached?.length) {
                     setPaymentMethodsList(cached);
+                    if (__DEV__)
+                        console.log(
+                            `💾 [Payment Context] Re-hydrated ${cached.length} payment methods.`
+                        );
                 }
-
-                // Run background refresh link over the socket/wire
-                await runRemotePaymentMethodsSynchronizer();
-                intervalId = setInterval(runRemotePaymentMethodsSynchronizer, ONE_HOUR_MS);
             } catch (err) {
-                console.error("❌ [Payment Cold Boot Sync Failure]", err);
+                console.error(
+                    '❌ [Payment Cold Boot Sync Failure]',
+                    err
+                );
             }
+
+            if (cancelled) return;
+
+            await actionsRef.current.runRemotePaymentMethodsSynchronizer();
+
+            if (cancelled) return;
+
+            if (intervalRef.current)
+                clearInterval(intervalRef.current);
+            intervalRef.current = setInterval(() => {
+                actionsRef.current.runRemotePaymentMethodsSynchronizer();
+            }, ONE_HOUR_MS);
         };
 
         initSync();
+
         return () => {
-            if (intervalId) clearInterval(intervalId);
+            cancelled = true;
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    /* ---------------------------------------------------------
+     * Memoized context value
+     * ------------------------------------------------------- */
+
+    const value = useMemo<PaymentMethodsContextType>(
+        () => ({
+            paymentMethodsList,
+            isPaymentSyncing: getMethodsApi.loading,
+            isPaymentRefreshing,
+            triggerPaymentMethodsFetch:
+                runRemotePaymentMethodsSynchronizer,
+            forcePaymentMethodsRefresh,
+        }),
+        [
+            paymentMethodsList,
+            getMethodsApi.loading,
+            isPaymentRefreshing,
+            runRemotePaymentMethodsSynchronizer,
+            forcePaymentMethodsRefresh,
+        ]
+    );
+
     return (
-        <PaymentMethodsSyncContext.Provider
-            value={{
-                paymentMethodsList,
-                isPaymentSyncing: getMethodsApi.loading,
-                isPaymentRefreshing,
-                triggerPaymentMethodsFetch: runRemotePaymentMethodsSynchronizer,
-                forcePaymentMethodsRefresh
-            }}
-        >
+        <PaymentMethodsSyncContext.Provider value={value}>
             {children}
         </PaymentMethodsSyncContext.Provider>
     );
@@ -137,7 +316,9 @@ export const PaymentMethodsSyncProvider: React.FC<{ children: React.ReactNode }>
 export const usePaymentMethodsSync = () => {
     const context = useContext(PaymentMethodsSyncContext);
     if (!context) {
-        throw new Error('usePaymentMethodsSync must be used within an explicit <PaymentMethodsSyncProvider /> tree wrapper.');
+        throw new Error(
+            'usePaymentMethodsSync must be used within an explicit <PaymentMethodsSyncProvider /> tree wrapper.'
+        );
     }
     return context;
 };

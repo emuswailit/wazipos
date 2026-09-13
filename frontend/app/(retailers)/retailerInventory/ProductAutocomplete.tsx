@@ -1,12 +1,17 @@
 // app/(wholesalers)/wholesaleInventory/ProductAutocomplete.tsx
 
+import { ProductItem } from '@/databases/types';
 import React, {
+    useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from 'react';
 import {
+    Dimensions,
     Image,
+    Platform,
     Pressable,
     ScrollView,
     Text,
@@ -20,32 +25,28 @@ interface ProductAutocompleteProps {
     selectedValue?: string;
     hasError?: boolean;
     initialTitle?: string;
-
-    /*
-     * Optional. Prevents a runtime crash when the parent
-     * does not provide it.
-     */
-    onSelect?: (id: string, title: string) => void;
-
+    onSelect: (remoteId: string, title: string) => void;
     zIndexValue?: number;
-
-    /*
-     * Products list passed down from the modal.
-     * The context hook is no longer called inside this
-     * component.
-     */
-    products: any[];
+    products: ProductItem[];
 }
 
-interface ProductOption {
-    id: string;
-    title: string;
-    barcode: string;
-    images: any[];
-    thumbnail_url: string | null;
+const log = (...args: any[]) => {
+    if (__DEV__) console.log('[ProductAutocomplete]', ...args);
+};
+
+function pickThumbnail(p: ProductItem): string | null {
+    const first = Array.isArray(p.images) ? p.images[0] : null;
+    if (!first) return null;
+    return first.thumbnail || first.image || null;
 }
 
-const FALLBACK_BASE_URL = 'https://api.wazipos.co.ke';
+/* ---------------------------------------------------------
+ * Constants
+ * ------------------------------------------------------- */
+const HEADER_HEIGHT = 36;
+const MIN_DROPDOWN_HEIGHT = 140;
+const MAX_DROPDOWN_HEIGHT = 560;
+const SAFETY_BUFFER = 16;
 
 export default function ProductAutocomplete({
     theme,
@@ -54,362 +55,636 @@ export default function ProductAutocomplete({
     hasError = false,
     initialTitle = '',
     onSelect,
-    zIndexValue = 999,
-    products = [],
+    zIndexValue = 100,
+    products,
 }: ProductAutocompleteProps) {
+    const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState(initialTitle);
+    const [dropdownHeight, setDropdownHeight] = useState(320);
+    const [dropdownTop, setDropdownTop] = useState(48);
 
-    /*
-     * Keep the text synchronized when the parent changes
-     * the initially selected product.
-     */
+    const containerRef = useRef<View>(null);
+    const inputRef = useRef<TextInput>(null);
+
+    const backgroundColor = isDarkMode ? '#1e293b' : '#f8fafc';
+    const dropdownBackground = isDarkMode
+        ? '#0f172a'
+        : '#ffffff';
+    const textColor = theme?.text || '#0f172a';
+    const borderColor = hasError
+        ? '#ef4444'
+        : isDarkMode
+            ? '#475569'
+            : '#cbd5e1';
+    const primary = theme?.primary || '#2563eb';
+    const dividerColor = isDarkMode ? '#334155' : '#e5e7eb';
+
+    /* ---------------------------------------------------------
+     * Measure — dropdown fills from below the input to the
+     * bottom of the viewport, within a sane min/max range.
+     * ------------------------------------------------------- */
+    const measure = useCallback(() => {
+        if (!containerRef.current) return;
+
+        containerRef.current.measureInWindow(
+            (_x, y, _w, h) => {
+                if (!h) return;
+
+                const windowHeight =
+                    Dimensions.get('window').height;
+
+                // Space from the bottom of the input to the
+                // bottom of the window (web) / safe area (native).
+                const availableBelow =
+                    windowHeight - y - h - SAFETY_BUFFER;
+
+                // Space above the input.
+                const availableAbove = y - SAFETY_BUFFER;
+
+                // If there's more room above than below, prefer
+                // flipping the dropdown upward.
+                const flipUp =
+                    availableBelow < MIN_DROPDOWN_HEIGHT &&
+                    availableAbove > availableBelow;
+
+                const space = flipUp
+                    ? availableAbove
+                    : availableBelow;
+
+                const clamped = Math.max(
+                    MIN_DROPDOWN_HEIGHT,
+                    Math.min(MAX_DROPDOWN_HEIGHT, space)
+                );
+
+                setDropdownHeight(clamped);
+
+                if (flipUp) {
+                    // Anchor so the panel grows upward from the top
+                    // of the input.
+                    setDropdownTop(-clamped - 4);
+                } else {
+                    setDropdownTop(h + 4);
+                }
+            }
+        );
+    }, []);
+
     useEffect(() => {
-        setSearch(initialTitle ?? '');
-    }, [initialTitle]);
+        if (!open) return;
 
-    /*
-     * Build a usable image URL from an image array.
-     * Used only as a fallback when the pre-resolved
-     * thumbnail_url is missing.
-     */
-    const getImageUrl = (
-        images: any[]
-    ): string | null => {
-        if (!Array.isArray(images) || images.length === 0) {
-            return null;
+        const raf = requestAnimationFrame(measure);
+
+        // Re-measure on layout changes:
+        //  - native: orientation change / keyboard
+        //  - web: window resize
+        const sub = Dimensions.addEventListener(
+            'change',
+            measure
+        );
+
+        let webCleanup: (() => void) | undefined;
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            const onResize = () => measure();
+            window.addEventListener('resize', onResize);
+            window.addEventListener('scroll', onResize, true);
+            webCleanup = () => {
+                window.removeEventListener('resize', onResize);
+                window.removeEventListener(
+                    'scroll',
+                    onResize,
+                    true
+                );
+            };
         }
 
-        const firstImage = images[0];
+        return () => {
+            cancelAnimationFrame(raf);
+            sub?.remove?.();
+            webCleanup?.();
+        };
+    }, [open, measure]);
 
-        const rawPath =
-            typeof firstImage === 'string'
-                ? firstImage
-                : firstImage?.thumbnail ||
-                firstImage?.image ||
-                firstImage?.url ||
-                null;
-
-        if (
-            !rawPath ||
-            typeof rawPath !== 'string'
-        ) {
-            return null;
-        }
-
-        const trimmedPath = rawPath.trim();
-        if (!trimmedPath) return null;
-
-        if (
-            trimmedPath.startsWith('http://') ||
-            trimmedPath.startsWith('https://')
-        ) {
-            return trimmedPath;
-        }
-
-        const cleanPath = trimmedPath.startsWith('/')
-            ? trimmedPath.substring(1)
-            : trimmedPath;
-
-        return `${FALLBACK_BASE_URL}/${cleanPath
-            .split('/')
-            .map((segment) =>
-                encodeURIComponent(segment)
-            )
-            .join('/')}`;
-    };
-
-    /*
-     * Normalize products from the parent.
-     *
-     * Prefer the pre-resolved `thumbnail_url` set by the
-     * ProductsSyncContext. Fall back to resolving the raw
-     * images array in this component.
-     */
-    const options = useMemo<ProductOption[]>(() => {
-        if (!Array.isArray(products)) {
-            return [];
-        }
-
-        return products
-            .map((item: any): ProductOption => ({
-                id: String(item?.id ?? ''),
-                title:
-                    item?.long_title ||
-                    item?.title ||
-                    item?.product_name ||
-                    'UNSPECIFIED',
-                barcode: String(item?.bar_code ?? ''),
-                images: Array.isArray(item?.images)
-                    ? item.images
-                    : [],
-                thumbnail_url:
-                    item?.thumbnail_url ||
-                    item?.image_url ||
-                    getImageUrl(
-                        Array.isArray(item?.images)
-                            ? item.images
-                            : []
-                    ),
-            }))
-            .filter((item) => item.id);
-    }, [products]);
-
-    /*
-     * Filter products by title or barcode.
-     */
+    /* ---------------------------------------------------------
+     * Filter
+     * ------------------------------------------------------- */
     const filtered = useMemo(() => {
-        const query = search.trim().toLowerCase();
+        const list = Array.isArray(products) ? products : [];
+        const q = query.trim().toLowerCase();
 
-        if (!query) {
-            return options.slice(0, 20);
-        }
+        if (!q) return list.slice(0, 200);
 
-        return options
-            .filter((item) => {
-                const titleMatch = item.title
-                    .toLowerCase()
-                    .includes(query);
+        return list
+            .filter((p) => {
+                const title = String(p.title || '').toLowerCase();
+                const longTitle = String(
+                    p.long_title || ''
+                ).toLowerCase();
+                const productName = String(
+                    p.product_name || ''
+                ).toLowerCase();
+                const barcode = String(
+                    p.bar_code || ''
+                ).toLowerCase();
 
-                const barcodeMatch = item.barcode
-                    .toLowerCase()
-                    .includes(query);
-
-                return titleMatch || barcodeMatch;
+                return (
+                    title.includes(q) ||
+                    longTitle.includes(q) ||
+                    productName.includes(q) ||
+                    barcode.includes(q)
+                );
             })
-            .slice(0, 20);
-    }, [options, search]);
+            .slice(0, 200);
+    }, [products, query]);
 
-    /*
-     * Handle product selection.
-     *
-     * onSelect is optional so this component can never crash
-     * because the callback was not supplied.
-     */
-    const handleSelect = (
-        id: string,
-        title: string
-    ): void => {
-        setSearch(title);
-        setOpen(false);
-
-        if (typeof onSelect === 'function') {
-            onSelect(id, title);
-        } else {
-            console.warn(
-                '[ProductAutocomplete] onSelect callback was not provided.',
-                { id, title }
+    /* ---------------------------------------------------------
+     * Select
+     * ------------------------------------------------------- */
+    const handleSelect = useCallback(
+        (product: ProductItem) => {
+            const remoteId = String(
+                product.remote_id ?? ''
             );
-        }
-    };
+            const title = String(
+                product.title ||
+                product.long_title ||
+                product.product_name ||
+                ''
+            );
+
+            if (!remoteId) {
+                console.warn(
+                    '[ProductAutocomplete] Selected product has no remote_id:',
+                    product
+                );
+                return;
+            }
+
+            onSelect(remoteId, title);
+            setQuery('');
+            setOpen(false);
+        },
+        [onSelect]
+    );
+
+    const displayValue = useMemo(() => {
+        if (query) return query;
+        if (selectedValue) return initialTitle || 'Selected product';
+        return '';
+    }, [query, selectedValue, initialTitle]);
+
+    // Height of the scrollable list area, always at least
+    // MIN_DROPDOWN_HEIGHT minus the header, and at most the
+    // available dropdown height minus the header.
+    const listHeight = Math.max(
+        80,
+        dropdownHeight - HEADER_HEIGHT
+    );
 
     return (
         <View
+            className="w-full"
             style={{
-                zIndex: zIndexValue,
-                elevation: zIndexValue,
+                zIndex: open ? zIndexValue + 1000 : zIndexValue,
+                elevation: open
+                    ? zIndexValue + 1000
+                    : zIndexValue,
             }}
-            className="items-start w-full relative"
         >
-            {/* Label */}
             <Text
                 style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font?.bold,
+                    color: theme?.textDark,
+                    fontFamily: theme?.font?.bold,
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    letterSpacing: 1,
+                    marginBottom: 6,
                 }}
-                className="text-[10px] uppercase font-black tracking-wider mb-1"
             >
                 Select Catalog Product *
             </Text>
 
-            {/* Search input */}
-            <TextInput
-                value={search}
-                onFocus={() => setOpen(true)}
-                onChangeText={(text: string) => {
-                    setSearch(text);
-                    setOpen(true);
-                }}
-                placeholder="Type to filter and select catalog item..."
-                placeholderTextColor={
-                    isDarkMode ? '#64748b' : '#94a3b8'
-                }
-                autoCorrect={false}
-                autoCapitalize="none"
-                style={{
-                    backgroundColor: theme.background,
-                    borderColor: hasError
-                        ? '#ef4444'
-                        : isDarkMode
-                            ? '#475569'
-                            : theme.primary,
-                    color: theme.text,
-                    fontFamily: theme.font?.medium,
-                }}
-                className="w-full rounded-xl px-4 h-[42px] border text-sm font-medium"
-            />
-
-            {/* Dropdown */}
-            {open && (
-                <View
-                    style={{
-                        backgroundColor: isDarkMode
-                            ? '#0f172a'
-                            : '#ffffff',
-                        borderColor: theme.primary,
-                        zIndex: 9999,
-                        elevation: 30,
+            <View
+                ref={containerRef}
+                onLayout={measure}
+                style={{ width: '100%', position: 'relative' }}
+            >
+                <TextInput
+                    ref={inputRef}
+                    value={displayValue}
+                    onChangeText={(text) => {
+                        setQuery(text);
+                        setOpen(true);
                     }}
-                    className="absolute top-[68px] left-0 right-0 border rounded-xl shadow-lg overflow-hidden"
-                >
-                    <ScrollView
-                        keyboardShouldPersistTaps="always"
-                        nestedScrollEnabled
-                        showsVerticalScrollIndicator
-                        persistentScrollbar
-                        style={{ maxHeight: 360 }}
-                        contentContainerStyle={{
-                            paddingVertical: 2,
+                    onFocus={() => {
+                        setOpen(true);
+                        requestAnimationFrame(measure);
+                    }}
+                    placeholder="Type to filter and select catalog item..."
+                    placeholderTextColor="#94a3b8"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    style={{
+                        backgroundColor,
+                        color: textColor,
+                        fontFamily: theme?.font?.medium,
+                        borderColor,
+                        borderWidth: 1,
+                        height: 44,
+                        borderRadius: 12,
+                        paddingHorizontal: 14,
+                        fontSize: 14,
+                    }}
+                />
+
+                {open && (
+                    <View
+                        style={{
+                            position: 'absolute',
+                            top: dropdownTop,
+                            left: 0,
+                            right: 0,
+                            height: dropdownHeight,
+                            backgroundColor: dropdownBackground,
+                            borderColor: primary,
+                            borderWidth: 1,
+                            borderRadius: 12,
+                            zIndex: 10000,
+                            elevation: 10000,
+                            // `overflow: 'hidden'` clips the
+                            // ScrollView corners to the panel's
+                            // rounded corners.
+                            overflow: 'hidden',
                         }}
                     >
-                        {filtered.length === 0 ? (
-                            <View className="p-5">
+                        {/* ---- Header (non-scrolling) ---- */}
+                        <View
+                            style={{
+                                height: HEADER_HEIGHT,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                paddingHorizontal: 12,
+                                borderBottomColor: dividerColor,
+                                borderBottomWidth: 1,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: theme?.textDark,
+                                    fontFamily: theme?.font?.bold,
+                                    fontSize: 10,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 1,
+                                }}
+                            >
+                                {filtered.length} match
+                                {filtered.length === 1 ? '' : 'es'}
+                            </Text>
+                            <Pressable
+                                onPress={() => setOpen(false)}
+                                hitSlop={8}
+                            >
                                 <Text
                                     style={{
-                                        color: theme.textDark,
+                                        color: theme?.textDark,
+                                        fontFamily:
+                                            theme?.font?.bold,
+                                        fontSize: 10,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: 1,
                                     }}
-                                    className="text-xs text-center"
                                 >
-                                    No catalog items matched
-                                    query.
+                                    Close ✕
                                 </Text>
-                            </View>
-                        ) : (
-                            filtered.map((item) => {
-                                const imageUrl =
-                                    item.thumbnail_url;
+                            </Pressable>
+                        </View>
 
-                                const isSelected =
-                                    selectedValue === item.id;
-
-                                return (
-                                    <Pressable
-                                        key={item.id}
-                                        onPress={() =>
-                                            handleSelect(
-                                                item.id,
-                                                item.title
-                                            )
-                                        }
-                                        style={({
-                                            pressed,
-                                        }) => ({
-                                            backgroundColor:
-                                                pressed
-                                                    ? isDarkMode
-                                                        ? '#1e293b'
-                                                        : '#f1f5f9'
-                                                    : isSelected
-                                                        ? isDarkMode
-                                                            ? '#172554'
-                                                            : '#eff6ff'
-                                                        : 'transparent',
-                                        })}
-                                        className="min-h-[76px] px-3.5 py-2.5 flex-row items-center border-b border-slate-700/10"
+                        {/* ---- Scrollable list ---- */}
+                        <ScrollView
+                            style={{ flex: 1, height: listHeight }}
+                            contentContainerStyle={{
+                                flexGrow: 1,
+                                paddingBottom: 4,
+                            }}
+                            nestedScrollEnabled
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="on-drag"
+                            showsVerticalScrollIndicator
+                            scrollEventThrottle={16}
+                            // Works well when a parent ScrollView
+                            // tries to steal the gesture on native.
+                            onStartShouldSetResponderCapture={() =>
+                                true
+                            }
+                            {...(Platform.OS === 'web' && {
+                                // Prevent parent scroll from
+                                // hijacking wheel events.
+                                onWheel: (e: any) =>
+                                    e.stopPropagation?.(),
+                            })}
+                        >
+                            {filtered.length === 0 ? (
+                                <View
+                                    style={{
+                                        padding: 16,
+                                        alignItems: 'center',
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            color: theme?.textDark,
+                                            fontFamily:
+                                                theme?.font?.medium,
+                                            fontSize: 12,
+                                            textAlign: 'center',
+                                        }}
                                     >
-                                        {/* Product image */}
-                                        <View
-                                            style={{
-                                                width: 54,
-                                                height: 54,
+                                        No catalog items matched query.
+                                    </Text>
+                                </View>
+                            ) : (
+                                filtered.map((p, idx) => {
+                                    const isSelected =
+                                        String(p.remote_id) ===
+                                        String(selectedValue);
+                                    const thumb = pickThumbnail(p);
+                                    const isLast =
+                                        idx === filtered.length - 1;
+
+                                    return (
+                                        <Pressable
+                                            key={
+                                                p.remote_id ||
+                                                String(p.id)
+                                            }
+                                            onPress={() =>
+                                                handleSelect(p)
+                                            }
+                                            style={({ pressed }) => ({
                                                 backgroundColor:
-                                                    isDarkMode
-                                                        ? '#1e293b'
-                                                        : '#f1f5f9',
-                                                borderColor:
-                                                    isDarkMode
-                                                        ? '#334155'
-                                                        : '#e2e8f0',
-                                            }}
-                                            className="rounded-xl border items-center justify-center overflow-hidden flex-shrink-0"
+                                                    pressed
+                                                        ? isDarkMode
+                                                            ? '#1e293b'
+                                                            : '#f1f5f9'
+                                                        : isSelected
+                                                            ? isDarkMode
+                                                                ? '#172554'
+                                                                : '#eff6ff'
+                                                            : 'transparent',
+                                            })}
                                         >
-                                            {imageUrl ? (
-                                                <Image
-                                                    source={{
-                                                        uri: imageUrl,
-                                                    }}
-                                                    style={{
-                                                        width: '100%',
-                                                        height: '100%',
-                                                    }}
-                                                    resizeMode="cover"
-                                                />
-                                            ) : (
-                                                <Text className="text-lg">
-                                                    📦
-                                                </Text>
-                                            )}
-                                        </View>
-
-                                        {/* Product details */}
-                                        <View className="flex-1 px-3 min-w-0">
-                                            <Text
+                                            <View
                                                 style={{
-                                                    color:
-                                                        isSelected
-                                                            ? theme.primary
-                                                            : theme.text,
-                                                    fontFamily:
-                                                        isSelected
-                                                            ? theme
-                                                                .font
-                                                                ?.bold
-                                                            : theme
-                                                                .font
-                                                                ?.medium,
+                                                    flexDirection:
+                                                        'row',
+                                                    alignItems:
+                                                        'center',
+                                                    paddingHorizontal: 12,
+                                                    paddingVertical: 10,
+                                                    borderBottomWidth:
+                                                        isLast
+                                                            ? 0
+                                                            : 1,
+                                                    borderBottomColor:
+                                                        dividerColor,
                                                 }}
-                                                className="text-xs"
-                                                numberOfLines={2}
                                             >
-                                                {item.title}
-                                            </Text>
-
-                                            {item.barcode ? (
-                                                <Text
+                                                {/* Thumbnail */}
+                                                <View
                                                     style={{
-                                                        color:
-                                                            theme.textDark,
+                                                        width: 56,
+                                                        height: 56,
+                                                        borderRadius: 10,
+                                                        marginRight: 12,
+                                                        backgroundColor:
+                                                            isDarkMode
+                                                                ? '#0f172a'
+                                                                : '#f1f5f9',
+                                                        borderWidth: 1,
+                                                        borderColor:
+                                                            dividerColor,
+                                                        alignItems:
+                                                            'center',
+                                                        justifyContent:
+                                                            'center',
+                                                        overflow:
+                                                            'hidden',
+                                                        flexShrink: 0,
                                                     }}
-                                                    className="text-[9px] mt-1"
-                                                    numberOfLines={1}
                                                 >
-                                                    SKU:{' '}
-                                                    {item.barcode}
-                                                </Text>
-                                            ) : null}
-                                        </View>
+                                                    {thumb ? (
+                                                        <Image
+                                                            source={{
+                                                                uri: thumb,
+                                                            }}
+                                                            style={{
+                                                                width: 56,
+                                                                height: 56,
+                                                            }}
+                                                            resizeMode="cover"
+                                                        />
+                                                    ) : (
+                                                        <Text
+                                                            style={{
+                                                                fontSize: 22,
+                                                                color: theme
+                                                                    ?.textDark,
+                                                                opacity: 0.4,
+                                                            }}
+                                                        >
+                                                            📦
+                                                        </Text>
+                                                    )}
+                                                </View>
 
-                                        {/* Selected check */}
-                                        {isSelected && (
-                                            <View className="w-6 h-6 rounded-full items-center justify-center">
-                                                <Text
+                                                {/* Details */}
+                                                <View
                                                     style={{
-                                                        color:
-                                                            theme.primary,
+                                                        flex: 1,
+                                                        minWidth: 0,
+                                                        justifyContent:
+                                                            'center',
                                                     }}
-                                                    className="text-sm font-black"
                                                 >
-                                                    ✓
-                                                </Text>
+                                                    <Text
+                                                        style={{
+                                                            color: isSelected
+                                                                ? primary
+                                                                : textColor,
+                                                            fontFamily:
+                                                                theme
+                                                                    ?.font
+                                                                    ?.bold,
+                                                            fontSize: 14,
+                                                        }}
+                                                        numberOfLines={2}
+                                                    >
+                                                        {p.title ||
+                                                            p.long_title ||
+                                                            p.product_name ||
+                                                            '(untitled)'}
+                                                    </Text>
+
+                                                    <View
+                                                        style={{
+                                                            flexDirection:
+                                                                'row',
+                                                            flexWrap:
+                                                                'wrap',
+                                                            alignItems:
+                                                                'center',
+                                                            marginTop: 2,
+                                                        }}
+                                                    >
+                                                        {p.category_title ? (
+                                                            <>
+                                                                <Text
+                                                                    style={{
+                                                                        color: theme
+                                                                            ?.textDark,
+                                                                        fontFamily:
+                                                                            theme
+                                                                                ?.font
+                                                                                ?.medium,
+                                                                        fontSize: 11,
+                                                                    }}
+                                                                    numberOfLines={
+                                                                        1
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        p.category_title
+                                                                    }
+                                                                </Text>
+                                                                <Text
+                                                                    style={{
+                                                                        color: theme
+                                                                            ?.textDark,
+                                                                        marginHorizontal: 6,
+                                                                        opacity: 0.5,
+                                                                        fontSize: 11,
+                                                                    }}
+                                                                >
+                                                                    •
+                                                                </Text>
+                                                            </>
+                                                        ) : null}
+                                                        <Text
+                                                            style={{
+                                                                color: theme
+                                                                    ?.textDark,
+                                                                fontFamily:
+                                                                    theme
+                                                                        ?.font
+                                                                        ?.medium,
+                                                                fontSize: 11,
+                                                                opacity:
+                                                                    p.bar_code
+                                                                        ? 1
+                                                                        : 0.6,
+                                                            }}
+                                                            numberOfLines={1}
+                                                        >
+                                                            {p.bar_code
+                                                                ? `BC: ${p.bar_code}`
+                                                                : 'No barcode'}
+                                                        </Text>
+                                                    </View>
+
+                                                    {(p.manufacturer_title ||
+                                                        p.final_unit_selling_price) && (
+                                                            <View
+                                                                style={{
+                                                                    flexDirection:
+                                                                        'row',
+                                                                    flexWrap:
+                                                                        'wrap',
+                                                                    alignItems:
+                                                                        'center',
+                                                                    marginTop: 1,
+                                                                }}
+                                                            >
+                                                                {p.manufacturer_title ? (
+                                                                    <Text
+                                                                        style={{
+                                                                            color: theme
+                                                                                ?.textDark,
+                                                                            fontFamily:
+                                                                                theme
+                                                                                    ?.font
+                                                                                    ?.medium,
+                                                                            opacity: 0.75,
+                                                                            fontSize: 10,
+                                                                        }}
+                                                                        numberOfLines={
+                                                                            1
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            p.manufacturer_title
+                                                                        }
+                                                                    </Text>
+                                                                ) : null}
+                                                                {p.final_unit_selling_price ? (
+                                                                    <>
+                                                                        <Text
+                                                                            style={{
+                                                                                color: theme
+                                                                                    ?.textDark,
+                                                                                marginHorizontal: 6,
+                                                                                opacity: 0.5,
+                                                                                fontSize: 10,
+                                                                            }}
+                                                                        >
+                                                                            •
+                                                                        </Text>
+                                                                        <Text
+                                                                            style={{
+                                                                                color: primary,
+                                                                                fontFamily:
+                                                                                    theme
+                                                                                        ?.font
+                                                                                        ?.bold,
+                                                                                fontSize: 10,
+                                                                            }}
+                                                                        >
+                                                                            KES{' '}
+                                                                            {Number(
+                                                                                p.final_unit_selling_price
+                                                                            ).toFixed(
+                                                                                2
+                                                                            )}
+                                                                        </Text>
+                                                                    </>
+                                                                ) : null}
+                                                            </View>
+                                                        )}
+                                                </View>
+
+                                                {isSelected && (
+                                                    <Text
+                                                        style={{
+                                                            color: primary,
+                                                            fontFamily:
+                                                                theme
+                                                                    ?.font
+                                                                    ?.bold,
+                                                            fontSize: 16,
+                                                            marginLeft: 8,
+                                                        }}
+                                                    >
+                                                        ✓
+                                                    </Text>
+                                                )}
                                             </View>
-                                        )}
-                                    </Pressable>
-                                );
-                            })
-                        )}
-                    </ScrollView>
-                </View>
-            )}
+                                        </Pressable>
+                                    );
+                                })
+                            )}
+                        </ScrollView>
+                    </View>
+                )}
+            </View>
         </View>
     );
 }
