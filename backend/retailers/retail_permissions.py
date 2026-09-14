@@ -21,6 +21,9 @@ class EntitySubscriptionPermission(permissions.BasePermission):
                 raise exceptions.ValidationError(f"{request.user.entity.title} has no active subscription")
         else:
             raise exceptions.ValidationError("Please log in")
+
+
+
 class RetailAdminPermission(permissions.BasePermission):
     """Allow selected array of roles to access a resource"""
 

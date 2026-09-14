@@ -61,13 +61,7 @@ urlpatterns = [
         views.RetailPrescriptionsCreateAPIView.as_view(),
         name=views.RetailPrescriptionsCreateAPIView.name,
     ),
-      # Phase 1: The Dynamic Simulation Playground (GET)
-    # Retailer sends: ?days_to_order=30&lead_time_days=5&max_shelf_days=90
-    path(
-        'procurement/predictions', 
-        views.VendorPurchasePredictionAPIView.as_view(), 
-        name='inventory-prediction-simulator'
-    ),
+
 
         path(
         "indents/current/",

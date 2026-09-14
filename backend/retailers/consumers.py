@@ -202,8 +202,8 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
-from retailers.helpers import UUIDEncoder, predict_product, sort_by_urgency, compute_lead_time_summary
-from retailers.services.prediction import sync_prediction_indent
+from retailers.helpers import UUIDEncoder
+
 from retailers.models import (
     OutOfStock,
     RetailerIndent,
@@ -212,174 +212,6 @@ from retailers.models import (
 )
 
 
-class RetailerInventoryPredictionConsumer(AsyncJsonWebsocketConsumer):
-
-    @database_sync_to_async
-    def _resolve_entity(self, user):
-        if not user or not user.is_authenticated:
-            return None
-        return getattr(user, "entity", None)
-
-    async def connect(self):
-        self.user = self.scope["user"]
-        if not self.user.is_authenticated:
-            await self.close()
-            return
-
-        entity = await self._resolve_entity(self.user)
-        if not entity:
-            await self.close()
-            return
-
-        self.entity = entity
-        self.entity_id = str(entity.id)
-        self.group_name = f"retailer-predictions-{self.entity_id}"
-
-        await self.channel_layer.group_add(
-            self.group_name, self.channel_name,
-        )
-        await self.accept()
-
-        await self.helper_func()
-        await self.send_json({"predictions": json.loads(self.datum)})
-
-    async def disconnect(self, close_code):
-        if hasattr(self, "group_name"):
-            await self.channel_layer.group_discard(
-                self.group_name, self.channel_name,
-            )
-        await self.close()
-
-    async def send_retailer_predictions(self, event):
-        await self.helper_func()
-        await self.send_json({"predictions": json.loads(self.datum)})
-
-    @sync_to_async
-    def helper_func(self):
-        started = time.time()
-        entity = getattr(self, "entity", None)
-        if not entity:
-            self.datum = json.dumps([])
-            return
-
-        indent = (
-            RetailerIndent.objects
-            .filter(entity=entity, is_open="true")
-            .order_by("-created")
-            .first()
-        )
-        if not indent:
-            indent = RetailerIndent.objects.create(
-                entity=entity,
-                owner=self.user,
-                order_days=getattr(entity, "order_days", 30) or 30,
-                lead_time=0,
-                is_open="true",
-            )
-
-        cycle_days = int(indent.order_days or 30)
-        budget_enforced = indent.budget_enforced == "true"
-        pricing_percentage = float(indent.pricing_percentage or 30)
-        indent_lead_override = int(indent.lead_time or 0)
-        today = timezone.localdate()
-
-        candidate_pids = self._candidate_product_ids(entity)
-        compiled = []
-        failed = 0
-
-        for p_id in candidate_pids:
-            try:
-                result = predict_product(
-                    entity=entity,
-                    p_id=p_id,
-                    cycle_days=cycle_days,
-                    today=today,
-                    indent_lead_override=indent_lead_override,
-                    pricing_percentage=pricing_percentage,
-                )
-                if result:
-                    compiled.append(result)
-            except Exception as e:
-                failed += 1
-                print(
-                    f"[PREDICTION] FAILED product={p_id}: "
-                    f"{type(e).__name__}: {e}"
-                )
-
-        compiled = sort_by_urgency(compiled)
-
-        try:
-            indent, budget_info = sync_prediction_indent(
-                entity=entity,
-                user=self.user,
-                indent=indent,
-                cycle_days=cycle_days,
-                compiled=compiled,
-                today=today,
-            )
-            retailer_indent_id = str(indent.id)
-        except Exception as e:
-            print(
-                f"[PREDICTION] INDENT SYNC FAILED: "
-                f"{type(e).__name__}: {e}"
-            )
-            retailer_indent_id = None
-            budget_info = None
-
-        lead_time_summary = compute_lead_time_summary(compiled)
-
-        try:
-            indent.average_lead_time_days = (
-                lead_time_summary["average_lead_time_days"]
-            )
-            indent.lead_time_updated_at = timezone.now()
-            indent.save(update_fields=[
-                "average_lead_time_days", "lead_time_updated_at",
-            ])
-        except Exception:
-            pass
-
-        payload = {
-            "retailer_id": str(entity.id),
-            "retailer_name": getattr(entity, "title", self.user.email),
-            "retailer_indent_id": retailer_indent_id,
-            "config": {
-                "order_days": cycle_days,
-                "lead_time_override": indent_lead_override,
-                "budget_amount": (
-                    float(indent.budget_amount)
-                    if indent.budget_amount else None
-                ),
-                "budget_enforced": budget_enforced,
-                "pricing_percentage": pricing_percentage,
-            },
-            "lead_time_summary": lead_time_summary,
-            "budget": budget_info,
-            "predictions": compiled,
-        }
-
-        self.datum = json.dumps(payload, cls=UUIDEncoder)
-
-    def _candidate_product_ids(self, entity):
-        r_pids = set(
-            RetailerReceipts.objects
-            .filter(entity=entity, is_active="true")
-            .values_list("product_id", flat=True)
-        )
-        o_pids = set(
-            OutOfStock.objects
-            .filter(entity=entity)
-            .values_list("product_id", flat=True)
-        )
-        pending = set(
-            RetailerOrderItems.objects
-            .filter(
-                retailer_order__retailer=entity,
-                is_received="false",
-            )
-            .values_list("wholesaler_receipt__product_id", flat=True)
-        )
-        return (r_pids | o_pids) - pending
 
 class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
     
@@ -1097,18 +929,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from products.models import Products
-from retailers.helpers import (
-    UUIDEncoder,
-    apply_budget,
-    compute_bonus_quantity,
-    compute_lead_time_summary,
-    compute_profit,
-    estimate_daily_demand,
-    estimate_safety_stock,
-    line_cost,
-    resolve_lead_time,
-    sort_by_urgency,
-)
+
 from retailers.models import (
     CustomerOrderItems,
     IndentItemSource,

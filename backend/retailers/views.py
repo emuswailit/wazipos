@@ -7,6 +7,7 @@ from core.responses import custom_error_response, custom_json_response, custom_s
 from . import retail_permissions
 from . import serializers
 from . import models
+from .utils import retailer_utils
 from authentication.validators import authentication_models_validators
 from rest_framework.response import Response
 from authentication.serializers import CategoriesSerializer
@@ -30,7 +31,7 @@ from rest_framework import generics, exceptions, permissions, status
 from core.views import EntitySafeViewMixin
 from . import serializers, models
 from .utils import (
-    retailer_utils,
+
     retailers_shipping_rates_utils,
     wholesaler_invoice_utils,
     retail_prescriptions_utils
@@ -494,7 +495,7 @@ def retailerReceiptsJointAPIView(request):
 
 @api_view(["POST"])
 @permission_classes([  retail_permissions.EntitySubscriptionPermission,
-                     retail_permissions.RetailEmployeePermission])
+                    ])
 def customerOrdersStaffAPIView(request):
     customer_orders = []
     try:
@@ -1609,97 +1610,6 @@ from rest_framework.permissions import IsAuthenticated
 from authentication.models import Entities
 from retailers.models import RetailerReceipts
 from .serializers import InventoryPredictionQuerySerializer
-from .helpers import (
-    get_entity_interacted_products, 
-    calculate_single_product_metrics, 
-    find_wholesaler_procurement_offers,
-    sync_or_create_active_indent,       
-    rebuild_indent_item_row
-)
-
-class VendorPurchasePredictionAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        query_serializer = InventoryPredictionQuerySerializer(data=request.query_params.dict())
-        if not query_serializer.is_valid():
-            return Response(query_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        v = query_serializer.validated_data
-        today = datetime.date.today()
-        days_to_order = int(v['days_to_order'])
-        history_cutoff = today - datetime.timedelta(days=v.get('lookback_window', 30))
-        total_horizon_days = days_to_order + v['lead_time_days']
-        horizon_expiry_threshold = today + datetime.timedelta(days=total_horizon_days)
-
-        entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
-        if not entity:
-            return Response({"error": "No active retailer profiling instance recognized."}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            active_indent = sync_or_create_active_indent(entity, request.user, v)
-        except Exception as err:
-            return Response({"error": f"Indent synchronization failure: {str(err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        predictions = []
-        master_products = get_entity_interacted_products(entity.owner)
-
-        for product in master_products:
-            metric_data = calculate_single_product_metrics(
-                product=product, owner=entity.owner, total_horizon_days=total_horizon_days,
-                horizon_expiry_threshold=horizon_expiry_threshold, history_cutoff=history_cutoff,
-                max_shelf_days=active_indent.max_shelf_days, lookback_days=active_indent.lookback_days, days_to_order=days_to_order
-            )
-            if not metric_data or not isinstance(metric_data, dict):
-                continue
-
-            safety_buffer = 10 if not metric_data["has_overstayed"] else 0
-            base_demand = metric_data["avg_daily_sales"] * Decimal(days_to_order)
-            predicted_purchase = max(Decimal(0), (base_demand + Decimal(safety_buffer)) - Decimal(metric_data["usable_stock_calculated"]))
-            final_quantity_units = int(predicted_purchase.quantize(Decimal('1.'), rounding='ROUND_UP'))
-
-            if metric_data["has_overstayed"] and final_quantity_units > 0:
-                final_quantity_units = int(metric_data["validated_backlog_demand"])
-                recommendation_notes = "Overstayed stock blocker active. Restocking unfulfilled client shortfalls only."
-            else:
-                final_quantity_units += int(metric_data["validated_backlog_demand"])
-                recommendation_notes = "Velocity runway matching with unfulfilled client backlog buffers appended."
-
-            proposed_offers = find_wholesaler_procurement_offers(product, final_quantity_units, today)
-            last_receipt = RetailerReceipts.objects.filter(owner=entity.owner, product=product).order_by('-created').first()
-            unit_cost = last_receipt.unit_buying_price if (last_receipt and last_receipt.unit_buying_price is not None) else Decimal('0.00')
-            total_value = Decimal(metric_data["total_physical_stock"]) * unit_cost
-
-            try:
-                rebuild_indent_item_row(entity, entity.owner, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today)
-            except Exception as item_err:
-                return Response({"error": f"Child lines population breakdown: {str(item_err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            predictions.append({
-                "product_id": str(product.id), "title": product.product_name(), "bar_code": product.bar_code, 
-                "metrics_in_units": {
-                    "total_physical_stock": metric_data["total_physical_stock"], "usable_stock_calculated": metric_data["usable_stock_calculated"], 
-                    "shelf_age_days": metric_data["shelf_age_days"], "average_daily_sales": round(float(metric_data["avg_daily_sales"]), 2), 
-                    "validated_backlog_demand": metric_data["validated_backlog_demand"], "unit_cost_price": float(unit_cost), "total_value_calculated": float(total_value)
-                },
-                "flags": {
-                    "expiry_warning": metric_data["expiring_stock_hidden"] > 0, "has_overstayed_on_shelf": metric_data["has_overstayed"], "has_inventory_discrepancy": metric_data["has_inventory_discrepancy"]
-                },
-                "discrepancy_details": metric_data["discrepancy_note"], "recommendation_notes": recommendation_notes,
-                "predicted_purchase_units": final_quantity_units, "wholesaler_procurement_offers": proposed_offers
-            })
-        
-        return Response({
-            "entity_id": str(entity.id), "entity_title": entity.title, "retailer_indent_id": str(active_indent.id), "retailer_indent_status": "OPEN_DRAFT",
-            "config": {
-                "ordering_window_days": active_indent.order_days, "lead_time_days": active_indent.lead_time,
-                "lookback_window_days": active_indent.lookback_days, "max_shelf_age_days": active_indent.max_shelf_days,
-                "total_coverage_horizon": active_indent.order_days + active_indent.lead_time
-            },
-            "predictions": predictions
-        }, status=status.HTTP_200_OK)
-
-
 
 
 import datetime

@@ -1503,6 +1503,8 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
     product_title = serializers.SerializerMethodField(read_only=True)
     units_per_pack = serializers.SerializerMethodField(read_only=True)
     images = serializers.SerializerMethodField(read_only=True)
+    wholesaler_offers = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = models.OutOfStock
         fields = (
@@ -1521,6 +1523,7 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
             "retailer_indent",
             "created",
             "images",
+            "wholesaler_offers",
             "updated",
             "owner",
         )
@@ -1531,18 +1534,114 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
             "owner",
         )
 
-    def get_product_title(self,obj):
+    def get_product_title(self, obj):
         return obj.product.title
-    
-    def get_units_per_pack(self,obj):
+
+    def get_units_per_pack(self, obj):
         return obj.product.units_per_pack
-    
-    def get_images(self,obj):
-        images =[]
+
+    def get_images(self, obj):
+        images = []
         if ProductImages.objects.filter(product=obj.product).exists():
             images = ProductImages.objects.filter(product=obj.product).all()
-        return ProductImageSerializer(images, context=self.context, many=True).data
-# retailers/serializers.py
+        return ProductImageSerializer(
+            images, context=self.context, many=True
+        ).data
+
+    def get_wholesaler_offers(self, obj):
+        if not obj.product_id:
+            return []
+
+        # Local imports to avoid a circular dependency between the
+        # retailers and wholesalers apps.
+        from datetime import date
+
+        from django.db.models import Case, Count, IntegerField, Q, When, Value
+
+        from wholesalers.models import WholesalerReceipts
+        from wholesalers.serializers import WholesalerReceiptsSerializer
+
+        try:
+            today = date.today()
+
+            # A receipt is "discounted" if it has an active price
+            # discount OR an active quantity discount whose date
+            # window covers today.
+            active_price_discount = Q(
+                wholesaler_price_discount_receipt__is_active="true",
+                wholesaler_price_discount_receipt__start__lte=today,
+                wholesaler_price_discount_receipt__end__gte=today,
+            )
+            active_quantity_discount = Q(
+                wholesaler_quantity_discount_receipt__is_active="true",
+                wholesaler_quantity_discount_receipt__start__lte=today,
+                wholesaler_quantity_discount_receipt__end__gte=today,
+            )
+
+            receipts = (
+                WholesalerReceipts.objects
+                .filter(product=obj.product)
+                .annotate(
+                    has_price_discount=Count(
+                        "wholesaler_price_discount_receipt",
+                        filter=active_price_discount,
+                        distinct=True,
+                    ),
+                    has_quantity_discount=Count(
+                        "wholesaler_quantity_discount_receipt",
+                        filter=active_quantity_discount,
+                        distinct=True,
+                    ),
+                )
+                .annotate(
+                    discount_rank=Case(
+                        # Both price + quantity discounts
+                        When(
+                            has_price_discount__gt=0,
+                            has_quantity_discount__gt=0,
+                            then=Value(3),
+                        ),
+                        # Price discount only
+                        When(
+                            has_price_discount__gt=0,
+                            then=Value(2),
+                        ),
+                        # Quantity discount only
+                        When(
+                            has_quantity_discount__gt=0,
+                            then=Value(1),
+                        ),
+                        # No active discount
+                        default=Value(0),
+                        output_field=IntegerField(),
+                    ),
+                )
+                .select_related(
+                    "product",
+                    "product__preparation",
+                    "product__manufacturer",
+                    "product__origin_country",
+                    "wholesaler_variation",
+                    "received_from",
+                    "retailer_order_item",
+                    "employee",
+                    "owner",
+                )
+                # Best offers first, then cheapest price, then newest.
+                .order_by(
+                    "-discount_rank",
+                    "final_unit_selling_price",
+                    "-created",
+                )[:5]
+            )
+
+            return WholesalerReceiptsSerializer(
+                receipts, context=self.context, many=True
+            ).data
+        except Exception:
+            # Never let an offer-lookup failure break the
+            # OutOfStock response.
+            return []
 
 from rest_framework import serializers
 
