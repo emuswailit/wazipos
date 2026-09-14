@@ -102,12 +102,7 @@ def get_wholesaler_discounts():
 
 @app.task
 def load_out_of_stock_items():
-    create_log("INFO","Loading out of stock items.....")
-
-    # items=OutOfStock.objects.filter(pack_quantity__gte=1).all()
-
-    # out_of_stock_items =WholesalerReceiptsSerializer(receipts,many=True,).data
-    # data=json.dumps(out_of_stock_items,cls=UUIDEncoder)
+    
     result= async_to_sync(channel_layer.group_send)(
             'oss',
             {
@@ -116,6 +111,8 @@ def load_out_of_stock_items():
         )
     print("rtes",result)
     return result
+
+
 @app.task
 def load_customer_order_details():
     print("Send customer order details")
