@@ -1,10 +1,3 @@
-import datetime
-from decimal import Decimal
-from django.db import transaction
-from django.db.models import Sum, Min
-
-# retailers/helpers.py
-
 """
 Pure helpers for the inventory prediction pipeline.
 
@@ -22,6 +15,8 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+from django.db import transaction
+from django.db.models import Min, Sum
 from django.utils import timezone
 from sklearn.linear_model import LinearRegression
 
@@ -210,19 +205,11 @@ def compute_profit(
         "cost_per_unit": float(cost_per_unit),
         "sell_per_unit": float(sell_per_unit),
         "pricing_source": pricing_source,
-        "profit_per_unit": float(
-            round(profit_per_unit, 2)
-        ),
-        "margin_percent": float(
-            round(margin_percent, 2)
-        ),
+        "profit_per_unit": float(round(profit_per_unit, 2)),
+        "margin_percent": float(round(margin_percent, 2)),
         "total_cost": float(round(total_cost, 2)),
-        "total_revenue": float(
-            round(total_revenue, 2)
-        ),
-        "total_profit": float(
-            round(total_profit, 2)
-        ),
+        "total_revenue": float(round(total_revenue, 2)),
+        "total_profit": float(round(total_profit, 2)),
     }
 
 
@@ -436,85 +423,626 @@ def apply_budget(predictions, budget_amount, enforce):
 
     return included, excluded
 
+
+# =========================================================
+# Interaction with products
+# =========================================================
+
 def get_entity_interacted_products(owner):
     from products.models import Products
-    from retailers.models import RetailerReceipts, OutOfStock, RetailerOrderItems
-    r_ids = RetailerReceipts.objects.filter(owner=owner).values_list('product_id', flat=True)
-    o_ids = OutOfStock.objects.filter(owner=owner, is_ordered="false").values_list('product_id', flat=True)
-    interacted_product_ids = set(list(r_ids) + list(o_ids))
-    active_ordered_product_ids = RetailerOrderItems.objects.filter(retailer_order__owner=owner, is_received="false").values_list('wholesaler_receipt__product_id', flat=True)
-    final_eligible_ids = interacted_product_ids - set(list(active_ordered_product_ids))
-    return Products.objects.filter(id__in=final_eligible_ids, active=True)
+    from retailers.models import (
+        OutOfStock,
+        RetailerOrderItems,
+        RetailerReceipts,
+    )
 
-def calculate_single_product_metrics(product, owner, total_horizon_days, horizon_expiry_threshold, history_cutoff, max_shelf_days, lookback_days, days_to_order):
-    from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock
+    r_ids = RetailerReceipts.objects.filter(owner=owner).values_list(
+        "product_id", flat=True,
+    )
+    o_ids = OutOfStock.objects.filter(
+        owner=owner, is_ordered="false",
+    ).values_list("product_id", flat=True)
+    interacted_product_ids = set(list(r_ids) + list(o_ids))
+    active_ordered_product_ids = RetailerOrderItems.objects.filter(
+        retailer_order__owner=owner, is_received="false",
+    ).values_list("wholesaler_receipt__product_id", flat=True)
+    final_eligible_ids = interacted_product_ids - set(
+        list(active_ordered_product_ids)
+    )
+    return Products.objects.filter(
+        id__in=final_eligible_ids, active=True,
+    )
+
+
+def calculate_single_product_metrics(
+    product,
+    owner,
+    total_horizon_days,
+    horizon_expiry_threshold,
+    history_cutoff,
+    max_shelf_days,
+    lookback_days,
+    days_to_order,
+):
+    from retailers.models import (
+        CustomerOrderItems,
+        OutOfStock,
+        RetailerReceipts,
+    )
+
     today = datetime.date.today()
-    p_stock = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
-    received_stock = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(r=Sum('received_unit_quantity'))['r'] or 0
+
+    p_stock = (
+        RetailerReceipts.objects
+        .filter(owner=owner, product=product)
+        .aggregate(t=Sum("current_unit_quantity"))["t"]
+        or 0
+    )
+    received_stock = (
+        RetailerReceipts.objects
+        .filter(owner=owner, product=product)
+        .aggregate(r=Sum("received_unit_quantity"))["r"]
+        or 0
+    )
     consumed_volume_historical = max(0, received_stock - p_stock)
-    e_stock = RetailerReceipts.objects.filter(owner=owner, product=product, expiry_date__isnull=False, expiry_date__lte=horizon_expiry_threshold, expiry_date__gte=today).aggregate(t=Sum('current_unit_quantity'))['t'] or 0
+
+    e_stock = (
+        RetailerReceipts.objects
+        .filter(
+            owner=owner,
+            product=product,
+            expiry_date__isnull=False,
+            expiry_date__lte=horizon_expiry_threshold,
+            expiry_date__gte=today,
+        )
+        .aggregate(t=Sum("current_unit_quantity"))["t"]
+        or 0
+    )
     usable_stock = max(0, p_stock - e_stock)
-    o_date = RetailerReceipts.objects.filter(owner=owner, product=product).aggregate(o=Min('created'))['o']
+
+    o_date = (
+        RetailerReceipts.objects
+        .filter(owner=owner, product=product)
+        .aggregate(o=Min("created"))["o"]
+    )
     age, overstayed = 0, False
     if o_date:
-        if isinstance(o_date, datetime.datetime): o_date = o_date.date()
+        if isinstance(o_date, datetime.datetime):
+            o_date = o_date.date()
         age = (today - o_date).days
         overstayed = age >= max_shelf_days
-    start_of_history_datetime = datetime.datetime.combine(history_cutoff, datetime.time.min)
-    sold = CustomerOrderItems.objects.filter(retailer_receipt__owner=owner, retailer_receipt__product=product, customer_order__status__in=["COMPLETED", "DELIVERED"], customer_order__created__gte=start_of_history_datetime).aggregate(t=Sum('purchased_quantity'))['t'] or 0
-    if consumed_volume_historical > 0 and age > 0: ads = Decimal(consumed_volume_historical) / Decimal(age)
-    elif sold > 0: ads = Decimal(sold) / Decimal(lookback_days)
-    else: ads = Decimal('0.00')
-    raw_oos = OutOfStock.objects.filter(product=product, owner=owner, is_ordered="false", retailer_indent__isnull=True, created__date__gte=history_cutoff).aggregate(t=Sum('required_quantity'))['t'] or 0
+
+    start_of_history_datetime = datetime.datetime.combine(
+        history_cutoff, datetime.time.min,
+    )
+    sold = (
+        CustomerOrderItems.objects
+        .filter(
+            retailer_receipt__owner=owner,
+            retailer_receipt__product=product,
+            customer_order__status__in=["COMPLETED", "DELIVERED"],
+            customer_order__created__gte=start_of_history_datetime,
+        )
+        .aggregate(t=Sum("purchased_quantity"))["t"]
+        or 0
+    )
+
+    if consumed_volume_historical > 0 and age > 0:
+        ads = Decimal(consumed_volume_historical) / Decimal(age)
+    elif sold > 0:
+        ads = Decimal(sold) / Decimal(lookback_days)
+    else:
+        ads = Decimal("0.00")
+
+    raw_oos = (
+        OutOfStock.objects
+        .filter(
+            product=product,
+            owner=owner,
+            is_ordered="false",
+            retailer_indent__isnull=True,
+            created__date__gte=history_cutoff,
+        )
+        .aggregate(t=Sum("required_quantity"))["t"]
+        or 0
+    )
+
     val_oos, disc, note = raw_oos, False, ""
     if raw_oos > 0:
         if usable_stock > 0:
             disc = True
-            val_oos = 0 if usable_stock >= raw_oos else max(0, raw_oos - usable_stock)
-            note = f"Discrepancy: Shortage for {raw_oos} units, but {usable_stock} units remain sitting on shelf."
-        else: val_oos = raw_oos
-    return {"total_physical_stock": int(p_stock), "expiring_stock_hidden": int(e_stock), "usable_stock_calculated": int(usable_stock), "shelf_age_days": int(age), "has_overstayed": bool(overstayed), "avg_daily_sales": ads, "validated_backlog_demand": int(val_oos), "has_inventory_discrepancy": bool(disc), "discrepancy_note": str(note), "pack_factor": 1}
+            val_oos = (
+                0 if usable_stock >= raw_oos
+                else max(0, raw_oos - usable_stock)
+            )
+            note = (
+                f"Discrepancy: Shortage for {raw_oos} units, but "
+                f"{usable_stock} units remain sitting on shelf."
+            )
+        else:
+            val_oos = raw_oos
+
+    return {
+        "total_physical_stock": int(p_stock),
+        "expiring_stock_hidden": int(e_stock),
+        "usable_stock_calculated": int(usable_stock),
+        "shelf_age_days": int(age),
+        "has_overstayed": bool(overstayed),
+        "avg_daily_sales": ads,
+        "validated_backlog_demand": int(val_oos),
+        "has_inventory_discrepancy": bool(disc),
+        "discrepancy_note": str(note),
+        "pack_factor": 1,
+    }
+
 
 def find_wholesaler_procurement_offers(product, final_quantity_units, today):
-    from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts
-    receipts = WholesalerReceipts.objects.filter(product=product, current_unit_quantity__gt=0, in_placement='true').select_related('received_from')
+    from wholesalers.models import (
+        WholesalerPriceDiscounts,
+        WholesalerReceipts,
+    )
+
+    receipts = (
+        WholesalerReceipts.objects
+        .filter(
+            product=product,
+            current_unit_quantity__gt=0,
+            in_placement="true",
+        )
+        .select_related("received_from")
+    )
     r = receipts.first()
-    if not r: return None
+    if not r:
+        return None
+
     name = r.received_from.title if r.received_from else "Unknown Wholesaler"
-    p_disc = WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=r, is_active="true", start__lte=today, end__gte=today).first()
+
+    p_disc = WholesalerPriceDiscounts.objects.filter(
+        wholesaler_receipt=r,
+        is_active="true",
+        start__lte=today,
+        end__gte=today,
+    ).first()
+
     price = r.final_unit_selling_price if p_disc else r.unit_selling_price
-    p_txt = f"Promo Offer: Save {p_disc.percent}%! Price dropped to {p_disc.offer_price}" if p_disc else f"Standard Price: {r.unit_selling_price}"
-    return {"wholesaler_receipt_id": str(r.id), "supplier_name": name, "batch": r.batch, "available_wholesaler_units": r.current_unit_quantity, "unit_pricing": { "unit_selling_price": float(r.unit_selling_price), "final_unit_selling_price": float(price), "is_discounted": p_disc is not None }, "promotions": { "price_promotion_details": p_txt, "quantity_promotion_details": [] }}
+
+    p_txt = (
+        f"Promo Offer: Save {p_disc.percent}%! "
+        f"Price dropped to {p_disc.offer_price}"
+        if p_disc
+        else f"Standard Price: {r.unit_selling_price}"
+    )
+
+    return {
+        "wholesaler_receipt_id": str(r.id),
+        "supplier_name": name,
+        "batch": r.batch,
+        "available_wholesaler_units": r.current_unit_quantity,
+        "unit_pricing": {
+            "unit_selling_price": float(r.unit_selling_price),
+            "final_unit_selling_price": float(price),
+            "is_discounted": p_disc is not None,
+        },
+        "promotions": {
+            "price_promotion_details": p_txt,
+            "quantity_promotion_details": [],
+        },
+    }
+
 
 def sync_or_create_active_indent(entity, user, v):
     from retailers.models import RetailerIndent, RetailerIndentItem
+
     with transaction.atomic():
-        active_indent = RetailerIndent.objects.filter(entity=entity, owner=user, is_open="true").first()
+        active_indent = RetailerIndent.objects.filter(
+            entity=entity, owner=user, is_open="true",
+        ).first()
+
         if active_indent:
-            active_indent.order_days = int(v['days_to_order'])
-            active_indent.lead_time = int(v['lead_time_days'])
-            active_indent.lookback_days = int(v.get('lookback_window', 30))
-            active_indent.max_shelf_days = int(v.get('max_shelf_days', 90))
+            active_indent.order_days = int(v["days_to_order"])
+            active_indent.lead_time = int(v["lead_time_days"])
+            active_indent.lookback_days = int(v.get("lookback_window", 30))
+            active_indent.max_shelf_days = int(v.get("max_shelf_days", 90))
             active_indent.save()
-        else: active_indent = RetailerIndent.objects.create(entity=entity, owner=user, order_days=int(v['days_to_order']), lead_time=int(v['lead_time_days']), lookback_days=int(v.get('lookback_window', 30)), max_shelf_days=int(v.get('max_shelf_days', 90)), is_open="true")
-        RetailerIndentItem.objects.filter(retailer_indent=active_indent, entity=entity).delete()
+        else:
+            active_indent = RetailerIndent.objects.create(
+                entity=entity,
+                owner=user,
+                order_days=int(v["days_to_order"]),
+                lead_time=int(v["lead_time_days"]),
+                lookback_days=int(v.get("lookback_window", 30)),
+                max_shelf_days=int(v.get("max_shelf_days", 90)),
+                is_open="true",
+            )
+
+        RetailerIndentItem.objects.filter(
+            retailer_indent=active_indent, entity=entity,
+        ).delete()
+
         return active_indent
 
-def rebuild_indent_item_row(entity, user, active_indent, product, final_quantity_units, unit_cost, proposed_offers, today):
+
+def rebuild_indent_item_row(
+    entity,
+    user,
+    active_indent,
+    product,
+    final_quantity_units,
+    unit_cost,
+    proposed_offers,
+    today,
+):
     from retailers.models import RetailerIndentItem
-    from wholesalers.models import WholesalerReceipts, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
-    if final_quantity_units <= 0: return None
-    target_receipt, p_disc, q_disc, total_quantity = None, None, None, final_quantity_units
+    from wholesalers.models import (
+        WholesalerPriceDiscounts,
+        WholesalerQuantityDiscounts,
+        WholesalerReceipts,
+    )
+
+    if final_quantity_units <= 0:
+        return None
+
+    target_receipt = None
+    p_disc = None
+    q_disc = None
+    total_quantity = final_quantity_units
     base_unit_price = Decimal(str(unit_cost))
+
     if proposed_offers:
         try:
-            target_receipt = WholesalerReceipts.objects.get(id=proposed_offers["wholesaler_receipt_id"])
-            base_unit_price = Decimal(str(proposed_offers["unit_pricing"]["unit_selling_price"]))
-            if proposed_offers["unit_pricing"]["is_discounted"]: p_disc = WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", start__lte=today, end__gte=today).first()
-            q_disc = WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=target_receipt, is_active="true", limit_quantity__lte=final_quantity_units).order_by('-limit_quantity').first()
-        except WholesalerReceipts.DoesNotExist: pass
-    final_pack_price = base_unit_price - (base_unit_price * Decimal(str(p_disc.percent)) / Decimal('100.00')) if p_disc else base_unit_price
-    item_gross_total_amount = Decimal(str(final_quantity_units)) * base_unit_price
-    item_net_total_amount = Decimal(str(final_quantity_units)) * final_pack_price
-    if q_disc: total_quantity = final_quantity_units + int((final_quantity_units / q_disc.purchase_trigger) * q_disc.bonus_quantity)
-    return RetailerIndentItem.objects.create(entity=entity, owner=user, retailer_indent=active_indent, wholesale_receipt=target_receipt, wholesaler_price_discount=p_disc, wholesaler_quantity_discount=q_disc, required_quantity=final_quantity_units, total_quantity=total_quantity, final_pack_price=final_pack_price, item_gross_total_amount=item_gross_total_amount, item_net_total_amount=item_net_total_amount, indenting_criteria="VELOCITY_RUNWAY")
+            target_receipt = WholesalerReceipts.objects.get(
+                id=proposed_offers["wholesaler_receipt_id"]
+            )
+            base_unit_price = Decimal(
+                str(proposed_offers["unit_pricing"]["unit_selling_price"])
+            )
+            if proposed_offers["unit_pricing"]["is_discounted"]:
+                p_disc = WholesalerPriceDiscounts.objects.filter(
+                    wholesaler_receipt=target_receipt,
+                    is_active="true",
+                    start__lte=today,
+                    end__gte=today,
+                ).first()
+            q_disc = WholesalerQuantityDiscounts.objects.filter(
+                wholesaler_receipt=target_receipt,
+                is_active="true",
+                limit_quantity__lte=final_quantity_units,
+            ).order_by("-limit_quantity").first()
+        except WholesalerReceipts.DoesNotExist:
+            pass
+
+    final_pack_price = (
+        base_unit_price - (
+            base_unit_price * Decimal(str(p_disc.percent)) / Decimal("100.00")
+        )
+        if p_disc
+        else base_unit_price
+    )
+    item_gross_total_amount = (
+        Decimal(str(final_quantity_units)) * base_unit_price
+    )
+    item_net_total_amount = (
+        Decimal(str(final_quantity_units)) * final_pack_price
+    )
+
+    if q_disc:
+        total_quantity = final_quantity_units + int(
+            (final_quantity_units / q_disc.purchase_trigger)
+            * q_disc.bonus_quantity
+        )
+
+    return RetailerIndentItem.objects.create(
+        entity=entity,
+        owner=user,
+        retailer_indent=active_indent,
+        wholesale_receipt=target_receipt,
+        wholesaler_price_discount=p_disc,
+        wholesaler_quantity_discount=q_disc,
+        required_quantity=final_quantity_units,
+        total_quantity=total_quantity,
+        final_pack_price=final_pack_price,
+        item_gross_total_amount=item_gross_total_amount,
+        item_net_total_amount=item_net_total_amount,
+        indenting_criteria="VELOCITY_RUNWAY",
+    )
+# =========================================================
+# Candidate product selection
+# =========================================================
+
+def get_candidate_product_ids(entity):
+    """
+    Products worth running the prediction against:
+
+      - anything with active retailer stock,
+      - anything with an unmet out-of-stock record,
+      - minus anything already on an order that hasn't
+        been received yet.
+
+    Returns a set of product ids.
+    """
+    from retailers.models import (
+        OutOfStock,
+        RetailerOrderItems,
+        RetailerReceipts,
+    )
+
+    r_pids = set(
+        RetailerReceipts.objects
+        .filter(entity=entity, is_active="true")
+        .values_list("product_id", flat=True)
+    )
+    o_pids = set(
+        OutOfStock.objects
+        .filter(entity=entity)
+        .values_list("product_id", flat=True)
+    )
+    pending = set(
+        RetailerOrderItems.objects
+        .filter(
+            retailer_order__retailer=entity,
+            is_received="false",
+        )
+        .values_list("wholesaler_receipt__product_id", flat=True)
+    )
+    return (r_pids | o_pids) - pending
+
+
+# =========================================================
+# Per-product prediction
+# =========================================================
+
+def predict_product(
+    entity,
+    p_id,
+    cycle_days,
+    today,
+    indent_lead_override,
+    pricing_percentage,
+):
+    """
+    Compute the prediction payload for one product.
+
+    Returns a dict shaped for the WebSocket payload:
+
+        {
+          product_id, product_title, sku, is_drug,
+          calculated_metrics, current_stock_status,
+          order_suggestion: {
+            suggested_order_quantity,
+            total_quantity_after_bonus,
+            bonus_quantity_earned,
+            supplier, profit_estimate,
+          }
+        }
+
+    or None if the product has no signal / no demand / no
+    supplier offer.
+    """
+    from datetime import timedelta
+
+    from django.db.models import Sum
+
+    from products.models import Products
+    from retailers.models import (
+        CustomerOrderItems,
+        OutOfStock,
+        RetailerOrderItems,
+        RetailerReceipts,
+    )
+    from wholesalers.models import WholesalerReceipts
+
+    product = Products.objects.filter(id=p_id, active=True).first()
+    if not product:
+        return None
+
+    sales_rows = list(
+        CustomerOrderItems.objects
+        .filter(
+            retailer_receipt__product_id=product.id,
+            customer_order__entity=entity,
+            customer_order__status="COMPLETED",
+        )
+        .values(
+            "customer_order__created",
+            "purchased_quantity",
+        )
+    )
+
+    oos_rows = list(
+        OutOfStock.objects
+        .filter(product_id=product.id, entity=entity)
+        .values("created", "required_quantity")
+    )
+
+    daily_demand = estimate_daily_demand(sales_rows, oos_rows)
+    if daily_demand is None:
+        return None
+
+    supplier_receipt = (
+        WholesalerReceipts.objects
+        .filter(
+            product=product,
+            current_unit_quantity__gt=0,
+        )
+        .select_related("received_from")
+        .order_by("final_unit_selling_price")
+        .first()
+    )
+
+    supplier_entity = (
+        supplier_receipt.received_from
+        if supplier_receipt and supplier_receipt.received_from
+        else None
+    )
+
+    lead_days, lead_var, lead_source = resolve_lead_time_from_db(
+        entity=entity,
+        product=product,
+        supplier=supplier_entity,
+        indent_lead_override=indent_lead_override,
+    )
+
+    total_days = lead_days + lead_var + cycle_days
+    cutoff = today + timedelta(days=int(total_days))
+
+    batches = (
+        RetailerReceipts.objects
+        .filter(
+            product=product,
+            entity=entity,
+            is_active="true",
+            current_unit_quantity__gt=0,
+        )
+        .order_by("expiry_date")
+    )
+
+    usable = 0
+    expiring = 0
+    batch_log = []
+
+    for b in batches:
+        will_expire = bool(b.expiry_date and b.expiry_date <= cutoff)
+        batch_log.append({
+            "batch_number": b.batch,
+            "expiry_date": (
+                b.expiry_date.isoformat() if b.expiry_date else None
+            ),
+            "units_remaining": b.current_unit_quantity,
+            "will_expire_during_plan_period": will_expire,
+        })
+        if will_expire:
+            expiring += b.current_unit_quantity
+        else:
+            usable += b.current_unit_quantity
+
+    pending = (
+        RetailerOrderItems.objects
+        .filter(
+            wholesaler_receipt__product_id=product.id,
+            retailer_order__retailer=entity,
+            retailer_order__status__in=[
+                "SUBMITTED", "PROCESSING", "DISPATCHED",
+            ],
+            is_received="false",
+        )
+        .aggregate(t=Sum("purchased_quantity"))["t"]
+        or 0
+    )
+
+    backlog = (
+        OutOfStock.objects
+        .filter(
+            product=product,
+            entity=entity,
+            is_ordered="false",
+            created__gte=(
+                today - timedelta(days=int(cycle_days))
+            ),
+        )
+        .aggregate(t=Sum("required_quantity"))["t"]
+        or 0
+    )
+
+    safety_stock = estimate_safety_stock(sales_rows, oos_rows)
+
+    needed = (
+        int(round(daily_demand * total_days)) + safety_stock
+    )
+    suggested = max(0, (needed - usable - pending)) + backlog
+
+    if suggested <= 0:
+        return None
+
+    active_price_disc = resolve_active_price_discount(
+        supplier_receipt, today,
+    )
+    active_qty_disc = resolve_active_quantity_discount(
+        supplier_receipt, int(suggested), today,
+    )
+
+    profit = preview_indent_item_profit(
+        receipt=supplier_receipt,
+        quantity=int(suggested),
+        price_discount=active_price_disc,
+        quantity_discount=active_qty_disc,
+    )
+
+    effective_purchase_price = float(profit.get("cost_per_unit") or 0)
+
+    total_quantity, bonus_quantity, full_blocks = (
+        compute_bonus_quantity(int(suggested), active_qty_disc)
+    )
+
+    supplier_payload = {
+        "id": (
+            str(supplier_receipt.received_from.id)
+            if supplier_receipt and supplier_receipt.received_from
+            else None
+        ),
+        "name": (
+            supplier_receipt.received_from.title
+            if supplier_receipt and supplier_receipt.received_from
+            else None
+        ),
+        "unit_price": effective_purchase_price,
+        "normal_price": (
+            float(supplier_receipt.unit_selling_price)
+            if supplier_receipt else None
+        ),
+        "is_discounted": active_price_disc is not None,
+        "discount_percent": (
+            float(active_price_disc.percent)
+            if active_price_disc else 0.0
+        ),
+        "price_promotion": (
+            {
+                "title": active_price_disc.title,
+                "start": active_price_disc.start.isoformat(),
+                "end": active_price_disc.end.isoformat(),
+            }
+            if active_price_disc else None
+        ),
+        "quantity_promotion": (
+            {
+                "id": str(active_qty_disc.id),
+                "title": active_qty_disc.title,
+                "buy_quantity": active_qty_disc.limit_quantity,
+                "free_quantity": active_qty_disc.awarded_quantity,
+                "start": active_qty_disc.start.isoformat(),
+                "end": active_qty_disc.end.isoformat(),
+                "blocks_earned": full_blocks,
+            }
+            if active_qty_disc else None
+        ),
+    }
+
+    return {
+        "product_id": str(product.id),
+        "product_title": product.product_name(),
+        "sku": getattr(product, "bar_code", None),
+        "is_drug": product.check_is_drug,
+        "calculated_metrics": {
+            "average_daily_demand": float(round(daily_demand, 4)),
+            "supplier_lead_time_days": lead_days,
+            "supplier_lead_time_source": lead_source,
+            "supplier_delay_days": lead_var,
+            "safety_stock_units": safety_stock,
+            "total_days_planned_for": total_days,
+            "total_units_needed": needed,
+        },
+        "current_stock_status": {
+            "total_physical_on_hand": usable + expiring,
+            "good_usable_units": usable,
+            "expiring_units_warning": expiring,
+            "units_already_ordered": int(pending),
+            "customer_waitlist_units": int(backlog),
+            "existing_expiries": batch_log,
+        },
+        "order_suggestion": {
+            "suggested_order_quantity": int(suggested),
+            "total_quantity_after_bonus": total_quantity,
+            "bonus_quantity_earned": bonus_quantity,
+            "supplier": supplier_payload,
+            "profit_estimate": profit,
+        },
+    }
