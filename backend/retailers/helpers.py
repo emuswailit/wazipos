@@ -428,7 +428,12 @@ def apply_budget(predictions, budget_amount, enforce):
 # Interaction with products
 # =========================================================
 
-def get_entity_interacted_products(owner):
+def get_entity_interacted_products(entity):
+    """
+    Products a retailer has interacted with: anything with
+    stock, or with an unmet out-of-stock record. Excludes
+    products already on an active order.
+    """
     from products.models import Products
     from retailers.models import (
         OutOfStock,
@@ -436,27 +441,34 @@ def get_entity_interacted_products(owner):
         RetailerReceipts,
     )
 
-    r_ids = RetailerReceipts.objects.filter(owner=owner).values_list(
-        "product_id", flat=True,
+    r_pids = set(
+        RetailerReceipts.objects
+        .filter(entity=entity)
+        .values_list("product_id", flat=True)
     )
-    o_ids = OutOfStock.objects.filter(
-        entity=owner.entity, is_ordered="false",
-    ).values_list("product_id", flat=True)
-    interacted_product_ids = set(list(r_ids) + list(o_ids))
-    active_ordered_product_ids = RetailerOrderItems.objects.filter(
-        retailer_order__owner=owner, is_received="false",
-    ).values_list("wholesaler_receipt__product_id", flat=True)
-    final_eligible_ids = interacted_product_ids - set(
-        list(active_ordered_product_ids)
+    o_pids = set(
+        OutOfStock.objects
+        .filter(entity=entity, is_ordered="false")
+        .values_list("product_id", flat=True)
+    )
+    ordered = set(
+        RetailerOrderItems.objects
+        .filter(
+            retailer_order__retailer=entity,
+            is_received="false",
+            retailer_order__status__in=[
+                "SUBMITTED", "PROCESSING", "DISPATCHED",
+            ],
+        )
+        .values_list("wholesaler_receipt__product_id", flat=True)
     )
     return Products.objects.filter(
-        id__in=final_eligible_ids, 
+        id__in=(r_pids | o_pids) - ordered,
     )
-
 
 def calculate_single_product_metrics(
     product,
-    owner,
+    entity,
     total_horizon_days,
     horizon_expiry_threshold,
     history_cutoff,
@@ -470,17 +482,17 @@ def calculate_single_product_metrics(
         RetailerReceipts,
     )
 
-    today = datetime.date.today()
+    today = timezone.localdate()
 
     p_stock = (
         RetailerReceipts.objects
-        .filter(owner=owner, product=product)
+        .filter(entity=entity, product=product)
         .aggregate(t=Sum("current_unit_quantity"))["t"]
         or 0
     )
     received_stock = (
         RetailerReceipts.objects
-        .filter(owner=owner, product=product)
+        .filter(entity=entity, product=product)
         .aggregate(r=Sum("received_unit_quantity"))["r"]
         or 0
     )
@@ -489,7 +501,7 @@ def calculate_single_product_metrics(
     e_stock = (
         RetailerReceipts.objects
         .filter(
-            owner=owner,
+            entity=entity,
             product=product,
             expiry_date__isnull=False,
             expiry_date__lte=horizon_expiry_threshold,
@@ -502,7 +514,7 @@ def calculate_single_product_metrics(
 
     o_date = (
         RetailerReceipts.objects
-        .filter(owner=owner, product=product)
+        .filter(entity=entity, product=product)
         .aggregate(o=Min("created"))["o"]
     )
     age, overstayed = 0, False
@@ -512,15 +524,18 @@ def calculate_single_product_metrics(
         age = (today - o_date).days
         overstayed = age >= max_shelf_days
 
-    start_of_history_datetime = datetime.datetime.combine(
-        history_cutoff, datetime.time.min,
+    start_of_history_datetime = timezone.make_aware(
+        datetime.datetime.combine(history_cutoff, datetime.time.min),
+        timezone.get_current_timezone(),
     )
     sold = (
         CustomerOrderItems.objects
         .filter(
-            retailer_receipt__owner=owner,
+            retailer_receipt__entity=entity,
             retailer_receipt__product=product,
-            customer_order__status__in=["COMPLETED", "DELIVERED"],
+            customer_order__status__in=[
+                "COMPLETED", "COMPLETE", "DELIVERED",
+            ],
             customer_order__created__gte=start_of_history_datetime,
         )
         .aggregate(t=Sum("purchased_quantity"))["t"]
@@ -538,7 +553,7 @@ def calculate_single_product_metrics(
         OutOfStock.objects
         .filter(
             product=product,
-            owner=owner,
+            entity=entity,
             is_ordered="false",
             retailer_indent__isnull=True,
             created__date__gte=history_cutoff,
@@ -574,8 +589,6 @@ def calculate_single_product_metrics(
         "discrepancy_note": str(note),
         "pack_factor": 1,
     }
-
-
 def find_wholesaler_procurement_offers(product, final_quantity_units, today):
     from wholesalers.models import (
         WholesalerPriceDiscounts,
