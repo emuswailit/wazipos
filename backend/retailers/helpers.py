@@ -440,7 +440,7 @@ def get_entity_interacted_products(owner):
         "product_id", flat=True,
     )
     o_ids = OutOfStock.objects.filter(
-        owner=owner, is_ordered="false",
+        entity=owner.entity, is_ordered="false",
     ).values_list("product_id", flat=True)
     interacted_product_ids = set(list(r_ids) + list(o_ids))
     active_ordered_product_ids = RetailerOrderItems.objects.filter(
@@ -450,7 +450,7 @@ def get_entity_interacted_products(owner):
         list(active_ordered_product_ids)
     )
     return Products.objects.filter(
-        id__in=final_eligible_ids, active=True,
+        id__in=final_eligible_ids, 
     )
 
 
@@ -751,20 +751,19 @@ def rebuild_indent_item_row(
 
 def get_candidate_product_ids(entity):
     """
-    Products worth running the prediction against:
+    Products worth running the prediction against.
 
-      - anything with active retailer stock,
-      - anything with an unmet out-of-stock record,
-      - minus anything already on an order that hasn't
-        been received yet.
+    Eligibility is:
+      - anything with active retailer stock, OR
+      - anything with an unmet out-of-stock record.
 
-    Returns a set of product ids.
+    Note: this is *eligibility*, not pipeline state. Products
+    already on an unreceived order are NOT excluded here —
+    `predict_product` nets the pending quantity against the
+    suggested quantity, so a product with 20 units on the way
+    and a need for 50 will still surface a top-up suggestion.
     """
-    from retailers.models import (
-        OutOfStock,
-        RetailerOrderItems,
-        RetailerReceipts,
-    )
+    from retailers.models import OutOfStock, RetailerReceipts
 
     r_pids = set(
         RetailerReceipts.objects
@@ -776,16 +775,7 @@ def get_candidate_product_ids(entity):
         .filter(entity=entity)
         .values_list("product_id", flat=True)
     )
-    pending = set(
-        RetailerOrderItems.objects
-        .filter(
-            retailer_order__retailer=entity,
-            is_received="false",
-        )
-        .values_list("wholesaler_receipt__product_id", flat=True)
-    )
-    return (r_pids | o_pids) - pending
-
+    return r_pids | o_pids
 
 # =========================================================
 # Per-product prediction
@@ -831,7 +821,7 @@ def predict_product(
     )
     from wholesalers.models import WholesalerReceipts
 
-    product = Products.objects.filter(id=p_id, active=True).first()
+    product = Products.objects.filter(id=p_id).first()
     if not product:
         return None
 

@@ -1009,7 +1009,7 @@ class RetailerIndentItem(EntityRelatedModel):
     def pricing_source(self):
         return (self.profit_estimate or {}).get("pricing_source")
     
-
+#
 
 
 class OutOfStock(EntityRelatedModel):

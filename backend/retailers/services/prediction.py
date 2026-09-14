@@ -181,3 +181,22 @@ def sync_prediction_indent(
             }
 
     return indent, budget_info
+
+def finalize_order_items(order, received=True):
+    """
+    Set is_received on all of an order's items.
+
+    Call this from wherever `order.status` transitions to a
+    terminal state (RECEIVED, COMPLETED, CANCELLED).
+
+    received=True  → mark as received (default for RECEIVED/COMPLETED)
+    received=False → leave unreceived (for CANCELLED; the items
+                     never arrived, but the order is closed so the
+                     pipeline should stop treating them as pending)
+    """
+    from retailers.models import RetailerOrderItems
+
+    flag = "true" if received else "false"
+    RetailerOrderItems.objects.filter(
+        retailer_order=order,
+    ).update(is_received=flag)
