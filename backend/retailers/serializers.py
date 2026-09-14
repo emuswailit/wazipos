@@ -2843,6 +2843,13 @@ class RetailerIndentItemParamsUpdateSerializer(
         decimal_places=2,
         min_value=0,
     )
+    markup_percentage_used = serializers.DecimalField(
+        required=False,
+        allow_null=True,
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+    )
 
     # ---- Optional FK overrides ----
     wholesaler_price_discount = serializers.UUIDField(
