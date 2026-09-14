@@ -39,3 +39,25 @@ class OwnerSafeSerializerMixin(object):
     Mixin to be used with HyperlinkedModelSerializer to ensure that only entity values are returned
     """
     serializer_related_field = OwnerSafeRelatedField
+
+
+from rest_framework import serializers
+
+
+class BaseModelSerializer(serializers.ModelSerializer):
+    """
+    Project base serializer. Auto-injects `owner` and `entity`
+    from the request on create; exposes `created` / `updated`
+    as read-only.
+    """
+    owner = serializers.PrimaryKeyRelatedField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and not validated_data.get("owner"):
+            validated_data["owner"] = request.user
+        if request and "entity" in self.fields and not validated_data.get("entity"):
+            validated_data["entity"] = request.user.entity
+        return super().create(validated_data)

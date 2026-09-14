@@ -169,10 +169,24 @@ class WholesalerInvoiceItems(EntityRelatedModel):
         User, related_name="wholesaler_invoice_owner", on_delete=models.CASCADE
     )
 
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.db import models
+from django.db.models import Sum
+from django.utils import timezone
+
+
 class RetailerReceipts(EntityRelatedModel):
-    draft_id = models.CharField(
-        max_length=256, null=True, blank=True,
-    )
+    """
+    Retailer's own inventory lot.
+
+    Created either from a received RetailerOrder, or directly
+    (onboarding, manual stock entry, adjustments). Both paths
+    are supported — the order FKs are nullable.
+    """
+
+    draft_id = models.CharField(max_length=256, null=True, blank=True)
     product = models.ForeignKey("products.Products", on_delete=models.CASCADE)
     received_from = models.ForeignKey(
         Entities,
@@ -181,90 +195,245 @@ class RetailerReceipts(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    bar_code = models.CharField(max_length=256, default="",null=True,blank=True)
+    bar_code = models.CharField(max_length=256, default="", null=True, blank=True)
+
     retailer_order = models.ForeignKey(
-        RetailerOrders,
-        related_name="retailer_wholesale_order",
+        "wholesalers.RetailerOrders",
+        related_name="retailer_receipts_from_order",
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        help_text=(
+            "The order this receipt came from. Null for direct/manual "
+            "receipts (onboarding, opening stock, adjustments)."
+        ),
     )
     retailer_order_item = models.ForeignKey(
-        RetailerOrderItems,
-        related_name="retailer_wholesale_order_item",
+        "wholesalers.RetailerOrderItems",
+        related_name="retailer_receipts_from_order_item",
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        help_text=(
+            "The order line this receipt was created from. Null when "
+            "the retailer created the receipt directly."
+        ),
     )
+    wholesaler_receipt = models.ForeignKey(
+        "wholesalers.WholesalerReceipts",
+        related_name="retailer_placements",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text=(
+            "The wholesaler's lot this stock came from. Set for both "
+            "outright and placement receipts. Critical for placement "
+            "because the wholesaler retains ownership until sale."
+        ),
+    )
+
     batch = models.CharField(max_length=50, null=True, blank=True)
     supplier_invoice = models.CharField(max_length=50, null=True, blank=True)
     manufacture_date = models.DateField(default=None, null=True, blank=True)
     expiry_date = models.DateField(default=None, null=True, blank=True)
+
     unit_buying_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        null=True,blank=True
+        null=True,
+        blank=True,
+        help_text=(
+            "Goods-only price per unit. For in_placement=True this is "
+            "the base price owed to the wholesaler on sale, not paid "
+            "at receipt time. Shipping is tracked separately in "
+            "allocated_shipping_per_unit."
+        ),
     )
     unit_price_discount = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0.00
+        max_digits=10, decimal_places=2, default=0.00,
+        help_text="Retail-side markdown off unit_selling_price.",
     )
     unit_selling_price = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0.00
+        max_digits=10, decimal_places=2, default=0.00,
+    )
+    final_unit_selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="unit_selling_price − unit_price_discount.",
     )
 
-    final_unit_selling_price = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0.00
+    allocated_shipping_total = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text=(
+            "This receipt's share of the parent order's shipping_amount, "
+            "allocated by value across all receipts from that order."
+        ),
     )
-    units_per_pack=models.IntegerField(default=1)
+    allocated_shipping_per_unit = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+        help_text=(
+            "allocated_shipping_total / received_unit_quantity. "
+            "Added to unit_buying_price to obtain landed cost."
+        ),
+    )
+
+    units_per_pack = models.IntegerField(default=1)
     unit_of_receipt = models.CharField(
         verbose_name=_("Unit of Receipt"),
-        choices=UnitsOfReceipt.choices,default="PIECE",
+        choices=UnitsOfReceipt.choices,
+        default="PIECE",
         max_length=20,
     )
 
     received_unit_quantity = models.IntegerField()
- 
     current_unit_quantity = models.IntegerField()
+    reserved_unit_quantity = models.IntegerField(
+        default=0,
+        help_text=(
+            "Units committed to unpaid/undelivered customer orders. "
+            "Reduced when the order is delivered or cancelled."
+        ),
+    )
+
+    placement_sold_quantity = models.IntegerField(
+        default=0,
+        help_text="Cumulative units sold through delivered customer orders.",
+    )
+    placement_owed_total = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0.00,
+        help_text="Total owed to the wholesaler for delivered placement units.",
+    )
+    placement_margin_total = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0.00,
+        help_text="Total margin retained on delivered placement units.",
+    )
 
     is_active = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="true",
     )
- 
     in_placement = models.BooleanField(default=False)
     created = models.DateTimeField(default=timezone.now)
     updated = models.DateTimeField(auto_now=True)
     employee = models.ForeignKey(
-        Employees, related_name="employee_creating_receipt", on_delete=models.CASCADE
+        Employees,
+        related_name="employee_creating_receipt",
+        on_delete=models.CASCADE,
     )
     owner = models.ForeignKey(
-        User, related_name="retailerVariationReceiptOwner", on_delete=models.CASCADE
+        User,
+        related_name="retailerVariationReceiptOwner",
+        on_delete=models.CASCADE,
     )
 
     class Meta:
         verbose_name_plural = "Retailer Inventory"
 
-    def save(self, *args, **kwargs):
-     
-            
-        if self.product.bar_code:
-            self.bar_code=self.product.bar_code
-
-        super(RetailerReceipts, self).save(*args, **kwargs)
+    def __str__(self):
+        return self.product.title
 
     def title(self):
         return self.product.title
 
-    def __str__(self):
-        return self.product.title
+    def clean(self):
+        super().clean()
+        if (
+            self.retailer_order_id
+            and self.retailer_order_item_id
+            and self.retailer_order_item.retailer_order_id
+            != self.retailer_order_id
+        ):
+            raise ValidationError(
+                "retailer_order and retailer_order_item must belong "
+                "to the same order."
+            )
 
+    def save(self, *args, **kwargs):
+        if self.product and self.product.bar_code:
+            self.bar_code = self.product.bar_code
 
-    def num_reviews(self):
-        return self.retailer_variation.num_reviews
+        # Keep final selling price consistent with list − discount.
+        if self.unit_selling_price is not None:
+            self.final_unit_selling_price = _q(
+                (self.unit_selling_price or 0)
+                - (self.unit_price_discount or 0)
+            )
 
-    def description(self):
-        return self.retailer_variation.product.description
+        super().save(*args, **kwargs)
 
+    # ------------------------------------------------------------------
+    # Derived values
+    # ------------------------------------------------------------------
 
+    @property
+    def landed_unit_buying_price(self) -> Decimal:
+        return _q(
+            (self.unit_buying_price or 0)
+            + (self.allocated_shipping_per_unit or 0)
+        )
+
+    @property
+    def available_unit_quantity(self) -> int:
+        return max(
+            0,
+            (self.current_unit_quantity or 0)
+            - (self.reserved_unit_quantity or 0),
+        )
+
+    @property
+    def is_consignment_open(self) -> bool:
+        return (
+            self.in_placement
+            and self.is_active == "true"
+            and (self.current_unit_quantity or 0) > 0
+        )
+
+    # ------------------------------------------------------------------
+    # Placement rollups
+    # ------------------------------------------------------------------
+
+    def recalculate_placement(self, save=True):
+        """
+        Roll up settled customer order items into the placement
+        summary fields. Only counts items on delivered orders.
+        """
+        if not self.in_placement:
+            self.placement_sold_quantity = 0
+            self.placement_owed_total = Decimal("0.00")
+            self.placement_margin_total = Decimal("0.00")
+            if save:
+                super().save(update_fields=[
+                    "placement_sold_quantity",
+                    "placement_owed_total",
+                    "placement_margin_total",
+                ])
+            return
+
+        agg = (
+            CustomerOrderItems.objects
+            .filter(
+                retailer_receipt=self,
+                is_placement=True,
+                customer_order__is_delivered="true",
+            )
+            .aggregate(
+                qty=Sum("total_quantity"),
+                owed=Sum("wholesaler_total"),
+                margin=Sum("retailer_margin_total"),
+            )
+        )
+
+        self.placement_sold_quantity = int(agg["qty"] or 0)
+        self.placement_owed_total = _q(agg["owed"] or 0)
+        self.placement_margin_total = _q(agg["margin"] or 0)
+
+        if save:
+            super().save(update_fields=[
+                "placement_sold_quantity",
+                "placement_owed_total",
+                "placement_margin_total",
+                "updated",
+            ])
 
 # class IndentingCriteria(models.TextChoices):
 #         OUT_OF_STOCK = "OUT_OF_STOCK", _("OUT_OF_STOCK")
@@ -337,122 +506,84 @@ class IndentItemSource(models.TextChoices):
     IMPORTED = "IMPORTED", "Imported from another source"
 
 
-# ===========================================================================
-# Retailer Indent
-# ===========================================================================
+from decimal import Decimal
+
+from django.db import models
+
+from authentication.models import Users
+
 
 class RetailerIndent(EntityRelatedModel):
     """
     A replenishment plan for a retailer.
 
-    Field defaults / nullability
-    ----------------------------
-    Every field added since the initial schema is either
-    nullable, has a default, or both, so:
-      * `migrate` never asks for a backfill,
-      * existing rows keep working untouched,
-      * service code and the prediction consumer can omit
-        any of the aggregates and rely on the model to fill
-        them in on save / signal.
+    The indent is the retailer's shopping list: a persistent draft
+    that items are added to (manually, from prediction, or from
+    campaigns) and later committed to orders. It is the sole
+    commitment path — campaign or not.
     """
 
     class Meta:
         verbose_name_plural = "Retailer Indents"
         ordering = ["-created"]
 
-    # ---- Config (required to exist, but defaulted) ----
-    is_open = models.CharField(
-        max_length=10,
-        default="true",
-    )
+    is_open = models.CharField(max_length=10, default="true")
     indent_number = models.CharField(
-        max_length=32,
-        unique=True,
-        null=True,
-        blank=True,
+        max_length=32, unique=True, null=True, blank=True,
     )
     lead_time = models.IntegerField(default=0)
     order_days = models.IntegerField(default=30)
 
     budget_amount = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        null=True,
-        blank=True,
+        max_digits=14, decimal_places=2, null=True, blank=True,
     )
-    budget_enforced = models.CharField(
-        max_length=10,
-        default="true",
-    )
+    budget_enforced = models.CharField(max_length=10, default="true")
     pricing_percentage = models.DecimalField(
         max_digits=6,
         decimal_places=2,
         default=30.00,
         help_text=(
-            "Markup % applied when a supplier has no "
+            "Markup % applied to the supplier's post-discount unit "
+            "price when neither the item nor the receipt provides a "
             "recommended retail price."
         ),
     )
 
-    # ---- Lead-time aggregate (all defaulted) ----
     average_lead_time_days = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0.00,
+        max_digits=6, decimal_places=2, default=0.00,
     )
     average_variance_days = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        default=0.00,
+        max_digits=6, decimal_places=2, default=0.00,
     )
     min_lead_time_days = models.IntegerField(default=0)
     max_lead_time_days = models.IntegerField(default=0)
-    lead_time_updated_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
+    lead_time_updated_at = models.DateTimeField(null=True, blank=True)
 
-    # ---- Projected aggregates (all defaulted) ----
     total_cost = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        default=0.00,
+        max_digits=14, decimal_places=2, default=0.00,
     )
     total_revenue = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        default=0.00,
+        max_digits=14, decimal_places=2, default=0.00,
     )
     total_profit = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        default=0.00,
+        max_digits=14, decimal_places=2, default=0.00,
     )
     included_item_count = models.IntegerField(default=0)
     excluded_item_count = models.IntegerField(default=0)
     over_budget = models.BooleanField(default=False)
 
-    # ---- Config snapshot (nullable) ----
-    config_snapshot = models.JSONField(
-        null=True,
-        blank=True,
-    )
+    config_snapshot = models.JSONField(null=True, blank=True)
 
     owner = models.ForeignKey(
         Users,
         related_name="retailer_indent_owner",
         on_delete=models.CASCADE,
     )
-
-    # ---- Timestamps ----
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return (
-            f"{self.indent_number or '(unsaved)'} "
-            f"· {self.entity_title}"
-        )
+        return f"{self.indent_number or '(unsaved)'} · {self.entity_title}"
 
     def save(self, *args, **kwargs):
         if not self.indent_number:
@@ -470,7 +601,7 @@ class RetailerIndent(EntityRelatedModel):
             RetailerIndent.objects
             .filter(entity=self.entity)
             .exclude(indent_number__isnull=True)
-            .order_by("-created")
+            .order_by("-indent_number")
             .values_list("indent_number", flat=True)
             .first()
         )
@@ -485,15 +616,10 @@ class RetailerIndent(EntityRelatedModel):
 
         return f"{prefix}{seq:010d}"
 
-    # =======================================================================
-    # Aggregates — recomputed from child items
-    # =======================================================================
-
-    def recalculate(self, save: bool = True):
+    def recalculate(self, save=True):
         """
-        Roll up item-level profit JSON into the header
-        aggregates. Called automatically by the item
-        post_save / post_delete signal.
+        Roll up item-level profit_estimate into header aggregates.
+        Only counts items with a profit_estimate (i.e. priced).
         """
         items = self.indent_for_item.all()
 
@@ -508,31 +634,23 @@ class RetailerIndent(EntityRelatedModel):
             revenue = est.get("total_revenue")
             profit = est.get("total_profit")
 
-            if cost is not None:
-                total_cost += Decimal(str(cost))
-            if revenue is not None:
-                total_revenue += Decimal(str(revenue))
-            if profit is not None:
-                total_profit += Decimal(str(profit))
+            if cost is None:
+                continue
 
+            total_cost += Decimal(str(cost))
+            total_revenue += Decimal(str(revenue or 0))
+            total_profit += Decimal(str(profit or 0))
             included_count += 1
 
         self.total_cost = _q(total_cost)
         self.total_revenue = _q(total_revenue)
         self.total_profit = _q(total_profit)
         self.included_item_count = included_count
-
-        # excluded_item_count is written by the prediction
-        # consumer based on its budget filter. Preserve it.
-        self.excluded_item_count = (
-            self.excluded_item_count or 0
-        )
+        self.excluded_item_count = self.excluded_item_count or 0
 
         budget = self.budget_amount
         if budget is not None:
-            self.over_budget = (
-                self.total_cost > Decimal(str(budget))
-            )
+            self.over_budget = self.total_cost > Decimal(str(budget))
         else:
             self.over_budget = False
 
@@ -546,46 +664,47 @@ class RetailerIndent(EntityRelatedModel):
                 "over_budget",
                 "updated",
             ])
-# ===========================================================================
-# Retailer Indent Item
-# ===========================================================================
+
+
+from decimal import Decimal
+
+from django.db import models
+from django.utils import timezone
+
 
 class RetailerIndentItem(EntityRelatedModel):
     """
     One line on a retailer indent.
 
-    Field defaults / nullability
-    ----------------------------
-    Every snapshot field added for the pricing / bonus chain
-    is either nullable or has a default. This means:
-      * old rows migrate without a backfill,
-      * the manual create service can omit every derived field,
-      * `recalculate()` (called from save) will populate them
-        whenever a `required_quantity` or supplier change
-        occurs.
+    Pricing chain (locked):
+      list_price    = supplier_unit_selling_price or receipt.unit_selling_price
+      final_price   = price_discount.offer_price if FK set, else list_price
+      bonus         = from quantity_discount FK
+      total_qty     = required_quantity + bonus
+      sell_per_unit = item RRP > receipt RRP > final_price * (1 + markup/100)
+      total_cost    = final_price * required_quantity
+      total_revenue = sell_per_unit * total_qty
+      total_profit  = total_revenue - total_cost
 
-    The three flat pricing columns (`final_unit_price`,
-    `item_gross_total_amount`, `item_net_total_amount`) are
-    deliberately *not* model fields — they're `@property`
-    accessors that read out of `profit_estimate`.
+    Markup base is final_price (what the retailer pays per paid unit).
+    Bonus dilution does NOT affect the markup base.
     """
 
     class Meta:
         verbose_name_plural = "Retailer Indent Items"
-        unique_together = (
-            "wholesale_receipt",
-            "retailer_indent",
-            "entity",
-        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=("wholesale_receipt", "retailer_indent", "entity"),
+                name="uniq_retailer_indent_item_receipt_indent_entity",
+            ),
+        ]
 
-    # ---- Source (defaulted) ----
     source = models.CharField(
         max_length=20,
         choices=IndentItemSource.choices,
         default=IndentItemSource.PREDICTION,
     )
 
-    # ---- FKs (all nullable) ----
     retailer_indent = models.ForeignKey(
         RetailerIndent,
         on_delete=models.CASCADE,
@@ -601,479 +720,297 @@ class RetailerIndentItem(EntityRelatedModel):
     )
     wholesaler_price_discount = models.ForeignKey(
         WholesalerPriceDiscounts,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="indent_items_priced_against",
     )
     wholesaler_quantity_discount = models.ForeignKey(
         WholesalerQuantityDiscounts,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="indent_items_priced_against",
+    )
+    campaign_item = models.ForeignKey(
+        "wholesalers.WholesalerCampaignItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="indent_items",
+        help_text="Set when this line was created by accepting a campaign.",
     )
 
-    # ---- Quantities (required, but defaulted) ----
     required_quantity = models.IntegerField(default=0)
     total_quantity = models.IntegerField(default=0)
 
-    # ---- Bonus snapshot (all defaulted / nullable) ----
     bonus_quantity_earned = models.IntegerField(default=0)
     bonus_blocks_earned = models.IntegerField(default=0)
-    bonus_rule_buy_quantity = models.IntegerField(
-        null=True,
-        blank=True,
-    )
-    bonus_rule_free_quantity = models.IntegerField(
-        null=True,
-        blank=True,
-    )
+    bonus_rule_buy_quantity = models.IntegerField(null=True, blank=True)
+    bonus_rule_free_quantity = models.IntegerField(null=True, blank=True)
 
-    # ---- Price snapshot chain (all nullable) ----
     supplier_unit_selling_price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
+        max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    final_supplier_unit_selling_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Post-price-discount unit price. What the retailer pays "
+            "per paid unit. Markup is applied to this."
+        ),
     )
     recommended_retail_price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
+        max_digits=10, decimal_places=2, null=True, blank=True,
     )
     markup_percentage_used = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
+        max_digits=6, decimal_places=2, null=True, blank=True,
     )
 
-    # ---- Profit JSON (nullable) ----
-    profit_estimate = models.JSONField(
-        null=True,
-        blank=True,
-    )
+    profit_estimate = models.JSONField(null=True, blank=True)
 
-    # ---- Lead time (defaulted) ----
     lead_time_days = models.IntegerField(default=0)
     lead_time_variance_days = models.IntegerField(default=0)
-    lead_time_source = models.CharField(
-        max_length=32,
-        default="default",
-    )
+    lead_time_source = models.CharField(max_length=32, default="default")
 
-    # ---- Batch dates (nullable) ----
-    manufacture_date = models.DateField(
-        null=True,
-        blank=True,
-    )
-    expiry_date = models.DateField(
-        null=True,
-        blank=True,
-    )
+    manufacture_date = models.DateField(null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
 
-    # ---- Timestamps (auto) ----
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(
         Users,
         related_name="retailer_indent_item_owner",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
 
     def __str__(self):
-        title = (
-            self.wholesale_receipt.product.title
-            if self.wholesale_receipt
-            and self.wholesale_receipt.product
-            else "(no product)"
-        )
+        title = self.wholesale_receipt_title or "(no product)"
         return f"{title} × {self.required_quantity}"
 
-    # =======================================================================
-    # Save → recalculate
-    # =======================================================================
-
     def save(self, *args, **kwargs):
-        self.recalculate()
+        if kwargs.pop("recalculate", True):
+            self.recalculate()
         super().save(*args, **kwargs)
 
-    # =======================================================================
-    # Recalculation — single source of truth for derived values
-    # =======================================================================
+    # ------------------------------------------------------------------
+    # Inputs
+    # ------------------------------------------------------------------
 
-    def recalculate(self):
-        """
-        Derive pricing + bonus + profit from the current
-        supplier chain and `required_quantity`.
-
-        Safe to call on any save. Also resolves an active
-        quantity discount on the receipt when the FK is null,
-        so the bonus math applies even for manually-added
-        items that didn't pass a discount.
-        """
-        qty = int(self.required_quantity or 0)
-
-        receipt = self.wholesale_receipt
-        base_price = Decimal("0.00")
-        recommended_rrp = None
-
-        if receipt:
-            base_price = _q(
-                getattr(receipt, "unit_selling_price", 0) or 0
-            )
-            rrp = getattr(
-                receipt, "recommended_retail_price", None
-            )
-            if rrp is not None:
-                recommended_rrp = _q(rrp)
-
-        # ---- Resolve quantity discount ----
-        # 1. Prefer the FK that was set on the item.
-        # 2. Otherwise look up the currently active one on the
-        #    receipt, and persist it so subsequent reads skip
-        #    the query.
-        qd = self.wholesaler_quantity_discount
-        if not qd and receipt and qty > 0:
-            today = timezone.now().date()
-            qd = (
-                WholesalerQuantityDiscounts.objects
-                .filter(
-                    wholesaler_receipt=receipt,
-                    is_active="true",
-                    start__lte=today,
-                    end__gte=today,
-                    limit_quantity__lte=qty,
-                )
-                .order_by("-limit_quantity")
-                .first()
-            )
-            if qd:
-                self.wholesaler_quantity_discount = qd
-
-        # ---- Resolve price discount (same pattern) ----
-        pd = self.wholesaler_price_discount
-        if not pd and receipt:
-            today = timezone.now().date()
-            pd = (
-                WholesalerPriceDiscounts.objects
-                .filter(
-                    wholesaler_receipt=receipt,
-                    is_active="true",
-                    start__lte=today,
-                    end__gte=today,
-                )
-                .order_by("-percent")
-                .first()
-            )
-            if pd:
-                self.wholesaler_price_discount = pd
-
-        # ---- Final unit price ----
-        final_unit_price = base_price
-        if pd:
-            offer = getattr(pd, "offer_price", None)
-            if offer is not None:
-                final_unit_price = _q(offer)
-
-        # ---- Bonus blocks ----
-        bonus_qty = 0
-        bonus_blocks = 0
-        buy_qty = None
-        free_qty = None
-
-        if qd and qd.limit_quantity and qd.limit_quantity > 0:
-            buy_qty = int(qd.limit_quantity)
-            free_qty = int(qd.awarded_quantity or 0)
-            bonus_blocks = qty // buy_qty
-            bonus_qty = bonus_blocks * free_qty
-
-        total_quantity = qty + bonus_qty
-
-        # ---- Profit ----
-        cost_per_unit = final_unit_price
-
-        if recommended_rrp is not None:
-            sell_per_unit = recommended_rrp
-            pricing_source = "recommended_retail_price"
-            markup_used = None
-        else:
-            markup_pct = _q(
-                self._retailer_markup_percentage()
-            )
-            sell_per_unit = _q(
-                cost_per_unit
-                * (Decimal("1") + markup_pct / Decimal("100"))
-            )
-            pricing_source = "retailer_markup"
-            markup_used = markup_pct
-
-        profit_per_unit = sell_per_unit - cost_per_unit
-        total_cost = _q(cost_per_unit * qty)
-        total_revenue = _q(sell_per_unit * qty)
-        total_profit = total_revenue - total_cost
-
-        margin_percent = Decimal("0.00")
-        if sell_per_unit > 0:
-            margin_percent = _q(
-                profit_per_unit / sell_per_unit
-                * Decimal("100")
-            )
-
-        # ---- Write back ----
-        self.supplier_unit_selling_price = base_price
-        self.recommended_retail_price = recommended_rrp
-        self.markup_percentage_used = markup_used
-
-        self.bonus_quantity_earned = bonus_qty
-        self.bonus_blocks_earned = bonus_blocks
-        self.bonus_rule_buy_quantity = buy_qty
-        self.bonus_rule_free_quantity = free_qty
-
-        self.total_quantity = total_quantity
-
-        self.profit_estimate = {
-            "cost_per_unit": float(cost_per_unit),
-            "sell_per_unit": float(sell_per_unit),
-            "pricing_source": pricing_source,
-            "profit_per_unit": float(_q(profit_per_unit)),
-            "margin_percent": float(margin_percent),
-            "total_cost": float(total_cost),
-            "total_revenue": float(total_revenue),
-            "total_profit": float(total_profit),
-        }
-
-    def _retailer_markup_percentage(self) -> Decimal:
+    def _retailer_markup_percentage(self, override: Decimal = None) -> Decimal:
+        if override is not None:
+            return Decimal(str(override))
         parent = self.retailer_indent
-        if (
-            parent is not None
-            and parent.pricing_percentage is not None
-        ):
+        if parent is not None and parent.pricing_percentage is not None:
             return Decimal(str(parent.pricing_percentage))
         return Decimal("30.00")
 
-    # =======================================================================
-    # Derived pricing — read out of the profit_estimate JSON
-    # =======================================================================
+    def _resolve_list_price(self) -> Decimal:
+        if self.supplier_unit_selling_price is not None:
+            return _q(self.supplier_unit_selling_price)
+        receipt = self.wholesale_receipt
+        if receipt is None:
+            return Decimal("0.00")
+        return _q(getattr(receipt, "unit_selling_price", 0) or 0)
+
+    def _resolve_final_price(self, list_price: Decimal) -> Decimal:
+        pd = self.wholesaler_price_discount
+        if pd is not None and pd.offer_price is not None:
+            return _q(pd.offer_price)
+        return list_price
+
+    def _resolve_recommended_rrp(self):
+        if self.recommended_retail_price is not None:
+            return _q(self.recommended_retail_price)
+        receipt = self.wholesale_receipt
+        if receipt is None:
+            return None
+        raw = getattr(receipt, "recommended_retail_price", None)
+        return _q(raw) if raw is not None else None
+
+    def _compute_bonus(self, qty: int):
+        qd = self.wholesaler_quantity_discount
+        if (
+            qd is None
+            or (qd.limit_quantity or 0) <= 0
+            or (qd.awarded_quantity or 0) <= 0
+            or qty <= 0
+        ):
+            return 0, 0, None, None
+
+        buy_qty = int(qd.limit_quantity)
+        free_qty = int(qd.awarded_quantity)
+        blocks = qty // buy_qty
+        return blocks * free_qty, blocks, buy_qty, free_qty
+
+    # ------------------------------------------------------------------
+    # Recalculate
+    # ------------------------------------------------------------------
+
+    def recalculate(self, markup_override: Decimal = None):
+        qty = int(self.required_quantity or 0)
+
+        list_price = self._resolve_list_price()
+        final_price = self._resolve_final_price(list_price)
+        self.final_supplier_unit_selling_price = final_price
+
+        bonus_qty, blocks, buy_qty, free_qty = self._compute_bonus(qty)
+        self.bonus_quantity_earned = bonus_qty
+        self.bonus_blocks_earned = blocks
+        self.bonus_rule_buy_quantity = buy_qty
+        self.bonus_rule_free_quantity = free_qty
+        self.total_quantity = qty + bonus_qty
+
+        markup_pct = self._retailer_markup_percentage(markup_override)
+        self.markup_percentage_used = markup_pct
+
+        rrp = self._resolve_recommended_rrp()
+        if rrp is not None:
+            sell_per_unit = rrp
+            pricing_source = "rrp"
+        else:
+            sell_per_unit = _q(
+                final_price * (Decimal("1") + markup_pct / Decimal("100"))
+            )
+            pricing_source = "markup"
+
+        total_cost = _q(final_price * qty)
+        total_revenue = _q(sell_per_unit * self.total_quantity)
+        total_profit = _q(total_revenue - total_cost)
+
+        effective_cost = (
+            _q(total_cost / self.total_quantity)
+            if self.total_quantity else _q(final_price)
+        )
+        profit_per_unit = _q(sell_per_unit - final_price)
+        margin_percent = (
+            _q((total_profit / total_revenue) * Decimal("100"))
+            if total_revenue else Decimal("0.00")
+        )
+
+        self.profit_estimate = {
+            "list_unit_price": str(list_price),
+            "cost_per_unit": str(final_price),
+            "effective_cost_per_unit": str(effective_cost),
+            "sell_per_unit": str(sell_per_unit),
+            "profit_per_unit": str(profit_per_unit),
+            "total_revenue": str(total_revenue),
+            "total_cost": str(total_cost),
+            "total_profit": str(total_profit),
+            "margin_percent": str(margin_percent),
+            "markup_percentage": str(markup_pct),
+            "pricing_source": pricing_source,
+        }
+
+        receipt = self.wholesale_receipt
+        if receipt is not None:
+            self.lead_time_days = int(getattr(receipt, "lead_time_days", 0) or 0)
+            self.lead_time_variance_days = int(
+                getattr(receipt, "lead_time_variance_days", 0) or 0
+            )
+            self.lead_time_source = getattr(
+                receipt, "lead_time_source", "receipt",
+            )
+            self.manufacture_date = getattr(receipt, "manufacture_date", None)
+            self.expiry_date = getattr(receipt, "expiry_date", None)
+        else:
+            self.lead_time_days = 0
+            self.lead_time_variance_days = 0
+            self.lead_time_source = "default"
+
+    # ------------------------------------------------------------------
+    # Derived pricing
+    # ------------------------------------------------------------------
 
     @property
     def final_unit_price(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("cost_per_unit")
-        return None
+        return (self.profit_estimate or {}).get("cost_per_unit")
 
     @property
     def item_net_total_amount(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("total_cost")
-        return None
+        return (self.profit_estimate or {}).get("total_cost")
 
     @property
     def item_gross_total_amount(self):
-        if (
-            self.supplier_unit_selling_price is not None
-            and self.required_quantity is not None
-        ):
-            return (
-                Decimal(str(self.supplier_unit_selling_price))
-                * Decimal(str(self.required_quantity))
-            )
-        return None
+        receipt = self.wholesale_receipt
+        if receipt is None:
+            return None
+        list_price = getattr(receipt, "unit_selling_price", None)
+        if list_price is None or self.required_quantity is None:
+            return None
+        return Decimal(str(list_price)) * Decimal(str(self.required_quantity))
 
-    # =======================================================================
-    # Display helpers — used by the serializer
-    # =======================================================================
+    # ------------------------------------------------------------------
+    # Display helpers
+    # ------------------------------------------------------------------
 
     @property
     def wholesale_receipt_title(self):
-        if (
-            self.wholesale_receipt
-            and self.wholesale_receipt.product
-        ):
+        if self.wholesale_receipt and self.wholesale_receipt.product:
             return self.wholesale_receipt.product.product_name()
         return ""
 
     @property
     def wholesaler_title(self):
-        if (
-            self.wholesale_receipt
-            and self.wholesale_receipt.received_from
-        ):
-            return self.wholesale_receipt.received_from.title
+        r = self.wholesale_receipt
+        if r and r.received_from:
+            return r.received_from.title
         return ""
 
     @property
     def wholesaler(self):
-        if (
-            self.wholesale_receipt
-            and self.wholesale_receipt.received_from
-        ):
-            return str(
-                self.wholesale_receipt.received_from.id
-            )
+        r = self.wholesale_receipt
+        if r and r.received_from:
+            return str(r.received_from.id)
         return None
 
     @property
     def wholesaler_price_discount_title(self):
-        if self.wholesaler_price_discount:
-            return self.wholesaler_price_discount.title
-        return ""
+        return self.wholesaler_price_discount.title if self.wholesaler_price_discount else ""
 
     @property
     def wholesaler_quantity_discount_title(self):
-        if self.wholesaler_quantity_discount:
-            return self.wholesaler_quantity_discount.title
-        return ""
+        return self.wholesaler_quantity_discount.title if self.wholesaler_quantity_discount else ""
 
     @property
     def source_label(self):
         return self.get_source_display()
 
-    # =======================================================================
-    # Profit accessors (convenience reads)
-    # =======================================================================
+    # ------------------------------------------------------------------
+    # Profit accessors
+    # ------------------------------------------------------------------
 
     @property
     def cost_per_unit(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("cost_per_unit")
-        return None
+        return (self.profit_estimate or {}).get("cost_per_unit")
 
     @property
     def sell_per_unit(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("sell_per_unit")
-        return None
+        return (self.profit_estimate or {}).get("sell_per_unit")
 
     @property
     def profit_per_unit(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("profit_per_unit")
-        return None
+        return (self.profit_estimate or {}).get("profit_per_unit")
 
     @property
     def total_profit(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("total_profit")
-        return None
+        return (self.profit_estimate or {}).get("total_profit")
 
     @property
     def total_revenue(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("total_revenue")
-        return None
+        return (self.profit_estimate or {}).get("total_revenue")
 
     @property
     def margin_percent(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("margin_percent")
-        return None
+        return (self.profit_estimate or {}).get("margin_percent")
 
     @property
     def pricing_source(self):
-        if self.profit_estimate:
-            return self.profit_estimate.get("pricing_source")
-        return None
-
-
-# class RetailerIndent(EntityRelatedModel):
-#     class Meta:
-#         verbose_name_plural="Retailer Indent"
-#     indent_number = models.ForeignKey(
-#         DocumentNumbers,
-#         related_name="indent_number",
-#         on_delete=models.CASCADE, null=True, blank=True
-#     )
-#     order_days = models.IntegerField()
-#     lead_time = models.IntegerField()
-#     is_open = models.CharField(
-#         max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
-#     )
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         Users,
-#         related_name="retailer_indent_owner",
-#         on_delete=models.CASCADE,
-#     )
-# class RetailerIndent(EntityRelatedModel):
-#     class Meta:
-#         verbose_name_plural="Retailer Indent"
-        
-#     indent_number = models.ForeignKey(
-#         DocumentNumbers,
-#         related_name="indent_number",
-#         on_delete=models.CASCADE, null=True, blank=True
-#     )
-#     order_days = models.IntegerField()
-#     lead_time = models.IntegerField()
+        return (self.profit_estimate or {}).get("pricing_source")
     
-#     # ➕ ADDED MODEL SIMULATION PARAMETERS TRACKING FIELDS
-#     lookback_days = models.IntegerField(default=30)
-#     max_shelf_days = models.IntegerField(default=90)
-    
-#     is_open = models.CharField(
-#         max_length=50, choices=TRUE_FALSE_OPTIONS, default="true"
-#     )
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         Users,
-#         related_name="retailer_indent_owner",
-#         on_delete=models.CASCADE,
-#     )
 
-# class RetailerIndentItem(EntityRelatedModel):
-#     class Meta:
-#         verbose_name_plural="Retailer Indent Items"
-#         unique_together=("wholesale_receipt","retailer_indent","entity")
-#     indenting_criteria = models.CharField(
-#         verbose_name=_("Indenting Criteria"),
-#         choices=IndentingCriteria.choices,
-#         max_length=20,null=True, blank=True
-#     )
-   
-#     retailer_indent = models.ForeignKey(
-#         RetailerIndent,
-#         on_delete=models.CASCADE,
-#         related_name="indent_for_item",
-#         null=True,
-#         blank=True,
-#     )
 
-#     wholesale_receipt = models.ForeignKey(WholesalerReceipts, on_delete=models.CASCADE,null=True,blank=True)
-#     wholesaler_price_discount = models.ForeignKey(WholesalerReceipts, on_delete=models.CASCADE,null=True,blank=True)
-#     wholesaler_price_discount = models.ForeignKey(WholesalerPriceDiscounts, on_delete=models.CASCADE,null=True,blank=True)
-#     wholesaler_quantity_discount = models.ForeignKey(WholesalerQuantityDiscounts, on_delete=models.CASCADE,null=True,blank=True)
-#     required_quantity = models.IntegerField()
-#     total_quantity = models.IntegerField()
-#     final_pack_price = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-#     item_gross_total_amount = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-#     item_net_total_amount = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         Users,
-#         related_name="retailer_indent_item_owner",
-#         on_delete=models.CASCADE,
-#     )
-
-#     # def save(self, *args, **kwargs):
-#     #     if self.wholesaler_price_discount:
-#     #         self.final_pack_price =self.wholesale_receipt.pack_selling_price - (self.wholesale_receipt.pack_selling_price*self.wholesaler_price_discount.percent/100)
-#     #         self.item_gross_total_amount =self.required_quantity * self.wholesale_receipt.pack_selling_price
-#     #         self.item_net_total_amount =self.final_pack_price * self.required_quantity
-#     #     else:
-#     #         self.final_pack_price=self.wholesale_receipt.pack_selling_price
-#     #         self.item_gross_total_amount =float(self.required_quantity) * float(self.wholesale_receipt.pack_selling_price)
-#     #         self.item_net_total_amount =float(self.final_pack_price) * float(self.required_quantity)
-        
-#     #     if self.wholesaler_quantity_discount:
-#     #         self.total_quantity=self.required_quantity+ self.wholesaler_quantity_discount.awarded_quantity
-#     #     else:
-#     #         self.total_quantity=self.required_quantity
-
-#     #     super(RetailerIndentItem, self).save(*args, **kwargs)
 
 class OutOfStock(EntityRelatedModel):
     class Meta:
@@ -1407,7 +1344,12 @@ def create_retail_presciption_item_administrations_model(sender, instance, creat
 
 class CustomerOrders(EntityRelatedModel):
     """
-    An order describes the entire need of a client e.g. the exact costing of the prescription
+    End-customer order. Terminal document in the chain.
+
+    Payment and delivery are tracked independently:
+      - is_paid is recomputed from successful CustomerOrderPayments.
+      - is_delivered is set when stock physically leaves.
+      - is_settled guards the stock-movement service (idempotency).
     """
 
     class OrderOriginOptions(models.TextChoices):
@@ -1415,8 +1357,8 @@ class CustomerOrders(EntityRelatedModel):
         STAFF = "STAFF", _("STAFF")
 
     class OrderTypeOptions(models.TextChoices):
-        CUSTOMER = "NORMAL", _("NORMAL")
-        STAFF = "PRESCRIPTION", _("PRESCRIPTION")
+        NORMAL = "NORMAL", _("NORMAL")
+        PRESCRIPTION = "PRESCRIPTION", _("PRESCRIPTION")
 
     class OrderChannelOptions(models.TextChoices):
         WEB = "WEB", _("WEB")
@@ -1440,46 +1382,39 @@ class CustomerOrders(EntityRelatedModel):
 
     entity = models.ForeignKey(Entities, on_delete=models.CASCADE)
 
-
     order_number = models.ForeignKey(
         DocumentNumbers,
         related_name="customer_order_number",
-        on_delete=models.CASCADE, null=True, blank=True
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
-    payment_account_number = models.CharField(max_length=50, null=True, blank=True)
-
+    payment_account_number = models.CharField(
+        max_length=50, null=True, blank=True,
+    )
     reference_number = models.CharField(max_length=100, null=True, blank=True)
     prescription = models.ForeignKey(
-        Prescriptions, null=True, blank=True, on_delete=models.CASCADE
+        Prescriptions, null=True, blank=True, on_delete=models.CASCADE,
     )
 
     order_type = models.CharField(
         max_length=100, null=True, blank=True, default="NORMAL",
-         choices=OrderTypeOptions.choices,
+        choices=OrderTypeOptions.choices,
     )
-    draft_id = models.CharField(
-        max_length=256, null=True, blank=True,
-    )
-    city_name = models.CharField(
-        max_length=256, null=True, blank=True,
-    )
-    recipient_name = models.CharField(
-        max_length=256, null=True, blank=True,
-    )
-    recipient_phone = models.CharField(
-        max_length=256, null=True, blank=True,
-    )
+    draft_id = models.CharField(max_length=256, null=True, blank=True)
+    city_name = models.CharField(max_length=256, null=True, blank=True)
+    recipient_name = models.CharField(max_length=256, null=True, blank=True)
+    recipient_phone = models.CharField(max_length=256, null=True, blank=True)
     order_origin = models.CharField(
         verbose_name=_("Order Origin"),
         choices=OrderOriginOptions.choices,
         max_length=20,
     )
-
     status = models.CharField(
         verbose_name=_("Order Status"),
         choices=OrderStatusOptions.choices,
         max_length=20,
-        default=OrderStatusOptions.PROCESSING
+        default=OrderStatusOptions.PROCESSING,
     )
     order_channel = models.CharField(
         verbose_name=_("Order Source"),
@@ -1491,38 +1426,46 @@ class CustomerOrders(EntityRelatedModel):
     origin_point = geomodel.PointField(null=True, blank=True, srid=4326)
     destination_point = geomodel.PointField(null=True, blank=True, srid=4326)
     order_tax_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True,default=0.00
+        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
     )
     farness = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
+        max_digits=7, decimal_places=2, null=True, blank=True,
     )
     shipping_cost = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00
+        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
     )
     order_price_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True,default=0.00
+        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
     )
     order_price_discount_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
+        max_digits=7, decimal_places=2, null=True, blank=True,
     )
     order_net_price_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+
+    paid_total = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="Sum of successful CustomerOrderPayment amounts.",
+    )
+    balance_due = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="order_net_price_total − paid_total. Never negative.",
     )
 
     is_quoted = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
-    paid_at = models.DateTimeField(auto_now_add=True)
     is_settled = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
     is_paid = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
     is_delivered = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
-    delivered_at = models.DateTimeField(auto_now_add=True)
+
     employee = models.ForeignKey(
         Employees,
         on_delete=models.CASCADE,
@@ -1560,11 +1503,9 @@ class CustomerOrders(EntityRelatedModel):
         blank=True,
     )
 
-
     is_processed = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
-    processed_at = models.DateTimeField(auto_now_add=True)
     processed_by = models.ForeignKey(
         Users,
         related_name="retailerOrderProcessedBy",
@@ -1573,9 +1514,8 @@ class CustomerOrders(EntityRelatedModel):
         blank=True,
     )
     is_packed = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
-    packed_at = models.DateTimeField(auto_now_add=True)
     packed_by = models.ForeignKey(
         Users,
         related_name="retailerOrderPackedBy",
@@ -1584,9 +1524,8 @@ class CustomerOrders(EntityRelatedModel):
         blank=True,
     )
     is_received = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
-    received_at = models.DateTimeField(auto_now_add=True)
     received_by = models.ForeignKey(
         Users,
         related_name="retailerOrderReceivedBy",
@@ -1615,27 +1554,59 @@ class CustomerOrders(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    due_date = models.DateField(auto_now=True)
+
+    # ---- Timestamps (nullable, set explicitly on transition) ----
+    paid_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    packed_at = models.DateTimeField(null=True, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(
-        User, related_name="retailerOrderOwner", on_delete=models.CASCADE
+        User, related_name="retailerOrderOwner", on_delete=models.CASCADE,
     )
+
     class Meta:
         verbose_name_plural = "Customer Orders"
+
     def __str__(self):
-        return f"{self.entity.title}-{self.order_number}"
+        number = self.order_number.id if self.order_number else "unsaved"
+        return f"{self.entity.title}-{number}"
 
-    # def save(self, *args, **kwargs):
-    #     if self.customer:
-    #         self.customer_name = f"{self.customer.first_name} {self.customer.last_name}"
-    #         self.customer_phone = f"{self.customer.phone}"
+    @property
+    def has_placement_items(self) -> bool:
+        return self.parent_order.filter(is_placement=True).exists()
 
-    #     if self.coupon:
-    #         self.discount = self.coupon.discount
-    #     super(CustomerOrders, self).save(*args, **kwargs)
+    def recalculate(self, save=True):
+        agg = self.parent_order.aggregate(
+            gross=Sum("item_price_total"),
+            tax=Sum("item_tax_total"),
+            discount=Sum("item_price_discount_total"),
+            counter_discount=Sum("item_counter_price_discount_amount_total"),
+        )
 
+        self.order_price_total = _q(agg["gross"] or 0)
+        self.order_tax_total = _q(agg["tax"] or 0)
+        self.order_price_discount_total = _q(agg["discount"] or 0)
+        self.order_net_price_total = _q(
+            (self.order_price_total or 0)
+            + (self.order_tax_total or 0)
+            + (self.shipping_cost or 0)
+            - (self.order_price_discount_total or 0)
+            - _q(agg["counter_discount"] or 0)
+        )
 
+        if save:
+            super().save(update_fields=[
+                "order_price_total",
+                "order_tax_total",
+                "order_price_discount_total",
+                "order_net_price_total",
+                "updated",
+            ])
 @receiver(post_save, sender=CustomerOrders)
 def send_notification_on_create(sender, instance, created, **kwargs):
     
@@ -1677,6 +1648,139 @@ def send_notification_on_create(sender, instance, created, **kwargs):
     #         )
     #     ]
 
+class CustomerOrderItems(EntityRelatedModel):
+    """
+    One line on a customer order — the actual sale event.
+
+    For placement receipts, the line snapshots the base price
+    owed to the wholesaler and the retailer's retained margin at
+    the moment the sale is recorded.
+    """
+
+    customer_order = models.ForeignKey(
+        CustomerOrders,
+        related_name="parent_order",
+        on_delete=models.CASCADE,
+    )
+    retailer_receipt = models.ForeignKey(
+        RetailerReceipts,
+        related_name="orderItemRetailerReceipt",
+        on_delete=models.CASCADE,
+    )
+    unit_of_issue = models.CharField(
+        verbose_name=_("Unit of Issue"),
+        choices=UnitOfIssue.choices,
+        max_length=20,
+    )
+    purchased_quantity = models.IntegerField(null=True, blank=True, default=0)
+    discount_quantity = models.IntegerField(default=0)
+    total_quantity = models.DecimalField(
+        max_digits=7, decimal_places=2, default=0.00,
+    )
+    quantity = models.DecimalField(
+        max_digits=7, decimal_places=2, default=0.00,
+    )
+
+    item_price = models.DecimalField(max_digits=7, decimal_places=2)
+    item_price_total = models.DecimalField(max_digits=7, decimal_places=2)
+    item_tax = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_tax_total = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_counter_price_discount = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_counter_price_discount_amount = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_counter_price_discount_amount_total = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
+    )
+    item_price_discount = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_price_discount_total = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_net_price = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+    item_net_price_total = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+    )
+
+    # ---- Placement snapshot (set at order creation) ----
+    is_placement = models.BooleanField(
+        default=False,
+        help_text="Snapshot of retailer_receipt.in_placement at sale time.",
+    )
+    wholesaler_base_unit_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Frozen unit_buying_price of the receipt. Placement only.",
+    )
+    wholesaler_total = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="wholesaler_base_unit_price × total_quantity. Placement only.",
+    )
+    retailer_margin_total = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="item_net_price_total − wholesaler_total. Placement only.",
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name_plural = "Customer Order Items"
+
+    def __str__(self):
+        return f"{self.retailer_receipt.product.title} × {self.total_quantity}"
+
+    def recalculate(self):
+        qty = Decimal(str(self.total_quantity or 0))
+        retail_unit = _q(self.item_net_price or self.item_price or 0)
+
+        self.item_price_total = _q(
+            Decimal(str(self.item_price or 0))
+            * Decimal(str(self.purchased_quantity or 0))
+        )
+
+        receipt = self.retailer_receipt
+        placement = bool(receipt and receipt.in_placement)
+        self.is_placement = placement
+
+        if placement:
+            base = _q(receipt.unit_buying_price or 0)
+            self.wholesaler_base_unit_price = base
+            self.wholesaler_total = _q(base * qty)
+            self.retailer_margin_total = _q(
+                (retail_unit * qty) - self.wholesaler_total
+            )
+        else:
+            self.wholesaler_base_unit_price = None
+            self.wholesaler_total = None
+            self.retailer_margin_total = None
+
+    def save(self, *args, **kwargs):
+        self.recalculate()
+        super().save(*args, **kwargs)
+
+        if self.retailer_receipt_id:
+            self.retailer_receipt.recalculate_placement()
+        if self.customer_order_id:
+            self.customer_order.recalculate()
+
+    def delete(self, *args, **kwargs):
+        receipt = self.retailer_receipt
+        order = self.customer_order
+        super().delete(*args, **kwargs)
+        if receipt:
+            receipt.recalculate_placement()
+        if order:
+            order.recalculate()
 
 # def customer_order_post_save(sender, instance, signal, *args, **kwargs):
 #     if instance:
@@ -1719,66 +1823,6 @@ def send_notification_on_create(sender, instance, created, **kwargs):
 
 #     created_at = models.DateTimeField(auto_now_add=True)
 
-class CustomerOrderItems(EntityRelatedModel):
-    customer_order = models.ForeignKey(
-        CustomerOrders, related_name="parent_order", on_delete=models.CASCADE
-    )
-    retailer_receipt = models.ForeignKey(
-        RetailerReceipts,
-        related_name="orderItemRetailerReceipt",
-        on_delete=models.CASCADE,
-    )
-    unit_of_issue = models.CharField(
-        verbose_name=_("Unit of Issue"),
-        choices=UnitOfIssue.choices,
-        max_length=20,
-    )
-    purchased_quantity = models.IntegerField(null=True,blank=True,default=0)
-    discount_quantity = models.IntegerField(default=0)
-    total_quantity = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-    quantity = models.DecimalField(max_digits=7, decimal_places=2,default=0.00)
-    item_price = models.DecimalField(max_digits=7, decimal_places=2)
-    item_price_total = models.DecimalField(max_digits=7, decimal_places=2)
-    item_tax = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_tax_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_counter_price_discount = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_counter_price_discount_amount = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_counter_price_discount_amount_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True,default=0.00
-    )
-    item_price_discount = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_price_discount_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_net_price = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    item_net_price_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(User, on_delete=models.CASCADE)
-    
-    class Meta:
-        verbose_name_plural = "Customer Order Items"
-    def save(self, *args, **kwargs):
-
-        if self.purchased_quantity and self.item_price:
-            self.item_price_total = self.purchased_quantity * self.item_price
-            self.customer_order.order_price_total +=self.item_price_total
-            self.customer_order.save()
-        super(CustomerOrderItems, self).save(*args, **kwargs)
 
 class ShippingAddress(EntityRelatedModel):
     customer_order = models.ForeignKey(

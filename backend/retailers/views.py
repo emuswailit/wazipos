@@ -2258,3 +2258,229 @@ class RetailerIndentItemCreateView(APIView):
             RetailerIndentItemsSerializer(item).data,
             status=status.HTTP_201_CREATED,
         )
+
+# apps/retailers/views.py
+
+from django.db import IntegrityError
+from django.shortcuts import get_object_or_404
+
+from .serializers import (
+    RetailerIndentItemParamsUpdateSerializer,
+)
+
+
+class RetailerIndentItemParamsUpdateView(APIView):
+    """
+    PATCH /retailers/indent-items/<uuid:item_id>/params/
+
+    Edits a single line on a retailer indent. Only the fields
+    accepted by `RetailerIndentItemParamsUpdateSerializer` are
+    changed; everything else is recomputed by the model on save.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, item_id, *args, **kwargs):
+        user = request.user
+
+        # ---- Locate the item, scoped to the user's entity ----
+        item = get_object_or_404(
+            RetailerIndentItem,
+            id=item_id,
+            entity=user.entity,
+        )
+
+        # ---- Block edits on closed indents ----
+        if (
+            item.retailer_indent
+            and item.retailer_indent.is_open == "false"
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "This indent is closed and cannot be "
+                        "edited."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---- Validate the incoming params ----
+        serializer = RetailerIndentItemParamsUpdateSerializer(
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # ---- Resolve FKs before assignment so a bad UUID
+        #      produces a 400 rather than an IntegrityError ----
+        if "wholesale_receipt" in data:
+            receipt_id = data.pop("wholesale_receipt")
+            if receipt_id is None:
+                item.wholesale_receipt = None
+            else:
+                receipt = WholesalerReceipts.objects.filter(
+                    id=receipt_id
+                ).first()
+                if receipt is None:
+                    return Response(
+                        {
+                            "detail": (
+                                "Wholesale receipt not found."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                item.wholesale_receipt = receipt
+
+        if "wholesaler_price_discount" in data:
+            discount_id = data.pop(
+                "wholesaler_price_discount"
+            )
+            if discount_id is None:
+                item.wholesaler_price_discount = None
+            else:
+                discount = (
+                    WholesalerPriceDiscounts.objects.filter(
+                        id=discount_id
+                    ).first()
+                )
+                if discount is None:
+                    return Response(
+                        {
+                            "detail": (
+                                "Price discount not found."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                item.wholesaler_price_discount = discount
+
+        if "wholesaler_quantity_discount" in data:
+            discount_id = data.pop(
+                "wholesaler_quantity_discount"
+            )
+            if discount_id is None:
+                item.wholesaler_quantity_discount = None
+            else:
+                discount = (
+                    WholesalerQuantityDiscounts.objects
+                    .filter(id=discount_id)
+                    .first()
+                )
+                if discount is None:
+                    return Response(
+                        {
+                            "detail": (
+                                "Quantity discount not found."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                item.wholesaler_quantity_discount = discount
+
+        # ---- Scalar fields ----
+        if "required_quantity" in data:
+            item.required_quantity = data[
+                "required_quantity"
+            ]
+
+        if "source" in data:
+            item.source = data["source"]
+
+        # ---- Price snapshot chain (user-editable) ----
+        # The model's recalculate() will re-derive
+        # markup_percentage_used, profit_estimate, and the
+        # final unit price based on these inputs. Setting
+        # recommended_retail_price to null makes the model
+        # fall back to the retailer's markup.
+        if "supplier_unit_selling_price" in data:
+            item.supplier_unit_selling_price = data[
+                "supplier_unit_selling_price"
+            ]
+
+        if "recommended_retail_price" in data:
+            item.recommended_retail_price = data[
+                "recommended_retail_price"
+            ]
+
+        # ---- Save. The model runs recalculate() which
+        #      re-derives the bonus, unit price, totals, and
+        #      profit from the new inputs. A post_save signal
+        #      then updates the parent indent's aggregates. ----
+        try:
+            item.save()
+        except IntegrityError:
+            return Response(
+                {
+                    "detail": (
+                        "Another line on this indent already "
+                        "uses that receipt."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item.refresh_from_db()
+
+        return Response(
+            {
+                "status": "accepted",
+                "item_id": str(item.id),
+                "indent_id": (
+                    str(item.retailer_indent_id)
+                    if item.retailer_indent_id
+                    else None
+                ),
+                "params": {
+                    "required_quantity": (
+                        item.required_quantity
+                    ),
+                    "source": item.source,
+
+                    # Price snapshot chain — echo back the
+                    # values as they are now stored, including
+                    # the ones the model may have recomputed.
+                    "supplier_unit_selling_price": (
+                        str(item.supplier_unit_selling_price)
+                        if item.supplier_unit_selling_price
+                        is not None
+                        else None
+                    ),
+                    "recommended_retail_price": (
+                        str(item.recommended_retail_price)
+                        if item.recommended_retail_price
+                        is not None
+                        else None
+                    ),
+                    "markup_percentage_used": (
+                        str(item.markup_percentage_used)
+                        if item.markup_percentage_used
+                        is not None
+                        else None
+                    ),
+
+                    # Derived values the model recomputed
+                    "total_quantity": item.total_quantity,
+                    "bonus_quantity_earned": (
+                        item.bonus_quantity_earned
+                    ),
+                    "bonus_blocks_earned": (
+                        item.bonus_blocks_earned
+                    ),
+                    "final_unit_price": (
+                        str(item.final_unit_price)
+                        if item.final_unit_price is not None
+                        else None
+                    ),
+                    "item_net_total_amount": (
+                        str(item.item_net_total_amount)
+                        if item.item_net_total_amount
+                        is not None
+                        else None
+                    ),
+                },
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

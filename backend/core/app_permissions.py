@@ -8,6 +8,33 @@ from rest_framework.response import Response
 from employees.models import Employees
 from utils.logging import create_log
 
+
+from rest_framework import permissions
+from rest_framework import exceptions
+from employees.models import Employees
+from subscriptions.models import Subscription
+from django.utils import timezone
+from core.responses import custom_error_response
+
+
+class EntitySubscriptionPermission(permissions.BasePermission):
+    """Allow selected array of roles to access a resource"""
+
+    def has_permission(self, request, view):
+    
+        if request.user.is_authenticated:
+            
+            if Subscription.objects.filter(entity=request.user.entity, end_date__gte=timezone.now()).exists(): 
+                return True
+            else:
+
+               
+                raise exceptions.ValidationError(f"{request.user.entity.title} has no active subscription")
+        else:
+            raise exceptions.ValidationError("Please log in")
+
+
+
 # from authentication.models import Entity,  Subscriptions
 from employees.serializers import Users
 # from payments.models import Subscriptions

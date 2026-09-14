@@ -1123,3 +1123,265 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
         return obj
+
+from rest_framework import exceptions, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
+
+from retailers.retail_permissions import EntitySubscriptionPermission
+from core.responses import (
+    custom_error_response,
+    custom_errors_response,
+    custom_success_message,
+)
+
+from . import utils
+from . import serializers
+
+
+@api_view(["POST"])
+@permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
+def campaignsAPIView(request):
+    try:
+        action = request.data["action"]
+    except KeyError:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    # =================================================================
+    # Campaign lifecycle
+    # =================================================================
+
+    if action == "CreateCampaign":
+        errors, campaign = utils.create_campaign(request.data, request.user)
+        if campaign:
+            serializer = serializers.WholesalerCampaignDetailSerializer(
+                campaign, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign created successfully",
+                serializer.data, "campaign",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be created", errors,
+        )
+
+    elif action == "GetEntityCampaigns":
+        campaigns = utils.get_entity_campaigns(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(campaigns, request)
+        serializer = serializers.WholesalerCampaignListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    elif action == "GetCampaignDetails":
+        campaign, errors = utils.get_campaign_details(request.data, request.user)
+        if campaign:
+            serializer = serializers.WholesalerCampaignDetailSerializer(
+                campaign, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign retrieved successfully",
+                serializer.data, "campaign",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be retrieved", errors,
+        )
+
+    elif action == "UpdateCampaign":
+        errors, campaign = utils.update_campaign(request.data, request.user)
+        if campaign:
+            serializer = serializers.WholesalerCampaignDetailSerializer(
+                campaign, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign updated successfully",
+                serializer.data, "campaign",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be updated", errors,
+        )
+
+    elif action == "DeleteCampaign":
+        errors, campaign = utils.delete_campaign(request.data, request.user)
+        if campaign:
+            return custom_success_message(
+                0, "Campaign deleted successfully", {}, "campaign",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be deleted", errors,
+        )
+
+    elif action == "PublishCampaign":
+        errors, campaign = utils.publish_campaign(request.data, request.user)
+        if campaign:
+            serializer = serializers.WholesalerCampaignDetailSerializer(
+                campaign, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign published successfully",
+                serializer.data, "campaign",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be published", errors,
+        )
+
+    elif action == "CloseCampaign":
+        errors, campaign = utils.close_campaign(request.data, request.user)
+        if campaign:
+            serializer = serializers.WholesalerCampaignDetailSerializer(
+                campaign, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign closed successfully",
+                serializer.data, "campaign",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be closed", errors,
+        )
+
+    # =================================================================
+    # Campaign items
+    # =================================================================
+
+    elif action == "AddCampaignItem":
+        errors, item = utils.add_campaign_item(request.data, request.user)
+        if item:
+            serializer = serializers.WholesalerCampaignItemDetailSerializer(
+                item, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign item added successfully",
+                serializer.data, "campaign_item",
+            )
+        return custom_errors_response(
+            1, "Campaign item could not be added", errors,
+        )
+
+    elif action == "UpdateCampaignItem":
+        errors, item = utils.update_campaign_item(request.data, request.user)
+        if item:
+            serializer = serializers.WholesalerCampaignItemDetailSerializer(
+                item, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Campaign item updated successfully",
+                serializer.data, "campaign_item",
+            )
+        return custom_errors_response(
+            1, "Campaign item could not be updated", errors,
+        )
+
+    elif action == "DeleteCampaignItem":
+        errors, item = utils.delete_campaign_item(request.data, request.user)
+        if item:
+            return custom_success_message(
+                0, "Campaign item deleted successfully", {}, "campaign_item",
+            )
+        return custom_errors_response(
+            1, "Campaign item could not be deleted", errors,
+        )
+
+    elif action == "GetCampaignItems":
+        items = utils.get_campaign_items(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(items, request)
+        serializer = serializers.WholesalerCampaignItemListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    # =================================================================
+    # Audience
+    # =================================================================
+
+    elif action == "AddCampaignAudience":
+        errors, audience = utils.add_campaign_audience(request.data, request.user)
+        if audience:
+            serializer = serializers.WholesalerCampaignAudienceListSerializer(
+                audience, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Audience added successfully",
+                serializer.data, "campaign_audience",
+            )
+        return custom_errors_response(
+            1, "Audience could not be added", errors,
+        )
+
+    elif action == "RemoveCampaignAudience":
+        errors, audience = utils.remove_campaign_audience(request.data, request.user)
+        if audience:
+            return custom_success_message(
+                0, "Audience removed successfully", {}, "campaign_audience",
+            )
+        return custom_errors_response(
+            1, "Audience could not be removed", errors,
+        )
+
+    elif action == "GetCampaignAudience":
+        audience = utils.get_campaign_audience(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(audience, request)
+        serializer = serializers.WholesalerCampaignAudienceListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    # =================================================================
+    # Retailer-facing
+    # =================================================================
+
+    elif action == "GetMyCampaigns":
+        campaigns = utils.get_my_campaigns(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(campaigns, request)
+        serializer = serializers.WholesalerCampaignListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    elif action == "ProjectCampaign":
+        errors, projections = utils.project_campaign(request.data, request.user)
+        if projections is not None:
+            return custom_success_message(
+                0, "Projection computed successfully",
+                projections, "projections",
+            )
+        return custom_errors_response(
+            1, "Projection could not be computed", errors,
+        )
+
+    elif action == "OptInCampaign":
+        errors, result = utils.opt_in_campaign(request.data, request.user)
+        if result:
+            return custom_success_message(
+                0,
+                "Campaign accepted — indent updated",
+                {
+                    "indent_id": result["indent"].id,
+                    "indent_number": result["indent"].indent_number,
+                    "items_created": len(result["items"]),
+                },
+                "indent",
+            )
+        return custom_errors_response(
+            1, "Campaign could not be accepted", errors,
+        )
+
+    elif action == "OptOutCampaign":
+        errors, audience = utils.opt_out_campaign(request.data, request.user)
+        if audience:
+            serializer = serializers.WholesalerCampaignAudienceListSerializer(
+                audience, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Opted out successfully",
+                serializer.data, "campaign_audience",
+            )
+        return custom_errors_response(
+            1, "Could not opt out", errors,
+        )
+
+    else:
+        raise exceptions.ValidationError(f"Action {action} is unknown")

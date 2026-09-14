@@ -99,6 +99,13 @@ urlpatterns = [
         views.RetailerIndentItemCreateView.as_view(),
         name="retailer-indent-item-create",
     ),
+    # apps/retailers/urls.py
+
+path(
+    "indent-items/<uuid:item_id>/params/",
+    views.RetailerIndentItemParamsUpdateView.as_view(),
+    name="retailer-indent-item-params-update",
+),
     path(
         "indent-items/<uuid:item_id>/",
         views.RetailerIndentItemUpdateView.as_view(),

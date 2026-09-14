@@ -19,6 +19,11 @@ urlpatterns = [
         name="retailer-orders-apiview",
     ),
     path(
+    "retailers/campaigns",
+    views.campaignsAPIView,
+    name="campaigns-apiview",
+),
+    path(
         "retailers/orders/staff",
         views.retailerOrdersStaffAPIView,
         name="retailer-orders-staff-apiview",

@@ -182,30 +182,42 @@ def custom_error_message(message):
 #     return
 
 
+@transaction.atomic
 def create_retailer_receipts(item, retailer_order_obj, user):
     errors = []
     try:
-        retailer_receipt = RetailerReceipts.objects.create(
-            unit_selling_price=item.wholesaler_receipt.unit_selling_price,
-            pack_buying_price=item.item_price,
-            pack_quantity=item.total_quantity,
-            current_unit_quantity=item.total_quantity
-            * item.wholesaler_receipt.product.units_per_pack,
+        receipt = RetailerReceipts.objects.create(
+            product=item.wholesaler_receipt.product,
+            received_from=retailer_order_obj.wholesaler,
             entity=user.entity,
             owner=user,
-            draft_id=item.draft_id,
-            product=item.wholesaler_receipt.product,
             retailer_order=retailer_order_obj,
-           
+            retailer_order_item=item,
+            wholesaler_receipt=item.wholesaler_receipt,
+            unit_buying_price=item.item_final_price or item.item_net_price,
+            unit_selling_price=(
+                item.intended_retail_unit_price
+                or item.item_final_price
+                or item.item_net_price
+            ),
+            received_unit_quantity=item.total_quantity,
+            current_unit_quantity=item.total_quantity,
+            units_per_pack=item.wholesaler_receipt.product.units_per_pack,
+            unit_of_receipt=item.unit_of_issue or "Pack",
+            batch=item.wholesaler_receipt.batch,
+            manufacture_date=item.wholesaler_receipt.manufacture_date,
+            expiry_date=item.wholesaler_receipt.expiry_date,
+            in_placement=False,
         )
 
-        return retailer_receipt
+        if item.is_received != "true":
+            item.is_received = "true"
+            item.save(update_fields=["is_received", "updated"])
+
+        return receipt
     except IntegrityError as e:
-        errors.append(e)
-
+        errors.append(str(e))
         raise_custom_exception(errors)
-
-
 def confirm_item_in_retailer_order(receipt, retailer_order_obj):
     retailer_order_item_obj = None
     errors = []
@@ -270,83 +282,81 @@ def get_products( customerOrderItem):
 def get_products_from_os( outOfStocks):
         return outOfStocks.product
 
-def get_wholesale_offers_for_product(prod):
-    wholesaler_offerings=[]
-    if WholesalerReceipts.objects.filter(product = prod,pack_quantity__gte=0).exists():
-            wholesaler_inventory = WholesalerReceipts.objects.filter(product = prod,pack_quantity__gte=0).all().order_by('-unit_selling_price')[:3]
-            if len(wholesaler_inventory)>0:
+def get_wholesale_offers_for_product(product):
+    wholesaler_offerings = []
 
-                for wi  in wholesaler_inventory:
-                    price_discount=[]
-                    quantity_discount=[]
-                    price_discount_banners =[]
-                    quantity_discount_banners =[]
-                    if WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=wi,is_active="true").exists():
-                        wpd=WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=wi,is_active="true").first()
-                        if WholesalerPriceDiscountBanners.objects.filter(wholesaler_price_discount=wpd).exists():
-                            price_discount_banners_qs = WholesalerPriceDiscountBanners.objects.filter(wholesaler_price_discount=wpd).all()
-                            for pdbq in price_discount_banners_qs:
-                                banner ={
-                                    "banner": pdbq.price_discount_banner.url
-                                }
+    receipts = (
+        WholesalerReceipts.objects
+        .filter(product=product, current_unit_quantity__gte=0)
+        .order_by("-unit_selling_price")[:3]
+    )
 
-                                price_discount_banners.append(banner)
-  
-                        price_discount={
+    for receipt in receipts:
+        price_discount = {}
+        quantity_discount = {}
+        price_discount_banners = []
+        quantity_discount_banners = []
 
-                            "id":wpd.id,
-                            "title":wpd.title,
-                            "percent":wpd.percent,
-                            "normal_price":wpd.normal_price,
-                            "offer_price":wpd.offer_price,
-                            "is_active":wpd.is_active,
-                            "start":wpd.start,
-                            "end":wpd.end,
-                            "banners": price_discount_banners
-                        }
-                    if WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=wi,is_active="true").exists():
-                        wqd=WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=wi,is_active="true").first()
-                       
-                        if WholesalerQuantityDiscountBanners.objects.filter(wholesaler_quantity_discount=wqd).exists():
-                            quantity_discount_banners_qs = WholesalerQuantityDiscountBanners.objects.filter(wholesaler_quantity_discount=wqd).all()
-                            for pdbq in quantity_discount_banners_qs:
-                                banner1 ={
-                                    "banner": pdbq.quantity_discount_banner.url
-                                }
+        wpd = WholesalerPriceDiscounts.objects.filter(
+            wholesaler_receipt=receipt, is_active="true",
+        ).first()
+        if wpd:
+            for banner in WholesalerPriceDiscountBanners.objects.filter(
+                wholesaler_price_discount=wpd,
+            ):
+                price_discount_banners.append(
+                    {"banner": banner.price_discount_banner.url}
+                )
+            price_discount = {
+                "id": wpd.id,
+                "title": wpd.title,
+                "percent": wpd.percent,
+                "normal_price": wpd.normal_price,
+                "offer_price": wpd.offer_price,
+                "is_active": wpd.is_active,
+                "start": wpd.start,
+                "end": wpd.end,
+                "banners": price_discount_banners,
+            }
 
-                                quantity_discount_banners.append(banner1)
+        wqd = WholesalerQuantityDiscounts.objects.filter(
+            wholesaler_receipt=receipt, is_active="true",
+        ).first()
+        if wqd:
+            for banner in WholesalerQuantityDiscountBanners.objects.filter(
+                wholesaler_quantity_discount=wqd,
+            ):
+                quantity_discount_banners.append(
+                    {"banner": banner.quantity_discount_banner.url}
+                )
+            quantity_discount = {
+                "id": wqd.id,
+                "title": wqd.title,
+                "limit_quantity": wqd.limit_quantity,
+                "awarded_quantity": wqd.awarded_quantity,
+                "is_active": wqd.is_active,
+                "start": wqd.start,
+                "end": wqd.end,
+                "banners": quantity_discount_banners,
+            }
 
-                        quantity_discount={
-
-                            "id":wqd.id,
-                            "title":wqd.title,
-                            "percent":wqd.percent,
-                            "limit_quantity":wqd.limit_quantity,
-                            "awarded_quantity":wqd.awarded_quantity,
-                            "is_active":wqd.is_active,
-                            "start":wqd.start,
-                            "end":wqd.end,
-                            "banners": quantity_discount_banners
-                        }
-                
-                    # stringified =""
-                    # if  wi.quantity_discounts.count()>0:
-                    #     for i in wi.quantity_discounts.all():
-                    #         stringified = stringified + i.title + ","
-                    wiObj = {
-                        "wholesale_inventory_id": wi.id,
-                        "wholesale_id": wi.entity.id,
-                        "wholesale_title": wi.entity.title,
-                        "pack_quantity":wi.pack_quantity,
-                        "unit_selling_price":wi.unit_selling_price,
-                        "price_discount":price_discount,
-                        "quantity_discount":quantity_discount,
-                        "manufacture_date":wi.manufacture_date,
-                        "expiry_date":wi.expiry_date
-                    }
-                    wholesaler_offerings.append(wiObj)
-                    
-
+        wholesaler_offerings.append({
+            "wholesale_inventory_id": receipt.id,
+            "wholesale_id": (
+                receipt.received_from.id if receipt.received_from else None
+            ),
+            "wholesale_title": (
+                receipt.received_from.title if receipt.received_from else ""
+            ),
+            "current_unit_quantity": receipt.current_unit_quantity,
+            "unit_selling_price": receipt.unit_selling_price,
+            "final_unit_selling_price": receipt.final_unit_selling_price,
+            "recommended_retail_price": receipt.recommended_retail_price,
+            "price_discount": price_discount,
+            "quantity_discount": quantity_discount,
+            "manufacture_date": receipt.manufacture_date,
+            "expiry_date": receipt.expiry_date,
+        })
 
     return wholesaler_offerings
 
@@ -354,13 +364,13 @@ def get_unique_products(item):
     return item.product
 
 
-def get_current_balance(prod):
-    quantity =0
-    if RetailerReceipts.objects.filter(product=prod,current_unit_quantity__gte=0).exists():
-        with_stock = RetailerReceipts.objects.filter(product=prod,current_unit_quantity__gte=0).all()
-        for i in with_stock:
-            quantity = quantity + i.current_unit_quantity
-    return quantity
+def get_current_balance(product):
+    total = (
+        RetailerReceipts.objects
+        .filter(product=product, current_unit_quantity__gte=0)
+        .aggregate(total=Sum("current_unit_quantity"))["total"]
+    ) or 0
+    return total
 
 
 def generate_order_estimates(data,user, request):
@@ -595,67 +605,66 @@ def get_retailer_receipts(user):
     return retailer_receipts
 
 
-def get_product_movement(data,user):
-    product_entries = []
-    product_id=None
-    product=None
-    from_date = None
-    to_date = None
-    retailer_receipts_in_range=[]
-    customer_order_items_in_range=[]
-    product_movements=[]
-
-    if "product" in data and not data["product"]==None:
-        product_id = data["product"]
-        product = product_models_validator.validate_product(product_id)
-    else:
+def get_product_movement(data, user):
+    if not data.get("product"):
         raise exceptions.ValidationError("Product ID is required")
-    
-    if RetailerReceipts.objects.filter(product=product,entity=user.entity,created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)).exists():
-        retailer_receipts_in_range=RetailerReceipts.objects.filter(product=product,entity=user.entity, created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)).all()
-        
-    if CustomerOrderItems.objects.filter(retailer_receipt__product=product,entity=user.entity,created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)).exists():
-        customer_order_items_in_range=CustomerOrderItems.objects.filter(retailer_receipt__product=product,entity=user.entity,created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)).all()
-        
-    if ProductMovement.objects.filter(product=product,entity=user.entity,owner=user).exists():
-        product_movements=ProductMovement.objects.filter(product=product,entity=user.entity,owner=user).all()
-        for pm in product_movements:
-            pm.delete()
-    if len(retailer_receipts_in_range)>0:
 
-        for rrir in retailer_receipts_in_range:
+    product = product_models_validator.validate_product(data["product"])
+    from_date = get_formatted_from_date(data)
+    to_date = get_formatted_to_date(data)
 
-            movement= ProductMovement.objects.create(product=product,transaction_date=rrir.created,quantity=rrir.current_unit_quantity,direction="RECEIPT",retailer_receipt=rrir,customer_order_item=None,owner=rrir.owner,entity=user.entity)
+    receipts_in_range = RetailerReceipts.objects.filter(
+        product=product, entity=user.entity,
+        created__gte=from_date, created__lte=to_date,
+    )
+    items_in_range = CustomerOrderItems.objects.filter(
+        retailer_receipt__product=product, entity=user.entity,
+        created__gte=from_date, created__lte=to_date,
+    )
 
-    if len(customer_order_items_in_range)>0:
- 
+    ProductMovement.objects.filter(
+        product=product, entity=user.entity, owner=user,
+    ).delete()
 
-        for coiir in customer_order_items_in_range:
-            movement= ProductMovement.objects.create(product=product,transaction_date=coiir.created,quantity=coiir.total_quantity,direction="ISSUE",retailer_receipt=None,customer_order_item=coiir,owner=coiir.owner,entity=user.entity)
+    for receipt in receipts_in_range:
+        ProductMovement.objects.create(
+            product=product,
+            transaction_date=receipt.created,
+            quantity=receipt.current_unit_quantity,
+            direction="RECEIPT",
+            retailer_receipt=receipt,
+            customer_order_item=None,
+            owner=receipt.owner,
+            entity=user.entity,
+        )
 
+    for item in items_in_range:
+        ProductMovement.objects.create(
+            product=product,
+            transaction_date=item.created,
+            quantity=item.total_quantity,
+            direction="ISSUE",
+            retailer_receipt=None,
+            customer_order_item=item,
+            owner=item.owner,
+            entity=user.entity,
+        )
 
-    if  ProductMovement.objects.filter(product=product,entity=user.entity,owner=user).exists():
-        total_receipts =0
-        total_issues=0
-        product_movements=ProductMovement.objects.filter(product=product,entity=user.entity,owner=user).all().order_by("transaction_date")
+    movements = ProductMovement.objects.filter(
+        product=product, entity=user.entity, owner=user,
+    ).order_by("transaction_date")
 
-        for pm in product_movements:
-            balance=0
-            if pm.direction=="RECEIPT":
-                total_receipts=total_receipts+pm.quantity
-                print("total_receipts")
-                print(total_receipts)
-            elif pm.direction=="ISSUE":
-                total_issues=total_issues+pm.quantity
-                print("total_issues")
-                print(total_issues)
-            balance=total_receipts-total_issues
-            pm.balance=balance
-            pm.save()
-        return product_movements.order_by("-transaction_date")
-    else:
-        return []
+    total_receipts = Decimal("0.00")
+    total_issues = Decimal("0.00")
+    for pm in movements:
+        if pm.direction == "RECEIPT":
+            total_receipts += Decimal(str(pm.quantity))
+        else:
+            total_issues += Decimal(str(pm.quantity))
+        pm.balance = total_receipts - total_issues
+        pm.save(update_fields=["balance"])
 
+    return movements.order_by("-transaction_date")
 
 
 def get_retailer_receipts_by_catgory(data, user):
@@ -762,283 +771,169 @@ def search_receipts_by_customer(data, user):
     except KeyError:
         raise exceptions.ValidationError("Search parameter is required")
 
-# Validate data
 def validate_retailer_receipt_data(data, user):
     errors = []
     product = None
-    bar_code = ""
-    received_from_id = (None,)
     received_from_obj = None
-    employee = (None,)
-    manufacture_date = None
-    expiry_date = None
 
-    received_unit_quantity=None
-    batch =None
+    employee = Employees.objects.filter(
+        user=user, entity=user.entity, is_active="true",
+    ).first()
+    if not employee:
+        return custom_error_message(
+            f"You are not an active employee at "
+            f"{titlecase(user.entity.title)}"
+        )
 
-    if Employees.objects.filter(
-        user=user, entity=user.entity, is_active="true"
-    ).exists():
-        employee = Employees.objects.filter(
-            user=user, entity=user.entity, is_active="true"
-        ).first()
-    else:
-        return custom_error_message( f"You are not an active employee at {titlecase(user.entity.title)}")
-        # raise exceptions.ValidationError(
-        #     f"You are not an active employee at {titlecase(user.entity.title)}"
-        # )
+    details = data.get("retailer_receipt_details", {})
 
-
-    try:
-        received_unit_quantity = data["retailer_receipt_details"]["received_unit_quantity"]
-        if data["retailer_receipt_details"]["received_unit_quantity"] == "" or int(data["retailer_receipt_details"]["received_unit_quantity"])<1:
-            errors.append("Unit quantity cannot be empty")
-    except KeyError:
+    received_unit_quantity = details.get("received_unit_quantity")
+    if received_unit_quantity in (None, "", 0, "0"):
         errors.append("Received unit quantity is required")
+    else:
+        try:
+            if int(received_unit_quantity) < 1:
+                errors.append("Unit quantity must be at least 1")
+        except (TypeError, ValueError):
+            errors.append("Unit quantity must be an integer")
 
-    try:
-        product_id = data["retailer_receipt_details"]["product"]
-        if product_id == "":
-            errors.append("Product ID cannot be empty")
-        if Products.objects.filter(id=product_id).exists():
-            product = Products.objects.filter(id=product_id).first()
-            # if not product.category in user.entity.categories.all():
-            #     raise exceptions.ValidationError(
-            #         f"{product.title} is not under any of your authorized categories"
-            #     )
-        else:
-            raise exceptions.ValidationError("Product with supplied ID does not exist")
-
-    except KeyError:
+    product_id = details.get("product")
+    if not product_id:
         errors.append("Product ID is required")
+    else:
+        product = Products.objects.filter(id=product_id).first()
+        if not product:
+            raise exceptions.ValidationError(
+                "Product with supplied ID does not exist"
+            )
 
-    if product.preparation:
-        try:
-            manufacture_date = data["retailer_receipt_details"]["manufacture_date"]
-            if data["retailer_receipt_details"]["manufacture_date"] == "":
-                errors.append("Manufacture date cannot be empty")
-        except KeyError:
-            errors.append("Manufacture date is required is required")
+    if product and product.preparation:
+        if not details.get("manufacture_date"):
+            errors.append("Manufacture date is required")
+        if not details.get("expiry_date"):
+            errors.append("Expiry date is required")
 
-        try:
-            expiry_date = data["retailer_receipt_details"]["expiry_date"]
-            if data["retailer_receipt_details"]["expiry_date"] == "":
-                errors.append("Expiry date cannot be empty")
-        except KeyError:
-            errors.append("Expiry date is required is required")
+    draft_id = details.get("draft_id")
+    if draft_id:
+        existing = RetailerReceipts.objects.filter(
+            draft_id=draft_id, entity=user.entity,
+        ).first()
+        if existing:
+            return [], existing
 
-    # if "loose_units_quantity" in data["retailer_receipt_details"]:
-    #     loose_units_quantity = data["retailer_receipt_details"]["loose_units_quantity"]
-
-    #     if int(loose_units_quantity) > 0:
-    #         if int(loose_units_quantity) >= int(product.units_per_pack):
-    #             errors.append(
-    #                 "Loose units cannot be equal to or more than a full pack size"
-    #             )
-    #     else:
-    #         pass
-    # else:
-    #     pass
-    if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
-        draft_id = data["retailer_receipt_details"]["draft_id"]
-        if RetailerReceipts.objects.filter(draft_id=draft_id,entity=user.entity).exists():
-            created = RetailerReceipts.objects.filter(draft_id=draft_id,entity=user.entity).first()
-            return [], created
-    # try:
-        
-        # draft_id = data["retailer_receipt_details"]["draft_id"]
-        # if data["retailer_receipt_details"]["draft_id"] == "":
-        #     errors.append("Pack draft ID cannot be empty")
-        # else:
-        #     if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
-        #         errors.append("Item is already synced")
-
-    # except KeyError:
-    #     errors.append("Draft ID is required")
-
- 
-    
-
-
-    try:
-        unit_selling_price = data["retailer_receipt_details"]["unit_selling_price"]
-        if data["retailer_receipt_details"]["unit_selling_price"] == "":
-            errors.append("Unit selling price cannot be empty")
-
-    except KeyError:
+    unit_selling_price = details.get("unit_selling_price")
+    if unit_selling_price in (None, ""):
         errors.append("Unit selling price is required")
 
+    received_from_id = details.get("received_from")
+    if received_from_id:
+        received_from_obj = validate_entity(received_from_id)
 
-    if "received_from" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["received_from"]=="":
-        received_from_id = data["retailer_receipt_details"]["received_from"]
-        if not received_from_id == "":
-            received_from_obj = validate_entity(received_from_id)
-    else:
-        pass
-
-    if len(errors) > 0:
+    if errors:
         raise exceptions.ValidationError(errors)
-    else:
-        return
 
 
+@transaction.atomic
 def create_retailer_receipt_directly(data, user):
-    errors =[]
-    manufacture_date = None
-    expiry_date = None
-    received_from_id = None
+    errors = []
+    details = data.get("retailer_receipt_details", {})
+
+    draft_id = details.get("draft_id")
+    if draft_id:
+        existing = RetailerReceipts.objects.filter(draft_id=draft_id).first()
+        if existing:
+            return [], existing
+
+    employee = Employees.objects.filter(
+        user=user, entity=user.entity, is_active="true",
+    ).first()
+    if not employee:
+        errors.append(
+            f"You are not an active employee at "
+            f"{titlecase(user.entity.title)}"
+        )
+        return errors, None
+
+    manufacture_date = details.get("manufacture_date") or None
+    expiry_date = details.get("expiry_date") or None
+
     received_from = None
-    employee = None
-    bar_code=""
-    draft_id=""
-    retailer_order_item=None
-    unit_of_receipt=None
-    unit_selling_price=0
-    batch=None
-    unit_price_discount=0
-    final_unit_selling_price=0.00
+    received_from_id = details.get("received_from")
+    if received_from_id:
+        received_from = validate_entity(received_from_id)
 
-    if "draft_id" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["draft_id"]=="":
-        draft_id = data["retailer_receipt_details"]["draft_id"]
-        if RetailerReceipts.objects.filter(draft_id=draft_id).exists():
-            created = RetailerReceipts.objects.filter(draft_id=draft_id).first()
-            return [], created
-    if Employees.objects.filter(
-        user=user, entity=user.entity, is_active="true"
-    ).exists():
-        employee = Employees.objects.filter(
-            user=user, entity=user.entity, is_active="true"
+    retailer_order_item = None
+    roi_id = details.get("retailer_order_item")
+    if roi_id:
+        retailer_order_item = RetailerOrderItems.objects.filter(
+            id=roi_id,
         ).first()
-        print("employee", employee.id)
-    else:
-        errors.append( f"You are not an active employee at {titlecase(user.entity.title)}")
-        return errors,None
-        # return custom_error_message( f"You are not an active employee at {titlecase(user.entity.title)}")
-        # raise exceptions.ValidationError(
-        #     f"You are not an active employee at {user.entity.title}"
-        # )
-
-    if ("manufacture_date" in data["retailer_receipt_details"] and
-        data["retailer_receipt_details"]["manufacture_date"]
-        and not data["retailer_receipt_details"]["manufacture_date"] == ""
-    ):
-        manufacture_date = data["retailer_receipt_details"]["manufacture_date"]
-
-    if ("expiry_date" in data["retailer_receipt_details"] and
-        data["retailer_receipt_details"]["expiry_date"]
-        and not data["retailer_receipt_details"]["expiry_date"] == ""
-    ):
-        expiry_date = data["retailer_receipt_details"]["expiry_date"]
-    
-
-
-    if "received_from" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["received_from"]=="":
-        received_from_id = data["retailer_receipt_details"]["received_from"]
-        if not received_from_id == "":
-            received_from = validate_entity(received_from_id)
-
-    if "retailer_order_item" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["retailer_order_item"]=="":
-        retailer_order_item_id = data["retailer_receipt_details"]["retailer_order_item"]
-        if RetailerOrderItems.objects.filter(id=retailer_order_item_id).exists():
-            retailer_order_item=RetailerOrderItems.objects.filter(id=retailer_order_item_id).first()
-
-            # Check if order item is already received
-            if retailer_order_item and retailer_order_item.is_received=="true":
+        if retailer_order_item:
+            if retailer_order_item.is_received == "true":
                 errors.append("Item is already received into inventory")
-                return errors,None
-            if not retailer_order_item.retailer_order.status=="RECEIVED":
-                errors.append("Order status for this item is not yet set to RECEIVED ")
-                return errors,None
-    
-    
-    if "received_unit_quantity" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["received_unit_quantity"]=="":
-        received_unit_quantity = int(data["retailer_receipt_details"]["received_unit_quantity"])
-    
-    
+                return errors, None
+            if retailer_order_item.retailer_order.status != "RECEIVED":
+                errors.append(
+                    "Order status for this item is not yet set to RECEIVED"
+                )
+                return errors, None
 
-       
-    if "unit_selling_price" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["unit_selling_price"]=="":
-        unit_selling_price = float(data["retailer_receipt_details"]["unit_selling_price"] )
-    
-    if ("unit_price_discount" in data["retailer_receipt_details"] and
-        data["retailer_receipt_details"]["unit_price_discount"]
-        and not data["retailer_receipt_details"]["unit_price_discount"] == ""
-    ):
-        unit_price_discount = float(data["retailer_receipt_details"]["unit_price_discount"])
+    received_unit_quantity = _to_int(
+        details.get("received_unit_quantity")
+    )
+    unit_selling_price = _to_decimal(details.get("unit_selling_price"))
+    unit_price_discount = _to_decimal(details.get("unit_price_discount"))
+    unit_buying_price = _to_decimal(details.get("unit_buying_price"))
+    unit_of_receipt = details.get("unit_of_receipt") or "Piece"
 
-        final_unit_selling_price=unit_selling_price-unit_price_discount
-    else:
-        final_unit_selling_price=unit_selling_price
-   
-    if "unit_of_receipt" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["unit_of_receipt"]=="":
-        unit_of_receipt = data["retailer_receipt_details"]["unit_of_receipt"]  
-    
+    product_id = details.get("product")
+    product = Products.objects.filter(id=product_id).first()
+    if not product:
+        errors.append("Product with supplied ID does not exist")
+        return errors, None
 
-    product_id = data["retailer_receipt_details"]["product"]
-    if Products.objects.filter(id=product_id).exists():
-        product = Products.objects.get(id=product_id)
-    if "batch" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["batch"]=="":
-        batch = data["retailer_receipt_details"]["batch"]
-    
-    if "bar_code" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["bar_code"]=="":
-        bar_code = data["retailer_receipt_details"]["bar_code"]
+    batch = details.get("batch") or None
+    bar_code = details.get("bar_code") or ""
 
-
-
-
-
+    a_minute_ago = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    if RetailerReceipts.objects.filter(
+        product_id=product_id,
+        received_unit_quantity=received_unit_quantity,
+        created__gte=a_minute_ago,
+    ).exists():
+        errors.append("You added a similar item less than a minute ago")
+        return errors, None
 
     try:
-
-        a_minute_ago = datetime.datetime.now() - datetime.timedelta(minutes=1)
-        #     print("a_minute_ago", a_minute_ago)
-            # print('created ago', item.created)
-
-        if RetailerReceipts.objects.filter(
-            product_id=product_id,
+        created = RetailerReceipts.objects.create(
+            unit_of_receipt=unit_of_receipt,
+            product=product,
+            received_from=received_from,
+            entity=user.entity,
+            owner=user,
             received_unit_quantity=received_unit_quantity,
-            created__gte=a_minute_ago,
-        ).exists():
+            current_unit_quantity=received_unit_quantity,
+            manufacture_date=manufacture_date,
+            expiry_date=expiry_date,
+            batch=batch,
+            bar_code=bar_code,
+            employee=employee,
+            draft_id=draft_id,
+            retailer_order_item=retailer_order_item,
+            unit_buying_price=unit_buying_price,
+            unit_selling_price=unit_selling_price,
+            units_per_pack=product.units_per_pack,
+            unit_price_discount=unit_price_discount,
+        )
 
-            errors.append(
-                f"You added similar item 1 minutes ago"
-            )
+        if retailer_order_item:
+            retailer_order_item.is_received = "true"
+            retailer_order_item.save(update_fields=["is_received", "updated"])
 
-            return errors,None
-        else:
-            created = RetailerReceipts.objects.create(
-                unit_of_receipt=unit_of_receipt,
-                product=product,
-                received_from=received_from,
-                entity=user.entity,
-                owner=user,
-                received_unit_quantity=received_unit_quantity,
-                current_unit_quantity=received_unit_quantity,
-                manufacture_date=manufacture_date,
-                expiry_date=expiry_date,
-                batch=batch,
-                bar_code=bar_code,
-                employee=employee,
-                draft_id=draft_id,
-                retailer_order_item=retailer_order_item,
-                unit_selling_price=unit_selling_price,
-                units_per_pack=product.units_per_pack,
-                unit_price_discount=unit_price_discount,
-                final_unit_selling_price=final_unit_selling_price,
-       
-                
-            )
-
-            if created:
-                if retailer_order_item:
-                    retailer_order_item.is_received="true"
-                    retailer_order_item.save()
-
-                return [], created
-
+        return [], created
     except Exception as e:
         errors.append(str(e))
-        return errors,None
+        return errors, None
 
 
 def validate_retailer_receipt_update_data(data):
@@ -1120,131 +1015,78 @@ def validate_retailer_receipt_update_data(data):
 
 @transaction.atomic
 def update_retailer_receipt_directly(data, user):
-    retailer_receipt = None
-    current_unit_quantity = 0
-    bar_code = None
-    batch = None
-    received_from = None
-    unit_buying_price = 0.00
-    unit_selling_price = 0.00
-    manufacture_date = ""
-    expiry_date = ""
-    quantity_discount = None
-    is_active = None
-    unit_of_receipt = None
-    unit_price_discount = 0.00
-    final_unit_selling_price = 0.00
+    details = data.get("retailer_receipt_details", {})
+    receipt = RetailerReceipts.objects.filter(
+        id=data["retailer_receipt"]
+    ).first()
+    if not receipt:
+        raise exceptions.ValidationError("Retailer receipt not found")
 
-    if "is_active" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["is_active"]:
-            is_active = data["retailer_receipt_details"]["is_active"]
-    if "current_unit_quantity" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["current_unit_quantity"]:
-            current_unit_quantity = int(data["retailer_receipt_details"]["current_unit_quantity"])
+    changed = []
 
-    if "received_from" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["received_from"]=="":
-        if data["retailer_receipt_details"]["received_from"]:
-            received_from_id = data["retailer_receipt_details"]["received_from"]
-            received_from = validate_entity(received_from_id)
+    if details.get("current_unit_quantity"):
+        receipt.current_unit_quantity = _to_int(
+            details["current_unit_quantity"]
+        )
+        changed.append("current_unit_quantity")
 
+    if details.get("unit_of_receipt"):
+        receipt.unit_of_receipt = details["unit_of_receipt"]
+        changed.append("unit_of_receipt")
 
-    if "unit_selling_price" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["unit_selling_price"]=="":
-        if data["retailer_receipt_details"]["unit_selling_price"]:
-            unit_selling_price = float(data["retailer_receipt_details"]["unit_selling_price"])
-    
+    if details.get("received_from"):
+        receipt.received_from = validate_entity(details["received_from"])
+        changed.append("received_from")
 
-    if "unit_buying_price" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["unit_buying_price"]=="":
-        if data["retailer_receipt_details"]["unit_buying_price"]:
-            unit_buying_price = float(data["retailer_receipt_details"]["unit_buying_price"])
+    if details.get("unit_selling_price"):
+        receipt.unit_selling_price = _to_decimal(
+            details["unit_selling_price"]
+        )
+        changed.append("unit_selling_price")
 
-    if "batch" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["batch"]:
-            batch = data["retailer_receipt_details"]["batch"]
+    if details.get("unit_buying_price"):
+        receipt.unit_buying_price = _to_decimal(
+            details["unit_buying_price"]
+        )
+        changed.append("unit_buying_price")
 
-    if "bar_code" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["bar_code"]:
-            bar_code = data["retailer_receipt_details"]["bar_code"]
+    if details.get("unit_price_discount"):
+        receipt.unit_price_discount = _to_decimal(
+            details["unit_price_discount"]
+        )
+        changed.append("unit_price_discount")
 
-    if "unit_price_discount" in data["retailer_receipt_details"] and not data["retailer_receipt_details"]["unit_price_discount"]=="":
-        if data["retailer_receipt_details"]["unit_price_discount"]:
-            unit_price_discount = float(data["retailer_receipt_details"]["unit_price_discount"])
+    if details.get("batch"):
+        receipt.batch = details["batch"]
+        changed.append("batch")
 
-    if "manufacture_date" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["manufacture_date"]:
-            manufacture_date = data["retailer_receipt_details"]["manufacture_date"]
-    if "expiry_date" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["expiry_date"]:
-            expiry_date = data["retailer_receipt_details"]["expiry_date"]
+    if details.get("bar_code"):
+        bar_code = details["bar_code"]
+        if not receipt.product.bar_code:
+            receipt.product.bar_code = bar_code
+            receipt.product.save(update_fields=["bar_code"])
+        receipt.bar_code = bar_code
+        changed.append("bar_code")
 
-    if "unit_of_receipt" in data["retailer_receipt_details"]:
-        if data["retailer_receipt_details"]["unit_of_receipt"]:
-            unit_of_receipt = data["retailer_receipt_details"]["unit_of_receipt"]
-    try:
-        if RetailerReceipts.objects.filter(id=data["retailer_receipt"]).exists():
-            print("Retailer receipt iko")
-            retailer_receipt = RetailerReceipts.objects.get(id=data["retailer_receipt"])
+    if details.get("manufacture_date"):
+        receipt.manufacture_date = details["manufacture_date"]
+        changed.append("manufacture_date")
 
-            if current_unit_quantity and current_unit_quantity>0:
-                retailer_receipt.current_unit_quantity = current_unit_quantity
-                retailer_receipt.save()
-              
-      
-            if unit_of_receipt:
-                retailer_receipt.unit_of_receipt = unit_of_receipt
-                retailer_receipt.save()
+    if details.get("expiry_date"):
+        receipt.expiry_date = details["expiry_date"]
+        changed.append("expiry_date")
 
+    if details.get("is_active"):
+        receipt.is_active = details["is_active"]
+        changed.append("is_active")
 
-            if received_from:
-                retailer_receipt.received_from = received_from
-                retailer_receipt.save()
+    if changed:
+        changed.append("final_unit_selling_price")
+        changed.append("updated")
+        receipt.save(update_fields=changed)
 
+    return receipt
 
-            if unit_selling_price:
-                retailer_receipt.unit_selling_price = unit_selling_price
-                retailer_receipt.save()
-                
-            if unit_buying_price:
-                retailer_receipt.unit_buying_price = unit_buying_price
-                retailer_receipt.save()
-            
-            if unit_price_discount:
-                retailer_receipt.unit_price_discount = unit_price_discount
-                retailer_receipt.final_unit_selling_price = retailer_receipt.unit_selling_price - unit_price_discount
-                retailer_receipt.save()
-
-            if batch:
-                retailer_receipt.batch = batch
-                retailer_receipt.save()
-
-            if bar_code:
-                if not retailer_receipt.product.bar_code:
-                    retailer_receipt.product.bar_code = bar_code
-                    retailer_receipt.product.save()
-                retailer_receipt.bar_code=bar_code
-                retailer_receipt.save()
-
-
-            if manufacture_date:
-                retailer_receipt.manufacture_date = manufacture_date
-                retailer_receipt.save()
-            if expiry_date:
-                retailer_receipt.expiry_date = expiry_date
-                retailer_receipt.save()
-
-
-            # Fire notification to followers
-            if quantity_discount:
-                retailer_receipt.quantity_discount_id = quantity_discount
-                retailer_receipt.save()
-            if is_active:
-                retailer_receipt.is_active = is_active
-                retailer_receipt.save()
-            return retailer_receipt
-    except Exception as e:
-        raise exceptions.ValidationError(e)
-
-
-# New beginnings
 
 def get_user_own_orders(user, data):
     # today = timezone.now().date()
@@ -1507,111 +1349,51 @@ def validate_customer_order_data(data, user):
         raise exceptions.ValidationError(errors)
     else:
         return
+
+
 @transaction.atomic
-def create_estimate_indent(data,user):
+def create_estimate_indent(data, user):
+    errors = []
+    order_days = data.get("order_days")
+    lead_time = data.get("lead_time")
+    indent_items = data.get("indent_items")
 
-    errors=[]
-    lead_time=None
-    order_days=None
-    indent_items=None
-    retailer_indent=None
-    discount_quantity=0.00
-    price_discount=0.00
-   
-
-    if not "order_days" in data or data["order_days"]==None:
-        errors.append("Number of days the order inventory is projected to last is required")
+    if not order_days:
+        errors.append(
+            "Number of days the order inventory is projected to last "
+            "is required"
+        )
         return errors, None
-    else:
-        order_days=data['order_days']
-
-
-    if not "lead_time" in data or data["lead_time"]==None:
+    if lead_time is None:
         errors.append("Lead time is required")
         return errors, None
-    else:
-        lead_time = data['lead_time']
-
-    if not "indent_items" in data or data["indent_items"]==[]:
+    if not indent_items:
         errors.append("Add indent items")
         return errors, None
-    else:
-        indent_items = data["indent_items"]
 
+    header_errors, indent = create_retailer_indent(
+        {
+            "order_days": order_days,
+            "lead_time": lead_time,
+        },
+        user,
+    )
+    if header_errors:
+        return header_errors, None
 
+    for entry in indent_items:
+        item_errors, item = create_retailer_indent_item(
+            {
+                "retailer_indent": indent.id,
+                "wholesale_receipt": entry.get("offer_id"),
+                "required_quantity": entry.get("required_estimate"),
+            },
+            user,
+        )
+        if item_errors:
+            errors.extend(item_errors)
 
-    indent_number = generate_document_number(user.entity, user,"INDENT")
-    retailer_indent = RetailerIndent.objects.create(
-            indent_number=indent_number,
-            owner=user, 
-            is_open ="true",
-            order_days=order_days,
-            lead_time=lead_time,
-            entity=user.entity
-            )
-    
-
-    for item in indent_items:
-        print(indent_items)
-        created = RetailerIndentItem.objects.create(owner=user,
-    
-                                        wholesale_receipt_id=item['offer_id'], 
-                                        required_quantity =item['required_estimate'], 
-                                        total_quantity =item['required_estimate'], 
-                                        retailer_indent=retailer_indent,
-                                       entity=user.entity)
-    
-        
-    if RetailerIndentItem.objects.filter(retailer_indent=retailer_indent).exists():
-            indent_items =RetailerIndentItem.objects.filter(retailer_indent=retailer_indent).all()
-
-            create_log("info", f"Indent items: {indent_items}")
-
-            unique_wholesalers= list(set(map(get_wholesaler_from_indent_item, indent_items)))
-            print("unique_wholesalers",unique_wholesalers)
-
-            for wholesaler in unique_wholesalers:
-                unique_wholesale_items = get_indent_items_for_wholesaler(wholesaler,indent_items)
-                print("unique_wholesale_items",unique_wholesale_items)
-                if len(unique_wholesale_items)>0:
-                    document_number = generate_document_number(user.entity,user,"RETAILERORDER")
-                    retailer_order = RetailerOrders.objects.create(document_number=document_number,owner=user,retailer=retailer_indent.entity,wholesaler=wholesaler,entity=user.entity,status="SUBMITTED",order_origin="RETAILER")
-                    if retailer_order:
-                        for item in unique_wholesale_items:
-                            if WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).exists():
-                                quantity_discounts = WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).all()
-
-                                for qd in quantity_discounts:
-                                    #TODO: Refine the price discount code
-                                    if int(item.required_quantity) < int(qd.limit_quantity):
-                                        if (int(item.required_quantity) % int(qd.limit_quantity)) <qd.limit_quantity:
-                                            discount_quantity=qd.awarded_quantity
-
-                            if WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).exists():
-                                price_discount =WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).first()
-                            
-                            
-                            created_item = RetailerOrderItems.objects.create(
-                                retailer_order=retailer_order,
-                                wholesaler_receipt=item.wholesale_receipt,
-                                purchased_quantity=item.required_quantity,
-                                entity =retailer_indent.entity,
-                                discount_quantity=discount_quantity,
-                                total_quantity=item.required_quantity+ discount_quantity,
-                                item_price_total=float(item.required_quantity)*float(item.wholesale_receipt.unit_selling_price),
-                                owner =user,
-                                item_net_price =float(item.wholesale_receipt.unit_selling_price)
-                                )
-                            
-                        
-
-                    else:
-                        errors.append("Retailer order not created")
-                        return errors,None
-    return [], retailer_indent
-
-
-
+    return errors, indent
 
 
 from decimal import Decimal, InvalidOperation
@@ -1802,88 +1584,111 @@ def get_indent_items_for_wholesaler(wholesale,indent_items):
     
     return wholesaler_items
 
+
 @transaction.atomic
 def close_retailer_indent(data, user):
-    from wholesalers.models import RetailerOrders,RetailerOrderItems,WholesalerQuantityDiscounts
-    errors=[]
-    indent_id =None
-    indent=None
-    indent_items =None
-    discount_quantity=0.00
-    unique_wholesalers =[]
-    if not "indent" in data or data["indent"]==None:
+    from wholesalers.models import RetailerOrders, RetailerOrderItems
+
+    errors = []
+    indent_id = data.get("indent")
+    if not indent_id:
         errors.append("Indent ID is required")
         return errors, None
-    else:
-        indent_id= data["indent"]
-    if RetailerIndent.objects.filter(id=indent_id).exists():
-        indent =RetailerIndent.objects.filter(id=indent_id).first()
-        if indent.is_open=="false":
-            errors.append("Indent is already closed")
-            return errors,None
-        
 
+    indent = RetailerIndent.objects.filter(id=indent_id).first()
+    if not indent:
+        errors.append("Indent with provided ID does not exist")
+        return errors, None
 
+    if indent.is_open == "false":
+        errors.append("Indent is already closed")
+        return errors, None
 
-        if RetailerIndentItem.objects.filter(retailer_indent=indent).exists():
-            indent_items =RetailerIndentItem.objects.filter(retailer_indent=indent).all()
-    
-            unique_wholesalers= list(set(map(get_wholesaler_from_indent_item, indent_items)))
-            create_log("info",f"Wholesalers{unique_wholesalers}")
+    indent_items = list(
+        RetailerIndentItem.objects
+        .filter(retailer_indent=indent)
+        .select_related(
+            "wholesale_receipt__received_from",
+            "wholesaler_price_discount",
+            "wholesaler_quantity_discount",
+        )
+    )
+    if not indent_items:
+        errors.append("Indent has no items")
+        return errors, None
 
-            for wholesaler in unique_wholesalers:
-                unique_wholesale_items = get_indent_items_for_wholesaler(wholesaler,indent_items)
-                print("unique_wholesale_items",unique_wholesale_items)
-                if len(unique_wholesale_items)>0:
-                    document_number = generate_document_number(user.entity,user,"RETAILERORDER")
-                    retailer_order = RetailerOrders.objects.create(document_number=document_number,owner=user,retailer=indent.entity,wholesaler=wholesaler,entity=user.entity,status="SUBMITTED",order_origin="RETAILER")
-                    if retailer_order:
-                        for item in unique_wholesale_items:
-                            if WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).exists():
-                                quantity_discounts = WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).all()
+    by_wholesaler = {}
+    for item in indent_items:
+        if not item.wholesale_receipt:
+            errors.append(f"Item {item.id} has no receipt")
+            continue
+        wid = item.wholesale_receipt.received_from_id
+        if wid is None:
+            errors.append(
+                f"Receipt {item.wholesale_receipt_id} has no wholesaler"
+            )
+            continue
+        by_wholesaler.setdefault(wid, []).append(item)
 
-                                for qd in quantity_discounts:
-                                    #TODO: Refine the price discount code
-                                    if int(item.required_quantity) < int(qd.limit_quantity):
-                                        if (int(item.required_quantity) % int(qd.limit_quantity)) <qd.limit_quantity:
-                                            discount_quantity=qd.awarded_quantity
+    for wid, group in by_wholesaler.items():
+        document_number = generate_document_number(
+            user.entity, user, "RETAILERORDER",
+        )
+        order = RetailerOrders.objects.create(
+            document_number=document_number,
+            owner=user,
+            retailer=indent.entity,
+            wholesaler_id=wid,
+            entity=user.entity,
+            status="SUBMITTED",
+            order_origin="RETAILER",
+        )
 
-                            if WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).exists():
-                                price_discount =WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=item.wholesale_receipt).first()
-                            
-                            
-                            created_item = RetailerOrderItems.objects.create(
-                                retailer_order=retailer_order,
-                                wholesaler_receipt=item.wholesale_receipt,
-                                purchased_quantity=item.required_quantity,
-                                entity =indent.entity,
-                                discount_quantity=discount_quantity,
-                                total_quantity=item.required_quantity+ discount_quantity,
-                                item_price_total=float(item.required_quantity)*float(item.wholesale_receipt.unit_selling_price),
-                                owner =user,
-                                item_net_price =float(item.wholesale_receipt.unit_selling_price)
-                                )
-                            
-                        
+        for indent_item in group:
+            qd = indent_item.wholesaler_quantity_discount
+            if (
+                qd is not None
+                and (qd.limit_quantity or 0) > 0
+                and (qd.awarded_quantity or 0) > 0
+            ):
+                blocks = indent_item.required_quantity // qd.limit_quantity
+                discount_quantity = blocks * qd.awarded_quantity
+            else:
+                discount_quantity = 0
 
-                    else:
-                        errors.append("Retailer order not created")
-                        return errors,None
-                    
-       
-            indent.is_open="false"
-            indent.save()
-            return [],indent
-    
-        else:
-            errors.append("Indent has no items")
-            return errors,None
-    
-    else:
-        errors.append("Indent with provided ID does not exist()")
-        return errors,None
+            est = indent_item.profit_estimate or {}
+            cost_unit = _q(est.get("cost_per_unit") or 0)
+            sell_unit = _q(est.get("sell_per_unit") or 0)
+            purchased_qty = int(indent_item.required_quantity or 0)
 
+            RetailerOrderItems.objects.create(
+                retailer_order=order,
+                retailer_indent_item=indent_item,
+                wholesaler_receipt=indent_item.wholesale_receipt,
+                purchased_quantity=purchased_qty,
+                discount_quantity=discount_quantity,
+                total_quantity=purchased_qty + discount_quantity,
+                unit_of_issue=getattr(
+                    indent_item.wholesale_receipt,
+                    "unit_of_receipt", "Pack",
+                ),
+                item_price=cost_unit,
+                item_price_total=_q(cost_unit * purchased_qty),
+                item_final_price=cost_unit,
+                item_final_price_total=_q(cost_unit * purchased_qty),
+                item_net_price=cost_unit,
+                item_net_price_total=_q(cost_unit * purchased_qty),
+                intended_retail_unit_price=sell_unit,
+                intended_retail_unit_price_source=est.get(
+                    "pricing_source", "markup",
+                ),
+                entity=indent.entity,
+                owner=user,
+            )
 
+    indent.is_open = "false"
+    indent.save(update_fields=["is_open", "updated"])
+    return [], indent
 
 
 @transaction.atomic
@@ -1939,81 +1744,45 @@ from wholesalers import (
 
 @transaction.atomic
 def create_retailer_indent_item(data, user):
-    """
-    Create or update a line on the retailer's open indent.
+    from retailers.models import IndentItemSource
 
-    The line's pricing, bonus, and profit are NOT set here —
-    `RetailerIndentItem.recalculate()` derives them on save
-    from the supplier chain and `required_quantity`. The
-    parent's aggregates are updated by the item post_save
-    signal.
-    """
     errors = []
 
-    # -----------------------------------------------------------------
-    # retailer_indent
-    # -----------------------------------------------------------------
     retailer_indent = None
     raw_indent_id = data.get("retailer_indent")
-
     if not raw_indent_id:
         errors.append("Indent ID is required")
     else:
-        retailer_indent = (
-            RetailerIndent.objects
-            .filter(id=raw_indent_id)
-            .first()
-        )
-
-        if retailer_indent is None:
-            # Missing ID → create a fresh open indent.
-            retailer_indent = _create_open_indent(user)
-        elif retailer_indent.is_open == "false":
-            # Existing indent is closed → start a new open one.
+        retailer_indent = RetailerIndent.objects.filter(
+            id=raw_indent_id,
+        ).first()
+        if retailer_indent is None or retailer_indent.is_open == "false":
             retailer_indent = _create_open_indent(user)
 
-    # -----------------------------------------------------------------
-    # wholesale_receipt
-    # -----------------------------------------------------------------
     wholesale_receipt = None
     raw_receipt_id = data.get("wholesale_receipt")
-
     if not raw_receipt_id:
         errors.append("Wholesale product ID is required")
     else:
         wholesale_receipt = (
-            wholesalers_models_validators
-            .validate_wholesaler_receipt(raw_receipt_id)
+            wholesalers_models_validators.validate_wholesaler_receipt(
+                raw_receipt_id
+            )
         )
         if wholesale_receipt is None:
             errors.append("Wholesale product not found")
 
-    # -----------------------------------------------------------------
-    # required_quantity
-    # -----------------------------------------------------------------
     required_quantity = None
     raw_qty = data.get("required_quantity")
-
     if raw_qty in (None, 0, "0", ""):
         errors.append("Quantity is required")
     else:
-        try:
-            required_quantity = int(raw_qty)
-        except (TypeError, ValueError):
-            errors.append("Quantity must be an integer")
-        else:
-            if required_quantity <= 0:
-                errors.append(
-                    "Quantity must be greater than zero"
-                )
+        required_quantity = _to_int(raw_qty)
+        if required_quantity <= 0:
+            errors.append("Quantity must be greater than zero")
 
-    # -----------------------------------------------------------------
-    # source (was indenting_criteria)
-    # -----------------------------------------------------------------
     source = IndentItemSource.MANUAL
-    raw_source = data.get("source") or data.get(
-        "indenting_criteria"
-    )
+    raw_source = data.get("source") or data.get("indenting_criteria")
     if raw_source:
         raw_source = str(raw_source).upper()
         valid_sources = {c[0] for c in IndentItemSource.choices}
@@ -2024,11 +1793,6 @@ def create_retailer_indent_item(data, user):
                 f"source must be one of {sorted(valid_sources)}"
             )
 
-    # -----------------------------------------------------------------
-    # Discounts — optional. If the client doesn't pass them,
-    # the model's recalculate() will still derive pricing from
-    # the receipt's list price.
-    # -----------------------------------------------------------------
     wholesaler_price_discount = None
     raw_pd = data.get("wholesaler_price_discount")
     if raw_pd:
@@ -2037,9 +1801,7 @@ def create_retailer_indent_item(data, user):
             .validate_wholesaler_price_discount(raw_pd)
         )
         if wholesaler_price_discount is None:
-            errors.append(
-                "Price discount not found"
-            )
+            errors.append("Price discount not found")
 
     wholesaler_quantity_discount = None
     raw_qd = data.get("wholesaler_quantity_discount")
@@ -2049,48 +1811,36 @@ def create_retailer_indent_item(data, user):
             .validate_wholesaler_quantity_discount(raw_qd)
         )
         if wholesaler_quantity_discount is None:
-            errors.append(
-                "Quantity discount not found"
-            )
+            errors.append("Quantity discount not found")
+
+    campaign_item = None
+    raw_campaign_item = data.get("campaign_item")
+    if raw_campaign_item:
+        try:
+            from campaigns.models import WholesalerCampaignItem
+            campaign_item = WholesalerCampaignItem.objects.filter(
+                id=raw_campaign_item
+            ).first()
+        except ImportError:
+            campaign_item = None
 
     if errors:
         return errors, None
 
-    # -----------------------------------------------------------------
-    # Upsert
-    #
-    # The line's `total_quantity`, `profit_estimate`,
-    # `bonus_*`, `supplier_unit_selling_price`,
-    # `recommended_retail_price`, and `markup_percentage_used`
-    # are filled in by `RetailerIndentItem.save()`.
-    # -----------------------------------------------------------------
-    existing = (
-        RetailerIndentItem.objects
-        .filter(
-            wholesale_receipt=wholesale_receipt,
-            retailer_indent=retailer_indent,
-            entity=user.entity,
-        )
-        .first()
-    )
+    existing = RetailerIndentItem.objects.filter(
+        wholesale_receipt=wholesale_receipt,
+        retailer_indent=retailer_indent,
+        entity=user.entity,
+    ).first()
 
     if existing:
         existing.required_quantity = required_quantity
         existing.source = source
-        existing.wholesaler_price_discount = (
-            wholesaler_price_discount
-        )
-        existing.wholesaler_quantity_discount = (
-            wholesaler_quantity_discount
-        )
-        existing.save(update_fields=[
-            "required_quantity",
-            "source",
-            "wholesaler_price_discount",
-            "wholesaler_quantity_discount",
-            "updated",
-        ])
-        print("Updated indent item", existing.id)
+        existing.wholesaler_price_discount = wholesaler_price_discount
+        existing.wholesaler_quantity_discount = wholesaler_quantity_discount
+        if campaign_item is not None:
+            existing.campaign_item = campaign_item
+        existing.save()
         return [], existing
 
     created = RetailerIndentItem.objects.create(
@@ -2102,8 +1852,8 @@ def create_retailer_indent_item(data, user):
         source=source,
         wholesaler_price_discount=wholesaler_price_discount,
         wholesaler_quantity_discount=wholesaler_quantity_discount,
+        campaign_item=campaign_item,
     )
-    print("Created indent item", created.id)
     return [], created
 
 
@@ -2192,12 +1942,24 @@ def update_out_of_stock_item(data, user):
 
 
 def update_wholesaler_stock(retailer_order):
-    retailer_order_items = RetailerOrderItems.objects.filter(retailer_order=retailer_order).all()
+    retailer_order_items = RetailerOrderItems.objects.filter(
+        retailer_order=retailer_order,
+    )
     for roi in retailer_order_items:
-        wholesaler_receipt = WholesalerReceipts.objects.filter(id=roi.wholesaler_receipt.id).first()
+        wholesaler_receipt = WholesalerReceipts.objects.filter(
+            id=roi.wholesaler_receipt_id,
+        ).first()
         if wholesaler_receipt:
-            wholesaler_receipt.pack_quantity=wholesaler_receipt.pack_quantity-roi.total_quantity
-            wholesaler_receipt.save()
+            wholesaler_receipt.current_unit_quantity = max(
+                0,
+                (wholesaler_receipt.current_unit_quantity or 0)
+                - roi.total_quantity,
+            )
+            wholesaler_receipt.save(
+                update_fields=["current_unit_quantity"]
+            )
+
+
 
 def process_retailer_order_payment(retailer_order,payment_method,user,mobile_money_phone):
     retailer_order_payment=None
@@ -2435,71 +2197,69 @@ def make_retailer_order_payment(data,user):
 
 
 @transaction.atomic
-def make_customer_order_payment(data,user):
-    errors =[]
-    customer_order_id=None
-    customer_order=None
-    payment_method_id=None
-    customer_order=None
-    payment_method=None
-    mobile_money_phone=None
-    reference_number =None
-    order_items =[]
-    if not "customer_order" in data or data['customer_order']==None:
-        errors.append("Retailer order ID is required")
-        return errors,None
-    else:
-        customer_order_id = data['customer_order']
-        if CustomerOrders.objects.filter(id=customer_order_id).exists():
-            customer_order=CustomerOrders.objects.filter(id=customer_order_id).first()
-        else:
-            errors.append("Customer order for provided ID does not exist")
-            return errors,None
-    
-    if customer_order:
-        if CustomerOrderItems.objects.filter(customer_order=customer_order).exists():
-            order_items =  CustomerOrderItems.objects.filter(customer_order=customer_order).all()
-    
-    if not "payment_method" in data or data['payment_method']==None:
+def make_customer_order_payment(data, user):
+    errors = []
+    customer_order = None
+    payment_method = None
+    mobile_money_phone = None
+
+    customer_order_id = data.get("customer_order")
+    if not customer_order_id:
+        errors.append("Customer order ID is required")
+        return errors, None
+
+    customer_order = CustomerOrders.objects.filter(
+        id=customer_order_id,
+    ).first()
+    if not customer_order:
+        errors.append("Customer order for provided ID does not exist")
+        return errors, None
+
+    payment_method_id = data.get("payment_method")
+    if not payment_method_id:
         errors.append("Payment method ID is required")
-        return errors,None
-    else:
-        payment_method_id=data['payment_method']
+        return errors, None
 
+    payment_method = PaymentMethods.objects.filter(
+        id=payment_method_id,
+    ).first()
+    if not payment_method:
+        errors.append("Payment method with provided ID does not exist")
+        return errors, None
 
-    if "mobile_money_phone" in data and not data['mobile_money_phone']==None:
-        mobile_money_phone=data['mobile_money_phone']
+    if data.get("mobile_money_phone"):
+        mobile_money_phone = data["mobile_money_phone"]
 
-        
-
-    if CustomerOrderPayment.objects.filter(customer_order=customer_order,status="SUCCESS",is_validated=True).exists():
+    if CustomerOrderPayment.objects.filter(
+        customer_order=customer_order,
+        status="SUCCESS",
+        is_validated=True,
+    ).exists():
         errors.append("Order is already paid")
-        return errors,None
-    else:
-        customer_order_payments = CustomerOrderPayment.objects.filter(customer_order=customer_order).all()
-        for payment in customer_order_payments:
-            payment.is_validated=True
-            payment.save()
+        return errors, None
 
-    if PaymentMethods.objects.filter(id=payment_method_id).exists():
-        payment_method=PaymentMethods.objects.filter(id=payment_method_id).first()
-    else:
-        errors.append("Payment method with provided ID does not exist!")
-        return errors,None
+    if not CustomerOrderItems.objects.filter(
+        customer_order=customer_order,
+    ).exists():
+        errors.append("Order has no items")
+        return errors, None
 
-    reference_number=generate_reference_number(customer_order.entity,user)
-    errors,customer_order = process_customer_order_payment(customer_order.entity,customer_order,payment_method,user,mobile_money_phone,order_items)
+    order_items = CustomerOrderItems.objects.filter(
+        customer_order=customer_order,
+    )
+
+    errors, customer_order = process_customer_order_payment(
+        customer_order.entity,
+        customer_order,
+        payment_method,
+        user,
+        mobile_money_phone,
+        order_items,
+    )
+
     if customer_order:
-
-        return [],customer_order
-    else:
-       
-        return errors,None
-
-    # created = RetailerOrderPayments.objects.create()
-
-    
-
+        return [], customer_order
+    return errors, None
 
 
 # @transaction.atomic
@@ -2706,242 +2466,302 @@ def retrieve_retailer_indent_items(data):
             return arr
         else:
             return []
+
+
 def get_order_price_total(customer_order):
-    customer_order_items =[]
-    order_price_total =0.00
-    if models.CustomerOrderItems.objects.filter(customer_order=customer_order).exists():
-        customer_order_items= models.CustomerOrderItems.objects.filter(customer_order=customer_order).all()
-        for item in customer_order_items:
-            if item.retailer_receipt.unit_price_discount:
-                order_price_total+=float(item.purchased_quantity)*(float(item.retailer_receipt.unit_selling_price)-float(item.retailer_receipt.unit_price_discount))
-            else:
-                order_price_total+=float(item.purchased_quantity)*float(item.retailer_receipt.unit_selling_price)
-    else:
-        return 0.00
-         
-    if customer_order.shipping_cost and customer_order.shipping_cost>0.00:
-        order_price_total+=customer_order.shipping_cost
-    return order_price_total
+    total = (
+        CustomerOrderItems.objects
+        .filter(customer_order=customer_order)
+        .aggregate(total=Sum("item_net_price_total"))["total"]
+    ) or Decimal("0.00")
+
+    if customer_order.shipping_cost and customer_order.shipping_cost > 0:
+        total += Decimal(str(customer_order.shipping_cost))
+
+    return _q(total)
+
+from decimal import Decimal
+from django.db.models import Sum
+from django.utils import timezone
+
+from ..models import CustomerOrderPayment
 
 
+def _q(value):
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"))
 
-# Process customer order payment
-def process_customer_order_payment(entity,customer_order, payment_method,user,mobile_money_phone, order_items):
+def _to_decimal(value, default="0.00"):
+    if value in (None, ""):
+        return Decimal(default)
+    try:
+        return Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation):
+        return Decimal(default)
+def _to_int(value, default=0):
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
     
-    customer_order.selected_payment_method=payment_method
-    customer_order.save()
-    reference_number = generate_reference_number(customer_order.entity,user)
+def recompute_order_payment_state(customer_order):
+    paid_total = (
+        CustomerOrderPayment.objects
+        .filter(customer_order=customer_order, status="SUCCESS")
+        .aggregate(total=Sum("amount"))["total"]
+    ) or Decimal("0.00")
+
+    paid_total = _q(paid_total)
+    owed = _q(customer_order.order_net_price_total or 0)
+    balance = _q(max(Decimal("0.00"), owed - paid_total))
+
+    was_paid = customer_order.is_paid == "true"
+    now_paid = balance <= Decimal("0.00")
+
+    customer_order.paid_total = paid_total
+    customer_order.balance_due = balance
+    customer_order.is_paid = "true" if now_paid else "false"
+
+    if now_paid and customer_order.paid_at is None:
+        customer_order.paid_at = timezone.now()
+    elif not now_paid:
+        customer_order.paid_at = None
+
+    customer_order.save(update_fields=[
+        "paid_total", "balance_due", "is_paid", "paid_at", "updated",
+    ])
+
+    return now_paid and not was_paid
+
+
+def process_customer_order_payment(entity, customer_order, payment_method, user,
+                                   mobile_money_phone, order_items):
+    customer_order.selected_payment_method = payment_method
+    customer_order.save(update_fields=[
+        "selected_payment_method", "updated",
+    ])
+
+    reference_number = generate_reference_number(customer_order.entity, user)
 
     errors = []
     administrator_account = None
-    if payment_method.title=="CASH":
 
-        # Cash payments
+    if payment_method.title == "CASH":
+        try:
+            CustomerOrderPayment.objects.create(
+                payment_method=payment_method,
+                reference_number=reference_number,
+                status="SUCCESS",
+                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                entity=user.entity,
+                currency="KES",
+                owner=user,
+                customer_order=customer_order,
+                is_validated=True,
+            )
+            recompute_order_payment_state(customer_order)
+            customer_order.status = "COMPLETE"
+            customer_order.save(update_fields=["status", "updated"])
+            use_reference_number(reference_number)
+            return [], customer_order
+        except Exception as e:
+            errors.append(str(e))
+            return errors, None
+
+    elif payment_method.title == "CREDIT":
+        customer_order.payment_method = payment_method
+        customer_order.reference_number = reference_number
+        customer_order.status = "DEFERRED"
+        customer_order.save(update_fields=[
+            "payment_method", "reference_number", "status", "updated",
+        ])
+        return [], customer_order
+
+    elif payment_method.title == "MOBILE MONEY":
+        if not UserAccounts.objects.filter(
+            owner=entity.administrator,
+        ).exists():
+            errors.append("Entity admin has no collection account")
+            return errors, None
+
+        administrator_account = UserAccounts.objects.filter(
+            owner=entity.administrator,
+        ).first()
+
+        telco, formatted_phone_number = get_telco_by_phone_number(
+            mobile_money_phone
+        )
+
+        amount = int(customer_order.order_net_price_total or 0)
+
+        payload = None
+        if telco == "MPESA":
+            payload = json.dumps({
+                "orderId": reference_number,
+                "amount": amount,
+                "callBackUrl": (
+                    "https://webhook.site/"
+                    "7911487f-fc9e-46b0-a812-3adfa008375c"
+                ),
+                "accountTo": administrator_account.account_number,
+                "description": "Merchant payment",
+                "modeOfPayment": "MOBILE_MONEY",
+                "provider": "Mpesa",
+                "data": {
+                    "phoneNumber": formatted_phone_number,
+                    "serviceType": "TOPUP",
+                },
+            })
+            create_log(
+                "info",
+                f"create customer order by customer {payload}",
+            )
+        elif telco == "AIRTELMONEY":
+            payload = json.dumps({
+                "orderId": reference_number,
+                "amount": str(amount),
+                "callBackUrl": (
+                    "https://webhook.site/"
+                    "55963e0b-b692-42b6-a682-0223eaf7fbff"
+                ),
+                "accountTo": administrator_account.account_number,
+                "currency": "KES",
+                "description": "TOPUP",
+                "modeOfPayment": "MOBILE_MONEY",
+                "provider": "AIRTELMONEY",
+                "data": {
+                    "phoneNumber": formatted_phone_number,
+                    "serviceType": "TOPUP",
+                },
+            })
+        else:
+            errors.append(f"Unsupported telco: {telco}")
+            return errors, None
+
+        create_log("info", f"just before checkout {payload}")
+
+        the_data = {
+            "client_id": config("JAMBOPAY_CLIENT_ID"),
+            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+            "grant_type": config("JAMBOPA_GRANT_TYPE"),
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        result = requests.post(
+            config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers,
+        )
+        result_json = result.json()
+        token = result_json.get("access_token") if result_json else None
+
+        if not token:
+            errors.append("Token not generated")
+            return errors, None
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token,
+            "Accept": "*/*",
+        }
+        result = requests.post(
+            config("JAMBOPAY_BASE_URL") + "/checkout/express",
+            data=payload,
+            headers=headers,
+        )
+        result_json = result.json()
+        create_log("info", f"result_json {result_json}")
+
+        if not result_json or "ref" not in result_json:
+            create_log("info", f"from jp errors {errors}")
+            errors.append("Payment failed")
+            return errors, None
+
+        try:
+            CustomerOrderPayment.objects.create(
+                payment_method=payment_method,
+                reference_number=reference_number,
+                status="PENDING",
+                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                entity=entity,
+                currency="KES",
+                owner=user,
+                customer_order=customer_order,
+                administrator_account=administrator_account,
+                psp_reference_number=result_json["ref"],
+                telco=telco,
+            )
+            use_reference_number(reference_number)
+            return [], customer_order
+        except Exception as e:
+            errors.append(str(e))
+            return errors, None
+
+    elif payment_method.title == "JAMBOPAY WALLET":
+        if not UserAccounts.objects.filter(
+            owner=user.entity.administrator,
+        ).exists():
+            errors.append("Entity administrator has no collection account")
+            return errors, None
+
+        administrator_account = UserAccounts.objects.filter(
+            owner=user.entity.administrator,
+        ).first()
+
+        errors, wallet = get_account_by_phone(mobile_money_phone)
+        if not wallet:
+            errors.append("No wallet for provided mobile phone")
+            return errors, None
+
+        amount = int(customer_order.order_net_price_total or 0)
+
+        data = {
+            "orderId": reference_number,
+            "amount": amount,
+            "callBackUrl": (
+                "https://webhook.site/"
+                "931bef21-de22-43bc-a45b-7e12999ac9cb"
+            ),
+            "accountTo": administrator_account.account_number,
+            "description": "Customer order payment",
+            "modeOfPayment": "WALLET_AS_SERVICE",
+            "provider": "JAMBOPAY",
+            "data": {
+                "serviceType": "TOPUP",
+                "accountNo": wallet,
+            },
+        }
+        response = jambopay_wallet_checkout(data)
+
+        if "statusCode" in response or "ref" not in response:
+            errors.append("Wallet checkout failed")
+            return errors, None
+
         try:
             customer_order_payment = CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
-                status="SUCCESS",
-                amount=customer_order.order_net_price_total+customer_order.shipping_cost,
+                status="PENDING",
+                amount=customer_order.order_net_price_total or Decimal("0.00"),
                 entity=user.entity,
                 currency="KES",
                 owner=user,
-                customer_order = customer_order,
-                is_validated=True
+                customer_order=customer_order,
+                entity_collection_account=administrator_account,
             )
-        
-            if customer_order_payment:
-                print("Created")
-                # print("payment", customer_order_payment)
-                update_stock(customer_order)
-                customer_order.status="COMPLETE"
-                customer_order.is_paid="true"
-
-                customer_order.save()
-                return [], customer_order
-            else:
-                customer_order.delete()
-                print("Not Created")
-                errors.append("Error while creating customer order payment")
-                return errors, None
+            use_reference_number(reference_number)
+            customer_order.reference_number = reference_number
+            customer_order.payment = customer_order_payment
+            customer_order.save(update_fields=[
+                "reference_number", "payment", "updated",
+            ])
+            return [], customer_order
         except Exception as e:
             errors.append(str(e))
             return errors, None
-    elif payment_method.title=="CREDIT":
-        update_stock(customer_order)
-        customer_order.status="DEFERRED"
-        customer_order.payment_method=payment_method
-        customer_order.reference_number=reference_number
-        customer_order.save()
-        return [], customer_order
 
-   
-
-    elif payment_method.title=="MOBILE MONEY":
-        amount = get_order_price_total(customer_order)
-        print("AMT", amount)
-        print("MOMO")
-       
-        if not UserAccounts.objects.filter(owner = entity.administrator).exists():
-            errors.append("Entity admin has no collection account")
-            return errors, None
-        else:
-            administrator_account =  UserAccounts.objects.filter(owner = entity.administrator).first()
-            print("entity_collection_account",administrator_account)
-      
-            payload = None
-            telco, formatted_phone_number = get_telco_by_phone_number(mobile_money_phone)
-          
-            if telco=="MPESA":
-                payload = json.dumps({
-                    "orderId": reference_number,
-                    "amount": int(customer_order.order_price_total+ customer_order.shipping_cost),
-                    "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-                    "accountTo":  administrator_account.account_number,
-                    "description": "Merchant payment",
-                    "modeOfPayment": "MOBILE_MONEY",
-                    "provider": "Mpesa",
-                    "data": {
-                        "phoneNumber": formatted_phone_number,
-                        "serviceType": "TOPUP"
-                    }
-                    })
-                create_log("info",f"create customer order by customer {payload}")
-            elif telco=="AIRTELMONEY":
-                amount = customer_order.order_price_total+ customer_order.shipping_cost
-                print("AMT", amount)
-                payload = json.dumps({
-                    "orderId": reference_number,
-                    "amount":  str(int(amount)),
-                    "callBackUrl": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
-                    "accountTo":administrator_account.account_number, 
-                    "currency":"KES",
-                    "description": "TOPUP",
-                    "modeOfPayment": "MOBILE_MONEY",
-                    "provider": "AIRTELMONEY",
-                    "data": {
-                        "phoneNumber": formatted_phone_number,
-                        "serviceType": "TOPUP" 
-                    }
-            
-                    })
-            create_log("info",f"just before checkout {payload}")
-            # token = get_auth_token()
-            the_data = {
-                "client_id": config("JAMBOPAY_CLIENT_ID"),
-                "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                "grant_type": config("JAMBOPA_GRANT_TYPE"),
-            }
-            headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            # Execute the post
-            result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-            result_json = result.json()
-            token =None
-            if result_json and result_json["access_token"]:
-                token= result_json["access_token"]
-   
-            if token:
-                headers = {
-                   
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + token,
-                    "Accept": "*/*",
-                }
-
-                result = requests.post(
-                    config("JAMBOPAY_BASE_URL") + "/checkout/express",
-                    data=payload,
-                    headers=headers,
-                )
-                result_json=result.json()
-                create_log("info",f"result_json {result_json}")
-
-                if result_json:
-                    
-                    print("Ikoooo")
-                    customer_order_payment = CustomerOrderPayment.objects.create(
-                        payment_method=payment_method,
-                        reference_number=reference_number,
-                        status="PENDING",
-                        amount=float(customer_order.order_price_total+ customer_order.shipping_cost),
-                        entity=entity,
-                        currency="KES",
-                        owner=user,
-                        customer_order = customer_order,
-                        administrator_account=administrator_account,
-                        psp_reference_number= result_json["ref"],
-                        telco= telco
-                    )
-                    use_reference_number(reference_number)
-                    if customer_order_payment:
-                        return [], customer_order
-                    else:
-                        errors.append("Customer order payment not created")
-                        return errors, None
-                else:
-                    create_log("info",f"from jp errors {errors}")
-                    errors.append("Payment failed")
-                    return errors, None
-            else:
-               
-                errors.append("Token not generated")
-                return errors, None
-    elif payment_method.title=="JAMBOPAY WALLET":
-        if not UserAccounts.objects.filter(owner = user.entity.administrator).exists():
-            errors.append("Entity adminisrator has no collection account")
-            return errors, None
-        else:
-            administrator_account =  UserAccounts.objects.filter(owner = user.entity.administrator).first()
-
-        errors, wallet = get_account_by_phone(mobile_money_phone)
-        if wallet:
-            data ={
-                        "orderId": reference_number,
-                        "amount":  int(customer_order.order_price_total+ customer_order.shipping_cost),
-                        "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
-                        "accountTo": administrator_account.account_number,
-                        "description": "Customer order payment",
-                        "modeOfPayment": "WALLET_AS_SERVICE",
-                        "provider": "JAMBOPAY",
-                        "data": {
-                                "serviceType": "TOPUP",
-                                "accountNo": wallet
-                        }
-                        }
-            response = jambopay_wallet_checkout(data)
-
-            if not "statusCode" in response and  "ref" in response:
-                customer_order_payment = CustomerOrderPayment.objects.create(
-                    payment_method=payment_method,
-                    reference_number=reference_number,
-                    status="PENDING",
-                    amount=float(customer_order.order_price_total+ customer_order.shipping_cost),
-                    entity=user.entity,
-                    currency="KES",
-                    owner=user,
-                    customer_order = customer_order,
-                    entity_collection_account=administrator_account
-                )
-                use_reference_number(reference_number)
-                if customer_order_payment:
-                    customer_order.reference_number=reference_number
-                    customer_order.payment=customer_order_payment
-                    customer_order.save()
-                
-                    return [], customer_order
-                else:
-                    errors.append("Ticket payment not created")
-                    return errors, [], None
-            else:
-                # errors.append( str(response))
-                return errors, None, None
-
-        else:
-            errors.append("No wallet for provided mobile phone")
-            return errors, None
     else:
         errors.append("Unsupported payment method")
-        return errors, None,None
+        return errors, None
+
 
 
 # @transaction.atomic
@@ -2971,124 +2791,165 @@ def process_customer_order_payment(entity,customer_order, payment_method,user,mo
 #     return True
 
 @transaction.atomic
-def create_express_customer_order_data(data,user):
-    errors=[]
-    customer_order=None
-    customer=None
-    payment_method=None
-    order_origin=None
-    order_channel=None
-    payment_account_number=None
-    customer_order_items=[]
-    customer_name=None
-    customer_phone=None
-    due_date=None
-    if not "customer_order_items" in data or data['customer_order_items']==[]:
+def create_express_customer_order_data(data, user):
+    errors = []
+    customer_order = None
+    customer = None
+    payment_method = None
+    order_origin = None
+    order_channel = None
+    payment_account_number = None
+    customer_order_items = []
+    customer_name = None
+    customer_phone = None
+    due_date = None
+
+    if not data.get("customer_order_items"):
         errors.append("Customer order items are required")
-        return errors,None
-    else:
-        customer_order_items =data['customer_order_items']
-        print("Order items",customer_order_items)
-        for customer_order_item in customer_order_items:
-            retailer_receipt =None
-            retailer_receipt =None
-            
-            if RetailerReceipts.objects.filter(id=customer_order_item['product']).exists():
-                retailer_receipt= RetailerReceipts.objects.filter(id=customer_order_item['product']).first()
-                print("ddfd",retailer_receipt)
-                if int(retailer_receipt.current_unit_quantity)<int(customer_order_item['quantity']):
-                    errors.append(f"{retailer_receipt.product.title} has only {retailer_receipt.current_unit_quantity} units left whereas {customer_order_item['quantity']} units are required")
-                    return errors, None
-            else:
-                errors.append("Product with provided product ID does not exist")
-                return errors, None
+        return errors, None
 
-    if "customer" in data:
-        if Users.objects.filter(id=data['customer']).exists():
-            customer = Users.objects.filter(id=data['customer']).first()
-    if "customer_name" in data:
-        customer_name= data['customer_name']
+    customer_order_items = data["customer_order_items"]
 
-    if "customer_phone" in data:
-        customer_phone= data['customer_phone']
+    for entry in customer_order_items:
+        receipt_id = entry.get("product")
+        if not RetailerReceipts.objects.filter(id=receipt_id).exists():
+            errors.append("Product with provided product ID does not exist")
+            return errors, None
 
-    if "due_date" in data:
-        due_date= data['due_date']
+        retailer_receipt = RetailerReceipts.objects.filter(
+            id=receipt_id,
+        ).first()
+        if int(retailer_receipt.current_unit_quantity) < int(
+            entry["quantity"]
+        ):
+            errors.append(
+                f"{retailer_receipt.product.title} has only "
+                f"{retailer_receipt.current_unit_quantity} units left "
+                f"whereas {entry['quantity']} units are required"
+            )
+            return errors, None
 
-    if "payment_method" in data:
-        if PaymentMethods.objects.filter(id=data['payment_method']).exists():
-            payment_method = PaymentMethods.objects.filter(id=data['payment_method']).first()
-            if payment_method.title =="MOBILE MONEY" and not "payment_account_number" in data:
-                errors.append("Mobile money phone number is required")
-                return errors, None
-            else:
-                payment_account_number=data['payment_account_number']
+    if data.get("customer"):
+        customer = Users.objects.filter(id=data["customer"]).first()
 
-    if "order_origin" in data:
-        order_origin = data['order_origin']
+    if data.get("customer_name"):
+        customer_name = data["customer_name"]
 
-    if "order_channel" in data:
-        order_channel = data['order_channel']
+    if data.get("customer_phone"):
+        customer_phone = data["customer_phone"]
 
-    if len(errors)>0:
-        return errors,None
+    if data.get("due_date"):
+        due_date = data["due_date"]
+
+    if data.get("payment_method"):
+        payment_method = PaymentMethods.objects.filter(
+            id=data["payment_method"],
+        ).first()
+        if payment_method.title == "MOBILE MONEY" and not data.get(
+            "payment_account_number"
+        ):
+            errors.append("Mobile money phone number is required")
+            return errors, None
+        payment_account_number = data.get("payment_account_number")
+
+    if data.get("order_origin"):
+        order_origin = data["order_origin"]
+
+    if data.get("order_channel"):
+        order_channel = data["order_channel"]
+
+    if errors:
+        return errors, None
 
     try:
-        order_number = generate_document_number(user.entity, user,"CUSTOMERORDER")
+        order_number = generate_document_number(
+            user.entity, user, "CUSTOMERORDER",
+        )
         customer_order = CustomerOrders.objects.create(
             user=customer,
             owner=user,
             selected_payment_method=payment_method,
             entity=user.entity,
-            order_origin = order_origin,
+            order_origin=order_origin,
             order_channel=order_channel,
             order_number=order_number,
             customer_name=customer_name,
             customer_phone=customer_phone,
-            due_date=due_date
+            due_date=due_date,
         )
 
-        if customer_order and customer_order_items:
-            retailer_receipt = None
-            discount_quantity = 0
-            for item in customer_order_items:
-                if RetailerReceipts.objects.filter(id=item['product']).exists():
-                    retailer_receipt =RetailerReceipts.objects.filter(id=item['product']).first()
-                    customer_irder_item =CustomerOrderItems.objects.create(
-                        unit_of_issue=retailer_receipt.unit_of_receipt,
-                        item_price=float(retailer_receipt.unit_selling_price),
-                        item_price_total=float(item['quantity'])*float(retailer_receipt.unit_selling_price),
-                        quantity=float(item['quantity']),
-                        item_price_discount=float(item['discount']),
-                        total_quantity=int(item['quantity']) + int(discount_quantity),
-                        purchased_quantity=int(item['quantity']),
-                        retailer_receipt=retailer_receipt,
-                        customer_order=customer_order,
-                        owner=user,
-                        entity=user.entity,
-                )
-
-            order_items=CustomerOrderItems.objects.filter(customer_order=customer_order).all()
-            create_log("info", f"Customer order created {customer_order}")
-            create_log("info", f"Customer order created items{order_items}")
-       
-            errors, order_created = process_customer_order_payment(user.entity,customer_order,payment_method,user,payment_account_number, order_items )    
-            if order_created:
-                return [],order_created
-            else:
-                return errors,customer_order
-
-        else:
+        if not customer_order or not customer_order_items:
             errors.append("Order could not be created")
             return errors, None
 
+        for entry in customer_order_items:
+            retailer_receipt = RetailerReceipts.objects.filter(
+                id=entry["product"],
+            ).first()
+            if not retailer_receipt:
+                continue
 
-        return errors, None
+            purchased_qty = _to_int(entry.get("quantity"))
+            discount_quantity = _to_int(entry.get("discount_quantity"))
+            final_unit = _to_decimal(
+                retailer_receipt.final_unit_selling_price
+                or retailer_receipt.unit_selling_price
+            )
+            discount_unit = _to_decimal(entry.get("discount"))
+
+            item_price_total = _q(final_unit * purchased_qty)
+            item_price_discount_total = _q(discount_unit * purchased_qty)
+            item_net_price = _q(final_unit - discount_unit)
+            item_net_price_total = _q(item_net_price * purchased_qty)
+
+            if retailer_receipt.product.is_vatable:
+                item_tax = _q(final_unit * Decimal("0.16"))
+                item_tax_total = _q(item_tax * purchased_qty)
+            else:
+                item_tax = Decimal("0.00")
+                item_tax_total = Decimal("0.00")
+
+            CustomerOrderItems.objects.create(
+                unit_of_issue=retailer_receipt.unit_of_receipt,
+                customer_order=customer_order,
+                retailer_receipt=retailer_receipt,
+                purchased_quantity=purchased_qty,
+                discount_quantity=discount_quantity,
+                total_quantity=purchased_qty + discount_quantity,
+                quantity=purchased_qty,
+                item_price=final_unit,
+                item_price_total=item_price_total,
+                item_price_discount=discount_unit,
+                item_price_discount_total=item_price_discount_total,
+                item_net_price=item_net_price,
+                item_net_price_total=item_net_price_total,
+                item_tax=item_tax,
+                item_tax_total=item_tax_total,
+                owner=user,
+                entity=user.entity,
+            )
+
+        customer_order.recalculate()
+
+        order_items = CustomerOrderItems.objects.filter(
+            customer_order=customer_order,
+        )
+
+        errors, order_created = process_customer_order_payment(
+            user.entity,
+            customer_order,
+            payment_method,
+            user,
+            payment_account_number,
+            order_items,
+        )
+        if order_created:
+            return [], order_created
+        return errors, customer_order
+
     except Exception as e:
         errors.append(str(e))
-        return errors,None
-
-
+        return errors, None
 
 def validate_order_payment_method_data(data):
     errors = []
@@ -3141,155 +3002,149 @@ def re_initiate_order_payment(data, user):
                 # )
             else:
                 raise exceptions.ValidationError("Order already paid for")
-## This is the new method
+
 @transaction.atomic
 def create_customer_order(data, user):
-    errors=[]
-    customer_name = None
-    customer_phone = None
+    errors = []
+
+    customer = None
     entity = None
     order_number = None
     payment_account_number = None
-    payment_method_id = None
     payment_method = None
     delivery_method = None
     order_origin = None
-    shipping_cost = 0.00
-    origin_latitude =0.00
-    origin_longitude =0.00
-    destination_latitude=0.00
-    destination_longitude=0.00
-    farness =0.00
-    origin_point =None
-    destination_point =None
-    draft_id =None
-    recipient_name =None
-    recipient_phone =None
-    customer=None
-    order_tax_total=0.00
-    order_price_discount_total=0.00
-    order_net_price_total=0.00
+    shipping_cost = Decimal("0.00")
+    origin_latitude = None
+    origin_longitude = None
+    destination_latitude = None
+    destination_longitude = None
+    farness = Decimal("0.00")
+    origin_point = None
+    destination_point = None
+    draft_id = None
+    recipient_name = None
+    recipient_phone = None
 
-    order_items =[]
+    order_items = []
 
-    if not "customer_order_details" in data or data['customer_order_details']=="":
+    if not data.get("customer_order_details"):
         errors.append("No order details")
         return errors, None
 
+    details = data["customer_order_details"]
 
-    # Order origin
-    if "order_origin" in data["customer_order_details"]:
-        order_origin = data["customer_order_details"]["order_origin"]
+    order_origin = details.get("order_origin")
+    if not order_origin:
+        errors.append("Order origin is required")
+        return errors, None
 
-        if order_origin=="CUSTOMER":
-            customer=user
-    
-    if "draft_id" in data["customer_order_details"]:
-        draft_id = data["customer_order_details"]["draft_id"]
-    else:
+    if order_origin == "CUSTOMER":
+        customer = user
+
+    draft_id = details.get("draft_id")
+    if not draft_id:
         errors.append("Draft ID is required")
-  
-    
-    if "farness" in data["customer_order_details"] and not data["customer_order_details"]['farness']=="":
-        farness = data["customer_order_details"]["farness"]
 
-    if "origin_latitude" in data["customer_order_details"] and not data["customer_order_details"]['origin_latitude']=="":
-        origin_latitude = data["customer_order_details"]["origin_latitude"]
-    
-    if "entity" in data["customer_order_details"]:
-        entity_id = data["customer_order_details"]["entity"]
-        if Entities.objects.filter(id=entity_id).exists():
-            entity = Entities.objects.filter(id=entity_id).first()
-        else:
-            errors.append("Retailer with proovided ID does not exist")
-    else:
-        entity= user.entity
+    if details.get("farness") not in (None, ""):
+        farness = _to_decimal(details["farness"])
 
- 
-
-    if "origin_longitude" in data["customer_order_details"] and not data["customer_order_details"]['origin_longitude']=="":
-        origin_longitude = data["customer_order_details"]["origin_longitude"]
+    if details.get("origin_latitude") not in (None, ""):
+        origin_latitude = details["origin_latitude"]
+    if details.get("origin_longitude") not in (None, ""):
+        origin_longitude = details["origin_longitude"]
 
     if origin_latitude and origin_longitude:
-        origin_point = Point(origin_longitude, origin_latitude, srid=4326)
-        origin_point = fromstr(f"POINT({origin_longitude} {origin_latitude})", srid=4326)
+        origin_point = fromstr(
+            f"POINT({origin_longitude} {origin_latitude})", srid=4326,
+        )
 
-    if "destination_latitude" in data["customer_order_details"] and not data["customer_order_details"]['destination_latitude']=="":
-        destination_latitude = data["customer_order_details"]["destination_latitude"]
+    if details.get("destination_latitude") not in (None, ""):
+        destination_latitude = details["destination_latitude"]
+    if details.get("destination_longitude") not in (None, ""):
+        destination_longitude = details["destination_longitude"]
 
-    if "destination_longitude" in data["customer_order_details"]and not data["customer_order_details"]['destination_latitude']=="":
-        destination_longitude = data["customer_order_details"]["destination_longitude"]
-    
     if destination_latitude and destination_longitude:
-        destination_point = Point(destination_longitude, destination_latitude, srid=4326)
-        destination_point = fromstr(f"POINT({destination_longitude} {destination_latitude})", srid=4326)
+        destination_point = fromstr(
+            f"POINT({destination_longitude} {destination_latitude})",
+            srid=4326,
+        )
 
-    if "recipient_name" in data["customer_order_details"]:
-        recipient_name = data["customer_order_details"]["recipient_name"]
+    recipient_name = details.get("recipient_name")
+    recipient_phone = details.get("recipient_phone")
 
-    if "recipient_phone" in data["customer_order_details"]:
-        recipient_phone = data["customer_order_details"]["recipient_phone"]
-
-    if "payment_account_number" in data["customer_order_details"]:
-        payment_account_number = data["customer_order_details"]["payment_account_number"]
-    
-    if "shipping_cost" in data["customer_order_details"]:
-        shipping_cost = data["customer_order_details"]["shipping_cost"]
+    entity_id = details.get("entity")
+    if entity_id:
+        entity = Entities.objects.filter(id=entity_id).first()
+        if not entity:
+            errors.append("Retailer with provided ID does not exist")
     else:
-        shipping_cost=0.00
+        entity = user.entity
 
-    # Payment method
-    if "payment_method" in data["customer_order_details"]:
-        payment_method_id = data["customer_order_details"]["payment_method"]
-        payment_method=payments_models_validators.validate_payment_method_exists(payment_method_id)
-    else:
+    payment_account_number = details.get("payment_account_number")
+
+    if details.get("shipping_cost") not in (None, ""):
+        shipping_cost = _to_decimal(details["shipping_cost"])
+
+    payment_method_id = details.get("payment_method")
+    if not payment_method_id:
         errors.append("Payment method is required")
-
-    if "delivery_method" in data["customer_order_details"]:
-        delivery_method = data["customer_order_details"]["delivery_method"]
     else:
+        payment_method = (
+            payments_models_validators.validate_payment_method_exists(
+                payment_method_id
+            )
+        )
+
+    delivery_method = details.get("delivery_method")
+    if not delivery_method:
         errors.append("Delivery method is required")
 
-
-
-    if not "order_items" in data["customer_order_details"] or len(data["customer_order_details"]["order_items"])<1:
+    order_items = details.get("order_items")
+    if not order_items:
         errors.append("Order has no items")
         return errors, None
-    else:
-        order_items = data["customer_order_details"]["order_items"]
-        create_log("info",f"Data items: {order_items}")
-        for item in order_items:
-            retailer_receipt=None
-            purchased_quantity=0
 
-            if item['purchased_quantity'] and int(item['purchased_quantity'])>0:
-                purchased_quantity=int(item['purchased_quantity'])
-            
-            if  item['retailer_receipt'] and not item['retailer_receipt']=="":
-                if models.RetailerReceipts.objects.filter(id=item['retailer_receipt'],current_unit_quantity__gte=0).exists():
-                    retailer_receipt = models.RetailerReceipts.objects.filter(id=item['retailer_receipt'],current_unit_quantity__gte=0).first()
+    create_log("info", f"Data items: {order_items}")
 
-                    if retailer_receipt.current_unit_quantity<purchased_quantity:
-                        errors.append(f"Only {retailer_receipt.current_unit_quantity} available" )
-                        return errors,None
-                else:
-                    errors.append("Item with provided ID does not exist in inventory")
-                    return errors,None
-            else:
-                errors.append("Product ID is required")
-                return errors,None
+    for item in order_items:
+        purchased_quantity = _to_int(item.get("purchased_quantity"))
+        if purchased_quantity <= 0:
+            errors.append("Purchased quantity must be greater than zero")
+            return errors, None
 
+        retailer_receipt_id = item.get("retailer_receipt")
+        if not retailer_receipt_id:
+            errors.append("Product ID is required")
+            return errors, None
 
+        retailer_receipt = models.RetailerReceipts.objects.filter(
+            id=retailer_receipt_id, current_unit_quantity__gte=0,
+        ).first()
+        if not retailer_receipt:
+            errors.append(
+                "Item with provided ID does not exist in inventory"
+            )
+            return errors, None
 
+        if retailer_receipt.current_unit_quantity < purchased_quantity:
+            errors.append(
+                f"Only {retailer_receipt.current_unit_quantity} available"
+            )
+            return errors, None
 
-    if len(errors)>0:
-        return errors,None
-    else:
-        order_number = generate_document_number(entity, user,"CUSTOMERORDER") 
+        if item.get("final_unit_selling_price") in (None, ""):
+            errors.append("Final unit selling price is required")
+            return errors, None
+
+    if errors:
+        return errors, None
+
+    order_number = generate_document_number(
+        entity, user, "CUSTOMERORDER",
+    )
 
     try:
-        
-
         order_created = CustomerOrders.objects.create(
             order_number=order_number,
             payment_account_number=payment_account_number,
@@ -3309,586 +3164,188 @@ def create_customer_order(data, user):
             recipient_name=recipient_name,
             recipient_phone=recipient_phone,
             farness=farness,
-            
         )
 
-        create_log("info",f"Customer order: {order_created}")
+        create_log("info", f"Customer order: {order_created}")
 
-        if order_created:
-            create_log("info",f"Data items: {order_created}")
-            final_price_total= 0.00
-            order_net_price_total=0.00
-            for item in order_items:
-                
-                discount_quantity=0.00
-                item_price_total=0.00
-                item_net_price_total=0.00
-                item_net_price=0.00
-                item_price_discount=0.00
-                item_tax=0.00
-                item_tax_total=0.00
-                item_price_discount_total=0.00
-                final_unit_selling_price=float(item['final_unit_selling_price'])
-                
-                
-                purchased_quantity=item['purchased_quantity']
-                final_price_total+=final_unit_selling_price*float(purchased_quantity)
-                # unit_of_issue=item['unit_of_issue']
-                item_price_total=float(purchased_quantity)*float(final_unit_selling_price)
-                if "discount_quantity" in item:
-                    discount_quantity=item['discount_quantity']
-                create_log("info", "I reached here 2")
-                if "item_price_discount" in item:
-                   
-                    item_price_discount=item['item_price_discount']
-                    item_price_discount_total=float(item_price_discount)- float(purchased_quantity)
-                    item_net_price=float(final_unit_selling_price)- float(discount_quantity)
-                    item_net_price_total=float(item_net_price)*float(purchased_quantity)
-                   
-                else:
-                    item_net_price=float(final_unit_selling_price)
-                    item_net_price_total=float(item_net_price)*float(purchased_quantity)
-                    
-                order_net_price_total+=item_net_price_total
-                order_price_discount_total+=item_price_discount_total
-                
-
-                retailer_receipt = models.RetailerReceipts.objects.filter(id=item['retailer_receipt'],current_unit_quantity__gte=purchased_quantity).first()
-                if retailer_receipt.product.is_vatable:
-                    item_tax= float(final_unit_selling_price) *01.16
-                    item_tax_total=float(item_tax )* float(purchased_quantity)
-
-                order_tax_total+=item_tax_total
-
-                create_log("info", "I reached here 3")
-                item_created = CustomerOrderItems.objects.create(
-                    item_price=float(final_unit_selling_price),
-                    item_tax=float(item_tax),
-                    item_price_discount=float(item_price_discount),
-                    discount_quantity=float(discount_quantity),
-                    item_price_discount_total=float(item_price_discount_total),
-                    item_net_price_total=float(float(final_unit_selling_price)-float(item_price_discount))*float(purchased_quantity)
-                    * float(purchased_quantity),
-                    item_price_total=float(final_unit_selling_price)*float(purchased_quantity),
-                    total_quantity=float(purchased_quantity) + float(discount_quantity),
-                    purchased_quantity=float(purchased_quantity),
-                    retailer_receipt=retailer_receipt,
-                    customer_order=order_created,
-                    item_tax_total=float(item_tax_total),
-                    owner=user,
-                    entity=user.entity,
-                    item_net_price=float(item_net_price),
-                )
-            order_created.order_price_total=float(final_price_total)
-            order_created.order_net_price_total=order_net_price_total
-            order_created.order_price_discount_total=order_price_discount_total
-            order_created.order_tax_total=order_tax_total
-            order_created.save()
-            create_log("info",f"Customer order item: {item_created}")
-            errors, order_created = process_customer_order_payment(entity,order_created,payment_method,user,payment_account_number, order_items )
-            return errors,order_created
-        else:
+        if not order_created:
             errors.append("Order could not be created")
-            return errors,None  
+            return errors, None
+
+        for item in order_items:
+            purchased_qty = _to_int(item["purchased_quantity"])
+            discount_quantity = _to_int(item.get("discount_quantity"))
+            final_unit = _to_decimal(item["final_unit_selling_price"])
+            discount_unit = _to_decimal(item.get("item_price_discount"))
+
+            retailer_receipt = models.RetailerReceipts.objects.filter(
+                id=item["retailer_receipt"],
+                current_unit_quantity__gte=purchased_qty,
+            ).first()
+            if not retailer_receipt:
+                errors.append(
+                    f"Receipt {item['retailer_receipt']} no longer "
+                    f"available for the requested quantity"
+                )
+                return errors, None
+
+            item_price_total = _q(final_unit * purchased_qty)
+            item_price_discount_total = _q(discount_unit * purchased_qty)
+            item_net_price = _q(final_unit - discount_unit)
+            item_net_price_total = _q(item_net_price * purchased_qty)
+
+            if retailer_receipt.product.is_vatable:
+                item_tax = _q(final_unit * Decimal("0.16"))
+                item_tax_total = _q(item_tax * purchased_qty)
+            else:
+                item_tax = Decimal("0.00")
+                item_tax_total = Decimal("0.00")
+
+            CustomerOrderItems.objects.create(
+                customer_order=order_created,
+                retailer_receipt=retailer_receipt,
+                unit_of_issue=retailer_receipt.unit_of_receipt,
+                purchased_quantity=purchased_qty,
+                discount_quantity=discount_quantity,
+                total_quantity=purchased_qty + discount_quantity,
+                quantity=purchased_qty,
+                item_price=final_unit,
+                item_price_total=item_price_total,
+                item_price_discount=discount_unit,
+                item_price_discount_total=item_price_discount_total,
+                item_net_price=item_net_price,
+                item_net_price_total=item_net_price_total,
+                item_tax=item_tax,
+                item_tax_total=item_tax_total,
+                entity=user.entity,
+                owner=user,
+            )
+
+        order_created.recalculate()
+
+        errors, order_created = process_customer_order_payment(
+            entity,
+            order_created,
+            payment_method,
+            user,
+            payment_account_number,
+            order_items,
+        )
+        return errors, order_created
+
     except Exception as e:
         errors.append(str(e))
         return errors, None
 
-# def process_mpesa(payment_account_number, reference_number, amount):
-#     print('Creating payment for order..', reference_number)
-#     print('Creating payment for order..amount', amount)
-
-#     token_data = {
-#         "action": config('TOKEN_ACTION'),
-#         "consumer_code": config('TOKEN_CONSUMER_CODE'),
-#         "consumer_key": config('TOKEN_CONSUMER_KEY'),
-#         "consumer_secret": config('TOKEN_CONSUMER_SECRET')
-#     }
-#     result = requests.post(f'{config("TOKEN_URL")}', json=token_data,
-#                            headers={'Accept': 'application/json', 'Api-Key': f'{config("TOKEN_API_KEY")}'})
-#     result_json = result.json()
-
-#     token = result_json['access_token']
-
-#     if token:
-#         transaction_data = {
-#             "action": "ProcessCollection",
-#             "channel_id": 37,
-#             "amount": round(amount),
-#             "account_number": payment_account_number,
-#             "msisdn": payment_account_number,
-#             "reference_number": reference_number,
-#             "narration": f"Customer Order {reference_number}",
-#             "result_url": "https://webhook.site/3a9b9c43-c2c7-417e",
-#             "metadata": {
-#                 "key0": "value0",
-#                 "key1": "value1"
-#             },
-#             "show_qr_code": 1
-#         }
-#         payment_result = requests.post(f'{config("TRANSACTION_URL")}', json=transaction_data,
-#                                        headers={'Accept': 'application/json', 'Access-Token': f'{token}'})
-#         payment_result_json = payment_result.json()
-#         print("mpesa payment", payment_result_json)
-
-#         if payment_result_json:
-#             return payment_result_json
-#         else:
-#             return None
-
-
-# @transaction.atomic
-# def create_customer_order_by_customer(data, user):
-#     create_log("info",f"{user.phone} - {data}")
-#     errors=[]
-#     customer = None
-#     entity_id = None
-#     entity = None
-#     order_tax_total = 0.00
-#     order_price_discount_total = 0.00
-#     order_net_price_total = 0.00
-#     order_price_total = 0.00
-#     order_created = None
-#     user_id = None
-#     reference_number = None
-#     payment_account_number = None
-#     payment_method_id = None
-#     delivery_method = None
-#     order_origin = None
-#     shipping_cost = 0.00
-#     origin_latitude =None
-#     destination_latitude=None
-#     longitude =None
-#     farness =None
-#     origin_point =None
-#     destination_point =None
-#     draft_id =None
-#     recipient_name =None
-#     recipient_phone =None
-
-
-#     # Order origin
-#     if "order_origin" in data["customer_order_details"]:
-#         order_origin = data["customer_order_details"]["order_origin"]
-#     else:
-#         raise exceptions.ValidationError("Order origin is required")
     
-#     if "draft_id" in data["customer_order_details"]:
-#         draft_id = data["customer_order_details"]["draft_id"]
-#     else:
-#         raise exceptions.ValidationError("Draft ID is required")
-    
-#     if "recipient_name" in data["customer_order_details"]:
-#         recipient_name = data["customer_order_details"]["recipient_name"]
+            
 
-#     if "recipient_phone" in data["customer_order_details"]:
-#         recipient_phone = data["customer_order_details"]["recipient_phone"]
-
-
-#     # Payment method
-#     if "payment_method" in data["customer_order_details"]:
-#         payment_method_id = data["customer_order_details"]["payment_method"]
-#         payment_method=payments_models_validators.validate_payment_method_exists(payment_method_id)
-#     else:
-#         raise exceptions.ValidationError("Payment method is required")
-
-#     if "delivery_method" in data["customer_order_details"]:
-#         delivery_method = data["customer_order_details"]["delivery_method"]
-#     else:
-#         raise exceptions.ValidationError("Delivery method is required")
-
-#     # if delivery_method == "DELIVERY":
-#     #     if (
-#     #         not "shipping_address" in data["customer_order_details"]
-#     #         or not data["customer_order_details"]["shipping_address"]
-#     #     ):
-#     #         raise exceptions.ValidationError(
-#     #             "Delivery address is required for delivery orders"
-#     #         )
-#     # else:
-#     #     pass
-#     if delivery_method == "DELIVERY":
-#         if "shipping_cost" in data["customer_order_details"]:
-#             shipping_cost = float(data["customer_order_details"]["shipping_cost"])
-#     else:
-#         shipping_cost = 0.00
-
-#     if order_origin == "CUSTOMER":
-#         """All customer orders must not be payable in cash"""
-#         if not payment_method.title=="CASH":
-#             if not "payment_account_number" in data["customer_order_details"]:
-#                 errors.append("Payment account number is required")
-#                 return errors, None
-#             else:
-#                 payment_account_number = data["customer_order_details"][
-#                     "payment_account_number"
-#                 ]
-#                 if payment_account_number and not payment_account_number == "":
-#                     payment_account_number = data["customer_order_details"][
-#                         "payment_account_number"
-#                     ]
-
-#                 else:
-#                     errors.append("No cash payment for online orders")
-#                     return errors, None
-                
-#         else:
-#             errors.append("Unsupported payment method")
-#             return errors, None
-
-#     if order_origin == "CUSTOMER" and "entity_id" in data["customer_order_details"]:
-#         entity_id = data["customer_order_details"]["entity_id"]
-#         entity = validate_entity(entity_id)
-
-
-#     if order_origin == "CUSTOMER" and "user_id" in data["customer_order_details"]:
-#         customer = user
-#     elif order_origin == "STAFF" and "user_id" in data["customer_order_details"]:
-#         # User ID required for staff orders
-#         user_id = data["customer_order_details"]["user_id"]
-#         customer = validate_user(user_id)
-
-#         # Prohibit staff from creating orders for self
-
-#         if customer == user:
-#             errors.append("Creating order for self not permitted")
-#             return errors, None
-#     else:
-#         errors.append("User ID is required")
-#         return errors, None
-    
-#     if "origin_latitude" in data['customer_order_details']:
-#         origin_latitude = float(data['customer_order_details']['origin_latitude'])
-
-#     if "origin_longitude" in data['customer_order_details']:
-#         origin_longitude =  float(data['customer_order_details']['origin_longitude'])
-
-#     if origin_latitude and origin_longitude:
-#         # origin_point = Point(origin_longitude, origin_latitude, srid=4326)
-#         origin_point = fromstr(f"POINT({origin_longitude} {origin_latitude})", srid=4326)
-
-#     if "destination_latitude" in data['customer_order_details']:
-#         destination_latitude = float(data['customer_order_details']['destination_latitude'])
-
-#     if "destination_longitude" in data['customer_order_details']:
-#         destination_longitude =  float(data['customer_order_details']['destination_longitude'])
-
-#     if destination_latitude and destination_longitude:
-#         # destination_point = Point(destination_longitude, destination_latitude, srid=4326)
-#         destination_point = fromstr(f"POINT({destination_longitude} {destination_latitude})", srid=4326)
-
-#     if "farness" in data['customer_order_details']:
-#         farness = float(data['customer_order_details']['farness'])
-
-#     if "city_name" in data['customer_order_details']:
-#         city_name = data['customer_order_details']['city_name']
-
-
-#     try:
-#         order_number = generate_document_number(entity, user,"CUSTOMERORDER")
-#         # reference_number=generate_reference_number(entity,user)
-#         order_created = CustomerOrders.objects.create(
-#             reference_number=reference_number,
-#             order_number=order_number,
-#             payment_account_number=payment_account_number,
-#             customer_name=f"{user.first_name} {user.last_name}",
-#             customer_phone=f"{user.phone}",
-#             order_origin=order_origin,
-#             delivery_method=delivery_method,
-#             shipping_cost=shipping_cost,
-#             order_tax_total=order_tax_total,
-#             order_price_total=order_price_total,
-#             draft_id=draft_id,
-#             selected_payment_method=payment_method,
-#             order_price_discount_total=order_price_discount_total,
-#             order_net_price_total=order_net_price_total,
-#             owner=user,
-#             user=user,
-#             entity=entity,
-#             customer=customer,
-#             origin_point=origin_point,
-#             destination_point=destination_point,
-#             farness=farness,
-#             city_name=city_name,
-#             recipient_name=recipient_name,
-#             recipient_phone=recipient_phone
-#         )
-#         if order_created:
-#             # use_referenc e_number(reference_number)
-#             print("Order created", order_created)
-#             order_items = data["customer_order_details"]["customerOrderItems"]
-
-#             for item in order_items:
-#                 retailer_receipt = None
-#                 errors, retailer_receipt = model_validators.validate_retailer_receipt_for_entity(item["productID"],entity_id)
-#                 print("Errors at order item",errors)
-#                 print("Reaceipt at order item",retailer_receipt)
-                
-#                 item_price = None
-#                 unit_of_issue=None
-               
-#                 item_tax = 0.00
-#                 item_price_discount = 0.00
-#                 item_net_price = 0.00
-#                 discount_quantity = 0.00
-#                 item_price_total = 0.0
-#                 item_tax_total = 0.0
-#                 purchased_quantity = int(item["productQuantity"])
-#                 retailer_receipt_id = item["productID"]
-#                 unit_of_issue = item["unit_of_issue"]
-                
-
-                
-#                 if  retailer_receipt:
-#                     retailer_receipt = RetailerReceipts.objects.filter(
-#                         id=retailer_receipt_id, entity=entity
-#                     ).first()
-
-#                     # Calculate item tax
-#                     item_price = float(retailer_receipt.unit_selling_price)
-
-#                     item_price_total = float(retailer_receipt.unit_selling_price) * int(
-#                         purchased_quantity
-#                     )
-
-#                     if retailer_receipt.product.is_vatable:
-#                         item_tax = float(retailer_receipt.unit_selling_price) * float(
-#                             0.16
-#                         )
-
-#                         item_tax_total = float(item_tax) * int(purchased_quantity)
-
-          
-
-        
-
-#                 else:
-#                     errors.append("Item does not exist in inventory")
-#                     return errors,None
-
-#                 item_created = CustomerOrderItems.objects.create(
-#                     item_price=item_price,
-#                     item_price_total=item_price_total,
-#                     item_tax=item_tax,
-#                     item_tax_total=item_tax_total,
-#                     item_price_discount=item_price_discount,
-#                     item_price_discount_total=item_price_discount
-#                     * float(purchased_quantity),
-#                     item_net_price=item_net_price,
-#                     discount_quantity=discount_quantity,
-#                     item_net_price_total=float(item_net_price)
-#                     * float(purchased_quantity),
-#                     total_quantity=float(purchased_quantity) + float(discount_quantity),
-#                     purchased_quantity=purchased_quantity,
-#                     retailer_receipt=retailer_receipt,
-#                     customer_order=order_created,
-#                     owner=user,
-#                     entity=user.entity,
-#                 )
-#                 if item_created:
-#                     print("Order item created",item_created)
-                   
-#                     pass
-#                 else:
-#                    pass
-#             items = CustomerOrderItems.objects.filter(customer_order=order_created)
-
-#             for item in items:
-#                 order_price_discount_total = order_price_discount_total + float(
-#                     item.item_price_discount_total
-#                 )
-#                 order_tax_total = order_tax_total + float(item.item_tax_total)
-#                 order_net_price_total = order_net_price_total + float(
-#                     item.item_net_price_total
-#                 )
-#                 order_price_total = order_price_total + float(item.item_price_total)
-
-#             order_created.order_price_discount_total = order_price_discount_total
-#             order_created.order_tax_total = order_tax_total
-#             order_created.order_net_price_total = order_net_price_total
-#             order_created.order_price_total = (
-#                 order_price_total
-#             )
-#             order_created.save()
-#             print("Createddd",order_created)
-
-
-
-#             # Delivery address
-#             try:
-#                 if (
-#                     order_created.delivery_method == "DELIVERY"
-#                     and "shipping_address" in data["customer_order_details"]
-#                 ):
-#                     shipping_address = data["customer_order_details"][
-#                         "shipping_address"
-#                     ]
-
-#                     if shipping_address:
-#                         print("shipping_address", shipping_address)
-#                         created_delivery_address = ShippingAddress.objects.create(
-#                             customer_order_id=order_created.id,
-#                             contact_person_name=data["customer_order_details"][
-#                                 "shipping_address"
-#                             ]["contact_person_name"],
-#                             contact_person_phone=data["customer_order_details"][
-#                                 "shipping_address"
-#                             ]["contact_person_phone"],
-#                             estate=data["customer_order_details"]["shipping_address"][
-#                                 "estate"
-#                             ],
-#                             road=data["customer_order_details"]["shipping_address"][
-#                                 "road"
-#                             ],
-#                             city=data["customer_order_details"]["shipping_address"][
-#                                 "city"
-#                             ],
-#                             country_id=data["customer_order_details"][
-#                                 "shipping_address"
-#                             ]["country"],
-#                             county_id=data["customer_order_details"][
-#                                 "shipping_address"
-#                             ]["county"],
-#                             owner=user,
-#                             entity=user.entity,
-#                         )
-#                     else:
-#                         raise exceptions.ValidationError("Shipping address not saved")
-#                 else:
-#                     pass
-#             except Exception as e:
-#                 raise exceptions.ValidationError(
-#                     "Error while saving shipping address" + f"{e}"
-#                 )
-
-           
-#             errors, order_created=process_customer_order_payment(entity,order_created,payment_method,user,payment_account_number, order_items )
-#             return errors, order_created
-#         else:
-#             print("lastly")
-#             return ["errror at fail"],None
-#     except Exception as e:
-#         errors.append("Create order error: "+ str(e))
-#         return errors, None
-
-
+@transaction.atomic
 def update_customer_order(data, user):
+    errors = []
     customer_order = None
     payment_method = None
     delivery_method = None
     shipping_cost = None
-    contact_person_name = None
-    contact_person_phone = None
-    city = None
     bodaboda = None
     status = None
-    errors=[]
 
-    if "customer_order" in data["customer_order_details"]:
-        customer_order_id = data["customer_order_details"]["customer_order"]
-        if CustomerOrders.objects.filter(id=customer_order_id).exists():
-            customer_order = CustomerOrders.objects.filter(id=customer_order_id).first()
-    else:
-        errors.append("ID is required")
-        return errors,None
-    
+    details = data.get("customer_order_details")
+    if not details:
+        errors.append("Customer order details are required")
+        return errors, None
 
-    if "payment_method" in data["customer_order_details"]:
-        payment_method_id = data["customer_order_details"]["payment_method"]
-        if PaymentMethods.objects.filter(id=payment_method_id).exists():
-            payment_method = PaymentMethods.objects.filter(id=payment_method_id).first()
+    customer_order_id = details.get("customer_order")
+    if not customer_order_id:
+        errors.append("Customer order ID is required")
+        return errors, None
 
-    if "bodaboda" in data["customer_order_details"]:
-        bodaboda_id = data["customer_order_details"]["bodaboda"]
-        if BodaLocations.objects.filter(owner_id=bodaboda_id).exists():
-            bodaboda = BodaLocations.objects.filter(owner_id=bodaboda_id).first()
-        else:
+    customer_order = CustomerOrders.objects.filter(
+        id=customer_order_id,
+    ).first()
+    if not customer_order:
+        errors.append("Customer order with provided ID does not exist")
+        return errors, None
+
+    if details.get("payment_method"):
+        payment_method = PaymentMethods.objects.filter(
+            id=details["payment_method"],
+        ).first()
+        if not payment_method:
+            errors.append("Payment method with provided ID does not exist")
+            return errors, None
+
+    if details.get("delivery_method"):
+        delivery_method = details["delivery_method"]
+
+    if details.get("shipping_cost") not in (None, ""):
+        shipping_cost = _to_decimal(details["shipping_cost"])
+
+    if details.get("bodaboda"):
+        bodaboda = BodaLocations.objects.filter(
+            owner_id=details["bodaboda"],
+        ).first()
+        if not bodaboda:
             errors.append("Boda boda does not exist")
             return errors, None
 
-    # if "shipping_cost" in data["customer_order_details"]:
-    #     shipping_cost = data["customer_order_details"]["shipping_cost"]
+    if details.get("status"):
+        status = details["status"]
 
-    # if "shipping_cost" in data["customer_order_details"]:
-    #     shipping_cost = data["customer_order_details"]["shipping_cost"]
+    changed = []
 
-    if "status" in data["customer_order_details"]:
-        status = data["customer_order_details"]["status"]
+    if shipping_cost is not None:
+        customer_order.shipping_cost = shipping_cost
+        changed.append("shipping_cost")
 
-    if customer_order:
-        if shipping_cost:
-            customer_order.shipping_cost = float(shipping_cost)
-            customer_order.save()
+    if payment_method is not None:
+        customer_order.selected_payment_method = payment_method
+        changed.append("selected_payment_method")
 
-        if payment_method:
-            customer_order.payment_method = payment_method
-            customer_order.save()
+    if delivery_method is not None:
+        customer_order.delivery_method = delivery_method
+        changed.append("delivery_method")
 
-        if delivery_method:
-            customer_order.delivery_method = delivery_method.title
-            customer_order.save()
+    if bodaboda is not None and customer_order.delivery_method == "DELIVERY":
+        customer_order.bodaboda = bodaboda
+        changed.append("bodaboda")
 
-        if bodaboda and customer_order.delivery_method=="DELIVERY":
-            customer_order.bodaboda = bodaboda
-            customer_order.save()
-            # if ShippingAddress.objects.filter(customer_order=customer_order).exists():
-            #     customer_order.bodaboda = bodaboda
-            #     customer_order.save()
-            # else:
-            #     errors.append("Order is for pick up")
-            #     create_log("error", str(errors))
+    if status is not None:
+        customer_order.status = status
+        changed.append("status")
 
-        if status:
-            customer_order.status = status
-            customer_order.save()
+    if changed:
+        changed.append("updated")
+        customer_order.save(update_fields=changed)
 
-        return  [],customer_order
-    else:
-        errors.append("Not found")
-        return errors,None
+        if "shipping_cost" in changed or "selected_payment_method" in changed:
+            customer_order.recalculate()
+
+    return [], customer_order
+
+
 
 def get_title(self,item):
     return item.title
 
 def get_customer_order_items(data, user):
-    qs = []
+    qs = CustomerOrderItems.objects.filter(entity=user.entity)
     today = timezone.now().date()
-    from_date = timezone.now().date()
-    to_date = timezone.now().date()
+
     if (
         "filters" in data
         and "from_date" in data["filters"]
         and "to_date" in data["filters"]
     ):
-       
+        from_date = parse_datetime(
+            data["filters"]["from_date"]
+        ).strftime("%Y-%m-%d")
+        to_date = parse_datetime(
+            data["filters"]["to_date"]
+        ).strftime("%Y-%m-%d")
+        return qs.filter(created__gte=from_date, created__lte=to_date)
 
-        from_date = parse_datetime(data["filters"]["from_date"]).strftime("%Y-%m-%d")
-
-        to_date = parse_datetime(data["filters"]["to_date"]).strftime("%Y-%m-%d")
-
-        qs = CustomerOrderItems.objects.filter(
-            Q(entity=user.entity, created__gte=from_date, created__lte=to_date)
-        ).all()
-
-    else:
-        if (
-            CustomerOrderItems.objects.filter(entity=user.entity)
-            .filter(Q(created__gte=today))
-            .exists()
-        ):
-            qs = (
-                CustomerOrderItems.objects.filter(entity=user.entity)
-                .filter(Q(created__gte=today))
-                .all()
-            )
-
-            # final ={}
-            # titles = list(set(map(self.get_title,qs)))
-            # print(titles)
-
-    return qs
-
-
+    return qs.filter(created__gte=today)
 
 def retrieve_open_indent(user):
     indent =None
