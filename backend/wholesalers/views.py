@@ -1385,3 +1385,505 @@ def campaignsAPIView(request):
 
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")
+    
+
+# wholesalers/views.py
+
+from rest_framework import exceptions, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
+
+from core.responses import custom_success_message, custom_errors_response
+from retailers.retail_permissions import EntitySubscriptionPermission
+
+from wholesalers import utils
+from wholesalers import serializers
+
+
+@api_view(["POST"])
+@permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
+def receiptReturnsAPIView(request):
+    """
+    Single-entry command endpoint for wholesaler receipt returns.
+
+    Route:  POST /api/v1/wholesalers/receipt-returns
+    Body:   { "action": "<ActionName>", ...payload }
+
+    Supported actions and their payloads:
+
+    // ----------------------------------------------------------------
+    // 1. InitiateReturn — retailer sends stock back to a wholesaler.
+    //    Creates the StockAdjustment and the WholesalerReceiptReturns
+    //    atomically.
+    // ----------------------------------------------------------------
+    {
+        "action": "InitiateReturn",
+        "retailer_receipt": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
+        "quantity": 25,
+        "reason": "NEAR_EXPIRY",
+        "justification": "Batch expiring in 40 days, returning to wholesaler",
+        "return_type": "REFUND",
+        "unit_price_refunded": "45.00",
+        "restocking_fee_percent": "5.00"
+    }
+    // Required: retailer_receipt, quantity, reason, justification
+    // Optional: return_type, unit_price_refunded, restocking_fee_percent
+    // reason choices: EXPIRED | NEAR_EXPIRY | DAMAGED | WRONG_ITEM |
+    //                 SHORT_DATED | QUALITY | OVER_ORDERED | RECALL | OTHER
+    // return_type choices: REFUND | EXCHANGE | REPLACEMENT
+
+    // ----------------------------------------------------------------
+    // 2. CreateReturn — wholesaler records a return handled offline.
+    // ----------------------------------------------------------------
+    {
+        "action": "CreateReturn",
+        "wholesaler_entity": "3e21a7b8-9c4d-4e5f-8a1b-2c6d9e7f3a4b",
+        "retailer_entity": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
+        "retailer_receipt": "5a6b7c8d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+        "wholesaler_receipt": "9d8c7b6a-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+        "product": "b1c2d3e4-f5a6-7b8c-9d0e-1f2a3b4c5d6e",
+        "quantity": 12,
+        "reason": "QUALITY",
+        "justification": "Client reported discoloration on 3 units",
+        "return_type": "EXCHANGE",
+        "unit_price_paid": "120.00",
+        "unit_price_refunded": "120.00",
+        "restocking_fee_percent": "0.00"
+    }
+    // Required: wholesaler_entity, retailer_entity, product,
+    //           quantity, reason, justification
+
+    // ----------------------------------------------------------------
+    // 3. ListReturns — list returns scoped to caller's entity.
+    // ----------------------------------------------------------------
+    {
+        "action": "ListReturns",
+        "status": "PENDING_CONFIRMATION",
+        "reason": "NEAR_EXPIRY",
+        "return_type": "REFUND",
+        "confirmation_outcome": "PENDING",
+        "wholesaler_entity": "3e21a7b8-9c4d-4e5f-8a1b-2c6d9e7f3a4b",
+        "retailer_entity": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
+        "search": "paracetamol"
+    }
+    // All filters optional. Pagination via DRF PageNumberPagination.
+
+    // Minimal version:
+    {
+        "action": "ListReturns"
+    }
+
+    // ----------------------------------------------------------------
+    // 4. GetReturnDetails — retrieve one return by ID.
+    // ----------------------------------------------------------------
+    {
+        "action": "GetReturnDetails",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+    }
+    // Required: return_id
+
+    // ----------------------------------------------------------------
+    // 5. UpdateReturn — update a PENDING_CONFIRMATION return.
+    //    Whitelisted fields: justification, reference_number,
+    //                        return_type, unit_price_refunded,
+    //                        restocking_fee_percent
+    // ----------------------------------------------------------------
+    {
+        "action": "UpdateReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "justification": "Updated: batch number confirmed as B-2024-118",
+        "reference_number": "RMA-2026-0091",
+        "return_type": "EXCHANGE",
+        "unit_price_refunded": "118.50",
+        "restocking_fee_percent": "2.50"
+    }
+    // Required: return_id
+    // Optional: any whitelisted field
+
+    // ----------------------------------------------------------------
+    // 6. DeleteReturn — delete a PENDING_CONFIRMATION return.
+    // ----------------------------------------------------------------
+    {
+        "action": "DeleteReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+    }
+    // Required: return_id
+
+    // ----------------------------------------------------------------
+    // 7a. ConfirmReturn — full take-back into inventory.
+    // ----------------------------------------------------------------
+    {
+        "action": "ConfirmReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "outcome": "TAKE_BACK",
+        "notes": "Goods received in good condition"
+    }
+    // Required: return_id, outcome
+    // outcome choices: TAKE_BACK | WRITE_OFF | PARTIAL_TAKE_BACK
+
+    // ----------------------------------------------------------------
+    // 7b. ConfirmReturn — full write-off (cast).
+    // ----------------------------------------------------------------
+    {
+        "action": "ConfirmReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "outcome": "WRITE_OFF",
+        "notes": "All units expired on arrival, discarded"
+    }
+
+    // ----------------------------------------------------------------
+    // 7c. ConfirmReturn — partial take-back.
+    //     confirmed_quantity + written_off_quantity MUST equal
+    //     the return's total quantity.
+    // ----------------------------------------------------------------
+    {
+        "action": "ConfirmReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "outcome": "PARTIAL_TAKE_BACK",
+        "confirmed_quantity": 8,
+        "written_off_quantity": 2,
+        "notes": "8 units sellable, 2 damaged in transit"
+    }
+
+    // ----------------------------------------------------------------
+    // 8. RejectReturn — wholesaler rejects the return.
+    // ----------------------------------------------------------------
+    {
+        "action": "RejectReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "reason": "Return not authorized — no RMA was issued"
+    }
+    // Required: return_id
+    // Optional: reason
+
+    // ----------------------------------------------------------------
+    // 9a. SettleReturn — original refund terms.
+    // ----------------------------------------------------------------
+    {
+        "action": "SettleReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "notes": "Refund issued per original agreement"
+    }
+
+    // ----------------------------------------------------------------
+    // 9b. SettleReturn — override refund values at settle time.
+    // ----------------------------------------------------------------
+    {
+        "action": "SettleReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "unit_price_refunded": "110.00",
+        "restocking_fee_percent": "10.00",
+        "notes": "Agreed to deduct 10% restocking fee after inspection"
+    }
+    // Required: return_id
+    // Optional: unit_price_refunded, restocking_fee_percent, notes
+
+    // ----------------------------------------------------------------
+    // 10. CancelReturn — cancel pre-confirmation (either party).
+    // ----------------------------------------------------------------
+    {
+        "action": "CancelReturn",
+        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "reason": "Return no longer needed — goods found in stock"
+    }
+    // Required: return_id
+    // Optional: reason
+
+    // ----------------------------------------------------------------
+    // 11. GetStaleReturns — returns stuck in PENDING_CONFIRMATION.
+    // ----------------------------------------------------------------
+    {
+        "action": "GetStaleReturns",
+        "days": 14
+    }
+    // Optional: days (default 7)
+
+    // ----------------------------------------------------------------
+    // 12. GetReturnMismatches — quantity drift between paired records.
+    // ----------------------------------------------------------------
+    {
+        "action": "GetReturnMismatches"
+    }
+    """
+    try:
+        action = request.data["action"]
+    except KeyError:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    # =================================================================
+    # Lifecycle
+    # =================================================================
+
+    # -----------------------------------------------------------------
+    # InitiateReturn
+    # Payload: {
+    #     "action": "InitiateReturn",
+    #     "retailer_receipt": "<uuid>",
+    #     "quantity": <int>,
+    #     "reason": "<enum>",
+    #     "justification": "<string>",
+    #     "return_type": "REFUND" | "EXCHANGE" | "REPLACEMENT",
+    #     "unit_price_refunded": "<decimal>",
+    #     "restocking_fee_percent": "<decimal>"
+    # }
+    # -----------------------------------------------------------------
+    if action == "InitiateReturn":
+        errors, ret = utils.initiate_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return initiated successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be initiated", errors)
+
+    # -----------------------------------------------------------------
+    # CreateReturn
+    # Payload: {
+    #     "action": "CreateReturn",
+    #     "wholesaler_entity": "<uuid>",
+    #     "retailer_entity": "<uuid>",
+    #     "product": "<uuid>",
+    #     "quantity": <int>,
+    #     "reason": "<enum>",
+    #     "justification": "<string>",
+    #     "retailer_receipt": "<uuid>",
+    #     "wholesaler_receipt": "<uuid>",
+    #     "return_type": "REFUND" | "EXCHANGE" | "REPLACEMENT",
+    #     "unit_price_paid": "<decimal>",
+    #     "unit_price_refunded": "<decimal>",
+    #     "restocking_fee_percent": "<decimal>"
+    # }
+    # -----------------------------------------------------------------
+    elif action == "CreateReturn":
+        errors, ret = utils.create_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return created successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be created", errors)
+
+    # -----------------------------------------------------------------
+    # ListReturns
+    # Payload: {
+    #     "action": "ListReturns",
+    #     "status": "<enum>",
+    #     "reason": "<enum>",
+    #     "return_type": "<enum>",
+    #     "confirmation_outcome": "<enum>",
+    #     "wholesaler_entity": "<uuid>",
+    #     "retailer_entity": "<uuid>",
+    #     "search": "<string>"
+    # }
+    # All filters optional. Response is paginated.
+    # -----------------------------------------------------------------
+    elif action == "ListReturns":
+        qs = utils.get_entity_returns(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = serializers.WholesalerReceiptReturnListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    # -----------------------------------------------------------------
+    # GetReturnDetails
+    # Payload: {
+    #     "action": "GetReturnDetails",
+    #     "return_id": "<uuid>"
+    # }
+    # -----------------------------------------------------------------
+    elif action == "GetReturnDetails":
+        ret, errors = utils.get_return_details(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return retrieved successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be retrieved", errors)
+
+    # -----------------------------------------------------------------
+    # UpdateReturn
+    # Payload: {
+    #     "action": "UpdateReturn",
+    #     "return_id": "<uuid>",
+    #     "justification": "<string>",
+    #     "reference_number": "<string>",
+    #     "return_type": "REFUND" | "EXCHANGE" | "REPLACEMENT",
+    #     "unit_price_refunded": "<decimal>",
+    #     "restocking_fee_percent": "<decimal>"
+    # }
+    # Only whitelisted fields are accepted.
+    # -----------------------------------------------------------------
+    elif action == "UpdateReturn":
+        errors, ret = utils.update_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return updated successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be updated", errors)
+
+    # -----------------------------------------------------------------
+    # DeleteReturn
+    # Payload: {
+    #     "action": "DeleteReturn",
+    #     "return_id": "<uuid>"
+    # }
+    # -----------------------------------------------------------------
+    elif action == "DeleteReturn":
+        errors, ret = utils.delete_return(request.data, request.user)
+        if ret:
+            return custom_success_message(
+                0, "Return deleted successfully", {}, "return",
+            )
+        return custom_errors_response(1, "Return could not be deleted", errors)
+
+    # =================================================================
+    # State transitions
+    # =================================================================
+
+    # -----------------------------------------------------------------
+    # ConfirmReturn
+    # Payload (full take-back): {
+    #     "action": "ConfirmReturn",
+    #     "return_id": "<uuid>",
+    #     "outcome": "TAKE_BACK",
+    #     "notes": "<string>"
+    # }
+    #
+    # Payload (full write-off): {
+    #     "action": "ConfirmReturn",
+    #     "return_id": "<uuid>",
+    #     "outcome": "WRITE_OFF",
+    #     "notes": "<string>"
+    # }
+    #
+    # Payload (partial): {
+    #     "action": "ConfirmReturn",
+    #     "return_id": "<uuid>",
+    #     "outcome": "PARTIAL_TAKE_BACK",
+    #     "confirmed_quantity": <int>,
+    #     "written_off_quantity": <int>,
+    #     "notes": "<string>"
+    # }
+    # confirmed + written_off MUST equal the return's quantity.
+    # -----------------------------------------------------------------
+    elif action == "ConfirmReturn":
+        errors, ret = utils.confirm_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return confirmed successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be confirmed", errors)
+
+    # -----------------------------------------------------------------
+    # RejectReturn
+    # Payload: {
+    #     "action": "RejectReturn",
+    #     "return_id": "<uuid>",
+    #     "reason": "<string>"
+    # }
+    # -----------------------------------------------------------------
+    elif action == "RejectReturn":
+        errors, ret = utils.reject_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return rejected successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be rejected", errors)
+
+    # -----------------------------------------------------------------
+    # SettleReturn
+    # Payload: {
+    #     "action": "SettleReturn",
+    #     "return_id": "<uuid>",
+    #     "unit_price_refunded": "<decimal>",
+    #     "restocking_fee_percent": "<decimal>",
+    #     "notes": "<string>"
+    # }
+    # Only return_id required; the rest are optional overrides.
+    # -----------------------------------------------------------------
+    elif action == "SettleReturn":
+        errors, ret = utils.settle_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return settled successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be settled", errors)
+
+    # -----------------------------------------------------------------
+    # CancelReturn
+    # Payload: {
+    #     "action": "CancelReturn",
+    #     "return_id": "<uuid>",
+    #     "reason": "<string>"
+    # }
+    # -----------------------------------------------------------------
+    elif action == "CancelReturn":
+        errors, ret = utils.cancel_return(request.data, request.user)
+        if ret:
+            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
+                ret, many=False, context={"request": request},
+            )
+            return custom_success_message(
+                0, "Return cancelled successfully", serializer.data, "return",
+            )
+        return custom_errors_response(1, "Return could not be cancelled", errors)
+
+    # =================================================================
+    # Reconciliation
+    # =================================================================
+
+    # -----------------------------------------------------------------
+    # GetStaleReturns
+    # Payload: {
+    #     "action": "GetStaleReturns",
+    #     "days": <int>  // optional, default 7
+    # }
+    # Returns stuck in PENDING_CONFIRMATION beyond N days.
+    # -----------------------------------------------------------------
+    elif action == "GetStaleReturns":
+        qs = utils.get_stale_returns(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = serializers.WholesalerReceiptReturnListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    # -----------------------------------------------------------------
+    # GetReturnMismatches
+    # Payload: {
+    #     "action": "GetReturnMismatches"
+    # }
+    # Returns where the paired StockAdjustment quantity doesn't match.
+    # -----------------------------------------------------------------
+    elif action == "GetReturnMismatches":
+        qs = utils.get_return_mismatches(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = serializers.WholesalerReceiptReturnListSerializer(
+            page, many=True, context={"request": request},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+    else:
+        raise exceptions.ValidationError(f"Action {action} is unknown")

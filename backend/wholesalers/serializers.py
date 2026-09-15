@@ -356,74 +356,6 @@ class CampaignAudienceBulkWriteSerializer(serializers.Serializer):
 
 
 
-class WholesalerVariationSerializer(serializers.ModelSerializer):
-    title = serializers.SerializerMethodField(read_only=True)
-    last_year_sales = serializers.SerializerMethodField(read_only=True)
-    last_month_sales = serializers.SerializerMethodField(read_only=True)
-
-    class Meta:
-        model = models.WholesalerVariations
-        fields = (
-            "id",
-            "title",
-            "product",
-            "minimum_stock",
-            "maximum_stock",
-            "reorder_level",
-            "lead_time",
-            "safety_stock",
-            "danger_stock",
-            "economic_order_quantity",
-            "last_year_sales",
-            "last_month_sales",
-            "owner",
-        )
-        read_only_fields = ("id", "created",
-                            "updated", "owner", "entity")
-
-    def get_title(self, obj):
-        if obj.product.preparation:
-
-            return f'{obj.product.preparation.title} - {obj.product.title}'
-        else:
-            return {obj.product.title}
-
-    def get_last_year_sales(self, obj):
-        a_year_ago = datetime.now() - timedelta(days=365)
-
-        ads = 0
-        if models.WholesalerReceipts.objects.filter(product=obj.product).exists():
-            variation_receipts = models.WholesalerReceipts.objects.filter(
-                product=obj.product).all()
-            for vr in variation_receipts:
-                if models.RetailerOrderItems.objects.filter(wholesaler_receipt=vr, is_issued='true', created__gte=a_year_ago).exists():
-                    variation_order_items = models.RetailerOrderItems.objects.filter(
-                        wholesaler_receipt=vr, is_issued='true').exists()
-                    for voi in variation_order_items:
-                        ads = ads + voi.total_quantity
-        return ads
-
-    def get_last_month_sales(self, obj):
-        a_year_ago = datetime.now() - timedelta(days=365)
-
-        ads = 0
-        if models.WholesalerReceipts.objects.filter(product=obj.product).exists():
-            variation_receipts = models.WholesalerReceipts.objects.filter(
-                product=obj.product).all()
-            for vr in variation_receipts:
-                if models.RetailerOrderItems.objects.filter(wholesaler_receipt=vr, is_issued='true', created__gte=a_year_ago).exists():
-                    variation_order_items = models.RetailerOrderItems.objects.filter(
-                        wholesaler_receipt=vr, is_issued='true').exists()
-                    for voi in variation_order_items:
-                        ads = ads + voi.total_quantity
-        return ads
-
-def numOfDays(date1, date2):
-    # check which date is greater to avoid days output in -ve number
-    if isinstance(date1, date) and isinstance(date2, date):
-        return (date2 - date1).days
-    else:
-        return 0
 
 
 
@@ -1591,3 +1523,153 @@ class WholesalerPaymentsSerializer(serializers.ModelSerializer):
             return obj.payment_method.title
         else:
             return ""
+
+# wholesalers/serializers.py
+
+from rest_framework import serializers
+
+from wholesalers.models import WholesalerReceiptReturns
+
+
+class WholesalerReceiptReturnDetailSerializer(serializers.ModelSerializer):
+    """
+    Full read-only detail of a return. Used by:
+      - InitiateReturn
+      - CreateReturn
+      - GetReturnDetails
+      - UpdateReturn
+      - ConfirmReturn
+      - RejectReturn
+      - SettleReturn
+      - CancelReturn
+    """
+
+    # Nested read-only — human-readable labels
+    product_title = serializers.CharField(source="product.title", read_only=True)
+    product_bar_code = serializers.CharField(
+        source="product.bar_code", read_only=True,
+    )
+    retailer_title = serializers.CharField(
+        source="retailer_entity.title", read_only=True,
+    )
+    wholesaler_title = serializers.CharField(
+        source="wholesaler_entity.title", read_only=True,
+    )
+    wholesaler_batch = serializers.CharField(
+        source="wholesaler_receipt.batch", read_only=True,
+    )
+    wholesaler_expiry_date = serializers.DateField(
+        source="wholesaler_receipt.expiry_date", read_only=True,
+    )
+    retailer_batch = serializers.CharField(
+        source="retailer_receipt.batch", read_only=True,
+    )
+    retailer_expiry_date = serializers.DateField(
+        source="retailer_receipt.expiry_date", read_only=True,
+    )
+    order_reference = serializers.CharField(
+        source="retailer_order.reference_number", read_only=True,
+    )
+    initiating_adjustment_id = serializers.UUIDField(read_only=True)
+
+    # Display strings
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True,
+    )
+    reason_display = serializers.CharField(
+        source="get_reason_display", read_only=True,
+    )
+    return_type_display = serializers.CharField(
+        source="get_return_type_display", read_only=True,
+    )
+    confirmation_outcome_display = serializers.CharField(
+        source="get_confirmation_outcome_display", read_only=True,
+    )
+
+    # Property fields
+    net_refund_per_unit = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+
+    class Meta:
+        model = WholesalerReceiptReturns
+        fields = [
+            # identifiers
+            "id", "draft_id", "document_number", "reference_number",
+            # references
+            "retailer_order", "retailer_order_item",
+            "retailer_entity", "wholesaler_entity",
+            "retailer_receipt", "wholesaler_receipt",
+            "initiating_adjustment", "initiating_adjustment_id",
+            "product",
+            # nested read-only
+            "product_title", "product_bar_code",
+            "retailer_title", "wholesaler_title",
+            "wholesaler_batch", "wholesaler_expiry_date",
+            "retailer_batch", "retailer_expiry_date",
+            "order_reference",
+            # quantity
+            "quantity", "unit_of_return",
+            # financials
+            "unit_price_paid", "unit_price_refunded",
+            "restocking_fee_percent", "net_refund_per_unit",
+            "total_refund_amount",
+            # reason
+            "reason", "reason_display", "justification",
+            "return_type", "return_type_display",
+            # confirmation
+            "confirmation_outcome", "confirmation_outcome_display",
+            "confirmed_quantity", "written_off_quantity",
+            "confirmation_notes",
+            # state
+            "status", "status_display",
+            "is_confirmed", "is_settled",
+            # who
+            "employee", "confirmed_by", "settled_by", "rejected_by",
+            "owner",
+            # timestamps
+            "confirmed_at", "settled_at", "rejected_at", "cancelled_at",
+            "created", "updated",
+        ]
+        read_only_fields = fields  # everything
+
+
+class WholesalerReceiptReturnListSerializer(serializers.ModelSerializer):
+    """
+    Lightweight list output. Used by:
+      - ListReturns
+      - GetStaleReturns
+      - GetReturnMismatches
+    """
+
+    product_title = serializers.CharField(source="product.title", read_only=True)
+    retailer_title = serializers.CharField(
+        source="retailer_entity.title", read_only=True,
+    )
+    wholesaler_title = serializers.CharField(
+        source="wholesaler_entity.title", read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True,
+    )
+    reason_display = serializers.CharField(
+        source="get_reason_display", read_only=True,
+    )
+    confirmation_outcome_display = serializers.CharField(
+        source="get_confirmation_outcome_display", read_only=True,
+    )
+
+    class Meta:
+        model = WholesalerReceiptReturns
+        fields = [
+            "id",
+            "product", "product_title",
+            "retailer_entity", "retailer_title",
+            "wholesaler_entity", "wholesaler_title",
+            "quantity", "total_refund_amount",
+            "reason", "reason_display",
+            "status", "status_display",
+            "confirmation_outcome", "confirmation_outcome_display",
+            "created", "updated",
+        ]
+        read_only_fields = fields

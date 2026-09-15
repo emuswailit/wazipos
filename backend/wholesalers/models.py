@@ -1,30 +1,39 @@
-from authentication.models import Entities, Stakes
-from django.db import transaction
+# wholesalers/models.py
+
+# Standard library
+import pytz
+from decimal import Decimal, InvalidOperation
+from io import BytesIO
+
+# Third-party
+from PIL import Image
+from django_advance_thumbnail import AdvanceThumbnailField
+
+# Django
+from django.contrib.auth import get_user_model
+from django.core.files import File
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models, transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
+
+# Your apps
+from authentication.models import DocumentNumbers, Entities, Stakes, Users
 from core.models import EntityRelatedModel
+from core.utils import _q
+from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
 from distributors.models import (
     DistributorReceipts,
     WholesalerOrders,
     WholesalerOrderItems,
 )
-from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
-from django.utils.dateparse import parse_date
-from django_advance_thumbnail import AdvanceThumbnailField
-from django.contrib.auth import get_user_model
-from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
-from drugs.models import Users
+from drugs.models import Users as DrugsUsers  # note: renamed to avoid clash
 from employees.models import Employees
-from authentication.models import DocumentNumbers
-import pytz
-from django.core.files import File
-from io import BytesIO
-from PIL import Image
-from django.utils.text import slugify
-from decimal import Decimal, InvalidOperation
-from django.utils import timezone
 from payments.models import PayoutAccounts
+from products.models import Products
 User = get_user_model()
 
 TRUE_FALSE_OPTIONS = (
@@ -79,135 +88,6 @@ def compress_image(image):
     new_image = File(im_io, name=image.name)
     return new_image
 
-class WholesalerVariations(EntityRelatedModel):
-    product = models.ForeignKey(
-        "products.Products", related_name="wholesaler_receipt_product", on_delete=models.CASCADE
-    )
-    minimum_stock = models.IntegerField(null=True, blank=True, default=0)
-    maximum_stock = models.IntegerField(null=True, blank=True, default=0)
-    reorder_level = models.IntegerField(null=True, blank=True, default=0)
-    lead_time = models.IntegerField(null=True, blank=True, default=0)
-    safety_stock = models.IntegerField(null=True, blank=True, default=0)
-    danger_stock = models.IntegerField(null=True, blank=True, default=0)
-    economic_order_quantity = models.IntegerField(
-        null=True, blank=True, default=0)
-    is_active = models.BooleanField(default=True)
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(User, on_delete=models.CASCADE)
-
-    def save(self, *args, **kwargs):
-        if self.product.preparation:
-            self.isDrug = True
-        super(WholesalerVariations, self).save(*args, **kwargs)
-
-
-# class WholesalerReceipts(EntityRelatedModel):
-#     product = models.ForeignKey(
-#         "products.Products",
-#         on_delete=models.CASCADE,
-#     )
-#     wholesaler_variation = models.ForeignKey(
-#         WholesalerVariations,
-#         on_delete=models.CASCADE,
-#     )
-#     received_from = models.ForeignKey(
-#         "authentication.Entities",
-#         related_name="variationReceiptDistributor",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     wholesaler_order_item = models.ForeignKey(
-#         WholesalerOrderItems,
-#         related_name="wholesalerDistributorOrder",
-#         null=True,
-#         blank=True,
-#         on_delete=models.CASCADE,
-#     )
-#     unit_of_receipt = models.CharField(
-#         max_length=20,
-#         choices=UNIT_OF_RECEIPT,
-#         default="Pack",
-#     )
-#     batch = models.CharField(
-#         max_length=50, null=True, blank=True,
-#     )
-#     bar_code = models.CharField(
-#         max_length=100, null=True, blank=True,
-#     )
-#     manufacture_date = models.DateField(
-#         default=None, null=True, blank=True,
-#     )
-#     expiry_date = models.DateField(
-#         default=None, null=True, blank=True,
-#     )
-#     current_unit_quantity = models.BigIntegerField(default=0)
-#     received_unit_quantity = models.BigIntegerField(default=0)
-#     received_pack_quantity = models.BigIntegerField(default=0)
-#     unit_buying_price = models.DecimalField(
-#         max_digits=10, decimal_places=2, default=0,
-#     )
-#     unit_selling_price = models.DecimalField(
-#         max_digits=10, decimal_places=2, default=0,
-#     )
-#     discount_unit_selling_price = models.DecimalField(
-#         max_digits=10, decimal_places=2, default=0.00,
-#     )
-#     final_unit_selling_price = models.DecimalField(
-#         max_digits=10, decimal_places=2, default=0.00,
-#     )
-
-#     # ➕ Recommended retail price — used to compute tentative
-#     #    profit on the retailer side. Optional. When set, it
-#     #    overrides the retailer's markup when pricing the
-#     #    suggested order.
-#     recommended_retail_price = models.DecimalField(
-#         max_digits=10,
-#         decimal_places=2,
-#         null=True,
-#         blank=True,
-#         default=None,
-#         help_text=(
-#             "Suggested price for the retailer to sell at. "
-#             "If empty, the retailer's indent markup applies."
-#         ),
-#     )
-
-#     employee = models.ForeignKey(
-#         Employees,
-#         related_name="employee_creating_wholesaler_receipt",
-#         on_delete=models.CASCADE,
-#     )
-#     in_placement = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true',
-#     )
-#     description = models.TextField(max_length=300)
-#     created = models.DateTimeField(default=timezone.now)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         User,
-#         related_name="wholesalerReceiptOwner",
-#         on_delete=models.CASCADE,
-#     )
-
-#     def __str__(self):
-#         return self.product.title
-
-#     def save(self, *args, **kwargs):
-#         product = self.product
-
-#         if product and product.bar_code:
-#             self.bar_code = product.bar_code
-#         elif self.bar_code and product and not product.bar_code:
-#             product.bar_code = self.bar_code
-#             product.save(update_fields=['bar_code'])
-
-#         super(WholesalerReceipts, self).save(*args, **kwargs)
-
-
 
 
 class WholesalerReceipts(EntityRelatedModel):
@@ -223,10 +103,7 @@ class WholesalerReceipts(EntityRelatedModel):
         "products.Products",
         on_delete=models.CASCADE,
     )
-    wholesaler_variation = models.ForeignKey(
-        WholesalerVariations,
-        on_delete=models.CASCADE,
-    )
+
     received_from = models.ForeignKey(
         "authentication.Entities",
         related_name="variationReceiptDistributor",
@@ -359,13 +236,6 @@ class WholesalerPriceDiscountBanners(EntityRelatedModel):
         return self.wholesaler_price_discount.title
 
             
-
-
-from decimal import Decimal
-
-from django.db import models, transaction
-from django.utils import timezone
-
 
 class WholesalerPriceDiscounts(EntityRelatedModel):
     """
@@ -1604,3 +1474,342 @@ class RetailerOrderPayments(EntityRelatedModel):
         
         self.retailer_order.pay_in_reference_number = self.pay_in_reference_number
         super(RetailerOrderPayments, self).save(*args, **kwargs)
+
+
+
+# wholesalers/models.py
+
+
+class WholesalerReceiptReturns(EntityRelatedModel):
+    """
+    Wholesaler-side record of a return initiated by a retailer.
+
+    Created atomically with the retailer's StockAdjustment when the
+    retailer ships goods back. Lifecycle:
+
+      PENDING_CONFIRMATION  → created, awaiting wholesaler action
+      CONFIRMED             → wholesaler confirmed physical receipt
+                              (stock-in and/or write-off applied)
+      SETTLED               → financially closed
+      REJECTED              → wholesaler refused the return
+      CANCELLED             → cancelled before confirmation
+
+    The retailer's ledger is corrected at creation time via the paired
+    StockAdjustment; this record drives the wholesaler's ledger on
+    confirmation only.
+    """
+
+    class ReturnReasonOptions(models.TextChoices):
+        EXPIRED = "EXPIRED", _("Expired stock")
+        NEAR_EXPIRY = "NEAR_EXPIRY", _("Near-expiry return")
+        DAMAGED = "DAMAGED", _("Damaged in transit or storage")
+        WRONG_ITEM = "WRONG_ITEM", _("Wrong item supplied")
+        SHORT_DATED = "SHORT_DATED", _("Short-dated on delivery")
+        QUALITY = "QUALITY", _("Quality issue")
+        OVER_ORDERED = "OVER_ORDERED", _("Over-ordered")
+        RECALL = "RECALL", _("Product recall")
+        OTHER = "OTHER", _("Other")
+
+    class ReturnTypeOptions(models.TextChoices):
+        REFUND = "REFUND", _("Refund")
+        EXCHANGE = "EXCHANGE", _("Exchange / credit note")
+        REPLACEMENT = "REPLACEMENT", _("Replacement stock")
+
+    class ReturnStatusOptions(models.TextChoices):
+        PENDING_CONFIRMATION = "PENDING_CONFIRMATION", _("Awaiting wholesaler confirmation")
+        CONFIRMED = "CONFIRMED", _("Confirmed by wholesaler")
+        SETTLED = "SETTLED", _("Financially settled")
+        REJECTED = "REJECTED", _("Rejected by wholesaler")
+        CANCELLED = "CANCELLED", _("Cancelled before receipt")
+
+    class ConfirmationOptions(models.TextChoices):
+        PENDING = "PENDING", _("Pending confirmation")
+        TAKE_BACK = "TAKE_BACK", _("Take back into inventory")
+        WRITE_OFF = "WRITE_OFF", _("Cast / write off")
+        PARTIAL_TAKE_BACK = "PARTIAL_TAKE_BACK", _("Partial take back, rest written off")
+
+    # ---- References ----
+    retailer_order = models.ForeignKey(
+        RetailerOrders,
+        related_name="wholesaler_receipt_returns",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    retailer_order_item = models.ForeignKey(
+        RetailerOrderItems,
+        related_name="wholesaler_receipt_returns",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    retailer_entity = models.ForeignKey(
+        Entities,
+        related_name="wholesaler_returns_from",
+        on_delete=models.CASCADE,
+    )
+    wholesaler_entity = models.ForeignKey(
+        Entities,
+        related_name="wholesaler_returns_to",
+        on_delete=models.CASCADE,
+    )
+    retailer_receipt = models.ForeignKey(
+        "retailers.RetailerReceipts",
+        related_name="wholesaler_returns_from_receipt",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        help_text=_(
+            "The retailer's lot being returned. The paired "
+            "StockAdjustment decrements this lot."
+        ),
+    )
+    wholesaler_receipt = models.ForeignKey(
+        WholesalerReceipts,
+        related_name="wholesaler_receipt_returns",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    initiating_adjustment = models.OneToOneField(
+        "retailers.StockAdjustments",
+        related_name="generated_return",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        help_text=_(
+            "The retailer-side adjustment created alongside this "
+            "return. Reverse side of StockAdjustments.linked_return."
+        ),
+    )
+    product = models.ForeignKey(
+        Products,
+        on_delete=models.CASCADE,
+    )
+
+    # ---- Identity / audit ----
+    draft_id = models.CharField(max_length=256, null=True, blank=True)
+    document_number = models.ForeignKey(
+        DocumentNumbers,
+        related_name="wholesaler_receipt_return_document_number",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    reference_number = models.CharField(max_length=100, null=True, blank=True)
+
+    # ---- Quantity ----
+    quantity = models.IntegerField(default=0)
+    unit_of_return = models.CharField(
+        max_length=20,
+        choices=UNITS_OF_ISSUE_CHOICES,
+        default="Pack",
+    )
+
+    # ---- Financial snapshot ----
+    unit_price_paid = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+        help_text=_("Frozen from retailer_order_item.item_final_price at creation."),
+    )
+    unit_price_refunded = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+    )
+    restocking_fee_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.00,
+    )
+    total_refund_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0.00,
+    )
+
+    # ---- Reason ----
+    reason = models.CharField(
+        max_length=30,
+        choices=ReturnReasonOptions.choices,
+        default=ReturnReasonOptions.OTHER,
+    )
+    justification = models.CharField(max_length=256)
+    return_type = models.CharField(
+        max_length=20,
+        choices=ReturnTypeOptions.choices,
+        default=ReturnTypeOptions.REFUND,
+    )
+
+    # ---- Confirmation (wholesaler decision) ----
+    confirmation_outcome = models.CharField(
+        max_length=20,
+        choices=ConfirmationOptions.choices,
+        default=ConfirmationOptions.PENDING,
+    )
+    confirmed_quantity = models.IntegerField(default=0)
+    written_off_quantity = models.IntegerField(default=0)
+    confirmation_notes = models.TextField(blank=True)
+
+    # ---- State ----
+    status = models.CharField(
+        max_length=30,
+        choices=ReturnStatusOptions.choices,
+        default=ReturnStatusOptions.PENDING_CONFIRMATION,
+    )
+    is_confirmed = models.CharField(
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
+    )
+    is_settled = models.CharField(
+        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
+    )
+
+    # ---- Who did what ----
+    employee = models.ForeignKey(
+        Employees,
+        related_name="employee_creating_wholesaler_return",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    confirmed_by = models.ForeignKey(
+        Users,
+        related_name="wholesaler_return_confirmed_by",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    settled_by = models.ForeignKey(
+        Users,
+        related_name="wholesaler_return_settled_by",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+    rejected_by = models.ForeignKey(
+        Users,
+        related_name="wholesaler_return_rejected_by",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+    )
+
+    # ---- Timestamps ----
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        Users,
+        related_name="wholesaler_return_owner",
+        on_delete=models.CASCADE,
+    )
+
+    class Meta:
+        verbose_name_plural = "Wholesaler Receipt Returns"
+        indexes = [
+            models.Index(fields=["wholesaler_entity", "status"]),
+            models.Index(fields=["retailer_entity", "status"]),
+            models.Index(fields=["wholesaler_receipt", "status"]),
+            models.Index(fields=["status", "created"]),
+            models.Index(fields=["reason", "created"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Return {self.id} — {self.product.title} × {self.quantity}"
+
+    # ------------------------------------------------------------------
+    # Derived
+    # ------------------------------------------------------------------
+
+    @property
+    def net_refund_per_unit(self) -> Decimal:
+        return _q(
+            (self.unit_price_refunded or 0)
+            * (Decimal("1") - (self.restocking_fee_percent or 0) / Decimal("100"))
+        )
+
+    def recalculate(self, save=True):
+        self.total_refund_amount = _q(
+            self.net_refund_per_unit * Decimal(str(self.quantity or 0))
+        )
+        if save:
+            super().save(update_fields=["total_refund_amount", "updated"])
+
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        if self.quantity is None or self.quantity <= 0:
+            errors["quantity"] = "Quantity must be greater than zero."
+
+        if (
+            self.confirmation_outcome
+            and self.confirmation_outcome != self.ConfirmationOptions.PENDING
+            and self.confirmed_quantity + self.written_off_quantity
+            != self.quantity
+        ):
+            errors["confirmed_quantity"] = (
+                "Confirmed + written off quantity must equal total quantity."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    # ------------------------------------------------------------------
+    # Save — handles both creation and update concerns
+    # ------------------------------------------------------------------
+
+    def save(self, *args, **kwargs):
+        """
+        Creation concerns:
+          - Derive product from the receipt if not supplied.
+          - Freeze unit_price_paid from the source order line.
+          - Default unit_price_refunded to unit_price_paid.
+          - Compute total_refund_amount.
+
+        Update concerns:
+          - Never change `product` after creation (immutable identity).
+          - Never change `quantity` after confirmation.
+          - Recompute total_refund_amount if refund inputs changed.
+        """
+        is_new = self._state.adding
+
+        if is_new:
+            # --- Creation ---
+            if not self.product_id and self.retailer_receipt_id:
+                self.product_id = self.retailer_receipt.product_id
+
+            if (
+                self.unit_price_paid in (None, Decimal("0.00"))
+                and self.retailer_order_item_id
+            ):
+                self.unit_price_paid = (
+                    self.retailer_order_item.item_final_price
+                    or Decimal("0.00")
+                )
+
+            if (
+                self.unit_price_refunded in (None, Decimal("0.00"))
+                and self.unit_price_paid
+            ):
+                self.unit_price_refunded = self.unit_price_paid
+
+        else:
+            # --- Update ---
+            # Enforce immutability of core identity fields after confirmation.
+            if self.status in (
+                self.ReturnStatusOptions.CONFIRMED,
+                self.ReturnStatusOptions.SETTLED,
+            ):
+                original = (
+                    WholesalerReceiptReturns.objects
+                    .only("product_id", "quantity")
+                    .get(pk=self.pk)
+                )
+                if original.product_id != self.product_id:
+                    raise ValidationError(
+                        "Product cannot be changed after confirmation."
+                    )
+                if original.quantity != self.quantity:
+                    raise ValidationError(
+                        "Quantity cannot be changed after confirmation. "
+                        "Issue a compensating return instead."
+                    )
+
+        # Recompute derived total (safe on both create and update)
+        self.total_refund_amount = _q(
+            self.net_refund_per_unit * Decimal(str(self.quantity or 0))
+        )
+
+        super().save(*args, **kwargs)

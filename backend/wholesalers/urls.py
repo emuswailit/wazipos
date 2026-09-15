@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 
+
 urlpatterns = [
     path(
         "receipts/staff",
@@ -23,6 +24,11 @@ urlpatterns = [
     views.campaignsAPIView,
     name="campaigns-apiview",
 ),
+ path(
+        "wholesalers/receipt-returns",
+        views.receiptReturnsAPIView,
+        name="wholesaler-receipt-returns-apiview",
+    ),
     path(
         "retailers/orders/staff",
         views.retailerOrdersStaffAPIView,
@@ -49,4 +55,7 @@ urlpatterns = [
         views.WholesalerQuantityDiscountsCreateAPIView.as_view(),
         name=views.WholesalerQuantityDiscountsCreateAPIView.name,
     ),
+
+
+    
 ]

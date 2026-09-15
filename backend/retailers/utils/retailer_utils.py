@@ -18,7 +18,7 @@ from retailers.models import CustomerOrderPayment
 from products.models import ProductImages
 from products.serializers import ProductImageSerializer
 from wholesalers.models import WholesalerReceipts
-from wholesalers.validators import wholesalers_models_validators
+from wholesalers.validators.wholesalers_models_validators import validate_wholesaler_receipt
 from intergrations.jambopay.jp_mobile_money_checkout import jambopay_mobile_checkout
 from intergrations.jambopay.jambopay_wallet import get_account_by_phone
 from payments.validators import payments_models_validators
@@ -1764,11 +1764,10 @@ def create_retailer_indent_item(data, user):
     if not raw_receipt_id:
         errors.append("Wholesale product ID is required")
     else:
-        wholesale_receipt = (
-            wholesalers_models_validators.validate_wholesaler_receipt(
+        wholesale_receipt = validate_wholesaler_receipt(
                 raw_receipt_id
             )
-        )
+        
         if wholesale_receipt is None:
             errors.append("Wholesale product not found")
 
@@ -1817,7 +1816,7 @@ def create_retailer_indent_item(data, user):
     raw_campaign_item = data.get("campaign_item")
     if raw_campaign_item:
         try:
-            from campaigns.models import WholesalerCampaignItem
+            from wholesalers.models import WholesalerCampaignItem
             campaign_item = WholesalerCampaignItem.objects.filter(
                 id=raw_campaign_item
             ).first()

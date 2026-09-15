@@ -25,7 +25,7 @@ import uuid
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import requests
-
+from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
 
 User = get_user_model()
 
@@ -46,10 +46,7 @@ class UnitOfIssue(models.TextChoices):
     Pack = "Pack", _("Pack")
 
 
-TRUE_FALSE_OPTIONS = (
-    ("true", "true"),
-    ("false", "false"),
-)
+
 STOCK_ADJUSTMENT_DIRECTION_OPTIONS = (
     ("DECREMENT", "DECREMENT"),
     ("INCREMENT", "INCREMENT"),
@@ -435,11 +432,6 @@ class RetailerReceipts(EntityRelatedModel):
                 "updated",
             ])
 
-# class IndentingCriteria(models.TextChoices):
-#         OUT_OF_STOCK = "OUT_OF_STOCK", _("OUT_OF_STOCK")
-#         TOP_UP = "TOP_UP", _("TOP_UP")
-#         SPECIAL_ORDER = "SPECIAL_ORDER", _("SPECIAL_ORDER")
-#         ON_OFFER = "ON_OFFER", _("ON_OFFER")
 
 class RetailQuantityDiscounts(EntityRelatedModel):
     class Meta:
@@ -1015,7 +1007,7 @@ class RetailerIndentItem(EntityRelatedModel):
 class OutOfStock(EntityRelatedModel):
     class Meta:
         verbose_name_plural="Out Of Stock Items"
-
+    draft_id = models.CharField(max_length=256, null=True, blank=True)
     product = models.ForeignKey("products.Products", on_delete=models.CASCADE)
     unit_of_receipt = models.CharField(
         verbose_name=_("Unit of Receipt"),
@@ -1782,6 +1774,10 @@ class CustomerOrderItems(EntityRelatedModel):
         if order:
             order.recalculate()
 
+
+
+
+
 # def customer_order_post_save(sender, instance, signal, *args, **kwargs):
 #     if instance:
 
@@ -2260,8 +2256,60 @@ class SalesReturns(EntityRelatedModel):
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
-
 class StockAdjustments(EntityRelatedModel):
+    class Meta:
+        verbose_name_plural = "Stock Adjustment"
+
+    RETURN_INTENTS = (
+        ("NONE", "NONE"),
+        ("WHOLESALER_RETURN", "WHOLESALER_RETURN"),
+        ("CUSTOMER_RETURN", "CUSTOMER_RETURN"),
+        ("EXPIRY_WRITE_OFF", "EXPIRY_WRITE_OFF"),
+        ("DAMAGE_WRITE_OFF", "DAMAGE_WRITE_OFF"),
+        ("INTERNAL_CORRECTION", "INTERNAL_CORRECTION"),
+    )
+
+    retailer_receipt = models.ForeignKey(
+        "retailers.RetailerReceipts",
+        related_name="stock_adjustment_inventory",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
+    quantity = models.IntegerField(default=0)
+    justification = models.CharField(max_length=256)
+    direction = models.CharField(
+        max_length=50, choices=STOCK_ADJUSTMENT_DIRECTION_OPTIONS,
+    )
+
+    # ---- NEW FIELD 1 ----
+    return_intent = models.CharField(
+        max_length=30,
+        choices=RETURN_INTENTS,
+        default="NONE",
+        help_text=(
+            "When 'WHOLESALER_RETURN', this adjustment signals the "
+            "wholesaler that goods are inbound and should expect a "
+            "return. The paired WholesalerReceiptReturns is created in "
+            "the same transaction."
+        ),
+    )
+
+    # ---- NEW FIELD 2 ----
+    linked_return = models.ForeignKey(
+        "wholesalers.WholesalerReceiptReturns",
+        related_name="initiating_adjustments",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        help_text=(
+            "The WholesalerReceiptReturns created alongside this "
+            "adjustment. Set for return_intent=WHOLESALER_RETURN."
+        ),
+    )
+
+    owner = models.ForeignKey(
+        Users, related_name="stock_adjusted_by", on_delete=models.CASCADE,
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
     class Meta:
         verbose_name_plural="Stock Adjustment"
     retailer_receipt = models.ForeignKey(RetailerReceipts,related_name="stock_adjustment_inventory", on_delete=models.CASCADE,null=True,blank=True)

@@ -6,6 +6,26 @@ import string
 import datetime
 from rest_framework import exceptions
 
+# core/utils.py
+
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def _q(value, places=2):
+    """
+    Quantize a value to `places` decimal places using half-up rounding.
+    Returns Decimal("0.00") for None or invalid input.
+    Used for money/quantity rounding throughout the app.
+    """
+    if value is None:
+        return Decimal("0.00")
+    try:
+        if not isinstance(value, Decimal):
+            value = Decimal(str(value))
+    except Exception:
+        return Decimal("0.00")
+    quantizer = Decimal("1").scaleb(-places)
+    return value.quantize(quantizer, rounding=ROUND_HALF_UP)
 
 def random_string_generator(size=10, chars=string.ascii_lowercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))

@@ -1509,6 +1509,7 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
         model = models.OutOfStock
         fields = (
             "id",
+            "draft_id",
             "entity",
             "product",
             "unit_of_receipt",
@@ -2851,18 +2852,67 @@ class SalesReturnsSerializer(serializers.ModelSerializer):
     def get_retailer_receipt_title(self,obj):
         return obj.retailer_receipt.product.title
     
-
-class StockAdjustmentsSerializer(serializers.ModelSerializer):
-    retailer_receipt_title=serializers.SerializerMethodField(read_only=True)
-    class Meta:
-        model=models.StockAdjustments
-        fields=("id","retailer_receipt","retailer_receipt_title","quantity","justification","owner","created","updated")
-        read_only_fields=("id","created","updated")
-
-    def get_retailer_receipt_title(self,obj):
-        return obj.retailer_receipt.product.title
+# retailers/serializers.py
 
 from rest_framework import serializers
+
+from retailers import models
+
+
+class StockAdjustmentsSerializer(serializers.ModelSerializer):
+    """
+    Serializer for StockAdjustments.
+
+    Additions since the original version:
+      - return_intent        (new field)
+      - linked_return        (new field, FK to WholesalerReceiptReturns)
+      - direction            (was missing from the original)
+      - display strings      (return_intent_display, direction_display)
+      - linked return summary (linked_return_id, linked_return_status)
+    """
+
+    retailer_receipt_title = serializers.SerializerMethodField(read_only=True)
+    return_intent_display = serializers.CharField(
+        source="get_return_intent_display", read_only=True,
+    )
+    direction_display = serializers.CharField(
+        source="get_direction_display", read_only=True,
+    )
+    linked_return_id = serializers.UUIDField(read_only=True)
+    linked_return_status = serializers.CharField(
+        source="linked_return.status", read_only=True,
+    )
+
+    class Meta:
+        model = models.StockAdjustments
+        fields = (
+            "id",
+            "retailer_receipt",
+            "retailer_receipt_title",
+            "quantity",
+            "direction",
+            "direction_display",
+            "justification",
+            "return_intent",
+            "return_intent_display",
+            "linked_return",
+            "linked_return_id",
+            "linked_return_status",
+            "owner",
+            "created",
+            "updated",
+        )
+        read_only_fields = (
+            "id",
+            "created",
+            "updated",
+        )
+
+    def get_retailer_receipt_title(self, obj):
+        if obj.retailer_receipt and obj.retailer_receipt.product:
+            return obj.retailer_receipt.product.title
+        return None
+
 
 # retailers/serializers.py
 

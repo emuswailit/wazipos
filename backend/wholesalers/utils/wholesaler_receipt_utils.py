@@ -5,14 +5,13 @@ from authentication.validators import authentication_models_validators
 from distributors.validators import distributors_models_validator
 from employees.validators import employees_models_validators
 from retailers.models import RetailerReceipts
-from ..models import WholesalerReceipts, WholesalerVariations, WholesalerPriceDiscounts, WholesalerQuantityDiscounts
+from ..models import WholesalerReceipts,  WholesalerPriceDiscounts, WholesalerQuantityDiscounts
 from core import validators
 from ..validators import wholesalers_models_validators
 from django.db.models import Q
 import datetime
-from django.utils import timezone
 import pytz
-from django.db import models
+
 
 
 
@@ -102,14 +101,6 @@ def create_wholesaler_receipt(data, user):
     if len(errors) > 0:
         raise exceptions.ValidationError(errors)
     else:
-        if WholesalerVariations.objects.filter(product=product_obj).exists():
-            wholesaler_variation = WholesalerVariations.objects.filter(
-                product=product_obj
-            ).first()
-        else:
-            wholesaler_variation = WholesalerVariations.objects.create(
-                product=product_obj, owner=user, entity=user.entity
-            )
         a_minute_ago = datetime.datetime.now(pytz.timezone(
             'UTC')) - datetime.timedelta(minutes=1)
         print('a_minute_ago', a_minute_ago)
