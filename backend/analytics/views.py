@@ -227,5 +227,21 @@ def analyticsAPIView(request):
             serializers.ForecastAccuracySerializer(qs, many=True).data,
             "forecast_accuracy",
         )
+
+    # =================================================================
+    # Bulk forecast
+    # =================================================================
+
+    elif action == "GetBulkForecast":
+        errors, result = utils.get_bulk_forecast_action(request.data, request.user)
+        if errors:
+            return custom_errors_response(1, "Bulk forecast could not be computed", errors)
+
+        return custom_success_message(
+            0,
+            "Bulk forecast computed successfully",
+            result,
+            "bulk_forecast",
+        )
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")

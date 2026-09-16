@@ -22,6 +22,7 @@ from analytics.models import (
 )
 from analytics.services.campaign_advisor import suggest_campaign_candidates
 from authentication.models import Entities
+from analytics.services.bulk_forecast import get_bulk_forecast
 
 
 # =====================================================================
@@ -539,3 +540,67 @@ def get_forecast_accuracy(data, user):
 
     limit = int(data.get("limit", 100))
     return {}, qs.filter(period_end=latest).order_by("-wape")[:limit]
+
+
+def get_bulk_forecast_action(data, user):
+    """
+    Payload:
+    {
+        "action": "GetBulkForecast",
+        "tier": "RETAILER",                    # optional, defaults to user's tier
+        "lead_time_days": 7,                    # required
+        "order_days": 14,                       # required
+        "product_ids": ["<uuid>", ...],         # optional
+        "min_avg_daily_demand": 0.5,            # optional
+        "include_daily": true,                  # optional, default true
+        "run_date": "2026-09-15"                # optional, defaults to latest
+    }
+
+    Only platform staff may pass entity_id explicitly. Everyone else
+    gets their own entity's forecast.
+    """
+    tier = data.get("tier")
+    if not tier:
+        # Derive from the user's entity type
+        from analytics.utils.domains import tier_of
+        et = user.entity.entity_type if user.entity else None
+        tier = tier_of(et) if et else None
+    if tier not in ("WHOLESALER", "RETAILER"):
+        return {"tier": "Could not determine tier. Pass tier explicitly."}, None
+
+    try:
+        lead_time_days = int(data.get("lead_time_days", 0))
+        order_days = int(data.get("order_days", 0))
+    except (TypeError, ValueError):
+        return {"lead_time_days": "Must be an integer.", "order_days": "Must be an integer."}, None
+
+    if lead_time_days <= 0:
+        return {"lead_time_days": "Must be greater than zero."}, None
+    if order_days <= 0:
+        return {"order_days": "Must be greater than zero."}, None
+
+    # Determine target entity
+    entity_id = getattr(user, "entity_id", None)
+    if data.get("entity_id"):
+        if not user.is_staff:
+            return {"entity_id": "Only platform staff may specify entity."}, None
+        entity_id = data["entity_id"]
+
+    if not entity_id:
+        return {"entity_id": "No entity on user."}, None
+
+    try:
+        result = get_bulk_forecast(
+            entity_id=entity_id,
+            tier=tier,
+            lead_time_days=lead_time_days,
+            order_days=order_days,
+            product_ids=data.get("product_ids"),
+            min_avg_daily_demand=data.get("min_avg_daily_demand"),
+            include_daily=data.get("include_daily", True),
+            run_date=_parse_date(data.get("run_date")),
+        )
+    except Exception as e:
+        return {"detail": str(e)}, None
+
+    return {}, result

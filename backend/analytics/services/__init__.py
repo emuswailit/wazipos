@@ -11,6 +11,7 @@ from analytics.services.demand_extract import extract_daily_demand
 from analytics.services.demand_profile import build_demand_profiles
 from analytics.services.forecast import build_forecasts
 from analytics.services.backtest import backtest_forecasts   # ← NEW
+from analytics.services.bulk_forecast import get_bulk_forecast
 
 __all__ = [
     "build_daily_snapshot",
@@ -24,4 +25,5 @@ __all__ = [
     "build_demand_profiles",
     "build_forecasts",
     "backtest_forecasts",   # ← NEW
+    "get_bulk_forecast"
 ]

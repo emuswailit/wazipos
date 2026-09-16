@@ -29,6 +29,7 @@ from analytics.utils.inventory_utils import (
      get_demand_profile,
     get_forecast,
     get_forecast_accuracy,
+     get_bulk_forecast_action,
 )
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     "get_demand_profile",
     "get_forecast",
     "get_forecast_accuracy",
+    " get_bulk_forecast_action,"
 ]
