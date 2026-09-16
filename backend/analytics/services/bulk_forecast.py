@@ -103,11 +103,12 @@ def get_bulk_forecast(
     # Attach product metadata and optional daily breakdown
     from products.models import Products
 
-    product_titles = dict(
-        Products.objects
+    product_titles = {
+        str(pid): title
+        for pid, title in Products.objects
         .filter(id__in=[p["product_id"] for p in product_summaries])
         .values_list("id", "title")
-    )
+    }
 
     if include_daily:
         daily_by_product = _load_daily(qs, [p["product_id"] for p in product_summaries])
