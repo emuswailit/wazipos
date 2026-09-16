@@ -141,7 +141,18 @@ def get_bulk_forecast(
 
 def _load_daily(qs, product_ids):
     """
-    Return a dict {product_id: [daily rows]} for the given queryset.
+    Return a dict {product_id_str: [daily rows]} for the given queryset.
+
+    `qs` is a DemandForecast queryset already filtered to:
+        - the target entity
+        - the target tier
+        - a specific run_date
+        - horizon_days <= requested horizon
+
+    `product_ids` is a list of string UUIDs (from the aggregated summaries).
+
+    Each daily row is a plain dict, JSON-safe, ready to be embedded in
+    the API response.
     """
     if not product_ids:
         return {}
@@ -149,9 +160,15 @@ def _load_daily(qs, product_ids):
     daily_rows = (
         qs.filter(product_id__in=product_ids)
         .values(
-            "product_id", "forecast_date", "horizon_days",
-            "point_forecast", "p10", "p50", "p90",
-            "model_name", "segment",
+            "product_id",
+            "forecast_date",
+            "horizon_days",
+            "point_forecast",
+            "p10",
+            "p50",
+            "p90",
+            "model_name",
+            "segment",
         )
         .order_by("product_id", "horizon_days")
     )

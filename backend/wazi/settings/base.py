@@ -403,7 +403,7 @@ CORS_ALLOWED_ORIGINS = [
 # Celery Broker - Redis
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = "django-db"
-CELERY_ENABLE_UTC = True
+CELERY_ENABLE_UTC = False
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
