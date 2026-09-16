@@ -16,7 +16,7 @@ app = Celery("wazi")
 
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-
+app.conf.broker_url = "redis://127.0.0.1:6379/0"
 app.conf.enable_utc = False
 app.conf.update(timezone='Africa/Nairobi')
 
