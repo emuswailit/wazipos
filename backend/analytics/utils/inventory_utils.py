@@ -604,3 +604,65 @@ def get_bulk_forecast_action(data, user):
         return {"detail": str(e)}, None
 
     return {}, result
+
+def get_bulk_forecast_action(data, user):
+    """
+    Payload:
+    {
+        "action": "GetBulkForecast",
+        "tier": "RETAILER",
+        "lead_time_days": 7,
+        "order_days": 14,
+        "product_ids": ["<uuid>"],
+        "min_avg_daily_demand": 0.5,
+        "include_daily": true,
+        "include_offers": true,
+        "include_campaigns": true,
+        "run_date": "2026-09-16"
+    }
+    """
+    tier = data.get("tier")
+    if not tier:
+        from analytics.utils.domains import tier_of
+        et = user.entity.entity_type if user.entity else None
+        tier = tier_of(et) if et else None
+    if tier not in ("WHOLESALER", "RETAILER"):
+        return {"tier": "Could not determine tier. Pass tier explicitly."}, None
+
+    try:
+        lead_time_days = int(data.get("lead_time_days", 0))
+        order_days = int(data.get("order_days", 0))
+    except (TypeError, ValueError):
+        return {"lead_time_days": "Must be an integer.", "order_days": "Must be an integer."}, None
+
+    if lead_time_days <= 0:
+        return {"lead_time_days": "Must be greater than zero."}, None
+    if order_days <= 0:
+        return {"order_days": "Must be greater than zero."}, None
+
+    entity_id = getattr(user, "entity_id", None)
+    if data.get("entity_id"):
+        if not user.is_staff:
+            return {"entity_id": "Only platform staff may specify entity."}, None
+        entity_id = data["entity_id"]
+
+    if not entity_id:
+        return {"entity_id": "No entity on user."}, None
+
+    try:
+        result = get_bulk_forecast(
+            entity_id=entity_id,
+            tier=tier,
+            lead_time_days=lead_time_days,
+            order_days=order_days,
+            product_ids=data.get("product_ids"),
+            min_avg_daily_demand=data.get("min_avg_daily_demand"),
+            include_daily=data.get("include_daily", True),
+            include_offers=data.get("include_offers", True),
+            include_campaigns=data.get("include_campaigns", True),
+            run_date=_parse_date(data.get("run_date")),
+        )
+    except Exception as e:
+        return {"detail": str(e)}, None
+
+    return {}, result

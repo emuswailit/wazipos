@@ -2,7 +2,8 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from celery import Celery
 
-app = Celery()
+# app = Celery()
+from wazi.celery import app   
 channel_layer = get_channel_layer()
 
 @app.task

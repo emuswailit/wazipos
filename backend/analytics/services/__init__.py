@@ -12,6 +12,7 @@ from analytics.services.demand_profile import build_demand_profiles
 from analytics.services.forecast import build_forecasts
 from analytics.services.backtest import backtest_forecasts   # ← NEW
 from analytics.services.bulk_forecast import get_bulk_forecast
+from analytics.services.offer_advisor import suggest_offers_for_product
 
 __all__ = [
     "build_daily_snapshot",
@@ -26,4 +27,5 @@ __all__ = [
     "build_forecasts",
     "backtest_forecasts",   # ← NEW
     "get_bulk_forecast"
+      "suggest_campaigns_for_product",
 ]

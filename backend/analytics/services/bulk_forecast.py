@@ -4,25 +4,26 @@
 Bulk forecast aggregation.
 
 Returns, for a given entity + tier, the aggregated forecast over
-`lead_time_days + order_days` for every product that has a forecast.
+lead_time_days + order_days for every product that has a forecast.
 
-Aggregates the daily DemandForecast rows into:
-    - total forecast over the horizon
-    - p10 / p90 bounds over the horizon
-    - average daily forecast
-    - daily breakdown (optional)
-
-This is the input for reorder decisions. Not a separate forecast model
-— a projection of the same underlying per-product, per-day forecasts.
+For retailer-tier queries, enriches each product with:
+    - suggested_offers     (wholesaler lots to buy from)
+    - suggested_campaigns  (active campaigns to opt into)
 """
 
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import Sum, Max
+from django.db.models import Max, Sum
 
 from analytics.models import DemandForecast
+from analytics.services.campaign_advisor import suggest_campaigns_for_product
+from analytics.services.offer_advisor import suggest_offers_for_product
 
+
+# =====================================================================
+# Public entry point
+# =====================================================================
 
 def get_bulk_forecast(
     entity_id,
@@ -32,19 +33,14 @@ def get_bulk_forecast(
     product_ids: list | None = None,
     min_avg_daily_demand: float | None = None,
     include_daily: bool = True,
+    include_offers: bool = True,
+    include_campaigns: bool = True,
     run_date: date | None = None,
 ) -> dict:
-    """
-    Return aggregated forecasts for every product at (entity, tier)
-    over the horizon of lead_time_days + order_days.
-
-    If run_date is None, the latest run_date for the entity is used.
-    """
     horizon_days = int(lead_time_days) + int(order_days)
     if horizon_days <= 0:
         raise ValueError("lead_time_days + order_days must be positive.")
 
-    # Resolve the latest run_date if not provided
     base_qs = DemandForecast.objects.filter(entity_id=entity_id, tier=tier)
     if run_date is None:
         run_date = (
@@ -61,16 +57,10 @@ def get_bulk_forecast(
             "products": [],
         }
 
-    # Filter to the horizon window
-    qs = base_qs.filter(
-        run_date=run_date,
-        horizon_days__lte=horizon_days,
-    )
-
+    qs = base_qs.filter(run_date=run_date, horizon_days__lte=horizon_days)
     if product_ids:
         qs = qs.filter(product_id__in=product_ids)
 
-    # Aggregate per product
     agg = (
         qs.values("product_id")
         .annotate(
@@ -100,33 +90,46 @@ def get_bulk_forecast(
             "days_covered": days,
         })
 
-    # Attach product metadata and optional daily breakdown
+    # ---- Attach product titles ----
     from products.models import Products
 
+    product_ids_str = [p["product_id"] for p in product_summaries]
     product_titles = {
         str(pid): title
         for pid, title in Products.objects
-        .filter(id__in=[p["product_id"] for p in product_summaries])
+        .filter(id__in=product_ids_str)
         .values_list("id", "title")
     }
 
-    if include_daily:
-        daily_by_product = _load_daily(qs, [p["product_id"] for p in product_summaries])
-    else:
-        daily_by_product = {}
-
     for p in product_summaries:
         p["product_title"] = product_titles.get(p["product_id"], "")
-        if include_daily:
-            p["daily"] = daily_by_product.get(p["product_id"], [])
 
-    # Also attach model/segment from any daily row
+    # ---- Daily breakdown ----
     if include_daily:
+        daily_by_product = _load_daily(qs, product_ids_str)
         for p in product_summaries:
-            dailies = p["daily"]
-            if dailies:
-                p["model_name"] = dailies[0].get("model_name")
-                p["segment"] = dailies[0].get("segment")
+            daily = daily_by_product.get(p["product_id"], [])
+            p["daily"] = daily
+            if daily:
+                p["model_name"] = daily[0].get("model_name")
+                p["segment"] = daily[0].get("segment")
+    else:
+        for p in product_summaries:
+            p["daily"] = []
+
+    # ---- Offers and campaigns (retailer-tier only) ----
+    if tier == "RETAILER" and (include_offers or include_campaigns):
+        _enrich_with_offers_and_campaigns(
+            product_summaries=product_summaries,
+            product_ids=product_ids_str,
+            entity_id=entity_id,
+            include_offers=include_offers,
+            include_campaigns=include_campaigns,
+        )
+    else:
+        for p in product_summaries:
+            p["suggested_offers"] = []
+            p["suggested_campaigns"] = []
 
     return {
         "entity_id": str(entity_id),
@@ -139,36 +142,79 @@ def get_bulk_forecast(
     }
 
 
+# =====================================================================
+# Enrichment
+# =====================================================================
+
+def _enrich_with_offers_and_campaigns(
+    product_summaries,
+    product_ids,
+    entity_id,
+    include_offers,
+    include_campaigns,
+):
+    from authentication.models import Entities
+    from products.models import Products
+
+    try:
+        retailer_entity = Entities.objects.get(id=entity_id)
+    except Entities.DoesNotExist:
+        for p in product_summaries:
+            p["suggested_offers"] = []
+            p["suggested_campaigns"] = []
+        return
+
+    product_objs = {
+        str(p.id): p
+        for p in Products.objects.filter(id__in=product_ids)
+    }
+
+    for p in product_summaries:
+        product_obj = product_objs.get(p["product_id"])
+        if not product_obj:
+            p["suggested_offers"] = []
+            p["suggested_campaigns"] = []
+            continue
+
+        if include_offers:
+            try:
+                p["suggested_offers"] = suggest_offers_for_product(
+                    product=product_obj,
+                    retailer_entity=retailer_entity,
+                    forecast_total=p["total_forecast"],
+                )
+            except Exception:
+                p["suggested_offers"] = []
+        else:
+            p["suggested_offers"] = []
+
+        if include_campaigns:
+            try:
+                p["suggested_campaigns"] = suggest_campaigns_for_product(
+                    product=product_obj,
+                    retailer_entity=retailer_entity,
+                    forecast_total=p["total_forecast"],
+                )
+            except Exception:
+                p["suggested_campaigns"] = []
+        else:
+            p["suggested_campaigns"] = []
+
+
+# =====================================================================
+# Daily loader
+# =====================================================================
+
 def _load_daily(qs, product_ids):
-    """
-    Return a dict {product_id_str: [daily rows]} for the given queryset.
-
-    `qs` is a DemandForecast queryset already filtered to:
-        - the target entity
-        - the target tier
-        - a specific run_date
-        - horizon_days <= requested horizon
-
-    `product_ids` is a list of string UUIDs (from the aggregated summaries).
-
-    Each daily row is a plain dict, JSON-safe, ready to be embedded in
-    the API response.
-    """
     if not product_ids:
         return {}
 
     daily_rows = (
         qs.filter(product_id__in=product_ids)
         .values(
-            "product_id",
-            "forecast_date",
-            "horizon_days",
-            "point_forecast",
-            "p10",
-            "p50",
-            "p90",
-            "model_name",
-            "segment",
+            "product_id", "forecast_date", "horizon_days",
+            "point_forecast", "p10", "p50", "p90",
+            "model_name", "segment",
         )
         .order_by("product_id", "horizon_days")
     )
