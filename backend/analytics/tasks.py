@@ -1,10 +1,10 @@
 # analytics/tasks.py
-from celery import Celery
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.management import call_command
 
-app = Celery()
+from wazi.celery import app                     # ← the correctly configured app
 
 
 channel_layer = get_channel_layer()
