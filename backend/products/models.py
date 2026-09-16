@@ -135,47 +135,22 @@ class DrinksCategory(EntityRelatedModel):
 
 
 
-class EntityType(Enum):
-    BAR = "Bar"
-    BANK = "Bank"
-    CLINIC = "Clinic"
-    DEFAULT = "Default"
-    DISPENSARY = "Dispensary"
-    GENERAL_DISTRIBUTOR = "GeneralDistributor"
-    PHARMACEUTICAL_DISTRIBUTOR = "PharmaceuticalDistributor"
-    FARM = "Farm"
-    GROCERY = "Grocery"
-    HOSPITAL = "Hospital"
-    HOTEL = "Hotel"
-    INTERNET_SERVICE_PROVIDER = "InternetServiceProvider"
-    INSURANCE = "Insurance"
-    GENERAL_MANUFACTURER = "GeneralManufacturer"
-    PHARMACEUTICAL_MANUFACTURER = "PharmaceuticalManufacturer"
-    PARK = "Park"
-    PARKING = "Parking"
-    GENERAL_RETAILER = "GeneralRetailer"
-    PHARMACEUTICAL_RETAILER = "PharmaceuticalRetailer"
-    REALTY = "Realty"
-    RESTAURANT = "Restaurant"
-    SACCO = "Sacco"
-    TRANSPORT_COMPANY = "TransportCompany"
-    TELCO = "Telco"
-    GENERAL_WHOLESALER = "GeneralWholesaler"
-    PHARMACEUTICAL_WHOLESALER = "PharmaceuticalWholesaler"
+# products/models.py
 
-    @classmethod
-    def choices(cls):
-        return [(item.value, item.value) for item in cls]
+from django.contrib.postgres.fields import ArrayField
+from django.db import models
 
-    @classmethod
-    def default_entities(cls):
-        """Returns the default list of string values for migrations/models."""
-        return [
-            cls.GENERAL_MANUFACTURER.value,
-            cls.GENERAL_WHOLESALER.value,
-            cls.GENERAL_RETAILER.value
-        ]
+from authentication.models import Entities, Users
+from core.constants import EntityType
+from core.models import EntityRelatedModel
 
+
+
+
+
+# =====================================================================
+# Products
+# =====================================================================
 
 class Products(EntityRelatedModel):
     IS_VATABLE_OPTIONS = (
@@ -187,7 +162,6 @@ class Products(EntityRelatedModel):
     -If preparation parameter is provided then the product is a drug
     -Creation of this instances must be controlled to to ensure no duplication
     -Should be done at admin level though it may pose onboarding challenges
-
     """
 
     preparation = models.ForeignKey(
@@ -199,23 +173,31 @@ class Products(EntityRelatedModel):
     )
     title = models.CharField(max_length=100)
     packaging = models.CharField(max_length=100, default="")
-    bar_code = models.CharField(max_length=256, default="",null=True,blank=True)
-    category = models.ForeignKey(Categories, on_delete=models.CASCADE,null=True,blank=True)
+    bar_code = models.CharField(max_length=256, default="", null=True, blank=True)
+    category = models.ForeignKey(
+        Categories, on_delete=models.CASCADE, null=True, blank=True,
+    )
     sub_category = models.ForeignKey(
-        SubCategories, on_delete=models.CASCADE, null=True, blank=True
+        SubCategories, on_delete=models.CASCADE, null=True, blank=True,
     )
     description = models.TextField(null=True, blank=True)
     is_pom = models.BooleanField(default=True)
     is_vatable = models.CharField(
-        max_length=50, choices=IS_VATABLE_OPTIONS, default="false"
+        max_length=50, choices=IS_VATABLE_OPTIONS, default="false",
     )
     manufacturer = models.ForeignKey(
-        Entities, related_name="product_manufacturer", on_delete=models.CASCADE,null=True,blank=True
+        Entities,
+        related_name="product_manufacturer",
+        on_delete=models.CASCADE,
+        null=True, blank=True,
     )
     origin_country = models.ForeignKey(
-        Countries, related_name="product_origin_country", on_delete=models.CASCADE, null=True, blank=True
+        Countries,
+        related_name="product_origin_country",
+        on_delete=models.CASCADE,
+        null=True, blank=True,
     )
-    units_per_pack = models.BigIntegerField(null=True,blank=True,default=None)
+    units_per_pack = models.BigIntegerField(null=True, blank=True, default=None)
     images = models.ManyToManyField(ProductImages, related_name="images", blank=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     active = models.BooleanField(default=True)
@@ -225,11 +207,9 @@ class Products(EntityRelatedModel):
         models.CharField(max_length=50, choices=EntityType.choices()),
         blank=True,
         # Uses the classmethod callable to guarantee immutability across row generation
-        default=EntityType.default_entities 
+        default=EntityType.default_entities,
     )
 
-    # class Meta:
-    #     unique_together = ("manufacturer", "title", "units_per_pack")
     class Meta:
         verbose_name_plural = "products"
         constraints = [
@@ -260,10 +240,8 @@ class Products(EntityRelatedModel):
     def save(self, *args, **kwargs):
         self.title = self.title.upper()
         if self.manufacturer and self.manufacturer.country:
-            self.origin_country= self.manufacturer.country
+            self.origin_country = self.manufacturer.country
         super(Products, self).save(*args, **kwargs)
-
-
 # class EntityServices(EntityRelatedModel):
 #     title = models.CharField(max_length=256, null=True, blank=True)
 #     service_code = models.CharField(max_length=48, null=True, blank=True)

@@ -33,6 +33,8 @@ from django.core.files import File
 from io import BytesIO
 from PIL import Image
 from core.utils import generate_password
+from core.constants import EntityType, TRUE_FALSE_OPTIONS
+
 def compress_image(image):
     im = Image.open(image)
     if im.mode != 'RGB':
@@ -47,34 +49,7 @@ DOCUMENT_TYPE_CHOICES = (
         ("Passport", "Passport"),
     )
 
-ENTITY_TYPE = (
-        ("Bar", "Bar"),
-        ("Bank", "Bank"),
-        ("Clinic", "Clinic"),
-        ("Default", "Default"),
-        ("Dispensary", "Dispensary"),
-        ("GeneralDistributor", "GeneralDistributor"),
-        ("PharmaceuticalDistributor", "PharmaceuticalDistributor"),
-        ("Farm", "Farm"),
-        ("Grocery", "Grocery"),
-        ("Hospital", "Hospital"),
-        ("Hotel", "Hotel"),
-        ("InternetServiceProvider", "InternetServiceProvider"),
-        ("Insurance", "Insurance"),
-        ("GeneralManufaturer", "GeneralManufaturer"),
-        ("PharmaceuticalManufaturer", "PharmaceuticalManufaturer"),
-        ("Park", "Park"),
-        ("Parking", "Parking"),
-        ("GeneralRetailer", "GeneralRetailer"),
-        ("PharmaceuticalRetailer", "PharmaceuticalRetailer"),
-        ("Realty", "Realty"),
-        ("Restaurant", "Restaurant"),
-        ("Sacco", "Sacco"),
-        ("TransportCompany", "TransportCompany"),
-        ("Telco", "Telco"),
-        ("GeneralWholesaler", "GeneralWholesaler"),
-        ("PharmaceuticalWholesaler", "PharmaceuticalWholesaler"),
-    )
+
 CATEGORY_TYPE = (
         ("ALCOHOL", "ALCOHOL"),
         ("FMCG", "FMCG"),
@@ -128,10 +103,7 @@ class Plans(models.Model):
         return self.title
 
 
-TRUE_FALSE_OPTIONS = (
-    ("true", "true"),
-    ("false", "false"),
-)
+
 
 
 class TrueFalseOptions(models.TextChoices):
@@ -698,7 +670,10 @@ class Entities(models.Model):
     entity_level = models.IntegerField(
         choices=ENTITY_LEVELS, default=0
     )
-    entity_type = models.CharField(max_length=50, choices=ENTITY_TYPE)
+    entity_type = models.CharField(
+    max_length=50,
+    choices=EntityType.choices(),
+    )
     entity_code = models.CharField(max_length=7, null=True, blank=True)
     bank_code = models.CharField(max_length=7, null=True, blank=True)
     town = models.CharField(max_length=256, null=True, blank=True)

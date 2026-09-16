@@ -17,7 +17,7 @@ app = Celery("wazi")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
 
-app.conf.enable_utc=False
+app.conf.enable_utc = False
 app.conf.update(timezone='Africa/Nairobi')
 
 # Load task modules from all registered Django app configs.
@@ -30,15 +30,34 @@ def debug_task(self):
 
 
 app.conf.beat_schedule = {
-    
-  
-    "process_wifi_payments": {"task": "payments.tasks.process_wifi_payments", "schedule": 30.0,'args':None},
-    "process_retailer_order_payments": {"task": "payments.tasks.process_retailer_order_payments", "schedule": 30.0,'args':None},
-    "deactivate_expired_price_discounts": {"task": "wholesalers.tasks.deactivate_expired_price_discounts", "schedule": 60.0,'args':None},
-        "load_customer_orders": {"task": "retailers.tasks.load_customer_orders", "schedule": 30.0,'args':None},
-        "load_inventory_predictions": {"task": "retailers.tasks.load_inventory_predictions", "schedule": 120.0,'args':None},
-        "load_retailer_receipts": {"task": "retailers.tasks.load_retailer_receipts", "schedule": 120.0,'args':None},
-        "load_retailer-indents": {"task": "retailers.tasks.load_retailer_indents", "schedule": 120.0,'args':None},
-        "load_out_of_stocks": {"task": "retailers.tasks.load_out_of_stock_items", "schedule": 120.0,'args':None},
+
+    "process_wifi_payments": {"task": "payments.tasks.process_wifi_payments", "schedule": 30.0, 'args': None},
+    "process_retailer_order_payments": {"task": "payments.tasks.process_retailer_order_payments", "schedule": 30.0, 'args': None},
+    "deactivate_expired_price_discounts": {"task": "wholesalers.tasks.deactivate_expired_price_discounts", "schedule": 60.0, 'args': None},
+    "load_customer_orders": {"task": "retailers.tasks.load_customer_orders", "schedule": 30.0, 'args': None},
+    "load_inventory_predictions": {"task": "retailers.tasks.load_inventory_predictions", "schedule": 120.0, 'args': None},
+    "load_retailer_receipts": {"task": "retailers.tasks.load_retailer_receipts", "schedule": 120.0, 'args': None},
+    "load_retailer_indents": {"task": "retailers.tasks.load_retailer_indents", "schedule": 120.0, 'args': None},
+    "load_out_of_stocks": {"task": "retailers.tasks.load_out_of_stock_items", "schedule": 120.0, 'args': None},
+
+    # ── Analytics ──────────────────────────────────────────────────
+    # Full pipeline once a day at midnight (Africa/Nairobi)
+    "analytics-nightly-pipeline": {
+        "task": "analytics.tasks.run_nightly_pipeline",
+        "schedule": crontab(hour=0, minute=0),
+        "args": None,
+    },
+    # Periodic refresh — pushes alerts to any connected WebSocket clients
+    "analytics-refresh-alerts": {
+        "task": "analytics.tasks.load_analytics_alerts",
+        "schedule": 120.0,
+        "args": None,
+    },
+    # Periodic refresh — pushes overview metrics to any connected clients
+    "analytics-refresh-overview": {
+        "task": "analytics.tasks.load_analytics_overview",
+        "schedule": 300.0,
+        "args": None,
+    },
 
 }

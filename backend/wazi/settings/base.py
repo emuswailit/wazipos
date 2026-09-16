@@ -127,6 +127,7 @@ INSTALLED_APPS = [
     "chats",
     "stats",
     "ussd",
+    "analytics",
    
 ]
 
