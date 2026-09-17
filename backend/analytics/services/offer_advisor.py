@@ -12,6 +12,12 @@ Ranking weights balance:
     - quantity bonus       (buy-N-get-M value)
     - shelf life           (days to expiry)
     - availability         (stock vs. forecast need)
+    - placement bonus      (consignment offers nudge upward slightly)
+
+Placement (consignment) lots ARE included as offers. The retailer
+pays nothing upfront; they settle with the wholesaler per unit sold
+at `unit_buying_price`, keeping the difference to
+`final_unit_selling_price`.
 """
 
 from datetime import date, timedelta
@@ -24,11 +30,14 @@ from wholesalers.models import (
 )
 
 
-# Scoring weights — must sum to 1.0
+# Scoring weights — must sum to 1.0 (placement bonus is additive, not weighted)
 WEIGHT_PRICE_DISCOUNT = 0.45
 WEIGHT_BONUS_UNITS = 0.30
 WEIGHT_SHELF_LIFE = 0.15
 WEIGHT_AVAILABILITY = 0.10
+
+# Additional bonus for placement offers
+PLACEMENT_BONUS = 5.0
 
 # Thresholds
 MIN_DAYS_TO_EXPIRY = 30
@@ -52,8 +61,8 @@ def suggest_offers_for_product(
     Filters:
       - Product must allow the retailer's entity type
       - Lot must have stock (current_unit_quantity > 0)
-      - Lot must not be in placement (in_placement != "true")
       - Lot must have at least MIN_DAYS_TO_EXPIRY days left
+      - Lot may be in placement (consignment is a valid offer)
     """
     as_of_date = as_of_date or date.today()
 
@@ -70,7 +79,6 @@ def suggest_offers_for_product(
         .filter(
             product=product,
             current_unit_quantity__gt=0,
-            in_placement="false",
         )
         .exclude(expiry_date__isnull=False, expiry_date__lt=cutoff)
         .select_related("entity", "product")
@@ -91,6 +99,9 @@ def suggest_offers_for_product(
 # =====================================================================
 
 def _build_offer(receipt, forecast_total, as_of_date):
+    # ---- Placement flag ----
+    in_placement = (receipt.in_placement == "true")
+
     # ---- Price discount ----
     price_discount = (
         WholesalerPriceDiscounts.objects
@@ -161,10 +172,13 @@ def _build_offer(receipt, forecast_total, as_of_date):
         days_to_expiry=days_to_expiry,
         available_qty=available_qty,
         forecast_total=forecast_total,
+        in_placement=in_placement,
     )
 
     # ---- Rationale ----
     parts = []
+    if in_placement:
+        parts.append("consignment")
     if price_discount_pct > 0:
         parts.append(f"{price_discount_pct:.0f}% off")
     if bonus_pct > 0:
@@ -177,6 +191,13 @@ def _build_offer(receipt, forecast_total, as_of_date):
     if not parts:
         parts.append("standard offer")
 
+    # ---- Placement note ----
+    placement_note = (
+        "Consignment — pay the wholesaler only when each unit sells. "
+        "You keep the difference to the selling price."
+        if in_placement else None
+    )
+
     return {
         "receipt_id": str(receipt.id),
         "wholesaler_id": str(receipt.entity_id),
@@ -188,14 +209,22 @@ def _build_offer(receipt, forecast_total, as_of_date):
         "list_unit_price": str(list_price),
         "effective_unit_price": str(effective_price),
         "price_discount_percent": round(price_discount_pct, 2),
+        "wholesaler_price_discount_id": (
+            str(price_discount.id) if price_discount else None
+        ),
         "quantity_discount": {
             "limit_quantity": qty_discount.limit_quantity,
             "awarded_quantity": qty_discount.awarded_quantity,
             "bonus_pct": round(bonus_pct, 2),
         } if qty_discount else None,
+        "wholesaler_quantity_discount_id": (
+            str(qty_discount.id) if qty_discount else None
+        ),
         "effective_unit_cost_after_bonus": str(effective_unit_after_bonus),
         "score": round(score, 2),
         "rationale": " + ".join(parts),
+        "in_placement": in_placement,
+        "placement_note": placement_note,
     }
 
 
@@ -203,7 +232,14 @@ def _build_offer(receipt, forecast_total, as_of_date):
 # Scoring
 # =====================================================================
 
-def _score_offer(price_discount_pct, bonus_pct, days_to_expiry, available_qty, forecast_total):
+def _score_offer(
+    price_discount_pct,
+    bonus_pct,
+    days_to_expiry,
+    available_qty,
+    forecast_total,
+    in_placement=False,
+):
     # Price discount: 50%+ = full marks
     price_component = min(price_discount_pct / 50.0, 1.0) * 100
 
@@ -228,9 +264,13 @@ def _score_offer(price_discount_pct, bonus_pct, days_to_expiry, available_qty, f
         coverage = available_qty / forecast_total
         avail_component = min(coverage, 1.5) / 1.5 * 100
 
+    # Placement bonus — small nudge upward for consignment
+    placement_component = PLACEMENT_BONUS if in_placement else 0.0
+
     return (
         WEIGHT_PRICE_DISCOUNT * price_component
         + WEIGHT_BONUS_UNITS * bonus_component
         + WEIGHT_SHELF_LIFE * shelf_component
         + WEIGHT_AVAILABILITY * avail_component
+        + placement_component
     )

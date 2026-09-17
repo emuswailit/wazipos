@@ -2394,3 +2394,399 @@ class RetailerIndentItemParamsUpdateView(APIView):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+# retailers/views.py
+
+from datetime import timedelta
+
+from django.utils import timezone
+from django.db.models import Prefetch
+from rest_framework import exceptions, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
+
+from core.responses import custom_success_message, custom_errors_response
+from retailers.retail_permissions import EntitySubscriptionPermission
+from authentication.models import Entities
+from products.models import Products
+
+from .models import (
+    RetailerProductRequest,
+    RetailerProductRequestItem,
+    RetailerProductRequestOffer,
+)
+from .serializers import (
+    RetailerProductRequestSerializer,
+    RetailerProductRequestListSerializer,
+)
+from .services.request_confirmation import retailer_confirm_offers
+
+
+REQUEST_EXPIRY_DAYS = 14
+WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
+
+
+# =====================================================================
+# Product requests — unified dispatcher
+# =====================================================================
+
+@api_view(["POST"])
+@permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
+def productRequestsAPIView(request):
+    """
+    Unified dispatcher for retailer product requests.
+
+    Actions:
+        CreateRequest         — new multi-line request
+        GetMyRequests         — list requests for the caller's entity
+        GetRequestDetails     — one request with items, offers, responses
+        ConfirmOffers         — confirm/decline offers (creates orders)
+        CancelRequest         — cancel an open request
+        CancelRequestItem     — cancel a single line
+    """
+    action = request.data.get("action")
+    if not action:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    # =================================================================
+    if action == "CreateRequest":
+        items = request.data.get("items", [])
+        urgency = request.data.get("urgency", "medium")
+        note = request.data.get("note", "")
+
+        if not items:
+            return custom_errors_response(
+                1, "Request could not be created",
+                {"items": "At least one line is required."},
+            )
+
+        product_ids = [it.get("product_id") for it in items]
+        products = {str(p.id): p for p in Products.objects.filter(id__in=product_ids)}
+
+        # Validate every line
+        for idx, it in enumerate(items):
+            pid = str(it.get("product_id") or "")
+            if not pid:
+                return custom_errors_response(
+                    1, "Request could not be created",
+                    {"items": f"Line {idx + 1}: product_id required."},
+                )
+            if pid not in products:
+                return custom_errors_response(
+                    1, "Request could not be created",
+                    {"items": f"Line {idx + 1}: product {pid} not found."},
+                )
+            try:
+                qty = int(it.get("requested_quantity", 0))
+            except (TypeError, ValueError):
+                qty = 0
+            if qty <= 0:
+                return custom_errors_response(
+                    1, "Request could not be created",
+                    {"items": f"Line {idx + 1}: requested_quantity must be > 0."},
+                )
+
+        # Skip products already on an open request
+        existing_open_product_ids = set(
+            RetailerProductRequestItem.objects.filter(
+                request__entity=request.user.entity,
+                request__status__in=["OPEN", "ACKNOWLEDGED", "PARTIALLY_FULFILLED"],
+                status__in=["PENDING", "OFFERED", "PARTIALLY_FULFILLED"],
+            ).values_list("product_id", flat=True)
+        )
+
+        lines_to_create = [
+            it for it in items if str(it["product_id"]) not in {
+                str(pid) for pid in existing_open_product_ids
+            }
+        ]
+
+        if not lines_to_create:
+            return custom_errors_response(
+                1, "All products are already on an open request", {},
+            )
+
+        # Create the header
+        req = RetailerProductRequest.objects.create(
+            entity=request.user.entity,
+            urgency=urgency,
+            note=note,
+            expires_at=timezone.now() + timedelta(days=REQUEST_EXPIRY_DAYS),
+            owner=request.user,
+        )
+
+        # Create lines
+        for it in lines_to_create:
+            RetailerProductRequestItem.objects.create(
+                entity=request.user.entity,
+                request=req,
+                product=products[str(it["product_id"])],
+                requested_quantity=int(it["requested_quantity"]),
+                urgency=it.get("urgency", urgency),
+                note=it.get("note", ""),
+                owner=request.user,
+            )
+
+        req.recalculate(save=True)
+
+        # Fan out to eligible wholesalers
+        allowed_set = set()
+        for it in lines_to_create:
+            p = products[str(it["product_id"])]
+            for et in (p.allowed_entities or []):
+                allowed_set.add(et)
+
+        wholesaler_qs = Entities.objects.filter(
+            entity_type__in=[
+                et for et in WHOLESALER_ENTITY_TYPES
+                if not allowed_set or et in allowed_set
+            ],
+            is_active=True,
+        )
+        if request.user.entity.country_id:
+            wholesaler_qs = wholesaler_qs.filter(
+                country_id=request.user.entity.country_id,
+            )
+
+        wholesaler_ids = list(wholesaler_qs.values_list("id", flat=True))
+
+        from analytics.realtime import push_new_product_request
+        push_new_product_request(wholesaler_ids, {
+            "request_id": str(req.id),
+            "request_number": req.request_number,
+            "urgency": req.urgency,
+            "note": req.note,
+            "line_count": req.total_line_count,
+            "retailer_id": str(request.user.entity_id),
+            "retailer_title": request.user.entity.title,
+            "created": req.created.isoformat(),
+            "items": [
+                {
+                    "item_id": str(line.id),
+                    "product_id": str(line.product_id),
+                    "product_title": line.product.title,
+                    "requested_quantity": line.requested_quantity,
+                }
+                for line in req.items.select_related("product")
+            ],
+        })
+
+        return custom_success_message(
+            0, "Request submitted",
+            RetailerProductRequestSerializer(req).data, "request",
+        )
+
+    # =================================================================
+    elif action == "GetMyRequests":
+        qs = (
+            RetailerProductRequest.objects
+            .filter(entity=request.user.entity)
+            .select_related("entity")
+            .order_by("-created")
+        )
+        if request.data.get("status"):
+            qs = qs.filter(status=request.data["status"])
+
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = RetailerProductRequestListSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    # =================================================================
+    elif action == "GetRequestDetails":
+        request_id = request.data.get("request_id")
+        if not request_id:
+            return custom_errors_response(
+                1, "Request could not be retrieved",
+                {"request_id": "This field is required."},
+            )
+
+        try:
+            req = (
+                RetailerProductRequest.objects
+                .filter(entity=request.user.entity)
+                .prefetch_related(
+                    Prefetch("items", queryset=RetailerProductRequestItem.objects.select_related("product")),
+                    Prefetch("items__offers", queryset=RetailerProductRequestOffer.objects.select_related("wholesaler", "wholesaler_receipt")),
+                    "responses",
+                )
+                .get(id=request_id)
+            )
+        except RetailerProductRequest.DoesNotExist:
+            return custom_errors_response(
+                1, "Request not found",
+                {"request_id": "Not found or not yours."},
+            )
+
+        return custom_success_message(
+            0, "Request retrieved",
+            RetailerProductRequestSerializer(req).data, "request",
+        )
+
+    # =================================================================
+    elif action == "ConfirmOffers":
+        request_id = request.data.get("request_id")
+        confirmations = request.data.get("confirmations", [])
+        declinations = request.data.get("declinations", [])
+        note = request.data.get("note", "")
+
+        if not request_id:
+            return custom_errors_response(
+                1, "Confirmation failed",
+                {"request_id": "This field is required."},
+            )
+
+        try:
+            req = RetailerProductRequest.objects.get(
+                id=request_id, entity=request.user.entity,
+            )
+        except RetailerProductRequest.DoesNotExist:
+            return custom_errors_response(
+                1, "Request not found",
+                {"request_id": "Not found or not yours."},
+            )
+
+        if not confirmations and not declinations:
+            return custom_errors_response(
+                1, "Confirmation failed",
+                {"detail": "Provide at least one confirmation or declination."},
+            )
+
+        # Validate overlap
+        confirmed_ids = {p.get("offer_id") for p in confirmations}
+        declined_ids = {p.get("offer_id") for p in declinations}
+        overlap = confirmed_ids & declined_ids
+        if overlap:
+            return custom_errors_response(
+                1, "Confirmation failed",
+                {"overlap": list(overlap)},
+            )
+
+        try:
+            orders = retailer_confirm_offers(
+                request_obj=req,
+                confirmations=confirmations,
+                declinations=declinations,
+                note=note,
+                by_user=request.user,
+            )
+        except ValueError as e:
+            return custom_errors_response(1, "Confirmation failed", {"detail": str(e)})
+        except RetailerProductRequestOffer.DoesNotExist:
+            return custom_errors_response(1, "Confirmation failed", {"detail": "One or more offers not found."})
+
+        # Notify affected wholesalers
+        from analytics.realtime import push_retailer_confirmation
+        affected_wholesalers = set(
+            RetailerProductRequestOffer.objects
+            .filter(
+                request_item__request=req,
+                status=RetailerProductRequestOffer.Status.FULFILLED,
+            )
+            .values_list("wholesaler_id", flat=True)
+        )
+        for wid in affected_wholesalers:
+            order_ids = [str(o.id) for o in orders if str(o.wholesaler_id) == str(wid)]
+            push_retailer_confirmation(str(wid), {
+                "request_id": str(req.id),
+                "request_number": req.request_number,
+                "retailer_id": str(request.user.entity_id),
+                "retailer_title": request.user.entity.title,
+                "order_ids": order_ids,
+                "order_count": len(order_ids),
+            })
+
+        return custom_success_message(
+            0, "Confirmation recorded",
+            {
+                "order_ids": [str(o.id) for o in orders],
+                "order_count": len(orders),
+            },
+            "orders",
+        )
+
+    # =================================================================
+    elif action == "CancelRequest":
+        request_id = request.data.get("request_id")
+        if not request_id:
+            return custom_errors_response(
+                1, "Cancel failed",
+                {"request_id": "This field is required."},
+            )
+
+        try:
+            req = RetailerProductRequest.objects.get(
+                id=request_id, entity=request.user.entity,
+            )
+        except RetailerProductRequest.DoesNotExist:
+            return custom_errors_response(
+                1, "Cancel failed", {"request_id": "Not found."},
+            )
+
+        if req.status in ("FULFILLED", "CANCELLED", "EXPIRED"):
+            return custom_errors_response(
+                1, "Cancel failed",
+                {"status": f"Cannot cancel a request in status {req.status}."},
+            )
+
+        now = timezone.now()
+
+        # Cancel all pending offers that aren't already confirmed
+        req.items.update(status="CANCELLED")
+        RetailerProductRequestOffer.objects.filter(
+            request_item__request=req,
+            status=RetailerProductRequestOffer.Status.OFFERED,
+        ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
+
+        req.status = "CANCELLED"
+        req.cancelled_at = now
+        req.save(update_fields=["status", "cancelled_at", "updated"])
+
+        return custom_success_message(
+            0, "Request cancelled",
+            RetailerProductRequestSerializer(req).data, "request",
+        )
+
+    # =================================================================
+    elif action == "CancelRequestItem":
+        item_id = request.data.get("item_id")
+        if not item_id:
+            return custom_errors_response(
+                1, "Cancel failed",
+                {"item_id": "This field is required."},
+            )
+
+        try:
+            item = RetailerProductRequestItem.objects.get(
+                id=item_id, request__entity=request.user.entity,
+            )
+        except RetailerProductRequestItem.DoesNotExist:
+            return custom_errors_response(
+                1, "Cancel failed", {"item_id": "Not found."},
+            )
+
+        if item.status in ("FULFILLED", "CANCELLED"):
+            return custom_errors_response(
+                1, "Cancel failed",
+                {"status": f"Cannot cancel a line in status {item.status}."},
+            )
+
+        item.status = "CANCELLED"
+        item.save(update_fields=["status", "updated"])
+
+        # Cancel pending offers for this line
+        RetailerProductRequestOffer.objects.filter(
+            request_item=item,
+            status=RetailerProductRequestOffer.Status.OFFERED,
+        ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
+
+        item.request.recalculate(save=True)
+
+        return custom_success_message(
+            0, "Line cancelled",
+            RetailerProductRequestSerializer(item.request).data, "request",
+        )
+
+    # =================================================================
+    else:
+        raise exceptions.ValidationError(f"Action {action} is unknown")

@@ -1887,3 +1887,410 @@ def receiptReturnsAPIView(request):
 
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")
+    
+
+# wholesalers/views.py — product requests dispatcher
+
+from django.utils import timezone
+from django.db.models import Q, Prefetch
+from rest_framework import exceptions, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
+
+from core.responses import custom_success_message, custom_errors_response
+from retailers.retail_permissions import EntitySubscriptionPermission
+
+from retailers.models import (
+    RetailerProductRequest,
+    RetailerProductRequestItem,
+    RetailerProductRequestOffer,
+    RetailerProductRequestResponse,
+)
+from retailers.serializers import (
+    RetailerProductRequestSerializer,
+    RetailerProductRequestListSerializer,
+)
+
+from .models import WholesalerPriceDiscounts, WholesalerQuantityDiscounts
+from .services.request_response import wholesaler_respond_to_request
+
+
+# =====================================================================
+# Wholesaler product requests — unified dispatcher
+# =====================================================================
+
+@api_view(["POST"])
+@permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
+def productRequestsAPIView(request):
+    """
+    Actions:
+        GetIncoming                       — open requests in the wholesaler's scope
+        GetRequestDetails                 — one request with lines and current offers
+        Respond                           — accept/reject lines, attach or create receipts
+        GetActiveDiscountsForProducts     — active promos for a set of products
+    """
+    action = request.data.get("action")
+    if not action:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    # =================================================================
+    if action == "GetIncoming":
+        qs = (
+            RetailerProductRequest.objects
+            .filter(
+                status__in=["OPEN", "ACKNOWLEDGED", "PARTIALLY_FULFILLED"],
+                items__status__in=["PENDING", "OFFERED", "PARTIALLY_FULFILLED"],
+            )
+            .exclude(
+                items__offers__wholesaler=request.user.entity,
+                items__offers__status__in=[
+                    RetailerProductRequestOffer.Status.OFFERED,
+                    RetailerProductRequestOffer.Status.CONFIRMED,
+                    RetailerProductRequestOffer.Status.FULFILLED,
+                ],
+            )
+            .distinct()
+            .select_related("entity")
+            .prefetch_related("items")
+            .order_by("-urgency", "-created")
+        )
+
+        if request.data.get("urgency"):
+            qs = qs.filter(urgency=request.data["urgency"])
+
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = RetailerProductRequestListSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    # =================================================================
+    elif action == "GetRequestDetails":
+        request_id = request.data.get("request_id")
+        if not request_id:
+            return custom_errors_response(
+                1, "Could not retrieve request",
+                {"request_id": "This field is required."},
+            )
+
+        try:
+            req = (
+                RetailerProductRequest.objects
+                .prefetch_related(
+                    Prefetch("items", queryset=RetailerProductRequestItem.objects.select_related("product")),
+                    Prefetch(
+                        "items__offers",
+                        queryset=RetailerProductRequestOffer.objects.select_related("wholesaler", "wholesaler_receipt"),
+                    ),
+                    Prefetch("responses", queryset=RetailerProductRequestResponse.objects.select_related("wholesaler")),
+                )
+                .get(id=request_id)
+            )
+        except RetailerProductRequest.DoesNotExist:
+            return custom_errors_response(
+                1, "Request not found", {"request_id": "Not found."},
+            )
+
+        return custom_success_message(
+            0, "Request retrieved",
+            RetailerProductRequestSerializer(req).data, "request",
+        )
+
+    # =================================================================
+    elif action == "Respond":
+        request_id = request.data.get("request_id")
+        if not request_id:
+            return custom_errors_response(
+                1, "Response could not be recorded",
+                {"request_id": "This field is required."},
+            )
+
+        try:
+            req = RetailerProductRequest.objects.get(id=request_id)
+        except RetailerProductRequest.DoesNotExist:
+            return custom_errors_response(
+                1, "Request not found", {"request_id": "Not found."},
+            )
+
+        accepted_lines = request.data.get("accepted_lines", [])
+        rejected_lines = request.data.get("rejected_lines", [])
+        note = request.data.get("note", "")
+
+        if not accepted_lines and not rejected_lines:
+            return custom_errors_response(
+                1, "Response must accept or reject at least one line", {},
+            )
+
+        # Validate each accepted line
+        for payload in accepted_lines:
+            item_id = payload.get("item_id")
+            if not item_id:
+                return custom_errors_response(
+                    1, "Invalid accepted line",
+                    {"accepted_lines": "Each line requires item_id."},
+                )
+
+            has_receipt_id = bool(payload.get("receipt_id"))
+            has_receipt_payload = isinstance(payload.get("receipt"), dict)
+
+            if has_receipt_id and has_receipt_payload:
+                return custom_errors_response(
+                    1, "Invalid accepted line",
+                    {"accepted_lines": "Provide either receipt_id or receipt, not both."},
+                )
+            if not has_receipt_id and not has_receipt_payload:
+                return custom_errors_response(
+                    1, "Invalid accepted line",
+                    {"accepted_lines": "Each accepted line requires receipt_id or receipt."},
+                )
+
+            # Validate the item belongs to the request
+            if not req.items.filter(id=item_id).exists():
+                return custom_errors_response(
+                    1, "Line not found on this request",
+                    {"accepted_lines": f"Item {item_id} does not belong to this request."},
+                )
+
+        # Validate rejections
+        for payload in rejected_lines:
+            if not payload.get("item_id"):
+                return custom_errors_response(
+                    1, "Invalid rejected line",
+                    {"rejected_lines": "Each line requires item_id."},
+                )
+            if not req.items.filter(id=payload["item_id"]).exists():
+                return custom_errors_response(
+                    1, "Line not found on this request",
+                    {"rejected_lines": f"Item {payload['item_id']} does not belong to this request."},
+                )
+
+        # Overlap check
+        accepted_ids = {p["item_id"] for p in accepted_lines}
+        rejected_ids = {p["item_id"] for p in rejected_lines}
+        if accepted_ids & rejected_ids:
+            return custom_errors_response(
+                1, "A line cannot be both accepted and rejected",
+                {"overlap": list(accepted_ids & rejected_ids)},
+            )
+
+        try:
+            response_obj = wholesaler_respond_to_request(
+                request_obj=req,
+                wholesaler_entity=request.user.entity,
+                accepted_lines=accepted_lines,
+                rejected_lines=rejected_lines,
+                response_note=note,
+                by_user=request.user,
+            )
+        except ValueError as e:
+            return custom_errors_response(1, "Response could not be recorded", {"detail": str(e)})
+
+        # Notify the retailer
+        from analytics.realtime import push_request_response
+        push_request_response(str(req.entity_id), {
+            "request_id": str(req.id),
+            "request_number": req.request_number,
+            "wholesaler_id": str(request.user.entity_id),
+            "wholesaler_title": request.user.entity.title,
+            "offered_line_count": response_obj.offered_line_count,
+            "rejected_line_count": response_obj.rejected_line_count,
+            "note": note,
+        })
+
+        return custom_success_message(
+            0,
+            "Response recorded",
+            {
+                "response_id": str(response_obj.id),
+                "offered_line_count": response_obj.offered_line_count,
+                "rejected_line_count": response_obj.rejected_line_count,
+            },
+            "response",
+        )
+
+    # =================================================================
+    elif action == "GetActiveDiscountsForProducts":
+        product_ids = request.data.get("product_ids", [])
+        if not product_ids:
+            return custom_success_message(
+                0, "No products specified",
+                {"price_discounts": [], "quantity_discounts": []},
+                "discounts",
+            )
+
+        today = timezone.now().date()
+
+        price_discounts = (
+            WholesalerPriceDiscounts.objects
+            .filter(
+                entity=request.user.entity,
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+                wholesaler_receipt__product_id__in=product_ids,
+            )
+            .select_related("wholesaler_receipt", "wholesaler_receipt__product")
+            .values(
+                "id", "title",
+                "wholesaler_receipt_id",
+                "wholesaler_receipt__product_id",
+                "wholesaler_receipt__product__title",
+                "percent", "offer_price",
+            )
+        )
+
+        qty_discounts = (
+            WholesalerQuantityDiscounts.objects
+            .filter(
+                entity=request.user.entity,
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+                wholesaler_receipt__product_id__in=product_ids,
+            )
+            .select_related("wholesaler_receipt", "wholesaler_receipt__product")
+            .values(
+                "id", "title",
+                "wholesaler_receipt_id",
+                "wholesaler_receipt__product_id",
+                "wholesaler_receipt__product__title",
+                "limit_quantity", "awarded_quantity",
+            )
+        )
+
+        return custom_success_message(
+            0, "Active discounts retrieved",
+            {
+                "price_discounts": list(price_discounts),
+                "quantity_discounts": list(qty_discounts),
+            },
+            "discounts",
+        )
+
+    # =================================================================
+    else:
+        raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
+# wholesalers/views.py — order commit dispatcher
+
+@api_view(["POST"])
+@permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
+def retailerOrdersCommitAPIView(request):
+    """
+    Commit or reject a retailer order.
+
+    Actions:
+        CommitOrder    — commit with commit_type (CASH/CREDIT/PLACEMENT/FACILITY)
+        RejectOrder    — reject with a reason
+    """
+    action = request.data.get("action")
+    if not action:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    from .models import RetailerOrders
+    from .services.commit_order import commit_order
+
+    # =================================================================
+    if action == "CommitOrder":
+        order_id = request.data.get("order_id")
+        commit_type = request.data.get("commit_type")
+        note = request.data.get("note", "")
+
+        if not order_id or not commit_type:
+            return custom_errors_response(
+                1, "Order could not be committed",
+                {
+                    "order_id": "Required." if not order_id else None,
+                    "commit_type": "Required." if not commit_type else None,
+                },
+            )
+
+        try:
+            order = RetailerOrders.objects.get(
+                id=order_id, wholesaler=request.user.entity,
+            )
+        except RetailerOrders.DoesNotExist:
+            return custom_errors_response(
+                1, "Order not found",
+                {"order_id": "Not found or not yours."},
+            )
+
+        try:
+            order = commit_order(
+                order=order,
+                commit_type=commit_type,
+                by_user=request.user,
+                note=note,
+            )
+        except ValueError as e:
+            return custom_errors_response(1, "Order could not be committed", {"detail": str(e)})
+
+        from analytics.realtime import push_order_committed
+        push_order_committed(str(order.retailer_id), {
+            "order_id": str(order.id),
+            "reference_number": order.reference_number,
+            "commit_type": order.commit_type,
+            "committed_at": order.committed_at.isoformat() if order.committed_at else None,
+            "wholesaler_id": str(request.user.entity_id),
+            "wholesaler_title": request.user.entity.title,
+        })
+
+        return custom_success_message(
+            0, "Order committed",
+            {
+                "order_id": str(order.id),
+                "commit_type": order.commit_type,
+                "committed_at": order.committed_at.isoformat() if order.committed_at else None,
+            },
+            "order",
+        )
+
+    # =================================================================
+    elif action == "RejectOrder":
+        order_id = request.data.get("order_id")
+        reason = request.data.get("reason", "")
+
+        if not order_id:
+            return custom_errors_response(
+                1, "Order could not be rejected",
+                {"order_id": "This field is required."},
+            )
+
+        try:
+            order = RetailerOrders.objects.get(
+                id=order_id, wholesaler=request.user.entity,
+            )
+        except RetailerOrders.DoesNotExist:
+            return custom_errors_response(
+                1, "Order not found", {"order_id": "Not found or not yours."},
+            )
+
+        if order.is_committed == "true":
+            return custom_errors_response(
+                1, "Cannot reject a committed order",
+                {"status": "Order has already been committed."},
+            )
+
+        now = timezone.now()
+        order.status = "CANCELLED"
+        order.cancelled_at = now
+        order.save(update_fields=["status", "cancelled_at", "updated"])
+
+        # Notify the retailer
+        from analytics.realtime import push_order_rejected
+        push_order_rejected(str(order.retailer_id), {
+            "order_id": str(order.id),
+            "reference_number": order.reference_number,
+            "reason": reason,
+            "wholesaler_id": str(request.user.entity_id),
+            "wholesaler_title": request.user.entity.title,
+        })
+
+        return custom_success_message(
+            0, "Order rejected",
+            {"order_id": str(order.id)},
+            "order",
+        )
+
+    else:
+        raise exceptions.ValidationError(f"Action {action} is unknown")

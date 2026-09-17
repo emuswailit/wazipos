@@ -56,6 +56,15 @@ urlpatterns = [
         name=views.WholesalerQuantityDiscountsCreateAPIView.name,
     ),
 
-
+   path(
+        "wholesalers/product-requests",
+        views.productRequestsAPIView,
+        name="wholesaler-product-requests",
+    ),
+    path(
+        "wholesalers/retailer-orders/commit",
+        views.retailerOrdersCommitAPIView,
+        name="wholesaler-retailer-orders-commit",
+    ),
     
 ]

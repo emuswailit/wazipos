@@ -1775,7 +1775,33 @@ class CustomerOrderItems(EntityRelatedModel):
             order.recalculate()
 
 
+class CustomerOrderPayments(EntityRelatedModel):
+    customer_order = models.OneToOneField(
+        CustomerOrders, related_name="customer_order_paid", on_delete=models.CASCADE
+    )
+    user = models.ForeignKey(
+        Users,
+        related_name="paying_user",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    reference_number = models.CharField(max_length=50, default="")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    narration = models.CharField(max_length=100)
+    msisdn = models.CharField(max_length=50, default="")
+    transfer_status = models.CharField(max_length=50, default="")
+    account_number = models.CharField(max_length=50, default="")
+    transaction_id = models.CharField(max_length=50, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    transaction_time = models.DateTimeField(auto_now_add=False)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        Users, related_name="payment_owner", on_delete=models.CASCADE
+    )
 
+    class Meta:
+        verbose_name_plural = "Customer Order Payments"
 
 
 # def customer_order_post_save(sender, instance, signal, *args, **kwargs):
@@ -1857,33 +1883,7 @@ class ShippingAddress(EntityRelatedModel):
     )
 
 
-# class CustomerOrderPayments(EntityRelatedModel):
-#     customer_order = models.OneToOneField(
-#         CustomerOrders, related_name="customer_order_paid", on_delete=models.CASCADE
-#     )
-#     user = models.ForeignKey(
-#         Users,
-#         related_name="paying_user",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     reference_number = models.CharField(max_length=50, default="")
-#     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-#     narration = models.CharField(max_length=100)
-#     msisdn = models.CharField(max_length=50, default="")
-#     transfer_status = models.CharField(max_length=50, default="")
-#     account_number = models.CharField(max_length=50, default="")
-#     transaction_id = models.CharField(max_length=50, default="")
-#     created = models.DateTimeField(auto_now_add=True)
-#     transaction_time = models.DateTimeField(auto_now_add=False)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         Users, related_name="payment_owner", on_delete=models.CASCADE
-#     )
 
-#     class Meta:
-#         verbose_name_plural = "Customer Order Payments"
 
 
 class CustomerOrderFailedPayments(EntityRelatedModel):
@@ -2325,3 +2325,390 @@ class StockAdjustments(EntityRelatedModel):
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+
+
+
+# =====================================================================
+# Product Request Feature
+# =====================================================================
+
+class RetailerProductRequest(EntityRelatedModel):
+    """
+    A proforma-style request from a retailer to their wholesale network.
+
+    Contains N lines (RetailerProductRequestItem). Wholesalers respond
+    per line (RetailerProductRequestOffer). The retailer confirms offers
+    per line, splitting across wholesalers if desired. Confirmed offers
+    become RetailerOrderItems grouped by wholesaler.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", _("Open")
+        ACKNOWLEDGED = "ACKNOWLEDGED", _("At least one offer received")
+        PARTIALLY_FULFILLED = "PARTIALLY_FULFILLED", _("Some lines fulfilled")
+        FULFILLED = "FULFILLED", _("All lines fulfilled")
+        CANCELLED = "CANCELLED", _("Cancelled by retailer")
+        EXPIRED = "EXPIRED", _("Expired")
+
+    class Urgency(models.TextChoices):
+        LOW = "low", _("Low")
+        MEDIUM = "medium", _("Medium")
+        HIGH = "high", _("High")
+
+    request_number = models.CharField(
+        max_length=32, unique=True, null=True, blank=True,
+    )
+    urgency = models.CharField(
+        max_length=10, choices=Urgency.choices, default=Urgency.MEDIUM,
+    )
+    note = models.CharField(max_length=256, blank=True, default="")
+    status = models.CharField(
+        max_length=25, choices=Status.choices, default=Status.OPEN,
+    )
+
+    total_line_count = models.IntegerField(default=0)
+    fulfilled_line_count = models.IntegerField(default=0)
+    pending_line_count = models.IntegerField(default=0)
+
+    expires_at = models.DateTimeField(null=True, blank=True)
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    owner = models.ForeignKey(
+        "authentication.Users",
+        on_delete=models.CASCADE,
+        related_name="retailer_product_requests",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Retailer Product Requests"
+        ordering = ["-created"]
+        indexes = [
+            models.Index(fields=["entity", "status", "-created"]),
+            models.Index(fields=["status", "-created"]),
+        ]
+
+    def __str__(self):
+        return f"{self.request_number or '(unsaved)'} · {self.entity.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.request_number:
+            self.request_number = self._generate_number()
+        super().save(*args, **kwargs)
+
+    def _generate_number(self):
+        if not self.entity_id:
+            return None
+        last = (
+            RetailerProductRequest.objects
+            .filter(entity=self.entity)
+            .exclude(request_number__isnull=True)
+            .order_by("-request_number")
+            .values_list("request_number", flat=True)
+            .first()
+        )
+        if last and last.startswith("PR"):
+            try:
+                seq = int(last[2:]) + 1
+            except ValueError:
+                seq = 1
+        else:
+            seq = 1
+        return f"PR{seq:010d}"
+
+    def recalculate(self, save=True):
+        items = self.items.all()
+        self.total_line_count = items.count()
+        self.fulfilled_line_count = items.filter(
+            status=RetailerProductRequestItem.Status.FULFILLED,
+        ).count()
+        self.pending_line_count = self.total_line_count - self.fulfilled_line_count
+
+        if self.status in ("CANCELLED", "EXPIRED"):
+            pass
+        elif self.total_line_count > 0 and self.fulfilled_line_count == self.total_line_count:
+            self.status = "FULFILLED"
+            if not self.fulfilled_at:
+                self.fulfilled_at = timezone.now()
+        elif self.fulfilled_line_count > 0:
+            self.status = "PARTIALLY_FULFILLED"
+        elif self.responses.exists():
+            self.status = "ACKNOWLEDGED"
+        else:
+            self.status = "OPEN"
+
+        if save:
+            super().save(update_fields=[
+                "total_line_count", "fulfilled_line_count",
+                "pending_line_count", "status", "fulfilled_at", "updated",
+            ])
+
+
+class RetailerProductRequestItem(EntityRelatedModel):
+    """
+    One product line on a request. Demand side only — no wholesaler
+    references. Wholesaler responses live on RetailerProductRequestOffer.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", _("No offers yet")
+        OFFERED = "OFFERED", _("Offers received")
+        PARTIALLY_FULFILLED = "PARTIALLY_FULFILLED", _("Partially confirmed")
+        FULFILLED = "FULFILLED", _("Fully fulfilled")
+        CANCELLED = "CANCELLED", _("Cancelled")
+
+    request = models.ForeignKey(
+        RetailerProductRequest,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(
+        "products.Products",
+        on_delete=models.CASCADE,
+        related_name="request_items",
+    )
+    requested_quantity = models.IntegerField(default=0)
+    urgency = models.CharField(
+        max_length=10,
+        choices=RetailerProductRequest.Urgency.choices,
+        default=RetailerProductRequest.Urgency.MEDIUM,
+    )
+    note = models.CharField(max_length=256, blank=True, default="")
+
+    status = models.CharField(
+        max_length=25, choices=Status.choices, default=Status.PENDING,
+    )
+
+    # Aggregates across offers (denormalized for fast display)
+    offer_count = models.IntegerField(default=0)
+    total_offered_quantity = models.IntegerField(default=0)
+    confirmed_quantity = models.IntegerField(default=0)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(
+        "authentication.Users",
+        on_delete=models.CASCADE,
+        related_name="retailer_product_request_items",
+    )
+
+    class Meta:
+        verbose_name_plural = "Retailer Product Request Items"
+        ordering = ["created"]
+        indexes = [
+            models.Index(fields=["request", "status"]),
+            models.Index(fields=["product", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.product.title} × {self.requested_quantity}"
+
+    def recalculate(self, save=True):
+        offers = self.offers.all()
+        self.offer_count = offers.count()
+        self.total_offered_quantity = int(
+            offers.filter(
+                status__in=[
+                    RetailerProductRequestOffer.Status.OFFERED,
+                    RetailerProductRequestOffer.Status.CONFIRMED,
+                    RetailerProductRequestOffer.Status.FULFILLED,
+                ],
+            ).aggregate(total=Sum("offered_quantity"))["total"] or 0
+        )
+        self.confirmed_quantity = int(
+            offers.filter(
+                status__in=[
+                    RetailerProductRequestOffer.Status.CONFIRMED,
+                    RetailerProductRequestOffer.Status.FULFILLED,
+                ],
+            ).aggregate(total=Sum("offered_quantity"))["total"] or 0
+        )
+
+        if self.status == self.Status.CANCELLED:
+            pass
+        elif self.confirmed_quantity >= self.requested_quantity:
+            self.status = self.Status.FULFILLED
+        elif self.confirmed_quantity > 0:
+            self.status = self.Status.PARTIALLY_FULFILLED
+        elif self.offer_count > 0:
+            self.status = self.Status.OFFERED
+        else:
+            self.status = self.Status.PENDING
+
+        if save:
+            super().save(update_fields=[
+                "offer_count", "total_offered_quantity",
+                "confirmed_quantity", "status", "updated",
+            ])
+
+
+class RetailerProductRequestOffer(EntityRelatedModel):
+    """
+    One wholesaler's offer against a request line.
+
+    Multiple wholesalers can offer against the same line. The retailer
+    picks which to confirm. Each confirmed offer produces a
+    RetailerOrderItem on that wholesaler's RetailerOrder.
+    """
+
+    class Status(models.TextChoices):
+        OFFERED = "OFFERED", _("Awaiting retailer")
+        CONFIRMED = "CONFIRMED", _("Confirmed by retailer")
+        DECLINED_BY_RETAILER = "DECLINED_BY_RETAILER", _("Declined by retailer")
+        WITHDRAWN = "WITHDRAWN", _("Withdrawn — stock consumed")
+        FULFILLED = "FULFILLED", _("Order item created")
+        CANCELLED = "CANCELLED", _("Cancelled by wholesaler")
+
+    request_item = models.ForeignKey(
+        RetailerProductRequestItem,
+        on_delete=models.CASCADE,
+        related_name="offers",
+    )
+    wholesaler = models.ForeignKey(
+        "authentication.Entities",
+        on_delete=models.CASCADE,
+        related_name="product_request_offers",
+    )
+    wholesaler_receipt = models.ForeignKey(
+        "wholesalers.WholesalerReceipts",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="request_offers",
+    )
+
+    # Snapshotted at offer time
+    offered_quantity = models.IntegerField(default=0)
+    offered_unit_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    batch = models.CharField(max_length=50, null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    manufacture_date = models.DateField(null=True, blank=True)
+    is_placement = models.BooleanField(default=False)
+
+    status = models.CharField(
+        max_length=25, choices=Status.choices, default=Status.OFFERED,
+    )
+
+    retailer_confirmed_at = models.DateTimeField(null=True, blank=True)
+    retailer_response_note = models.CharField(max_length=256, blank=True, default="")
+
+    responded_by_user = models.ForeignKey(
+        "authentication.Users",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="product_request_offers",
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
+    response_note = models.CharField(max_length=256, blank=True, default="")
+
+    resulting_order_item = models.ForeignKey(
+        "wholesalers.RetailerOrderItems",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="source_offer",
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Retailer Product Request Offers"
+        ordering = ["offered_unit_price", "-offered_quantity"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["request_item", "wholesaler"],
+                name="one_offer_per_wholesaler_per_line",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["request_item", "status"]),
+            models.Index(fields=["wholesaler", "status"]),
+            models.Index(fields=["wholesaler_receipt"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.wholesaler.title} → {self.offered_quantity} "
+            f"@ {self.offered_unit_price}"
+        )
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+        errors = {}
+
+        if self.wholesaler_receipt_id and self.wholesaler_id:
+            if self.wholesaler_receipt.entity_id != self.wholesaler_id:
+                errors["wholesaler_receipt"] = (
+                    "The receipt must belong to the offering wholesaler."
+                )
+
+        if (
+            self.wholesaler_receipt_id
+            and self.request_item_id
+            and self.wholesaler_receipt.product_id != self.request_item.product_id
+        ):
+            errors["wholesaler_receipt"] = (
+                "The receipt must be for the same product as the request line."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+
+class RetailerProductRequestResponse(EntityRelatedModel):
+    """
+    Header-level record of a wholesaler's response to a request.
+
+    Aggregates what the wholesaler offered across lines. Line-level
+    detail lives on RetailerProductRequestOffer.
+    """
+
+    class ResponseType(models.TextChoices):
+        FULL = "FULL", _("All offered lines accepted")
+        PARTIAL = "PARTIAL", _("Some lines accepted")
+        REJECTED = "REJECTED", _("All lines rejected")
+        ACKNOWLEDGED = "ACKNOWLEDGED", _("Response made, nothing accepted yet")
+
+    request = models.ForeignKey(
+        RetailerProductRequest,
+        on_delete=models.CASCADE,
+        related_name="responses",
+    )
+    wholesaler = models.ForeignKey(
+        "authentication.Entities",
+        on_delete=models.CASCADE,
+        related_name="product_request_responses",
+    )
+    response_type = models.CharField(
+        max_length=20, choices=ResponseType.choices,
+    )
+    note = models.CharField(max_length=256, blank=True, default="")
+
+    offered_line_count = models.IntegerField(default=0)
+    rejected_line_count = models.IntegerField(default=0)
+
+    resulting_orders = models.ManyToManyField(
+        "wholesalers.RetailerOrders",
+        blank=True,
+        related_name="source_request_responses",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Retailer Product Request Responses"
+        ordering = ["-created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["request", "wholesaler"],
+                name="one_response_per_request_wholesaler",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.wholesaler.title} → {self.response_type}"

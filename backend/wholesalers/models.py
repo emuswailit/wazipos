@@ -4,7 +4,7 @@
 import pytz
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
-
+from django.db.models import Sum
 # Third-party
 from PIL import Image
 from django_advance_thumbnail import AdvanceThumbnailField
@@ -36,34 +36,6 @@ from payments.models import PayoutAccounts
 from products.models import Products
 User = get_user_model()
 
-TRUE_FALSE_OPTIONS = (
-    ("true", "true"),
-    ("false", "false"),
-)
-# LOOSE_PACK_UNITS_CHOICES = (
-#     ("FullPack", "FullPack"),
-#     ("LoosePackUnits", "LoosePackUnits"),
-# )
-
-
-UNITS_OF_ISSUE_CHOICES = (
-    ("Millilitre", "Millilitre"),
-    ("Litre", "Litre"),
-    ("Gram", "Gram"),
-    ("Kilogram", "Kilogram"),
-    ("Piece", "Piece"),
-    ("Pack", "Pack"),
-)
-
-
-UNIT_OF_RECEIPT = (
-    ("Millilitre", "Millilitre"),
-    ("Litre", "Litre"),
-    ("Gram", "Gram"),
-    ("Kilogram", "Kilogram"),
-    ("Piece", "Piece"),
-    ("Pack", "Pack"),
-)
 
 def wholesaler_price_discount_image_upload_to(instance, filename):
     title = instance.wholesaler_price_discount.title
@@ -132,7 +104,7 @@ class WholesalerReceipts(EntityRelatedModel):
 
     unit_of_receipt = models.CharField(
         max_length=20,
-        choices=UNIT_OF_RECEIPT,
+        choices=UNITS_OF_ISSUE_CHOICES,
         default="Pack",
     )
     batch = models.CharField(max_length=50, null=True, blank=True)
@@ -930,6 +902,11 @@ class WholesalerCampaignAudience(EntityRelatedModel):
     def __str__(self):
         return f"{self.retailer.title} · {self.campaign.title}"
 
+class CommitType(models.TextChoices):
+    CASH = "CASH", _("Paid in cash")
+    CREDIT = "CREDIT", _("Credit approved")
+    PLACEMENT = "PLACEMENT", _("Placement approved")
+    FACILITY = "FACILITY", _("Facility approved")
     
 class RetailerOrders(EntityRelatedModel):
     """
@@ -1087,7 +1064,39 @@ class RetailerOrders(EntityRelatedModel):
         User, related_name="wholesaler_order_owner",
         on_delete=models.CASCADE,
     )
-
+    committed_by_entity = models.ForeignKey(
+        "authentication.Entities",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="committed_orders",
+        help_text="The wholesaler entity that committed this order.",
+    )
+    commit_type = models.CharField(
+        max_length=20,
+        choices=CommitType.choices,
+        null=True, blank=True,
+        help_text="How the wholesaler is approving this order.",
+    )
+    committed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Set on commit. Triggers inventory reservation.",
+    )
+    committed_by_user = models.ForeignKey(
+        "authentication.Users",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="committed_orders_by_user",
+    )
+    commit_note = models.CharField(
+        max_length=256, blank=True, default="",
+    )
+    is_committed = models.CharField(
+        max_length=10,
+        choices=TRUE_FALSE_OPTIONS,
+        default="false",
+        help_text="Denormalized flag for fast filtering.",
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     class Meta:
         verbose_name_plural = "Retailer Orders"
 

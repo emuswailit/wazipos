@@ -793,6 +793,10 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
     actual_lead_time_days = serializers.SerializerMethodField(read_only=True)
     payment_summary = serializers.SerializerMethodField(read_only=True)
 
+    # ---- NEW: commit display helpers ----
+    commit_type_display = serializers.SerializerMethodField(read_only=True)
+    committed_by_title = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = models.RetailerOrders
         fields = (
@@ -845,6 +849,17 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "actual_lead_time_days",
             "payment_summary",
 
+            # ---- NEW: commit fields ----
+            "is_committed",
+            "commit_type",
+            "commit_type_display",
+            "committed_at",
+            "committed_by_entity",
+            "committed_by_title",
+            "committed_by_user",
+            "commit_note",
+            "cancelled_at",
+
             "created",
             "updated",
             "order_items",
@@ -883,6 +898,14 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             # Event-driven flags
             "is_paid",
             "is_delivered",
+            # ---- NEW: commit fields, all read-only ----
+            "is_committed",
+            "commit_type",
+            "committed_at",
+            "committed_by_entity",
+            "committed_by_user",
+            "commit_note",
+            "cancelled_at",
         )
 
     # ------------------------------------------------------------------
@@ -923,6 +946,17 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
 
     def get_actual_lead_time_days(self, obj):
         return obj.actual_lead_time_days
+
+    # ---- NEW: commit display resolvers ----
+    def get_commit_type_display(self, obj):
+        if not obj.commit_type:
+            return None
+        return obj.get_commit_type_display()
+
+    def get_committed_by_title(self, obj):
+        if obj.committed_by_entity:
+            return obj.committed_by_entity.title
+        return None
 
     # ------------------------------------------------------------------
     # Addresses and contact details
@@ -993,10 +1027,6 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
         return "N/A"
 
     def get_payment_summary(self, obj):
-        """
-        Aggregate of all successful payments against this order.
-        Useful on the retailer order list without an extra call.
-        """
         agg = (
             models.RetailerOrderPayments.objects
             .filter(retailer_order=obj, status="SUCCESS")
@@ -1009,6 +1039,7 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "balance_due": round(max(0.0, owed - paid), 2),
             "is_paid": paid >= owed if owed else False,
         }
+
 class WholesalerPriceDiscountBannersSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.WholesalerPriceDiscountBanners

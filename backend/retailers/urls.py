@@ -110,6 +110,11 @@ path(
         views.RetailerIndentItemDeleteView.as_view(),
         name="retailer-indent-item-delete",
     ),
+      path(
+        "retailers/product-requests",
+        views.productRequestsAPIView,
+        name="retailer-product-requests",
+    ),
       # Phase 2: The Final Order Execution Lock (POST)
     # Retailer passes the selected payload array to turn recommendations into real DB rows
  
