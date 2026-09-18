@@ -111,7 +111,7 @@ path(
         name="retailer-indent-item-delete",
     ),
       path(
-        "retailers/product-requests",
+        "product-requests",
         views.productRequestsAPIView,
         name="retailer-product-requests",
     ),
