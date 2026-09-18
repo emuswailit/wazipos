@@ -2343,7 +2343,8 @@ class RetailerProductRequest(EntityRelatedModel):
     """
 
     class Status(models.TextChoices):
-        OPEN = "OPEN", _("Open")
+        DRAFT = "DRAFT", _("Draft — not yet published")
+        PUBLISHED = "PUBLISHED", _("Published — accepting offers")
         ACKNOWLEDGED = "ACKNOWLEDGED", _("At least one offer received")
         PARTIALLY_FULFILLED = "PARTIALLY_FULFILLED", _("Some lines fulfilled")
         FULFILLED = "FULFILLED", _("All lines fulfilled")
@@ -2358,12 +2359,30 @@ class RetailerProductRequest(EntityRelatedModel):
     request_number = models.CharField(
         max_length=32, unique=True, null=True, blank=True,
     )
+
+    # Deterministic client-generated correlation key.
+    # Format: `${userId}:${productId}:${createdMs}` — see
+    # RetailerProductRequestsSyncContext.buildDraftId on the client.
+    # Nullable because older rows and server-created requests won't
+    # have one. Indexed because the client matches responses back to
+    # its local draft by this value.
+    draft_id = models.CharField(
+        max_length=256,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Client-side correlation key that ties a local draft "
+            "to the server-side RetailerProductRequest created from it."
+        ),
+    )
+
     urgency = models.CharField(
         max_length=10, choices=Urgency.choices, default=Urgency.MEDIUM,
     )
     note = models.CharField(max_length=256, blank=True, default="")
     status = models.CharField(
-        max_length=25, choices=Status.choices, default=Status.OPEN,
+        max_length=25, choices=Status.choices, default=Status.DRAFT,
     )
 
     total_line_count = models.IntegerField(default=0)
@@ -2388,64 +2407,36 @@ class RetailerProductRequest(EntityRelatedModel):
         indexes = [
             models.Index(fields=["entity", "status", "-created"]),
             models.Index(fields=["status", "-created"]),
+            models.Index(fields=["draft_id"]),
+        ]
+        constraints = [
+            # Only one DRAFT per (entity, draft_id). Two devices with
+            # different draft_ids can each keep their own draft open,
+            # but a single draft can only exist once on the server.
+            models.UniqueConstraint(
+                fields=["entity", "draft_id"],
+                condition=models.Q(
+                    status="DRAFT",
+                    draft_id__isnull=False,
+                ),
+                name="one_draft_request_per_entity_and_draft_id",
+            ),
+            # Belt-and-braces: one DRAFT per entity, no draft_id.
+            # Remove this one if you want to support multi-device.
+            models.UniqueConstraint(
+                fields=["entity"],
+                condition=models.Q(
+                    status="DRAFT",
+                    draft_id__isnull=True,
+                ),
+                name="one_draft_request_per_entity_no_draft_id",
+            ),
         ]
 
     def __str__(self):
         return f"{self.request_number or '(unsaved)'} · {self.entity.title}"
 
-    def save(self, *args, **kwargs):
-        if not self.request_number:
-            self.request_number = self._generate_number()
-        super().save(*args, **kwargs)
-
-    def _generate_number(self):
-        if not self.entity_id:
-            return None
-        last = (
-            RetailerProductRequest.objects
-            .filter(entity=self.entity)
-            .exclude(request_number__isnull=True)
-            .order_by("-request_number")
-            .values_list("request_number", flat=True)
-            .first()
-        )
-        if last and last.startswith("PR"):
-            try:
-                seq = int(last[2:]) + 1
-            except ValueError:
-                seq = 1
-        else:
-            seq = 1
-        return f"PR{seq:010d}"
-
-    def recalculate(self, save=True):
-        items = self.items.all()
-        self.total_line_count = items.count()
-        self.fulfilled_line_count = items.filter(
-            status=RetailerProductRequestItem.Status.FULFILLED,
-        ).count()
-        self.pending_line_count = self.total_line_count - self.fulfilled_line_count
-
-        if self.status in ("CANCELLED", "EXPIRED"):
-            pass
-        elif self.total_line_count > 0 and self.fulfilled_line_count == self.total_line_count:
-            self.status = "FULFILLED"
-            if not self.fulfilled_at:
-                self.fulfilled_at = timezone.now()
-        elif self.fulfilled_line_count > 0:
-            self.status = "PARTIALLY_FULFILLED"
-        elif self.responses.exists():
-            self.status = "ACKNOWLEDGED"
-        else:
-            self.status = "OPEN"
-
-        if save:
-            super().save(update_fields=[
-                "total_line_count", "fulfilled_line_count",
-                "pending_line_count", "status", "fulfilled_at", "updated",
-            ])
-
-
+    
 class RetailerProductRequestItem(EntityRelatedModel):
     """
     One product line on a request. Demand side only — no wholesaler
@@ -2469,6 +2460,16 @@ class RetailerProductRequestItem(EntityRelatedModel):
         on_delete=models.CASCADE,
         related_name="request_items",
     )
+
+    # Same correlation key as the parent request. Denormalized so the
+    # client can match a single line if needed without a join.
+    draft_id = models.CharField(
+        max_length=256,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     requested_quantity = models.IntegerField(default=0)
     urgency = models.CharField(
         max_length=10,
@@ -2500,50 +2501,12 @@ class RetailerProductRequestItem(EntityRelatedModel):
         indexes = [
             models.Index(fields=["request", "status"]),
             models.Index(fields=["product", "status"]),
+            models.Index(fields=["draft_id"]),
         ]
 
     def __str__(self):
         return f"{self.product.title} × {self.requested_quantity}"
-
-    def recalculate(self, save=True):
-        offers = self.offers.all()
-        self.offer_count = offers.count()
-        self.total_offered_quantity = int(
-            offers.filter(
-                status__in=[
-                    RetailerProductRequestOffer.Status.OFFERED,
-                    RetailerProductRequestOffer.Status.CONFIRMED,
-                    RetailerProductRequestOffer.Status.FULFILLED,
-                ],
-            ).aggregate(total=Sum("offered_quantity"))["total"] or 0
-        )
-        self.confirmed_quantity = int(
-            offers.filter(
-                status__in=[
-                    RetailerProductRequestOffer.Status.CONFIRMED,
-                    RetailerProductRequestOffer.Status.FULFILLED,
-                ],
-            ).aggregate(total=Sum("offered_quantity"))["total"] or 0
-        )
-
-        if self.status == self.Status.CANCELLED:
-            pass
-        elif self.confirmed_quantity >= self.requested_quantity:
-            self.status = self.Status.FULFILLED
-        elif self.confirmed_quantity > 0:
-            self.status = self.Status.PARTIALLY_FULFILLED
-        elif self.offer_count > 0:
-            self.status = self.Status.OFFERED
-        else:
-            self.status = self.Status.PENDING
-
-        if save:
-            super().save(update_fields=[
-                "offer_count", "total_offered_quantity",
-                "confirmed_quantity", "status", "updated",
-            ])
-
-
+    
 class RetailerProductRequestOffer(EntityRelatedModel):
     """
     One wholesaler's offer against a request line.

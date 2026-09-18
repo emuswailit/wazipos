@@ -3182,6 +3182,7 @@ class RetailerProductRequestSerializer(serializers.ModelSerializer):
         model = RetailerProductRequest
         fields = [
             "id",
+            "draft_id",
             "request_number",
             "entity",
             "entity_title",
@@ -3190,6 +3191,7 @@ class RetailerProductRequestSerializer(serializers.ModelSerializer):
             "note",
             "status",
             "status_display",
+
 
             "total_line_count",
             "fulfilled_line_count",
@@ -3223,6 +3225,7 @@ class RetailerProductRequestListSerializer(serializers.ModelSerializer):
         model = RetailerProductRequest
         fields = [
             "id",
+            "draft_id",
             "request_number",
             "entity",
             "entity_title",

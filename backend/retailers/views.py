@@ -2437,7 +2437,8 @@ def productRequestsAPIView(request):
     Unified dispatcher for retailer product requests.
 
     Actions:
-        CreateRequest         — new multi-line request
+        CreateRequest         — create or update the caller's DRAFT request
+        PublishRequest        — flip DRAFT → PUBLISHED and notify wholesalers
         GetMyRequests         — list requests for the caller's entity
         GetRequestDetails     — one request with items, offers, responses
         ConfirmOffers         — confirm/decline offers (creates orders)
@@ -2453,6 +2454,7 @@ def productRequestsAPIView(request):
         items = request.data.get("items", [])
         urgency = request.data.get("urgency", "medium")
         note = request.data.get("note", "")
+        draft_id = request.data.get("draft_id") or None
 
         if not items:
             return custom_errors_response(
@@ -2461,7 +2463,10 @@ def productRequestsAPIView(request):
             )
 
         product_ids = [it.get("product_id") for it in items]
-        products = {str(p.id): p for p in Products.objects.filter(id__in=product_ids)}
+        products = {
+            str(p.id): p
+            for p in Products.objects.filter(id__in=product_ids)
+        }
 
         # Validate every line
         for idx, it in enumerate(items):
@@ -2486,17 +2491,28 @@ def productRequestsAPIView(request):
                     {"items": f"Line {idx + 1}: requested_quantity must be > 0."},
                 )
 
-        # Skip products already on an open request
+        # Skip products already on a *published* request. Products
+        # already on the caller's own DRAFT are fine — they'll be
+        # upserted below.
         existing_open_product_ids = set(
             RetailerProductRequestItem.objects.filter(
                 request__entity=request.user.entity,
-                request__status__in=["OPEN", "ACKNOWLEDGED", "PARTIALLY_FULFILLED"],
-                status__in=["PENDING", "OFFERED", "PARTIALLY_FULFILLED"],
+                request__status__in=[
+                    RetailerProductRequest.Status.PUBLISHED,
+                    RetailerProductRequest.Status.ACKNOWLEDGED,
+                    RetailerProductRequest.Status.PARTIALLY_FULFILLED,
+                ],
+                status__in=[
+                    RetailerProductRequestItem.Status.PENDING,
+                    RetailerProductRequestItem.Status.OFFERED,
+                    RetailerProductRequestItem.Status.PARTIALLY_FULFILLED,
+                ],
             ).values_list("product_id", flat=True)
         )
 
         lines_to_create = [
-            it for it in items if str(it["product_id"]) not in {
+            it for it in items
+            if str(it["product_id"]) not in {
                 str(pid) for pid in existing_open_product_ids
             }
         ]
@@ -2506,34 +2522,133 @@ def productRequestsAPIView(request):
                 1, "All products are already on an open request", {},
             )
 
-        # Create the header
-        req = RetailerProductRequest.objects.create(
+        # Find the caller's existing DRAFT for this draft_id.
+        draft_qs = RetailerProductRequest.objects.filter(
             entity=request.user.entity,
-            urgency=urgency,
-            note=note,
-            expires_at=timezone.now() + timedelta(days=REQUEST_EXPIRY_DAYS),
-            owner=request.user,
+            status=RetailerProductRequest.Status.DRAFT,
+        )
+        if draft_id:
+            draft = draft_qs.filter(draft_id=draft_id).first()
+        else:
+            draft = draft_qs.filter(draft_id__isnull=True).first()
+
+        if draft is None:
+            draft = RetailerProductRequest.objects.create(
+                entity=request.user.entity,
+                draft_id=draft_id,
+                urgency=urgency,
+                note=note,
+                expires_at=timezone.now() + timedelta(days=REQUEST_EXPIRY_DAYS),
+                owner=request.user,
+                status=RetailerProductRequest.Status.DRAFT,
+            )
+        else:
+            # Keep the header metadata current.
+            draft.urgency = urgency
+            if note:
+                draft.note = note
+            if draft_id and not draft.draft_id:
+                draft.draft_id = draft_id
+            draft.save(update_fields=[
+                "urgency", "note", "draft_id", "updated",
+            ])
+
+        # Upsert lines by product.
+        existing_by_product = {
+            str(item.product_id): item
+            for item in draft.items.all()
+        }
+
+        for it in lines_to_create:
+            pid = str(it["product_id"])
+            product = products[pid]
+
+            if pid in existing_by_product:
+                line = existing_by_product[pid]
+                line.requested_quantity = int(it["requested_quantity"])
+                line.urgency = it.get("urgency", urgency)
+                line.note = it.get("note", "")
+                line.draft_id = draft_id
+                line.save(update_fields=[
+                    "requested_quantity",
+                    "urgency",
+                    "note",
+                    "draft_id",
+                    "updated",
+                ])
+            else:
+                RetailerProductRequestItem.objects.create(
+                    entity=request.user.entity,
+                    request=draft,
+                    product=product,
+                    draft_id=draft_id,
+                    requested_quantity=int(it["requested_quantity"]),
+                    urgency=it.get("urgency", urgency),
+                    note=it.get("note", ""),
+                    owner=request.user,
+                )
+
+        draft.recalculate(save=True)
+
+        # No fan-out here. Wholesalers are only notified when the
+        # retailer calls PublishRequest on this draft.
+        return custom_success_message(
+            0, "Draft saved",
+            RetailerProductRequestSerializer(draft).data,
+            "request",
         )
 
-        # Create lines
-        for it in lines_to_create:
-            RetailerProductRequestItem.objects.create(
-                entity=request.user.entity,
-                request=req,
-                product=products[str(it["product_id"])],
-                requested_quantity=int(it["requested_quantity"]),
-                urgency=it.get("urgency", urgency),
-                note=it.get("note", ""),
-                owner=request.user,
+    # =================================================================
+    elif action == "PublishRequest":
+        request_id = request.data.get("request_id")
+        draft_id = request.data.get("draft_id") or None
+
+        # Accept either the server id or the client draft id.
+        if not request_id and not draft_id:
+            return custom_errors_response(
+                1, "Publish failed",
+                {"request_id": "This field or draft_id is required."},
             )
 
-        req.recalculate(save=True)
+        try:
+            if request_id:
+                req = RetailerProductRequest.objects.get(
+                    id=request_id,
+                    entity=request.user.entity,
+                )
+            else:
+                req = RetailerProductRequest.objects.get(
+                    draft_id=draft_id,
+                    entity=request.user.entity,
+                    status=RetailerProductRequest.Status.DRAFT,
+                )
+        except RetailerProductRequest.DoesNotExist:
+            return custom_errors_response(
+                1, "Publish failed",
+                {"request_id": "Not found or not yours."},
+            )
 
-        # Fan out to eligible wholesalers
+        if req.status != RetailerProductRequest.Status.DRAFT:
+            return custom_errors_response(
+                1, "Publish failed",
+                {"status": f"Only DRAFT requests can be published. This one is {req.status}."},
+            )
+
+        if not req.items.exists():
+            return custom_errors_response(
+                1, "Publish failed",
+                {"items": "Cannot publish a request with no lines."},
+            )
+
+        # Flip to PUBLISHED.
+        req.status = RetailerProductRequest.Status.PUBLISHED
+        req.save(update_fields=["status", "updated"])
+
+        # Fan out to eligible wholesalers. This is the only place
+        # where push_new_product_request runs.
         allowed_set = set()
-        for it in lines_to_create:
-            p = products[str(it["product_id"])]
-            for et in (p.allowed_entities or []):
+        for line in req.items.select_related("product"):
+            for et in (line.product.allowed_entities or []):
                 allowed_set.add(et)
 
         wholesaler_qs = Entities.objects.filter(
@@ -2572,12 +2687,14 @@ def productRequestsAPIView(request):
         })
 
         return custom_success_message(
-            0, "Request submitted",
-            RetailerProductRequestSerializer(req).data, "request",
+            0, "Request published",
+            RetailerProductRequestSerializer(req).data,
+            "request",
         )
 
     # =================================================================
     elif action == "GetMyRequests":
+        # Retailer sees everything including drafts.
         qs = (
             RetailerProductRequest.objects
             .filter(entity=request.user.entity)
@@ -2586,6 +2703,10 @@ def productRequestsAPIView(request):
         )
         if request.data.get("status"):
             qs = qs.filter(status=request.data["status"])
+        # By default, exclude drafts from the list unless the caller
+        # explicitly asks for them.
+        elif not request.data.get("include_drafts"):
+            qs = qs.exclude(status=RetailerProductRequest.Status.DRAFT)
 
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
@@ -2595,14 +2716,16 @@ def productRequestsAPIView(request):
     # =================================================================
     elif action == "GetRequestDetails":
         request_id = request.data.get("request_id")
-        if not request_id:
+        draft_id = request.data.get("draft_id") or None
+
+        if not request_id and not draft_id:
             return custom_errors_response(
                 1, "Request could not be retrieved",
-                {"request_id": "This field is required."},
+                {"request_id": "This field or draft_id is required."},
             )
 
         try:
-            req = (
+            base_qs = (
                 RetailerProductRequest.objects
                 .filter(entity=request.user.entity)
                 .prefetch_related(
@@ -2610,8 +2733,11 @@ def productRequestsAPIView(request):
                     Prefetch("items__offers", queryset=RetailerProductRequestOffer.objects.select_related("wholesaler", "wholesaler_receipt")),
                     "responses",
                 )
-                .get(id=request_id)
             )
+            if request_id:
+                req = base_qs.get(id=request_id)
+            else:
+                req = base_qs.get(draft_id=draft_id)
         except RetailerProductRequest.DoesNotExist:
             return custom_errors_response(
                 1, "Request not found",
@@ -2646,13 +2772,18 @@ def productRequestsAPIView(request):
                 {"request_id": "Not found or not yours."},
             )
 
+        if req.status == RetailerProductRequest.Status.DRAFT:
+            return custom_errors_response(
+                1, "Confirmation failed",
+                {"status": "Cannot confirm offers on a draft request."},
+            )
+
         if not confirmations and not declinations:
             return custom_errors_response(
                 1, "Confirmation failed",
                 {"detail": "Provide at least one confirmation or declination."},
             )
 
-        # Validate overlap
         confirmed_ids = {p.get("offer_id") for p in confirmations}
         declined_ids = {p.get("offer_id") for p in declinations}
         overlap = confirmed_ids & declined_ids
@@ -2675,7 +2806,6 @@ def productRequestsAPIView(request):
         except RetailerProductRequestOffer.DoesNotExist:
             return custom_errors_response(1, "Confirmation failed", {"detail": "One or more offers not found."})
 
-        # Notify affected wholesalers
         from analytics.realtime import push_retailer_confirmation
         affected_wholesalers = set(
             RetailerProductRequestOffer.objects
@@ -2708,22 +2838,35 @@ def productRequestsAPIView(request):
     # =================================================================
     elif action == "CancelRequest":
         request_id = request.data.get("request_id")
-        if not request_id:
+        draft_id = request.data.get("draft_id") or None
+
+        if not request_id and not draft_id:
             return custom_errors_response(
                 1, "Cancel failed",
-                {"request_id": "This field is required."},
+                {"request_id": "This field or draft_id is required."},
             )
 
         try:
-            req = RetailerProductRequest.objects.get(
-                id=request_id, entity=request.user.entity,
-            )
+            if request_id:
+                req = RetailerProductRequest.objects.get(
+                    id=request_id,
+                    entity=request.user.entity,
+                )
+            else:
+                req = RetailerProductRequest.objects.get(
+                    draft_id=draft_id,
+                    entity=request.user.entity,
+                )
         except RetailerProductRequest.DoesNotExist:
             return custom_errors_response(
                 1, "Cancel failed", {"request_id": "Not found."},
             )
 
-        if req.status in ("FULFILLED", "CANCELLED", "EXPIRED"):
+        if req.status in (
+            RetailerProductRequest.Status.FULFILLED,
+            RetailerProductRequest.Status.CANCELLED,
+            RetailerProductRequest.Status.EXPIRED,
+        ):
             return custom_errors_response(
                 1, "Cancel failed",
                 {"status": f"Cannot cancel a request in status {req.status}."},
@@ -2731,14 +2874,15 @@ def productRequestsAPIView(request):
 
         now = timezone.now()
 
-        # Cancel all pending offers that aren't already confirmed
-        req.items.update(status="CANCELLED")
+        req.items.update(
+            status=RetailerProductRequestItem.Status.CANCELLED
+        )
         RetailerProductRequestOffer.objects.filter(
             request_item__request=req,
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
 
-        req.status = "CANCELLED"
+        req.status = RetailerProductRequest.Status.CANCELLED
         req.cancelled_at = now
         req.save(update_fields=["status", "cancelled_at", "updated"])
 
@@ -2765,16 +2909,18 @@ def productRequestsAPIView(request):
                 1, "Cancel failed", {"item_id": "Not found."},
             )
 
-        if item.status in ("FULFILLED", "CANCELLED"):
+        if item.status in (
+            RetailerProductRequestItem.Status.FULFILLED,
+            RetailerProductRequestItem.Status.CANCELLED,
+        ):
             return custom_errors_response(
                 1, "Cancel failed",
                 {"status": f"Cannot cancel a line in status {item.status}."},
             )
 
-        item.status = "CANCELLED"
+        item.status = RetailerProductRequestItem.Status.CANCELLED
         item.save(update_fields=["status", "updated"])
 
-        # Cancel pending offers for this line
         RetailerProductRequestOffer.objects.filter(
             request_item=item,
             status=RetailerProductRequestOffer.Status.OFFERED,
@@ -2784,7 +2930,8 @@ def productRequestsAPIView(request):
 
         return custom_success_message(
             0, "Line cancelled",
-            RetailerProductRequestSerializer(item.request).data, "request",
+            RetailerProductRequestSerializer(item.request).data,
+            "request",
         )
 
     # =================================================================
