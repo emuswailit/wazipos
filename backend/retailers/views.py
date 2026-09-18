@@ -2429,7 +2429,6 @@ WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
 # =====================================================================
 # Product requests — unified dispatcher
 # =====================================================================
-
 @api_view(["POST"])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
 def productRequestsAPIView(request):
@@ -2437,8 +2436,7 @@ def productRequestsAPIView(request):
     Unified dispatcher for retailer product requests.
 
     Actions:
-        CreateRequest         — create or update the caller's DRAFT request
-        PublishRequest        — flip DRAFT → PUBLISHED and notify wholesalers
+        CreateRequest         — create a request in PUBLISHED and notify wholesalers
         GetMyRequests         — list requests for the caller's entity
         GetRequestDetails     — one request with items, offers, responses
         ConfirmOffers         — confirm/decline offers (creates orders)
@@ -2491,9 +2489,23 @@ def productRequestsAPIView(request):
                     {"items": f"Line {idx + 1}: requested_quantity must be > 0."},
                 )
 
-        # Skip products already on a *published* request. Products
-        # already on the caller's own DRAFT are fine — they'll be
-        # upserted below.
+        # Idempotency: if this client draft has already been submitted,
+        # return the existing row instead of creating a duplicate.
+        if draft_id:
+            existing = (
+                RetailerProductRequest.objects
+                .filter(draft_id=draft_id, entity=request.user.entity)
+                .first()
+            )
+            if existing is not None:
+                existing.recalculate(save=True)
+                return custom_success_message(
+                    0, "Request already submitted",
+                    RetailerProductRequestSerializer(existing).data,
+                    "request",
+                )
+
+        # Skip products already on an open request for this retailer.
         existing_open_product_ids = set(
             RetailerProductRequestItem.objects.filter(
                 request__entity=request.user.entity,
@@ -2522,65 +2534,23 @@ def productRequestsAPIView(request):
                 1, "All products are already on an open request", {},
             )
 
-        # Find the caller's existing DRAFT for this draft_id.
-        draft_qs = RetailerProductRequest.objects.filter(
-            entity=request.user.entity,
-            status=RetailerProductRequest.Status.DRAFT,
-        )
-        if draft_id:
-            draft = draft_qs.filter(draft_id=draft_id).first()
-        else:
-            draft = draft_qs.filter(draft_id__isnull=True).first()
-
-        if draft is None:
-            draft = RetailerProductRequest.objects.create(
+        # Create the request and its lines atomically, in PUBLISHED.
+        with transaction.atomic():
+            req = RetailerProductRequest.objects.create(
                 entity=request.user.entity,
                 draft_id=draft_id,
                 urgency=urgency,
                 note=note,
                 expires_at=timezone.now() + timedelta(days=REQUEST_EXPIRY_DAYS),
                 owner=request.user,
-                status=RetailerProductRequest.Status.DRAFT,
+                status=RetailerProductRequest.Status.PUBLISHED,
             )
-        else:
-            # Keep the header metadata current.
-            draft.urgency = urgency
-            if note:
-                draft.note = note
-            if draft_id and not draft.draft_id:
-                draft.draft_id = draft_id
-            draft.save(update_fields=[
-                "urgency", "note", "draft_id", "updated",
-            ])
 
-        # Upsert lines by product.
-        existing_by_product = {
-            str(item.product_id): item
-            for item in draft.items.all()
-        }
-
-        for it in lines_to_create:
-            pid = str(it["product_id"])
-            product = products[pid]
-
-            if pid in existing_by_product:
-                line = existing_by_product[pid]
-                line.requested_quantity = int(it["requested_quantity"])
-                line.urgency = it.get("urgency", urgency)
-                line.note = it.get("note", "")
-                line.draft_id = draft_id
-                line.save(update_fields=[
-                    "requested_quantity",
-                    "urgency",
-                    "note",
-                    "draft_id",
-                    "updated",
-                ])
-            else:
+            for it in lines_to_create:
                 RetailerProductRequestItem.objects.create(
                     entity=request.user.entity,
-                    request=draft,
-                    product=product,
+                    request=req,
+                    product=products[str(it["product_id"])],
                     draft_id=draft_id,
                     requested_quantity=int(it["requested_quantity"]),
                     urgency=it.get("urgency", urgency),
@@ -2588,67 +2558,14 @@ def productRequestsAPIView(request):
                     owner=request.user,
                 )
 
-        draft.recalculate(save=True)
+            req.recalculate(save=True)
 
-        # No fan-out here. Wholesalers are only notified when the
-        # retailer calls PublishRequest on this draft.
-        return custom_success_message(
-            0, "Draft saved",
-            RetailerProductRequestSerializer(draft).data,
-            "request",
-        )
-
-    # =================================================================
-    elif action == "PublishRequest":
-        request_id = request.data.get("request_id")
-        draft_id = request.data.get("draft_id") or None
-
-        # Accept either the server id or the client draft id.
-        if not request_id and not draft_id:
-            return custom_errors_response(
-                1, "Publish failed",
-                {"request_id": "This field or draft_id is required."},
-            )
-
-        try:
-            if request_id:
-                req = RetailerProductRequest.objects.get(
-                    id=request_id,
-                    entity=request.user.entity,
-                )
-            else:
-                req = RetailerProductRequest.objects.get(
-                    draft_id=draft_id,
-                    entity=request.user.entity,
-                    status=RetailerProductRequest.Status.DRAFT,
-                )
-        except RetailerProductRequest.DoesNotExist:
-            return custom_errors_response(
-                1, "Publish failed",
-                {"request_id": "Not found or not yours."},
-            )
-
-        if req.status != RetailerProductRequest.Status.DRAFT:
-            return custom_errors_response(
-                1, "Publish failed",
-                {"status": f"Only DRAFT requests can be published. This one is {req.status}."},
-            )
-
-        if not req.items.exists():
-            return custom_errors_response(
-                1, "Publish failed",
-                {"items": "Cannot publish a request with no lines."},
-            )
-
-        # Flip to PUBLISHED.
-        req.status = RetailerProductRequest.Status.PUBLISHED
-        req.save(update_fields=["status", "updated"])
-
-        # Fan out to eligible wholesalers. This is the only place
-        # where push_new_product_request runs.
+        # Fan out to eligible wholesalers. Now safe: the request is
+        # PUBLISHED and its items exist.
         allowed_set = set()
-        for line in req.items.select_related("product"):
-            for et in (line.product.allowed_entities or []):
+        for it in lines_to_create:
+            p = products[str(it["product_id"])]
+            for et in (p.allowed_entities or []):
                 allowed_set.add(et)
 
         wholesaler_qs = Entities.objects.filter(
@@ -2687,14 +2604,13 @@ def productRequestsAPIView(request):
         })
 
         return custom_success_message(
-            0, "Request published",
+            0, "Request submitted",
             RetailerProductRequestSerializer(req).data,
             "request",
         )
 
     # =================================================================
     elif action == "GetMyRequests":
-        # Retailer sees everything including drafts.
         qs = (
             RetailerProductRequest.objects
             .filter(entity=request.user.entity)
@@ -2703,10 +2619,6 @@ def productRequestsAPIView(request):
         )
         if request.data.get("status"):
             qs = qs.filter(status=request.data["status"])
-        # By default, exclude drafts from the list unless the caller
-        # explicitly asks for them.
-        elif not request.data.get("include_drafts"):
-            qs = qs.exclude(status=RetailerProductRequest.Status.DRAFT)
 
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
