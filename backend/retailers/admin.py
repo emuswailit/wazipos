@@ -87,15 +87,11 @@ class RetailerProductRequestAdmin(admin.ModelAdmin):
               "draft_id",
                     "request_number",
                     "entity",
-                    "entity_title",
+                   
                     "urgency",
-                    "urgency_display",
+                    
                     "status",
-                    "status_display",
-                    "total_line_count",
-                    "fulfilled_line_count",
-                    "pending_line_count",
-                    "expires_at",
+                 
                     "created",
     )
 @admin.register(models.RetailerProductRequestItem)
