@@ -3207,17 +3207,8 @@ class RetailerProductRequestSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-# =====================================================================
-# Request (list — light)
-# =====================================================================
 
 class RetailerProductRequestListItemSerializer(serializers.ModelSerializer):
-    """
-    Compact read-only representation of one line on a request.
-    Used inside the list serializer so the client can render
-    product titles and line counts without a second round trip.
-    """
-
     product_title = serializers.CharField(
         source="product.title",
         read_only=True,
@@ -3252,28 +3243,10 @@ class RetailerProductRequestListItemSerializer(serializers.ModelSerializer):
 
 
 class RetailerProductRequestListSerializer(serializers.ModelSerializer):
-    """
-    Lightweight list serializer. Includes a compact read-only
-    `items` array so the client can render product titles and
-    per-line counts without a details fetch.
-    """
-
-    entity_title = serializers.CharField(
-        source="entity.title",
-        read_only=True,
-    )
-    status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
-    )
-    urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
-    )
-    items = RetailerProductRequestListItemSerializer(
-        many=True,
-        read_only=True,
-    )
+    entity_title = serializers.CharField(source="entity.title", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    urgency_display = serializers.CharField(source="get_urgency_display", read_only=True)
+    items = RetailerProductRequestListItemSerializer(many=True, read_only=True)
 
     class Meta:
         model = RetailerProductRequest
