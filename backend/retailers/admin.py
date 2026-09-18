@@ -81,17 +81,41 @@ class RetailQuantityDiscountsAdmin(admin.ModelAdmin):
 #         "updated",
 #     )
 
-# @admin.register(models.RetailerReceipts)
-# class RetailerReceiptsAdmin(admin.ModelAdmin):
-#     list_display = (
-#         "entity",
-#         "order_type",
-#         "order_origin",
-#         "reference_number",
-#         "shipping_cost",
-#         "created",
-#         "updated",
-#     )
+@admin.register(models.RetailerProductRequest)
+class RetailerProductRequestAdmin(admin.ModelAdmin):
+    list_display = (
+              "draft_id",
+                    "request_number",
+                    "entity",
+                    "entity_title",
+                    "urgency",
+                    "urgency_display",
+                    "status",
+                    "status_display",
+                    "total_line_count",
+                    "fulfilled_line_count",
+                    "pending_line_count",
+                    "expires_at",
+                    "created",
+    )
+@admin.register(models.RetailerProductRequestItem)
+class RetailerProductRequestItemAdmin(admin.ModelAdmin):
+    list_display = (
+                         "draft_id",
+            "request",
+            "product",
+            "product_title",
+            "product_bar_code",
+            "requested_quantity",
+            "urgency",
+            "urgency_display",
+            "note",
+            "status",
+            "status_display",
+            "offer_count",
+            "total_offered_quantity",
+            "confirmed_quantity",
+    )
 
 @admin.register(models.OutOfStock)
 class OutOfStockAdmin(admin.ModelAdmin):
