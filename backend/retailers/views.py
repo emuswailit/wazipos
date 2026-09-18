@@ -2414,6 +2414,7 @@ from .models import (
     RetailerProductRequest,
     RetailerProductRequestItem,
     RetailerProductRequestOffer,
+    RetailerProductRequestItemWholesaler
 )
 from .serializers import (
     RetailerProductRequestSerializer,
