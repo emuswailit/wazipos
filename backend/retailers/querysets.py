@@ -86,7 +86,7 @@ def visible_item_for_wholesaler(wholesaler_id, item_id):
         .filter(
             id=item_id,
             target_pairs__wholesaler_id=wholesaler_id,
-            target_pairs__is_active=True,
+          
             request__status__in=WHOLESALER_VISIBLE_REQUEST_STATUSES,
         )
         .select_related("product", "request", "request__entity")
