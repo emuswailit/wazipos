@@ -2414,7 +2414,6 @@ from .models import (
     RetailerProductRequest,
     RetailerProductRequestItem,
     RetailerProductRequestOffer,
-    RetailerProductRequestItemWholesaler
 )
 from .serializers import (
     RetailerProductRequestSerializer,
@@ -2507,39 +2506,10 @@ def productRequestsAPIView(request):
                     "request",
                 )
 
-        # Skip products already on an open request for this retailer.
-        existing_open_product_ids = set(
-            RetailerProductRequestItem.objects.filter(
-                request__entity=request.user.entity,
-                request__status__in=[
-                    RetailerProductRequest.Status.PUBLISHED,
-                    RetailerProductRequest.Status.ACKNOWLEDGED,
-                    RetailerProductRequest.Status.PARTIALLY_FULFILLED,
-                ],
-                status__in=[
-                    RetailerProductRequestItem.Status.PENDING,
-                    RetailerProductRequestItem.Status.OFFERED,
-                    RetailerProductRequestItem.Status.PARTIALLY_FULFILLED,
-                ],
-            ).values_list("product_id", flat=True)
-        )
-
-        lines_to_create = [
-            it for it in items
-            if str(it["product_id"]) not in {
-                str(pid) for pid in existing_open_product_ids
-            }
-        ]
-
-        if not lines_to_create:
-            return custom_errors_response(
-                1, "All products are already on an open request", {},
-            )
-
         # Collect and validate the union of all target wholesaler ids
         # from the payload, once, before creating anything.
         all_target_ids = set()
-        for it in lines_to_create:
+        for it in items:
             for wid in (it.get("target_wholesaler_ids") or []):
                 all_target_ids.add(str(wid))
 
@@ -2553,6 +2523,81 @@ def productRequestsAPIView(request):
                     is_active=True,
                 ).values_list("id", flat=True)
             }
+
+        # Pairs (product_id, wholesaler_id) that are already on an
+        # open request for this retailer. A new line may include a
+        # product already under request, so long as it's being sent to
+        # a wholesaler that isn't currently holding an unanswered line
+        # for that product.
+        existing_open_pairs = {
+            (str(pid), str(wid))
+            for pid, wid in (
+                RetailerProductRequestItemWholesaler.objects
+                .filter(
+                    request_item__request__entity=request.user.entity,
+                    request_item__request__status__in=[
+                        RetailerProductRequest.Status.PUBLISHED,
+                        RetailerProductRequest.Status.ACKNOWLEDGED,
+                        RetailerProductRequest.Status.PARTIALLY_FULFILLED,
+                    ],
+                    request_item__status__in=[
+                        RetailerProductRequestItem.Status.PENDING,
+                        RetailerProductRequestItem.Status.OFFERED,
+                        RetailerProductRequestItem.Status.PARTIALLY_FULFILLED,
+                    ],
+                    is_active=True,
+                )
+                .values_list(
+                    "request_item__product_id",
+                    "wholesaler_id",
+                )
+            )
+        }
+
+        # Build the final line list. Each incoming line keeps only the
+        # targets that are (a) valid, active wholesalers, and (b) not
+        # already holding an open request for that product.
+        lines_to_create = []
+        skipped_lines = []
+
+        for idx, it in enumerate(items):
+            pid = str(it["product_id"])
+
+            requested_targets = [
+                str(wid)
+                for wid in (it.get("target_wholesaler_ids") or [])
+            ]
+
+            fresh_targets = [
+                wid
+                for wid in requested_targets
+                if wid in valid_wholesaler_ids
+                and (pid, wid) not in existing_open_pairs
+            ]
+
+            if not fresh_targets:
+                skipped_lines.append({
+                    "index": idx,
+                    "product_id": pid,
+                    "requested_targets": requested_targets,
+                    "reason": (
+                        "Product is already on an open request for "
+                        "every selected wholesaler."
+                    ),
+                })
+                continue
+
+            lines_to_create.append({
+                **it,
+                "target_wholesaler_ids": fresh_targets,
+            })
+
+        if not lines_to_create:
+            return custom_errors_response(
+                1,
+                "All products are already on an open request for the selected wholesalers",
+                {"skipped": skipped_lines},
+            )
 
         # Create the request, its lines, and the target pairs in one
         # transaction.
@@ -2585,7 +2630,6 @@ def productRequestsAPIView(request):
                 per_item_ids = [
                     str(wid)
                     for wid in (it.get("target_wholesaler_ids") or [])
-                    if str(wid) in valid_wholesaler_ids
                 ]
 
                 if per_item_ids:
@@ -2853,8 +2897,6 @@ def productRequestsAPIView(request):
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
 
-        # Deactivate all target pairs — the request is dead, so no
-        # wholesaler should keep seeing it.
         RetailerProductRequestItemWholesaler.objects.filter(
             request_item__request=req,
             is_active=True,
@@ -2904,8 +2946,6 @@ def productRequestsAPIView(request):
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
 
-        # Deactivate this line's target pairs so it stops appearing in
-        # wholesaler feeds.
         RetailerProductRequestItemWholesaler.objects.filter(
             request_item=item,
             is_active=True,
