@@ -175,6 +175,47 @@ from analytics.realtime import (
 # =====================================================================
 # Wholesaler product requests
 # =====================================================================
+# analytics/consumers.py
+
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.db.models import Prefetch, Q
+
+
+def wholesaler_requests_group(entity_id) -> str:
+    """
+    Group name for a wholesaler's product-request feed.
+
+    Must match the group name that `push_new_product_request` targets
+    in analytics/realtime.py. If one side says `wholesaler_requests_…`
+    and the other says `wholesaler_entity_…`, messages go nowhere.
+    """
+    return f"wholesaler_requests_{entity_id}"
+
+
+def _json_safe(value):
+    """
+    Recursively convert datetimes, Decimals, UUIDs, and other
+    non-JSON-native values to primitives.
+    """
+    import datetime
+    import decimal
+    import uuid
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value.isoformat()
+    if isinstance(value, decimal.Decimal):
+        return str(value)
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return str(value)
+
 
 class WholesalerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
     """
@@ -199,45 +240,118 @@ class WholesalerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
         self.entity_id = str(self.user.entity_id)
         self.group_name = wholesaler_requests_group(self.entity_id)
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.channel_layer.group_add(
+            self.group_name, self.channel_name
+        )
         await self.accept()
 
-        initial = await self._get_open_requests()
-        await self.send_json(_json_safe({
-            "event": "initial",
-            "requests": initial,
-        }))
+        try:
+            initial = await self._get_open_requests()
+        except Exception as exc:  # noqa: BLE001
+            # Don't kill the socket if the snapshot fails.
+            print(
+                "[WholesalerProductRequestsConsumer] "
+                "initial snapshot failed:",
+                exc,
+            )
+            initial = []
+
+        await self.send_json(
+            _json_safe({"event": "initial", "requests": initial})
+        )
 
     async def disconnect(self, close_code):
         if hasattr(self, "group_name"):
-            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            await self.channel_layer.group_discard(
+                self.group_name, self.channel_name
+            )
 
     async def new_product_request(self, event):
-        await self.send_json(_json_safe({
-            "event": "new_request",
-            "payload": event.get("payload", {}),
-        }))
+        await self.send_json(
+            _json_safe(
+                {
+                    "event": "new_request",
+                    "payload": event.get("payload", {}),
+                }
+            )
+        )
 
     async def retailer_confirmed(self, event):
-        await self.send_json(_json_safe({
-            "event": "retailer_confirmed",
-            "payload": event.get("payload", {}),
-        }))
+        await self.send_json(
+            _json_safe(
+                {
+                    "event": "retailer_confirmed",
+                    "payload": event.get("payload", {}),
+                }
+            )
+        )
 
-    @sync_to_async
+    @database_sync_to_async
     def _get_open_requests(self):
-        from retailers.models import RetailerProductRequest
-        from retailers.serializers import RetailerProductRequestListSerializer
+        from retailers.models import (
+            RetailerProductRequest,
+            RetailerProductRequestItem,
+        )
+        from retailers.serializers import (
+            RetailerProductRequestListSerializer,
+        )
 
         qs = (
             RetailerProductRequest.objects
-            .filter(status__in=["OPEN", "ACKNOWLEDGED", "PARTIALLY_FULFILLED"])
+            .filter(
+                status__in=[
+                    RetailerProductRequest.Status.PUBLISHED,
+                    RetailerProductRequest.Status.ACKNOWLEDGED,
+                    RetailerProductRequest.Status.PARTIALLY_FULFILLED,
+                ],
+            )
+            .exclude(
+                items__offers__wholesaler_id=self.user.entity_id,
+            )
             .select_related("entity")
+            .prefetch_related(
+                Prefetch(
+                    "items",
+                    queryset=RetailerProductRequestItem.objects.select_related(
+                        "product"
+                    ),
+                ),
+            )
+            .distinct()
             .order_by("-created")[:50]
         )
-        return RetailerProductRequestListSerializer(qs, many=True).data
 
+        # Country gate — a wholesaler only sees requests from
+        # retailers in their own country.
+        country_id = getattr(self.user.entity, "country_id", None)
+        if country_id:
+            qs = qs.filter(entity__country_id=country_id)
 
+        # Allow-list gate — a wholesaler only sees requests for
+        # products they are permitted to supply.
+        #
+        # The shape of `allowed_entities` decides which of these
+        # applies. Uncomment the one that matches your model.
+        #
+        # If allowed_entities is a JSON list of id strings:
+        # qs = qs.filter(
+        #     Q(items__product__allowed_entities__isnull=True)
+        #     | Q(
+        #         items__product__allowed_entities__contains=[
+        #             self.user.entity_id,
+        #         ]
+        #     )
+        # )
+        #
+        # If allowed_entities is an M2M:
+        # qs = qs.filter(
+        #     Q(items__product__allowed_entities__isnull=True)
+        #     | Q(items__product__allowed_entities=self.user.entity_id)
+        # )
+
+        return RetailerProductRequestListSerializer(
+            qs, many=True
+        ).data
 # =====================================================================
 # Retailer product requests
 # =====================================================================
