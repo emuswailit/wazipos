@@ -3395,6 +3395,11 @@ class WholesalerFacingListSerializer(serializers.ModelSerializer):
     (Prefetch to_attr) containing only the caller's tagged items.
     Computes `line_count` from that set so the wholesaler never sees
     counts for lines they weren't sent.
+
+    If `tagged_items` is missing (i.e. the queryset was built without
+    the prefetch), the serializer returns an empty `items` list
+    rather than falling back to `obj.items`, which would leak every
+    line on the request.
     """
 
     entity_title = serializers.CharField(
@@ -3431,22 +3436,54 @@ class WholesalerFacingListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def _tagged(self, obj):
-        return getattr(obj, "tagged_items", None) or []
+    # ---------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------
+
+    def _get_tagged_items(self, obj):
+        """
+        Return the prefetched `tagged_items` list if present, else
+        an empty list. This is the ONLY place the serializer reads
+        items from — it must never touch `obj.items`, because that
+        relation contains every line on the request.
+        """
+        cached = getattr(obj, "tagged_items", None)
+        if cached is None:
+            if __debug__:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "WholesalerFacingListSerializer called on "
+                    "request %s without a `tagged_items` prefetch. "
+                    "Returning an empty items list. Add "
+                    "Prefetch('items', queryset=..., "
+                    "to_attr='tagged_items') to the queryset.",
+                    getattr(obj, "id", "<unknown>"),
+                )
+            return []
+        return list(cached)
+
+    # ---------------------------------------------------------------
+    # Field methods
+    # ---------------------------------------------------------------
 
     def get_line_count(self, obj):
-        return len(self._tagged(obj))
+        return len(self._get_tagged_items(obj))
 
     def get_items(self, obj):
         wholesaler_id = self.context.get("wholesaler_id")
+        tagged = self._get_tagged_items(obj)
+
+        if not tagged:
+            return []
+
         return [
             WholesalerFacingItemSerializer(
                 item,
                 context={"wholesaler_id": wholesaler_id},
             ).data
-            for item in self._tagged(obj)
+            for item in tagged
         ]
-
 
 class WholesalerFacingDetailSerializer(WholesalerFacingListSerializer):
     """
