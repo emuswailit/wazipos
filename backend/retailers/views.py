@@ -2732,11 +2732,13 @@ def productRequestsAPIView(request):
     # =================================================================
     elif action == "GetWholesalerTaggedRequests":
         # Wholesaler-only action.
-        if not is_wholesaler:
-            return custom_errors_response(
-                1, "Not authorised",
-                {"detail": "Wholesalers only."},
-            )
+        entity = getattr(request.user, "entity", None)
+        entity_type = getattr(entity, "entity_type", None)
+
+        is_wholesaler = entity_type in (
+            "GeneralWholesaler",
+            "PharmaceuticalWholesaler",
+        )
 
         from retailers.querysets import tagged_requests_for_wholesaler
         from retailers.serializers import WholesalerFacingListSerializer
