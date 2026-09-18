@@ -104,17 +104,12 @@ class RetailerProductRequestItemAdmin(admin.ModelAdmin):
                          "draft_id",
             "request",
             "product",
-            "product_title",
-            "product_bar_code",
-            "requested_quantity",
+
             "urgency",
-            "urgency_display",
+        
             "note",
             "status",
-            "status_display",
-            "offer_count",
-            "total_offered_quantity",
-            "confirmed_quantity",
+ 
     )
 
 @admin.register(models.OutOfStock)
