@@ -2332,12 +2332,26 @@ class StockAdjustments(EntityRelatedModel):
 # Product Request Feature
 # =====================================================================
 
-# models.py
+
+
+# retailers/models.py
+#
+# Complete file. Contains:
+#   RetailerProductRequest
+#   RetailerProductRequestItem
+#   RetailerProductRequestItemWholesaler
+#   RetailerProductRequestOffer
+#   RetailerProductRequestResponse
+#
+# `EntityRelatedModel` is imported from your base module — adjust the
+# import path to match your project layout.
 
 from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+from authentication.models import EntityRelatedModel
 
 
 class RetailerProductRequest(EntityRelatedModel):
@@ -2348,6 +2362,10 @@ class RetailerProductRequest(EntityRelatedModel):
     per line (RetailerProductRequestOffer). The retailer confirms offers
     per line, splitting across wholesalers if desired. Confirmed offers
     become RetailerOrderItems grouped by wholesaler.
+
+    Wholesaler targeting is per line, stored on
+    RetailerProductRequestItemWholesaler. There is no targeting at the
+    request level.
     """
 
     class Status(models.TextChoices):
@@ -2470,10 +2488,12 @@ class RetailerProductRequest(EntityRelatedModel):
         )
 
         if self.status in (
+            self.Status.DRAFT,
             self.Status.CANCELLED,
             self.Status.EXPIRED,
         ):
-            # Terminal states stay put.
+            # DRAFT: only an explicit publish can move it out.
+            # CANCELLED / EXPIRED: terminal, stay put.
             pass
         elif (
             self.total_line_count > 0
@@ -2486,9 +2506,7 @@ class RetailerProductRequest(EntityRelatedModel):
             self.status = self.Status.PARTIALLY_FULFILLED
         elif self.responses.exists():
             self.status = self.Status.ACKNOWLEDGED
-        # else: leave the current status as-is. The CreateRequest view
-        # sets PUBLISHED explicitly; recalculate() must not overwrite it.
-        # If DRAFT is used by another path, this preserves it too.
+        # else: leave the status as-is (usually PUBLISHED).
 
         if save:
             super().save(update_fields=[
@@ -2500,11 +2518,29 @@ class RetailerProductRequest(EntityRelatedModel):
                 "updated",
             ])
 
+    def target_wholesaler_ids(self):
+        """
+        Union of every active target pair across this request's items.
+        Convenience for display and for building fan-out lists.
+        """
+        return list(
+            self.items
+            .filter(target_pairs__is_active=True)
+            .values_list(
+                "target_pairs__wholesaler_id",
+                flat=True,
+            )
+            .distinct()
+        )
+
 
 class RetailerProductRequestItem(EntityRelatedModel):
     """
-    One product line on a request. Demand side only — no wholesaler
-    references. Wholesaler responses live on RetailerProductRequestOffer.
+    One product line on a request. Demand side only.
+
+    Wholesaler targeting lives on RetailerProductRequestItemWholesaler
+    (one row per tagged wholesaler). Wholesaler responses live on
+    RetailerProductRequestOffer.
     """
 
     class Status(models.TextChoices):
@@ -2524,16 +2560,12 @@ class RetailerProductRequestItem(EntityRelatedModel):
         on_delete=models.CASCADE,
         related_name="request_items",
     )
-
-    # Same correlation key as the parent request. Denormalized so the
-    # client can match a single line if needed without a join.
     draft_id = models.CharField(
         max_length=256,
         null=True,
         blank=True,
         db_index=True,
     )
-
     requested_quantity = models.IntegerField(default=0)
     urgency = models.CharField(
         max_length=10,
@@ -2548,10 +2580,20 @@ class RetailerProductRequestItem(EntityRelatedModel):
         default=Status.PENDING,
     )
 
-    # Aggregates across offers (denormalized for fast display)
+    # Denormalized aggregates across offers (fast display).
     offer_count = models.IntegerField(default=0)
     total_offered_quantity = models.IntegerField(default=0)
     confirmed_quantity = models.IntegerField(default=0)
+
+    # Many-to-many to Entities, via an explicit through table so we
+    # can attach per-pair metadata (notified_at, seen_at, is_active).
+    target_wholesalers = models.ManyToManyField(
+        "authentication.Entities",
+        through="RetailerProductRequestItemWholesaler",
+        through_fields=("request_item", "wholesaler"),
+        related_name="targeted_request_items",
+        blank=True,
+    )
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -2613,76 +2655,67 @@ class RetailerProductRequestItem(EntityRelatedModel):
                 "status",
                 "updated",
             ])
-class RetailerProductRequestItem(EntityRelatedModel):
+
+
+class RetailerProductRequestItemWholesaler(models.Model):
     """
-    One product line on a request. Demand side only — no wholesaler
-    references. Wholesaler responses live on RetailerProductRequestOffer.
+    One row per (line, wholesaler) target pair.
+
+    Represents "this line was sent to this wholesaler." Independent
+    from whether the wholesaler has offered yet — that's tracked on
+    RetailerProductRequestOffer. Setting is_active=False removes the
+    wholesaler from the line without destroying the audit trail.
     """
 
-    class Status(models.TextChoices):
-        PENDING = "PENDING", _("No offers yet")
-        OFFERED = "OFFERED", _("Offers received")
-        PARTIALLY_FULFILLED = "PARTIALLY_FULFILLED", _("Partially confirmed")
-        FULFILLED = "FULFILLED", _("Fully fulfilled")
-        CANCELLED = "CANCELLED", _("Cancelled")
-
-    request = models.ForeignKey(
-        RetailerProductRequest,
+    request_item = models.ForeignKey(
+        RetailerProductRequestItem,
         on_delete=models.CASCADE,
-        related_name="items",
+        related_name="target_pairs",
     )
-    product = models.ForeignKey(
-        "products.Products",
+    wholesaler = models.ForeignKey(
+        "authentication.Entities",
         on_delete=models.CASCADE,
-        related_name="request_items",
+        related_name="targeted_request_pairs",
     )
 
-    # Same correlation key as the parent request. Denormalized so the
-    # client can match a single line if needed without a join.
-    draft_id = models.CharField(
-        max_length=256,
+    notified_at = models.DateTimeField(
         null=True,
         blank=True,
-        db_index=True,
+        help_text="When push_new_product_request fired for this pair.",
     )
-
-    requested_quantity = models.IntegerField(default=0)
-    urgency = models.CharField(
-        max_length=10,
-        choices=RetailerProductRequest.Urgency.choices,
-        default=RetailerProductRequest.Urgency.MEDIUM,
+    seen_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the wholesaler's client first pulled this line.",
     )
-    note = models.CharField(max_length=256, blank=True, default="")
-
-    status = models.CharField(
-        max_length=25, choices=Status.choices, default=Status.PENDING,
+    is_active = models.BooleanField(
+        default=True,
+        help_text=(
+            "Set to False if the retailer later removes this "
+            "wholesaler from the line without cancelling the whole line."
+        ),
     )
-
-    # Aggregates across offers (denormalized for fast display)
-    offer_count = models.IntegerField(default=0)
-    total_offered_quantity = models.IntegerField(default=0)
-    confirmed_quantity = models.IntegerField(default=0)
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(
-        "authentication.Users",
-        on_delete=models.CASCADE,
-        related_name="retailer_product_request_items",
-    )
 
     class Meta:
-        verbose_name_plural = "Retailer Product Request Items"
-        ordering = ["created"]
+        verbose_name_plural = "Retailer Product Request Item Wholesalers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["request_item", "wholesaler"],
+                name="one_target_pair_per_item_and_wholesaler",
+            ),
+        ]
         indexes = [
-            models.Index(fields=["request", "status"]),
-            models.Index(fields=["product", "status"]),
-            models.Index(fields=["draft_id"]),
+            models.Index(fields=["wholesaler", "is_active"]),
+            models.Index(fields=["request_item", "is_active"]),
         ]
 
     def __str__(self):
-        return f"{self.product.title} × {self.requested_quantity}"
-    
+        return f"{self.wholesaler.title} ← {self.request_item}"
+
+
 class RetailerProductRequestOffer(EntityRelatedModel):
     """
     One wholesaler's offer against a request line.
@@ -2690,6 +2723,12 @@ class RetailerProductRequestOffer(EntityRelatedModel):
     Multiple wholesalers can offer against the same line. The retailer
     picks which to confirm. Each confirmed offer produces a
     RetailerOrderItem on that wholesaler's RetailerOrder.
+
+    Targeting invariant: an offer may only exist if the offering
+    wholesaler was tagged on the line (an active
+    RetailerProductRequestItemWholesaler row). This is enforced at
+    the view layer (CreateOffer), not by an FK, so offers survive
+    targeting changes.
     """
 
     class Status(models.TextChoices):
@@ -2713,14 +2752,18 @@ class RetailerProductRequestOffer(EntityRelatedModel):
     wholesaler_receipt = models.ForeignKey(
         "wholesalers.WholesalerReceipts",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name="request_offers",
     )
 
-    # Snapshotted at offer time
+    # Snapshotted at offer time.
     offered_quantity = models.IntegerField(default=0)
     offered_unit_price = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True,
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
     )
     batch = models.CharField(max_length=50, null=True, blank=True)
     expiry_date = models.DateField(null=True, blank=True)
@@ -2728,24 +2771,32 @@ class RetailerProductRequestOffer(EntityRelatedModel):
     is_placement = models.BooleanField(default=False)
 
     status = models.CharField(
-        max_length=25, choices=Status.choices, default=Status.OFFERED,
+        max_length=25,
+        choices=Status.choices,
+        default=Status.OFFERED,
     )
 
     retailer_confirmed_at = models.DateTimeField(null=True, blank=True)
-    retailer_response_note = models.CharField(max_length=256, blank=True, default="")
+    retailer_response_note = models.CharField(
+        max_length=256, blank=True, default="",
+    )
 
     responded_by_user = models.ForeignKey(
         "authentication.Users",
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="product_request_offers",
     )
     responded_at = models.DateTimeField(null=True, blank=True)
-    response_note = models.CharField(max_length=256, blank=True, default="")
+    response_note = models.CharField(
+        max_length=256, blank=True, default="",
+    )
 
     resulting_order_item = models.ForeignKey(
         "wholesalers.RetailerOrderItems",
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="source_offer",
     )
@@ -2789,10 +2840,12 @@ class RetailerProductRequestOffer(EntityRelatedModel):
         if (
             self.wholesaler_receipt_id
             and self.request_item_id
-            and self.wholesaler_receipt.product_id != self.request_item.product_id
+            and self.wholesaler_receipt.product_id
+            != self.request_item.product_id
         ):
             errors["wholesaler_receipt"] = (
-                "The receipt must be for the same product as the request line."
+                "The receipt must be for the same product as the "
+                "request line."
             )
 
         if errors:
@@ -2801,17 +2854,10 @@ class RetailerProductRequestOffer(EntityRelatedModel):
 
 class RetailerProductRequestResponse(EntityRelatedModel):
     """
-    Header-level record of a wholesaler's response to a request.
-
-    Aggregates what the wholesaler offered across lines. Line-level
-    detail lives on RetailerProductRequestOffer.
+    A lightweight wholesaler response attached to a whole request
+    (as opposed to a specific line). Optional; used for the
+    `responses` relation referenced by recalculate().
     """
-
-    class ResponseType(models.TextChoices):
-        FULL = "FULL", _("All offered lines accepted")
-        PARTIAL = "PARTIAL", _("Some lines accepted")
-        REJECTED = "REJECTED", _("All lines rejected")
-        ACKNOWLEDGED = "ACKNOWLEDGED", _("Response made, nothing accepted yet")
 
     request = models.ForeignKey(
         RetailerProductRequest,
@@ -2823,19 +2869,8 @@ class RetailerProductRequestResponse(EntityRelatedModel):
         on_delete=models.CASCADE,
         related_name="product_request_responses",
     )
-    response_type = models.CharField(
-        max_length=20, choices=ResponseType.choices,
-    )
     note = models.CharField(max_length=256, blank=True, default="")
 
-    offered_line_count = models.IntegerField(default=0)
-    rejected_line_count = models.IntegerField(default=0)
-
-    resulting_orders = models.ManyToManyField(
-        "wholesalers.RetailerOrders",
-        blank=True,
-        related_name="source_request_responses",
-    )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -2845,9 +2880,9 @@ class RetailerProductRequestResponse(EntityRelatedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["request", "wholesaler"],
-                name="one_response_per_request_wholesaler",
+                name="one_response_per_wholesaler_per_request",
             ),
         ]
 
     def __str__(self):
-        return f"{self.wholesaler.title} → {self.response_type}"
+        return f"{self.wholesaler.title} → {self.request.request_number}"

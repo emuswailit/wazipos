@@ -3022,30 +3022,44 @@ class RetailerIndentItemParamsUpdateSerializer(
         return attrs
 
 
-# retailers/serializers.py — append
+# retailers/serializers.py
+#
+# Complete file. Contains every serializer used by the retailer- and
+# wholesaler-facing product request endpoints.
 
 from rest_framework import serializers
 
 from .models import (
     RetailerProductRequest,
     RetailerProductRequestItem,
+    RetailerProductRequestItemWholesaler,
     RetailerProductRequestOffer,
     RetailerProductRequestResponse,
 )
 
 
 # =====================================================================
-# Offer
+# Offers
 # =====================================================================
 
 class RetailerProductRequestOfferSerializer(serializers.ModelSerializer):
     """
-    Read serializer for one wholesaler offer against a request line.
+    Full offer shape for the retailer's view of one of their requests.
+    Includes the offering wholesaler's display data.
     """
-    wholesaler_title = serializers.CharField(source="wholesaler.title", read_only=True)
-    wholesaler_receipt_title = serializers.SerializerMethodField()
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    responded_by_user_name = serializers.SerializerMethodField()
+
+    wholesaler_title = serializers.CharField(
+        source="wholesaler.title",
+        read_only=True,
+    )
+    wholesaler_receipt_title = serializers.CharField(
+        source="wholesaler_receipt.title",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
 
     class Meta:
         model = RetailerProductRequestOffer
@@ -3056,64 +3070,91 @@ class RetailerProductRequestOfferSerializer(serializers.ModelSerializer):
             "wholesaler_title",
             "wholesaler_receipt",
             "wholesaler_receipt_title",
-
-            # Snapshot at offer time
             "offered_quantity",
             "offered_unit_price",
             "batch",
             "expiry_date",
             "manufacture_date",
             "is_placement",
-
             "status",
             "status_display",
-            "retailer_confirmed_at",
-            "retailer_response_note",
-            "responded_by_user",
-            "responded_by_user_name",
-            "responded_at",
             "response_note",
-            "resulting_order_item",
+            "retailer_response_note",
+            "retailer_confirmed_at",
             "created",
             "updated",
         ]
         read_only_fields = fields
 
-    def get_wholesaler_receipt_title(self, obj):
-        receipt = obj.wholesaler_receipt
-        if receipt and receipt.product:
-            return receipt.product.product_name() if hasattr(receipt.product, "product_name") else receipt.product.title
-        return ""
 
-    def get_responded_by_user_name(self, obj):
-        if obj.responded_by_user:
-            return f"{obj.responded_by_user.first_name} {obj.responded_by_user.last_name}".strip()
-        return None
+class WholesalerFacingOfferSerializer(serializers.ModelSerializer):
+    """
+    Offer shape for a wholesaler's view of one of their own offers.
+    Hides who else is offering, and hides retailer-only fields.
+    """
+
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RetailerProductRequestOffer
+        fields = [
+            "id",
+            "request_item",
+            "offered_quantity",
+            "offered_unit_price",
+            "batch",
+            "expiry_date",
+            "manufacture_date",
+            "is_placement",
+            "status",
+            "status_display",
+            "response_note",
+            "retailer_response_note",
+            "created",
+            "updated",
+        ]
+        read_only_fields = fields
 
 
 # =====================================================================
-# Item (line)
+# Items
 # =====================================================================
 
 class RetailerProductRequestItemSerializer(serializers.ModelSerializer):
     """
-    Read serializer for a request line, including all offers.
+    Retailer-facing item. Includes every offer received on the line
+    and the list of wholesalers the line was sent to.
     """
-    product_title = serializers.CharField(source="product.title", read_only=True)
-    product_bar_code = serializers.CharField(source="product.bar_code", read_only=True)
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    urgency_display = serializers.CharField(source="get_urgency_display", read_only=True)
-    offers = RetailerProductRequestOfferSerializer(many=True, read_only=True)
+
+    product_title = serializers.CharField(
+        source="product.title",
+        read_only=True,
+    )
+    urgency_display = serializers.CharField(
+        source="get_urgency_display",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    offers = RetailerProductRequestOfferSerializer(
+        many=True,
+        read_only=True,
+    )
+    target_wholesaler_ids = serializers.SerializerMethodField()
+    target_wholesalers = serializers.SerializerMethodField()
 
     class Meta:
         model = RetailerProductRequestItem
         fields = [
             "id",
-            "draft_id",
             "request",
             "product",
             "product_title",
-            "product_bar_code",
             "requested_quantity",
             "urgency",
             "urgency_display",
@@ -3123,92 +3164,46 @@ class RetailerProductRequestItemSerializer(serializers.ModelSerializer):
             "offer_count",
             "total_offered_quantity",
             "confirmed_quantity",
+            "target_wholesaler_ids",
+            "target_wholesalers",
             "offers",
             "created",
             "updated",
         ]
         read_only_fields = fields
 
+    def _active_pairs(self, obj):
+        # Use prefetched attribute if present, else query.
+        cached = getattr(obj, "active_target_pairs", None)
+        if cached is not None:
+            return cached
+        return list(
+            obj.target_pairs.filter(is_active=True).select_related(
+                "wholesaler"
+            )
+        )
 
-# =====================================================================
-# Response (wholesaler's header response)
-# =====================================================================
+    def get_target_wholesaler_ids(self, obj):
+        return [str(p.wholesaler_id) for p in self._active_pairs(obj)]
 
-class RetailerProductRequestResponseSerializer(serializers.ModelSerializer):
-    """
-    Read serializer for the wholesaler's header-level response.
-    """
-    wholesaler_title = serializers.CharField(source="wholesaler.title", read_only=True)
-    response_type_display = serializers.CharField(source="get_response_type_display", read_only=True)
-    resulting_orders = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-
-    class Meta:
-        model = RetailerProductRequestResponse
-        fields = [
-            "id",
-            "request",
-            "wholesaler",
-            "wholesaler_title",
-            "response_type",
-            "response_type_display",
-            "note",
-            "offered_line_count",
-            "rejected_line_count",
-            "resulting_orders",
-            "created",
+    def get_target_wholesalers(self, obj):
+        return [
+            {
+                "id": str(p.wholesaler_id),
+                "title": p.wholesaler.title,
+            }
+            for p in self._active_pairs(obj)
         ]
-        read_only_fields = fields
 
 
-# =====================================================================
-# Request (header)
-# =====================================================================
-
-class RetailerProductRequestSerializer(serializers.ModelSerializer):
+class RetailerProductRequestListItemSerializer(
+    serializers.ModelSerializer
+):
     """
-    Full read serializer for a request, including items, offers, and
-    wholesaler responses.
+    Compact item shape for the retailer's list endpoint. No offers,
+    no targeting detail — just enough for a summary row.
     """
-    entity_title = serializers.CharField(source="entity.title", read_only=True)
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    urgency_display = serializers.CharField(source="get_urgency_display", read_only=True)
 
-    items = RetailerProductRequestItemSerializer(many=True, read_only=True)
-    responses = RetailerProductRequestResponseSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = RetailerProductRequest
-        fields = [
-            "id",
-            "draft_id",
-            "request_number",
-            "entity",
-            "entity_title",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "status_display",
-
-
-            "total_line_count",
-            "fulfilled_line_count",
-            "pending_line_count",
-
-            "expires_at",
-            "fulfilled_at",
-            "cancelled_at",
-
-            "items",
-            "responses",
-            "created",
-            "updated",
-        ]
-        read_only_fields = fields
-
-
-
-class RetailerProductRequestListItemSerializer(serializers.ModelSerializer):
     product_title = serializers.CharField(
         source="product.title",
         read_only=True,
@@ -3242,11 +3237,77 @@ class RetailerProductRequestListItemSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class RetailerProductRequestListSerializer(serializers.ModelSerializer):
-    entity_title = serializers.CharField(source="entity.title", read_only=True)
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    urgency_display = serializers.CharField(source="get_urgency_display", read_only=True)
-    items = RetailerProductRequestListItemSerializer(many=True, read_only=True)
+class WholesalerFacingItemSerializer(serializers.ModelSerializer):
+    """
+    Item shape for a wholesaler. Contains only the caller's own
+    offers. Reads `wholesaler_id` from context.
+    """
+
+    product_title = serializers.CharField(
+        source="product.title",
+        read_only=True,
+    )
+    urgency_display = serializers.CharField(
+        source="get_urgency_display",
+        read_only=True,
+    )
+    my_offers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RetailerProductRequestItem
+        fields = [
+            "id",
+            "product",
+            "product_title",
+            "requested_quantity",
+            "urgency",
+            "urgency_display",
+            "note",
+            "status",
+            "my_offers",
+            "created",
+        ]
+        read_only_fields = fields
+
+    def get_my_offers(self, obj):
+        wholesaler_id = self.context.get("wholesaler_id")
+        if not wholesaler_id:
+            return []
+        # Use prefetched attribute if present.
+        cached = getattr(obj, "my_offers_cache", None)
+        if cached is not None:
+            offers = cached
+        else:
+            offers = obj.offers.filter(wholesaler_id=wholesaler_id)
+        return WholesalerFacingOfferSerializer(offers, many=True).data
+
+
+# =====================================================================
+# Requests — retailer facing
+# =====================================================================
+
+class RetailerProductRequestSerializer(serializers.ModelSerializer):
+    """
+    Full retailer-facing request. Every item with every offer.
+    Used by GetRequestDetails on the retailer side.
+    """
+
+    entity_title = serializers.CharField(
+        source="entity.title",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    urgency_display = serializers.CharField(
+        source="get_urgency_display",
+        read_only=True,
+    )
+    items = RetailerProductRequestItemSerializer(
+        many=True,
+        read_only=True,
+    )
 
     class Meta:
         model = RetailerProductRequest
@@ -3258,6 +3319,58 @@ class RetailerProductRequestListSerializer(serializers.ModelSerializer):
             "entity_title",
             "urgency",
             "urgency_display",
+            "note",
+            "status",
+            "status_display",
+            "total_line_count",
+            "fulfilled_line_count",
+            "pending_line_count",
+            "expires_at",
+            "fulfilled_at",
+            "cancelled_at",
+            "created",
+            "updated",
+            "items",
+        ]
+        read_only_fields = fields
+
+
+class RetailerProductRequestListSerializer(
+    serializers.ModelSerializer
+):
+    """
+    Compact retailer-facing request. Nested item summaries, no
+    offers. Used by GetMyRequests and the WS initial snapshot.
+    """
+
+    entity_title = serializers.CharField(
+        source="entity.title",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    urgency_display = serializers.CharField(
+        source="get_urgency_display",
+        read_only=True,
+    )
+    items = RetailerProductRequestListItemSerializer(
+        many=True,
+        read_only=True,
+    )
+
+    class Meta:
+        model = RetailerProductRequest
+        fields = [
+            "id",
+            "draft_id",
+            "request_number",
+            "entity",
+            "entity_title",
+            "urgency",
+            "urgency_display",
+            "note",
             "status",
             "status_display",
             "total_line_count",
@@ -3266,5 +3379,134 @@ class RetailerProductRequestListSerializer(serializers.ModelSerializer):
             "expires_at",
             "created",
             "items",
+        ]
+        read_only_fields = fields
+
+
+# =====================================================================
+# Requests — wholesaler facing
+# =====================================================================
+
+class WholesalerFacingListSerializer(serializers.ModelSerializer):
+    """
+    Request shape for a wholesaler's list view.
+
+    Relies on the queryset passing a `tagged_items` attribute
+    (Prefetch to_attr) containing only the caller's tagged items.
+    Computes `line_count` from that set so the wholesaler never sees
+    counts for lines they weren't sent.
+    """
+
+    entity_title = serializers.CharField(
+        source="entity.title",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    urgency_display = serializers.CharField(
+        source="get_urgency_display",
+        read_only=True,
+    )
+    line_count = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RetailerProductRequest
+        fields = [
+            "id",
+            "request_number",
+            "entity",
+            "entity_title",
+            "urgency",
+            "urgency_display",
+            "note",
+            "status",
+            "status_display",
+            "line_count",
+            "expires_at",
+            "created",
+            "items",
+        ]
+        read_only_fields = fields
+
+    def _tagged(self, obj):
+        return getattr(obj, "tagged_items", None) or []
+
+    def get_line_count(self, obj):
+        return len(self._tagged(obj))
+
+    def get_items(self, obj):
+        wholesaler_id = self.context.get("wholesaler_id")
+        return [
+            WholesalerFacingItemSerializer(
+                item,
+                context={"wholesaler_id": wholesaler_id},
+            ).data
+            for item in self._tagged(obj)
+        ]
+
+
+class WholesalerFacingDetailSerializer(WholesalerFacingListSerializer):
+    """
+    Same fields as the list serializer today. Kept as a separate
+    class so the details response can diverge (e.g. include more
+    metadata) without touching the list endpoint.
+    """
+
+    pass
+
+
+# =====================================================================
+# Targeting pairs (optional — for admin / debug use)
+# =====================================================================
+
+class RetailerProductRequestItemWholesalerSerializer(
+    serializers.ModelSerializer
+):
+    wholesaler_title = serializers.CharField(
+        source="wholesaler.title",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RetailerProductRequestItemWholesaler
+        fields = [
+            "id",
+            "request_item",
+            "wholesaler",
+            "wholesaler_title",
+            "notified_at",
+            "seen_at",
+            "is_active",
+            "created",
+            "updated",
+        ]
+        read_only_fields = fields
+
+
+# =====================================================================
+# Responses (optional)
+# =====================================================================
+
+class RetailerProductRequestResponseSerializer(
+    serializers.ModelSerializer
+):
+    wholesaler_title = serializers.CharField(
+        source="wholesaler.title",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RetailerProductRequestResponse
+        fields = [
+            "id",
+            "request",
+            "wholesaler",
+            "wholesaler_title",
+            "note",
+            "created",
+            "updated",
         ]
         read_only_fields = fields

@@ -2414,6 +2414,7 @@ from .models import (
     RetailerProductRequest,
     RetailerProductRequestItem,
     RetailerProductRequestOffer,
+    RetailerProductRequestItemWholesaler
 )
 from .serializers import (
     RetailerProductRequestSerializer,
@@ -2424,7 +2425,6 @@ from .services.request_confirmation import retailer_confirm_offers
 
 REQUEST_EXPIRY_DAYS = 14
 WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
-
 
 # =====================================================================
 # Product requests — unified dispatcher
@@ -2449,6 +2449,8 @@ def productRequestsAPIView(request):
 
     # =================================================================
     if action == "CreateRequest":
+        from collections import defaultdict
+
         items = request.data.get("items", [])
         urgency = request.data.get("urgency", "medium")
         note = request.data.get("note", "")
@@ -2534,7 +2536,26 @@ def productRequestsAPIView(request):
                 1, "All products are already on an open request", {},
             )
 
-        # Create the request and its lines atomically, in PUBLISHED.
+        # Collect and validate the union of all target wholesaler ids
+        # from the payload, once, before creating anything.
+        all_target_ids = set()
+        for it in lines_to_create:
+            for wid in (it.get("target_wholesaler_ids") or []):
+                all_target_ids.add(str(wid))
+
+        valid_wholesaler_ids = set()
+        if all_target_ids:
+            valid_wholesaler_ids = {
+                str(x)
+                for x in Entities.objects.filter(
+                    id__in=list(all_target_ids),
+                    entity_type__in=WHOLESALER_ENTITY_TYPES,
+                    is_active=True,
+                ).values_list("id", flat=True)
+            }
+
+        # Create the request, its lines, and the target pairs in one
+        # transaction.
         with transaction.atomic():
             req = RetailerProductRequest.objects.create(
                 entity=request.user.entity,
@@ -2546,8 +2567,10 @@ def productRequestsAPIView(request):
                 status=RetailerProductRequest.Status.PUBLISHED,
             )
 
+            created_items = []
+
             for it in lines_to_create:
-                RetailerProductRequestItem.objects.create(
+                item = RetailerProductRequestItem.objects.create(
                     entity=request.user.entity,
                     request=req,
                     product=products[str(it["product_id"])],
@@ -2557,51 +2580,69 @@ def productRequestsAPIView(request):
                     note=it.get("note", ""),
                     owner=request.user,
                 )
+                created_items.append(item)
+
+                per_item_ids = [
+                    str(wid)
+                    for wid in (it.get("target_wholesaler_ids") or [])
+                    if str(wid) in valid_wholesaler_ids
+                ]
+
+                if per_item_ids:
+                    now = timezone.now()
+                    RetailerProductRequestItemWholesaler.objects.bulk_create(
+                        [
+                            RetailerProductRequestItemWholesaler(
+                                request_item=item,
+                                wholesaler_id=wid,
+                                notified_at=now,
+                            )
+                            for wid in per_item_ids
+                        ],
+                        ignore_conflicts=True,
+                    )
 
             req.recalculate(save=True)
 
-        # Fan out to eligible wholesalers. Now safe: the request is
-        # PUBLISHED and its items exist.
-        allowed_set = set()
-        for it in lines_to_create:
-            p = products[str(it["product_id"])]
-            for et in (p.allowed_entities or []):
-                allowed_set.add(et)
-
-        wholesaler_qs = Entities.objects.filter(
-            entity_type__in=[
-                et for et in WHOLESALER_ENTITY_TYPES
-                if not allowed_set or et in allowed_set
-            ],
-            is_active=True,
-        )
-        if request.user.entity.country_id:
-            wholesaler_qs = wholesaler_qs.filter(
-                country_id=request.user.entity.country_id,
+        # Fan out per wholesaler: each receives only the items they
+        # were tagged on.
+        by_wholesaler = defaultdict(list)
+        pairs = (
+            RetailerProductRequestItemWholesaler.objects
+            .filter(
+                request_item__request=req,
+                is_active=True,
             )
-
-        wholesaler_ids = list(wholesaler_qs.values_list("id", flat=True))
+            .select_related("request_item__product")
+        )
+        for pair in pairs:
+            by_wholesaler[str(pair.wholesaler_id)].append(pair.request_item)
 
         from analytics.realtime import push_new_product_request
-        push_new_product_request(wholesaler_ids, {
-            "request_id": str(req.id),
-            "request_number": req.request_number,
-            "urgency": req.urgency,
-            "note": req.note,
-            "line_count": req.total_line_count,
-            "retailer_id": str(request.user.entity_id),
-            "retailer_title": request.user.entity.title,
-            "created": req.created.isoformat(),
-            "items": [
-                {
-                    "item_id": str(line.id),
-                    "product_id": str(line.product_id),
-                    "product_title": line.product.title,
-                    "requested_quantity": line.requested_quantity,
-                }
-                for line in req.items.select_related("product")
-            ],
-        })
+
+        for wid, items_for_wholesaler in by_wholesaler.items():
+            payload = {
+                "request_id": str(req.id),
+                "request_number": req.request_number,
+                "urgency": req.urgency,
+                "note": req.note,
+                "line_count": len(items_for_wholesaler),
+                "retailer_id": str(request.user.entity_id),
+                "retailer_title": request.user.entity.title,
+                "created": req.created.isoformat(),
+                "items": [
+                    {
+                        "item_id": str(item.id),
+                        "product_id": str(item.product_id),
+                        "product_title": item.product.title,
+                        "requested_quantity": item.requested_quantity,
+                        "urgency": item.urgency,
+                        "note": item.note,
+                    }
+                    for item in items_for_wholesaler
+                ],
+            }
+            push_new_product_request([wid], payload)
 
         return custom_success_message(
             0, "Request submitted",
@@ -2641,8 +2682,26 @@ def productRequestsAPIView(request):
                 RetailerProductRequest.objects
                 .filter(entity=request.user.entity)
                 .prefetch_related(
-                    Prefetch("items", queryset=RetailerProductRequestItem.objects.select_related("product")),
-                    Prefetch("items__offers", queryset=RetailerProductRequestOffer.objects.select_related("wholesaler", "wholesaler_receipt")),
+                    Prefetch(
+                        "items",
+                        queryset=RetailerProductRequestItem.objects
+                            .select_related("product")
+                            .prefetch_related(
+                                Prefetch(
+                                    "target_pairs",
+                                    queryset=RetailerProductRequestItemWholesaler.objects
+                                        .filter(is_active=True)
+                                        .select_related("wholesaler"),
+                                    to_attr="active_target_pairs",
+                                ),
+                            ),
+                    ),
+                    Prefetch(
+                        "items__offers",
+                        queryset=RetailerProductRequestOffer.objects.select_related(
+                            "wholesaler", "wholesaler_receipt",
+                        ),
+                    ),
                     "responses",
                 )
             )
@@ -2794,6 +2853,13 @@ def productRequestsAPIView(request):
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
 
+        # Deactivate all target pairs — the request is dead, so no
+        # wholesaler should keep seeing it.
+        RetailerProductRequestItemWholesaler.objects.filter(
+            request_item__request=req,
+            is_active=True,
+        ).update(is_active=False)
+
         req.status = RetailerProductRequest.Status.CANCELLED
         req.cancelled_at = now
         req.save(update_fields=["status", "cancelled_at", "updated"])
@@ -2837,6 +2903,13 @@ def productRequestsAPIView(request):
             request_item=item,
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
+
+        # Deactivate this line's target pairs so it stops appearing in
+        # wholesaler feeds.
+        RetailerProductRequestItemWholesaler.objects.filter(
+            request_item=item,
+            is_active=True,
+        ).update(is_active=False)
 
         item.request.recalculate(save=True)
 
