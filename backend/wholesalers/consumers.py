@@ -45,7 +45,7 @@ class WholesalerInventoryConsumer(AsyncJsonWebsocketConsumer):
     def helper_func(self):
         wholesaler_receipts = WholesalerReceipts.objects.filter(entity=self.user.entity,current_unit_quantity__gte=0)
         self.wholesaler_receipts = wholesaler_receipts
-        sers =WholesalerReceipts(wholesaler_receipts,many=True,context={'request': None}).data
+        sers =WholesalerReceiptsSerializer(wholesaler_receipts,many=True,context={'request': None}).data
         data=json.dumps(sers,cls=UUIDEncoder)
  
         
