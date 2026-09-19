@@ -219,3 +219,49 @@ def get_today():
 
     return today
 
+
+from datetime import date, datetime
+
+
+def numOfDays(start, end) -> int:
+    """
+    Return the number of days between two dates.
+
+    Accepts `date`, `datetime`, or ISO-format strings ("YYYY-MM-DD"
+    or "YYYY-MM-DDTHH:MM:SS"). Strings in the "YYYY-MM-DD HH:MM:SS"
+    format are also handled.
+
+    Returns a signed integer: positive when `end` is in the future
+    relative to `start`, negative when it's in the past, zero when
+    they're on the same day.
+    """
+    def _coerce(value):
+        if value is None:
+            raise ValueError("numOfDays: date is None")
+
+        if isinstance(value, datetime):
+            return value.date()
+
+        if isinstance(value, date):
+            return value
+
+        if isinstance(value, str):
+            s = value.strip()
+            # Normalise "YYYY-MM-DD HH:MM:SS" to ISO form.
+            if " " in s and "T" not in s:
+                s = s.replace(" ", "T", 1)
+            try:
+                return datetime.fromisoformat(s).date()
+            except ValueError:
+                # Fall back to date-only parse.
+                return date.fromisoformat(s[:10])
+
+        raise TypeError(
+            f"numOfDays: unsupported type {type(value).__name__}"
+        )
+
+    start_d = _coerce(start)
+    end_d = _coerce(end)
+
+    return (end_d - start_d).days
+
