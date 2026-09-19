@@ -380,7 +380,7 @@ class WholesalerReceiptsSerializer(serializers.ModelSerializer):
         model = models.WholesalerReceipts
         fields = (
             "id", "title", "unit_of_receipt", "product_title", "preparation_title",
-            "product", "bar_code", "wholesaler_variation", "received_from",
+            "product", "bar_code",  "received_from",
             "wholesaler_order_item", "retailer_order_item",
             "retailer_order_item_details",
             "batch", "employee", "manufacture_date", "days_to_expiry",
@@ -443,12 +443,7 @@ class WholesalerReceiptsSerializer(serializers.ModelSerializer):
             ).data
         return None
 
-    def get_wholesaler_variation_details(self, obj):
-        if obj.wholesaler_variation:
-            return WholesalerVariationSerializer(
-                obj.wholesaler_variation, context=self.context, many=False,
-            ).data
-        return None
+
 
     def get_title(self, obj):
         if obj.product.preparation:
