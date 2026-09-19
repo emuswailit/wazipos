@@ -93,10 +93,10 @@ app.conf.beat_schedule = {
     },
 
     # WHOLESALERS
-        "load_wholesaler_receipts": {
-        "task": "wholesalers.tasks.load_wholesaler_receipts",
-        "schedule": 120.0,
-        "args": None,
-    },
+    #     "load_wholesaler_receipts": {
+    #     "task": "wholesalers.tasks.load_wholesaler_receipts",
+    #     "schedule": 120.0,
+    #     "args": None,
+    # },
 
 }
