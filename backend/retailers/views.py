@@ -2764,7 +2764,7 @@ def productRequestsAPIView(request):
 
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
-        serializer = WholesalerFacingListSerializer(
+        serializer = serializers.WholesalerFacingListSerializer(
             page,
             many=True,
             context={"request": request},
