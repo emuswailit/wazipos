@@ -2451,14 +2451,33 @@ def productRequestsAPIView(request):
     if not action:
         raise exceptions.ValidationError("Action is not supplied")
 
-    is_wholesaler = (
-        getattr(request.user, "entity_type", "")
-        in WHOLESALER_ENTITY_TYPES
+    # ---------------------------------------------------------------
+    # Role resolution.
+    # ---------------------------------------------------------------
+    entity = getattr(request.user, "entity", None)
+    entity_type = getattr(entity, "entity_type", None) if entity else None
+
+    is_wholesaler = entity_type in (
+        "GeneralWholesaler",
+        "PharmaceuticalWholesaler",
     )
 
+    if __debug__:
+        import logging
+        logging.getLogger(__name__).debug(
+            "[productRequestsAPIView] user=%s entity=%s "
+            "entity_type=%s is_wholesaler=%s action=%s",
+            getattr(request.user, "id", None),
+            getattr(entity, "id", None),
+            entity_type,
+            is_wholesaler,
+            action,
+        )
+
+    # =================================================================
+    # CreateRequest — retailer only
     # =================================================================
     if action == "CreateRequest":
-        # Retailer-only action.
         if is_wholesaler:
             return custom_errors_response(
                 1, "Not authorised",
@@ -2482,7 +2501,6 @@ def productRequestsAPIView(request):
             for p in Products.objects.filter(id__in=product_ids)
         }
 
-        # Validate every line
         for idx, it in enumerate(items):
             pid = str(it.get("product_id") or "")
             if not pid:
@@ -2505,8 +2523,6 @@ def productRequestsAPIView(request):
                     {"items": f"Line {idx + 1}: requested_quantity must be > 0."},
                 )
 
-        # Idempotency: if this client draft has already been submitted,
-        # return the existing row instead of creating a duplicate.
         if draft_id:
             existing = (
                 RetailerProductRequest.objects
@@ -2521,8 +2537,6 @@ def productRequestsAPIView(request):
                     "request",
                 )
 
-        # Collect and validate the union of all target wholesaler ids
-        # from the payload, once, before creating anything.
         all_target_ids = set()
         for it in items:
             for wid in (it.get("target_wholesaler_ids") or []):
@@ -2539,11 +2553,6 @@ def productRequestsAPIView(request):
                 ).values_list("id", flat=True)
             }
 
-        # Pairs (product_id, wholesaler_id) that are already on an
-        # open request for this retailer. A new line may include a
-        # product already under request, so long as it's being sent to
-        # a wholesaler that isn't currently holding an unanswered line
-        # for that product.
         existing_open_pairs = {
             (str(pid), str(wid))
             for pid, wid in (
@@ -2569,9 +2578,6 @@ def productRequestsAPIView(request):
             )
         }
 
-        # Build the final line list. Each incoming line keeps only the
-        # targets that are (a) valid, active wholesalers, and (b) not
-        # already holding an open request for that product.
         lines_to_create = []
         skipped_lines = []
 
@@ -2614,8 +2620,6 @@ def productRequestsAPIView(request):
                 {"skipped": skipped_lines},
             )
 
-        # Create the request, its lines, and the target pairs in one
-        # transaction.
         with transaction.atomic():
             req = RetailerProductRequest.objects.create(
                 entity=request.user.entity,
@@ -2660,8 +2664,6 @@ def productRequestsAPIView(request):
 
             req.recalculate(save=True)
 
-        # Fan out per wholesaler: each receives only the items they
-        # were tagged on.
         by_wholesaler = defaultdict(list)
         pairs = (
             RetailerProductRequestItemWholesaler.objects
@@ -2707,8 +2709,9 @@ def productRequestsAPIView(request):
         )
 
     # =================================================================
+    # GetMyRequests — retailer only
+    # =================================================================
     elif action == "GetMyRequests":
-        # Retailer-only action.
         if is_wholesaler:
             return custom_errors_response(
                 1, "Not authorised",
@@ -2730,41 +2733,46 @@ def productRequestsAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     # =================================================================
+    # GetWholesalerTaggedRequests — wholesaler only
+    # =================================================================
     elif action == "GetWholesalerTaggedRequests":
-        # Wholesaler-only action.
-        entity = getattr(request.user, "entity", None)
-        entity_type = getattr(entity, "entity_type", None)
+        if not is_wholesaler:
+            return custom_errors_response(
+                1, "Not authorised",
+                {"detail": "Wholesalers only."},
+            )
 
-        is_wholesaler = entity_type in (
-            "GeneralWholesaler",
-            "PharmaceuticalWholesaler",
-        )
-       
-        import logging
-        logging.getLogger(__name__).warning(
-            "[GetWholesalerTaggedRequests] user=%s entity=%s entity_id=%s",
-            getattr(request.user, "id", None),
-            getattr(getattr(request.user, "entity", None), "id", None),
-            getattr(request.user, "entity_id", None),
+        from retailers.querysets import (
+            tagged_items_for_wholesaler,
+            tagged_requests_for_wholesaler,
         )
 
-        from retailers.querysets import tagged_requests_for_wholesaler
-        from retailers.serializers import WholesalerFacingListSerializer
+        entity_id = request.user.entity_id
 
-        qs = tagged_requests_for_wholesaler(request.user.entity_id)
+        qs = tagged_requests_for_wholesaler(entity_id)
 
         if request.data.get("status"):
             qs = qs.filter(status=request.data["status"])
+
+        qs = qs.prefetch_related(
+            Prefetch(
+                "items",
+                queryset=tagged_items_for_wholesaler(entity_id),
+                to_attr="tagged_items",
+            ),
+        )
 
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         serializer = WholesalerFacingListSerializer(
             page,
             many=True,
-            context={"wholesaler_id": request.user.entity_id},
+            context={"request": request},
         )
         return paginator.get_paginated_response(serializer.data)
 
+    # =================================================================
+    # GetRequestDetails — both roles
     # =================================================================
     elif action == "GetRequestDetails":
         request_id = request.data.get("request_id")
@@ -2782,12 +2790,8 @@ def productRequestsAPIView(request):
                 tagged_items_for_wholesaler,
                 tagged_requests_for_wholesaler,
             )
-            from retailers.serializers import (
-                WholesalerFacingDetailSerializer,
-            )
 
             entity_id = request.user.entity_id
-            tagged_items_qs = tagged_items_for_wholesaler(entity_id)
 
             req = (
                 tagged_requests_for_wholesaler(entity_id)
@@ -2795,7 +2799,7 @@ def productRequestsAPIView(request):
                 .prefetch_related(
                     Prefetch(
                         "items",
-                        queryset=tagged_items_qs,
+                        queryset=tagged_items_for_wholesaler(entity_id),
                         to_attr="tagged_items",
                     ),
                 )
@@ -2816,7 +2820,7 @@ def productRequestsAPIView(request):
                 0, "Request retrieved",
                 WholesalerFacingDetailSerializer(
                     req,
-                    context={"wholesaler_id": entity_id},
+                    context={"request": request},
                 ).data,
                 "request",
             )
@@ -2848,9 +2852,12 @@ def productRequestsAPIView(request):
                     ),
                     Prefetch(
                         "items__offers",
-                        queryset=RetailerProductRequestOffer.objects.select_related(
-                            "wholesaler",
-                            "wholesaler_receipt",
+                        queryset=(
+                            RetailerProductRequestOffer.objects
+                            .select_related(
+                                "wholesaler",
+                                "wholesaler_receipt",
+                            )
                         ),
                     ),
                     "responses",
@@ -2873,8 +2880,9 @@ def productRequestsAPIView(request):
         )
 
     # =================================================================
+    # ConfirmOffers — retailer only
+    # =================================================================
     elif action == "ConfirmOffers":
-        # Retailer-only action.
         if is_wholesaler:
             return custom_errors_response(
                 1, "Not authorised",
@@ -2942,6 +2950,7 @@ def productRequestsAPIView(request):
             )
 
         from analytics.realtime import push_retailer_confirmation
+
         affected_wholesalers = set(
             RetailerProductRequestOffer.objects
             .filter(
@@ -2974,8 +2983,9 @@ def productRequestsAPIView(request):
         )
 
     # =================================================================
+    # CancelRequest — retailer only
+    # =================================================================
     elif action == "CancelRequest":
-        # Retailer-only action.
         if is_wholesaler:
             return custom_errors_response(
                 1, "Not authorised",
@@ -3027,8 +3037,6 @@ def productRequestsAPIView(request):
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
 
-        # Deactivate all target pairs — the request is dead, so no
-        # wholesaler should keep seeing it.
         RetailerProductRequestItemWholesaler.objects.filter(
             request_item__request=req,
             is_active=True,
@@ -3045,8 +3053,9 @@ def productRequestsAPIView(request):
         )
 
     # =================================================================
+    # CancelRequestItem — retailer only
+    # =================================================================
     elif action == "CancelRequestItem":
-        # Retailer-only action.
         if is_wholesaler:
             return custom_errors_response(
                 1, "Not authorised",
@@ -3086,8 +3095,6 @@ def productRequestsAPIView(request):
             status=RetailerProductRequestOffer.Status.OFFERED,
         ).update(status=RetailerProductRequestOffer.Status.CANCELLED)
 
-        # Deactivate this line's target pairs so it stops appearing in
-        # wholesaler feeds.
         RetailerProductRequestItemWholesaler.objects.filter(
             request_item=item,
             is_active=True,
