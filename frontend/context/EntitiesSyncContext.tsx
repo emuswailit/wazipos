@@ -18,170 +18,118 @@ import React, {
 } from 'react';
 import { Platform } from 'react-native';
 
+/* =========================================================
+ * Types
+ * ======================================================= */
+
 interface EntitiesContextType {
     entitiesList: EntityItem[];
     isEntitiesSyncing: boolean;
     isEntitiesRefreshing: boolean;
     triggerEntitiesFetch: () => Promise<void>;
     forceEntitiesRefresh: () => Promise<void>;
+
+    /* Derived selectors */
+    generalWholesalers: EntityItem[];
+    pharmaceuticalWholesalers: EntityItem[];
+    allWholesalers: EntityItem[];
+    getEntitiesByType: (entityType: string) => EntityItem[];
 }
 
 const EntitiesSyncContext =
-    createContext<EntitiesContextType | undefined>(
-        undefined
-    );
+    createContext<EntitiesContextType | undefined>(undefined);
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
-const EXPO_ENTITIES_LAST_SYNC_KEY =
-    'entities_last_sync_time';
+const EXPO_ENTITIES_LAST_SYNC_KEY = 'entities_last_sync_time';
 
 const isWeb = Platform.OS === 'web';
 
-/* ---------------------------------------------------------
+/* =========================================================
  * Normalizer
- * ------------------------------------------------------- */
+ * ======================================================= */
 
 function normalizeEntity(item: any): EntityItem {
     return {
         id: String(item.id),
-
         title: String(item.title || ''),
         entity_type: String(item.entity_type || ''),
 
         ...(item.entity_code
             ? { entity_code: String(item.entity_code) }
             : {}),
-
-        ...(item.phone
-            ? { phone: String(item.phone) }
-            : {}),
-
-        ...(item.phone1
-            ? { phone1: String(item.phone1) }
-            : {}),
-
-        ...(item.phone2
-            ? { phone2: String(item.phone2) }
-            : {}),
-
-        ...(item.phone3
-            ? { phone3: String(item.phone3) }
-            : {}),
-
-        ...(item.email
-            ? { email: String(item.email) }
-            : {}),
-
+        ...(item.phone ? { phone: String(item.phone) } : {}),
+        ...(item.phone1 ? { phone1: String(item.phone1) } : {}),
+        ...(item.phone2 ? { phone2: String(item.phone2) } : {}),
+        ...(item.phone3 ? { phone3: String(item.phone3) } : {}),
+        ...(item.email ? { email: String(item.email) } : {}),
         ...(item.registration
             ? { registration: String(item.registration) }
             : {}),
-
         ...(item.entity_ownership
             ? {
-                entity_ownership: String(
-                    item.entity_ownership
-                ),
+                entity_ownership: String(item.entity_ownership),
             }
             : {}),
-
         ...(item.town ? { town: String(item.town) } : {}),
-
-        ...(item.country
-            ? { country: String(item.country) }
-            : {}),
-
+        ...(item.country ? { country: String(item.country) } : {}),
         ...(item.country_title
             ? { country_title: String(item.country_title) }
             : {}),
-
-        ...(item.county
-            ? { county: String(item.county) }
-            : {}),
-
+        ...(item.county ? { county: String(item.county) } : {}),
         ...(item.county_title
             ? { county_title: String(item.county_title) }
             : {}),
-
         ...(item.constituency
-            ? {
-                constituency: String(
-                    item.constituency
-                ),
-            }
+            ? { constituency: String(item.constituency) }
             : {}),
-
         ...(item.constituency_title
-            ? {
-                constituency_title: String(
-                    item.constituency_title
-                ),
-            }
+            ? { constituency_title: String(item.constituency_title) }
             : {}),
-
         ...(item.road ? { road: String(item.road) } : {}),
-
-        ...(item.building
-            ? { building: String(item.building) }
-            : {}),
-
-        ...(Array.isArray(item.images)
-            ? { images: item.images }
-            : {}),
-
-        ...(Array.isArray(item.logos)
-            ? { logos: item.logos }
-            : {}),
-
+        ...(item.building ? { building: String(item.building) } : {}),
+        ...(Array.isArray(item.images) ? { images: item.images } : {}),
+        ...(Array.isArray(item.logos) ? { logos: item.logos } : {}),
         ...(typeof item.is_subscribed === 'boolean'
             ? { is_subscribed: item.is_subscribed }
             : {}),
-
         ...(item.is_verified !== null &&
             item.is_verified !== undefined
             ? { is_verified: item.is_verified }
             : {}),
-
-        ...(item.created
-            ? { created: String(item.created) }
-            : {}),
-
-        ...(item.updated
-            ? { updated: String(item.updated) }
-            : {}),
-
+        ...(item.created ? { created: String(item.created) } : {}),
+        ...(item.updated ? { updated: String(item.updated) } : {}),
         ...(item.description
             ? { description: String(item.description) }
             : {}),
-
         cached_at: new Date().toISOString(),
     } as EntityItem;
 }
 
-/* ---------------------------------------------------------
- * Unwrap server response shapes
- * ------------------------------------------------------- */
+/* =========================================================
+ * Response unwrap
+ * ======================================================= */
 
 function resolveEntityArray(raw: any): any[] {
     if (Array.isArray(raw)) return raw;
 
     if (raw && typeof raw === 'object') {
-        if (Array.isArray(raw.results))
-            return raw.results;
-        if (Array.isArray(raw.data))
-            return raw.data;
-        if (Array.isArray(raw.entities))
-            return raw.entities;
+        if (Array.isArray(raw.results)) return raw.results;
+        if (Array.isArray(raw.data)) return raw.data;
+        if (Array.isArray(raw.entities)) return raw.entities;
 
         if (raw.data && typeof raw.data === 'object') {
             if (Array.isArray(raw.data.results))
                 return raw.data.results;
-            if (Array.isArray(raw.data.data))
-                return raw.data.data;
+            if (Array.isArray(raw.data.data)) return raw.data.data;
         }
     }
 
     return [];
 }
+
+/* =========================================================
+ * Provider
+ * ======================================================= */
 
 export const EntitiesSyncProvider: React.FC<{
     children: React.ReactNode;
@@ -189,20 +137,14 @@ export const EntitiesSyncProvider: React.FC<{
     const { token } = useAuth();
     const { isOnline } = useNetworkStatus();
 
-    const [entitiesList, setEntitiesList] = useState<
-        EntityItem[]
-    >([]);
+    const [entitiesList, setEntitiesList] = useState<EntityItem[]>([]);
     const [isEntitiesRefreshing, setIsEntitiesRefreshing] =
         useState(false);
 
-    const getEntitiesApi = useApi(
-        entitiesApi.entitiesAction
-    );
+    const getEntitiesApi = useApi(entitiesApi.entitiesAction);
 
     const lastProcessedDataRef = useRef<any>(null);
-    const intervalRef = useRef<NodeJS.Timeout | null>(
-        null
-    );
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const isOnlineRef = useRef(isOnline);
     useEffect(() => {
@@ -213,51 +155,38 @@ export const EntitiesSyncProvider: React.FC<{
      * Remote fetch
      * ------------------------------------------------------- */
 
-    const runRemoteEntitiesSynchronizer = useCallback(
-        async () => {
-            if (!token) {
-                console.log(
-                    '[EntitiesSync] No token yet — skipping'
-                );
-                return;
-            }
-            if (!isOnlineRef.current) {
-                console.log(
-                    '[EntitiesSync] Offline — skipping'
-                );
-                return;
-            }
+    const runRemoteEntitiesSynchronizer = useCallback(async () => {
+        if (!token) {
+            console.log('[EntitiesSync] No token yet — skipping');
+            return;
+        }
+        if (!isOnlineRef.current) {
+            console.log('[EntitiesSync] Offline — skipping');
+            return;
+        }
 
-            try {
-                const res = await getEntitiesApi.request({
-                    action: 'GetAllEntities',
-                });
+        try {
+            const res = await getEntitiesApi.request({
+                action: 'GetAllEntities',
+            });
 
-                if (!res?.ok) {
-                    console.warn(
-                        '[EntitiesSync] Fetch failed:',
-                        res?.problem ||
-                        res?.status ||
-                        'unknown error'
-                    );
-                }
-            } catch (e) {
+            if (!res?.ok) {
                 console.warn(
-                    'Remote entity sync request failed:',
-                    e
+                    '[EntitiesSync] Fetch failed:',
+                    res?.problem || res?.status || 'unknown error'
                 );
             }
-        },
-        [token, getEntitiesApi]
-    );
+        } catch (e) {
+            console.warn('Remote entity sync request failed:', e);
+        }
+    }, [token, getEntitiesApi]);
 
     /* ---------------------------------------------------------
-     * Normalize + persist — guarded by identity check
+     * Normalize + persist
      * ------------------------------------------------------- */
 
     useEffect(() => {
         const rawData = getEntitiesApi.data;
-
         const list = resolveEntityArray(rawData);
 
         if (
@@ -270,10 +199,7 @@ export const EntitiesSyncProvider: React.FC<{
         lastProcessedDataRef.current = list;
 
         const normalized: EntityItem[] = list
-            .filter(
-                (item: any) =>
-                    item?.id && item?.entity_type
-            )
+            .filter((item: any) => item?.id && item?.entity_type)
             .map(normalizeEntity);
 
         if (!normalized.length) return;
@@ -306,8 +232,7 @@ export const EntitiesSyncProvider: React.FC<{
                 if (cancelled) return;
 
                 setEntitiesList((prev) => {
-                    if (prev.length === normalized.length)
-                        return prev;
+                    if (prev.length === normalized.length) return prev;
                     return normalized;
                 });
 
@@ -369,20 +294,14 @@ export const EntitiesSyncProvider: React.FC<{
      * Stable-ref pattern
      * ------------------------------------------------------- */
 
-    const actionsRef = useRef({
-        runRemoteEntitiesSynchronizer,
-    });
+    const actionsRef = useRef({ runRemoteEntitiesSynchronizer });
 
     useEffect(() => {
-        actionsRef.current = {
-            runRemoteEntitiesSynchronizer,
-        };
+        actionsRef.current = { runRemoteEntitiesSynchronizer };
     });
 
     /* ---------------------------------------------------------
-     * Bootstrap — ONE run per session, plus hourly refresh
-     *
-     * Depends ONLY on `token`. Do not add callbacks here.
+     * Bootstrap — one run per session, plus hourly refresh
      * ------------------------------------------------------- */
 
     useEffect(() => {
@@ -394,8 +313,7 @@ export const EntitiesSyncProvider: React.FC<{
                 let cached: EntityItem[] = [];
 
                 if (isWeb && dbInstance?.entities) {
-                    cached =
-                        await dbInstance.entities.toArray();
+                    cached = await dbInstance.entities.toArray();
                 } else if (db?.getEntities) {
                     cached = await db.getEntities();
                 }
@@ -459,7 +377,44 @@ export const EntitiesSyncProvider: React.FC<{
     }, [isOnline, token]);
 
     /* ---------------------------------------------------------
-     * Memoized value
+     * Derived selectors — memoized on entitiesList
+     * ------------------------------------------------------- */
+
+    const generalWholesalers = useMemo(
+        () =>
+            entitiesList.filter(
+                (e) => e.entity_type === 'GeneralWholesaler'
+            ),
+        [entitiesList]
+    );
+
+    const pharmaceuticalWholesalers = useMemo(
+        () =>
+            entitiesList.filter(
+                (e) =>
+                    e.entity_type === 'PharmaceuticalWholesaler'
+            ),
+        [entitiesList]
+    );
+
+    const allWholesalers = useMemo(
+        () => [
+            ...generalWholesalers,
+            ...pharmaceuticalWholesalers,
+        ],
+        [generalWholesalers, pharmaceuticalWholesalers]
+    );
+
+    const getEntitiesByType = useCallback(
+        (entityType: string) =>
+            entitiesList.filter(
+                (e) => e.entity_type === entityType
+            ),
+        [entitiesList]
+    );
+
+    /* ---------------------------------------------------------
+     * Memoized context value
      * ------------------------------------------------------- */
 
     const value = useMemo<EntitiesContextType>(
@@ -470,6 +425,12 @@ export const EntitiesSyncProvider: React.FC<{
             triggerEntitiesFetch:
                 runRemoteEntitiesSynchronizer,
             forceEntitiesRefresh,
+
+            // Derived
+            generalWholesalers,
+            pharmaceuticalWholesalers,
+            allWholesalers,
+            getEntitiesByType,
         }),
         [
             entitiesList,
@@ -477,6 +438,10 @@ export const EntitiesSyncProvider: React.FC<{
             isEntitiesRefreshing,
             runRemoteEntitiesSynchronizer,
             forceEntitiesRefresh,
+            generalWholesalers,
+            pharmaceuticalWholesalers,
+            allWholesalers,
+            getEntitiesByType,
         ]
     );
 
@@ -486,6 +451,10 @@ export const EntitiesSyncProvider: React.FC<{
         </EntitiesSyncContext.Provider>
     );
 };
+
+/* =========================================================
+ * Hook
+ * ======================================================= */
 
 export const useEntitiesSync = () => {
     const context = useContext(EntitiesSyncContext);

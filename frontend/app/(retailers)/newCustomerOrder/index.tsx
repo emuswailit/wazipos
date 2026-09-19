@@ -16,12 +16,12 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FulfillmentControls } from './FulfillmentControls';
-import { FulfillmentModal } from './FulfillmentModal';
-import { MomoPollerModal } from './MomoPollerModal';
-import { OrderMainSection } from './OrderMainSection';
-import { UniversalScannerModal } from './UniversalScannerModal';
-import { useCreateOrder } from './useCreateOrder';
+import { FulfillmentControls } from '../../../components/retailers/newCustomerOrder/FulfillmentControls';
+import { FulfillmentModal } from '../../../components/retailers/newCustomerOrder/FulfillmentModal';
+import { MomoPollerModal } from '../../../components/retailers/newCustomerOrder/MomoPollerModal';
+import { OrderMainSection } from '../../../components/retailers/newCustomerOrder/OrderMainSection';
+import { UniversalScannerModal } from '../../../components/retailers/newCustomerOrder/UniversalScannerModal';
+import { useCreateOrder } from '../../../components/retailers/newCustomerOrder/useCreateOrder';
 
 export default function CreateOrderScreen() {
     const { theme } = useAuth();

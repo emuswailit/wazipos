@@ -11,11 +11,11 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import InventoryDetailsModal from "./InventoryDetailsModal";
-import InventoryFilters from "./InventoryFilters";
-import InventoryFormModal from "./InventoryFormModal";
-import InventoryTableComponent from "./InventoryTableComponent";
-import { InventoryItem } from "./inventory";
+import InventoryDetailsModal from "../../../components/wholesalers/wholesaleInventory/InventoryDetailsModal";
+import InventoryFilters from "../../../components/wholesalers/wholesaleInventory/InventoryFilters";
+import InventoryFormModal from "../../../components/wholesalers/wholesaleInventory/InventoryFormModal";
+import InventoryTableComponent from "../../../components/wholesalers/wholesaleInventory/InventoryTableComponent";
+import { InventoryItem } from "../../../components/wholesalers/wholesaleInventory/inventory";
 
 export default function InventoryDashboard() {
     const { theme, isDarkMode } = useAuth();

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { ProductCatalogItem, RetailerOption, WholesaleItemRow } from '../../../app/(wholesalers)/newWholesaleOrder/types';
+import { ProductCatalogItem, RetailerOption, WholesaleItemRow } from './types';
 import { useWholesaleCatalogSync } from './useWholesaleCatalogSync';
 
 let SecureStore: any = null;

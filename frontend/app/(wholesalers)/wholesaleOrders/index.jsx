@@ -1,14 +1,16 @@
 import { useAuth } from '@/context/AuthContext';
 import { useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import WholesaleOrderInvoiceModal from './WholesaleOrderInvoiceModal';
-import { useWholesaleOrdersList } from './useWholesaleOrdersList';
+
+import WholesaleOrderInvoiceModal from '@/components/wholesalers/wholesaleOrders/WholesaleOrderInvoiceModal';
+import { useWholesaleOrdersList } from '@/components/wholesalers/wholesaleOrders/useWholesaleOrdersList';
+
 
 export default function WholesaleOrdersDashboard() {
     const { theme } = useAuth();
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768;
-    const [selectedOrder, setSelectedOrder] = useState<any>(null);
+    const [selectedOrder, setSelectedOrder] = useState < any > (null);
     const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
     const { ordersList, isLoading, errorMessage } = useWholesaleOrdersList();
 

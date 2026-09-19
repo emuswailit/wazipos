@@ -1,6 +1,6 @@
 import { useAuth } from '@/context/AuthContext';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ProductCatalogItem, WholesaleItemRow } from '../../../app/(wholesalers)/newWholesaleOrder/types';
+import { ProductCatalogItem, WholesaleItemRow } from './types';
 
 interface WholesaleItemRowItemProps {
     row: WholesaleItemRow;

@@ -24,6 +24,10 @@ export interface OutOfStockRecord {
     cached_at?: string;
 }
 
+// @/databases/types.ts
+
+
+
 export interface LocalIndentItemLine {
     product_id: string;
     wholesaler_receipt_id: string;
@@ -81,11 +85,6 @@ export interface PaymentMethodItem {
 
 // ===========================================================================
 // Products
-//
-// Wire shape from the products API. Field names mirror the server exactly.
-//
-// Server `id` is exposed as `remote_id` because Dexie / AsyncStorage assign
-// a locally-generated auto-incrementing primary key (`id` via `++id`).
 // ===========================================================================
 
 export interface ProductImage {
@@ -112,21 +111,13 @@ export interface ProductCategoryDetails {
 }
 
 export interface ProductItem {
-    // ---- Local persistence -------------------------------------------------
-    /** Local auto-increment primary key (Dexie `++id`). */
     id?: number;
-    /** When this row was last written to local storage. */
     cached_at?: string;
 
-    // ---- Server identity ---------------------------------------------------
-    /** Server UUID (was `id` on the wire). */
     remote_id: string;
-    /** Server `key` field, if present. */
     remote_key?: string;
-    /** Server `url` field — self-link, read-only. */
     url?: string;
 
-    // ---- Server content ----------------------------------------------------
     title: string;
     long_title: string;
     product_name: string;
@@ -159,13 +150,7 @@ export interface ProductItem {
 }
 
 // ===========================================================================
-// Retailer receipt
-//
-// A single physical receipt / stock lot held by a retailer. Wire shape from
-// the inventory API. Field names mirror the server exactly.
-//
-// Server `id` is exposed as `remote_id` because Dexie / AsyncStorage assign
-// a locally-generated auto-incrementing primary key (`id` via `++id`).
+// Retailer receipts
 // ===========================================================================
 
 export interface RetailerReceiptImage {
@@ -180,31 +165,19 @@ export interface RetailerReceiptImage {
 }
 
 export interface RetailerReceipt {
-    // ---- Local persistence -------------------------------------------------
-    /** Local auto-increment primary key (Dexie `++id`). */
     id?: number;
-    /** When this row was last written to local storage. */
     cached_at?: string;
 
-    // ---- Server identity ---------------------------------------------------
-    /** Server UUID (was `id` on the wire). */
     remote_id: string;
-    /** Server `key` field, if present. */
     remote_key?: string;
-    /** Alias of `remote_id`, kept for legacy call sites. */
     server_id?: string | null;
 
-    // ---- Local sync state --------------------------------------------------
-    /** true when the row has been confirmed by the server. */
     synced?: boolean;
-    /** Last sync error message, if any. */
     sync_error?: string | null;
 
-    // ---- Resolved image URLs (derived at normalize time) -------------------
     thumbnail_url?: string | null;
     image_url?: string | null;
 
-    // ---- Server content ----------------------------------------------------
     title: string;
     entity: string;
     entity_title: string;
@@ -249,18 +222,136 @@ export interface RetailerReceipt {
 }
 
 // ===========================================================================
+// Retailer indent
+// ===========================================================================
+
+export interface RetailerIndentItemImage {
+    id: string;
+    image: string;
+    thumbnail: string;
+    owner: string;
+    product: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+export interface RetailerIndentItem {
+    id: string;
+    entity: string;
+    entity_title: string;
+
+    source: 'PREDICTION' | 'MANUAL' | 'IMPORTED' | string;
+    source_label: string;
+
+    retailer_indent: string;
+    wholesale_receipt: string | null;
+    wholesale_receipt_title: string;
+    wholesaler: string | null;
+    wholesaler_title: string;
+
+    wholesaler_price_discount: string | null;
+    wholesaler_price_discount_title: string;
+    wholesaler_quantity_discount: string | null;
+    wholesaler_quantity_discount_title: string;
+
+    campaign_item: string | null;
+    campaign_item_details: any | null;
+
+    required_quantity: number;
+    total_quantity: number;
+
+    bonus_quantity_earned: number;
+    bonus_blocks_earned: number;
+    bonus_rule_buy_quantity: number | null;
+    bonus_rule_free_quantity: number | null;
+
+    supplier_unit_selling_price: string | null;
+    final_supplier_unit_selling_price: string | null;
+    recommended_retail_price: string | null;
+    markup_percentage_used: string | null;
+
+    final_unit_price: string | null;
+    item_gross_total_amount: string | null;
+    item_net_total_amount: string | null;
+
+    profit_estimate: {
+        cost_per_unit?: number;
+        sell_per_unit?: number;
+        pricing_source?: string;
+        profit_per_unit?: number;
+        margin_percent?: number;
+        total_cost?: number;
+        total_revenue?: number;
+        total_profit?: number;
+        [key: string]: any;
+    } | null;
+
+    cost_per_unit: number | null;
+    sell_per_unit: number | null;
+    profit_per_unit: number | null;
+    total_profit: number | null;
+    total_revenue: number | null;
+    margin_percent: number | null;
+    pricing_source: string | null;
+
+    lead_time_days: number;
+    lead_time_variance_days: number;
+    lead_time_source: string;
+
+    manufacture_date: string | null;
+    expiry_date: string | null;
+    images: RetailerIndentItemImage[];
+
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+export interface RetailerIndent {
+    id?: number;
+    cached_at?: string;
+
+    remote_id: string;
+
+    is_open: string;
+    indent_number: string;
+    entity: string;
+    entity_title: string;
+
+    lead_time: number;
+    order_days: number;
+    budget_amount: string | null;
+    budget_enforced: string;
+    pricing_percentage: string;
+
+    average_lead_time_days: string;
+    average_variance_days: string;
+    min_lead_time_days: number;
+    max_lead_time_days: number;
+    lead_time_updated_at: string | null;
+
+    total_cost: string;
+    total_revenue: string;
+    total_profit: string;
+    included_item_count: number;
+    excluded_item_count: number;
+    over_budget: boolean;
+
+    has_items: boolean;
+    active_item_count: number;
+
+    config_snapshot: any | null;
+
+    retailer_indent_items: RetailerIndentItem[];
+
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+// ===========================================================================
 // Customer orders
-//
-// Wire shape from RetrieveOwnOrders (HTTP) and from the WebSocket push
-// (customer_orders). Field names mirror the server exactly.
-//
-// Server `id` is exposed as `remote_id` (and `key` as `remote_key`) because
-// Dexie / AsyncStorage assign a locally-generated auto-incrementing primary
-// key (`id` via `++id`).
-//
-// The same type also carries the local queue fields used by useOrderPersistence
-// when a draft is saved offline (synced, customerName, customerOrderItems, ...)
-// and filled in once the server responds (remote_id, order_number, ...).
 // ===========================================================================
 
 export interface CustomerOrderItemImage {
@@ -319,7 +410,6 @@ export interface CustomerOrderItemReceiptDetails {
     manufacturer_title: string;
 }
 
-/** A single order line as it exists on the server (`order_items[]`). */
 export interface CustomerOrderItem {
     id: string;
     title: string;
@@ -347,10 +437,6 @@ export interface CustomerOrderItem {
     images: CustomerOrderItemImage[];
 }
 
-/**
- * The payload shape sent to `CreateCustomerOrder`. Distinct from
- * `CustomerOrderItem` (which is the server's rich representation).
- */
 export interface CustomerOrderItemLine {
     retailer_receipt: string;
     purchased_quantity: number;
@@ -359,29 +445,16 @@ export interface CustomerOrderItemLine {
     item_discount: number;
 }
 
-/**
- * A customer order — wire shape + local persistence fields.
- */
 export interface CustomerOrder {
-    // ---- Local persistence -------------------------------------------------
-    /** Local auto-increment primary key (Dexie `++id`). */
     id?: number;
-    /** When this row was last written to local storage. */
     cached_at: string;
 
-    // ---- Server identity ---------------------------------------------------
-    /** Server UUID (was `id` on the wire). May be empty before first sync. */
     remote_id: string;
-    /** Server `key` field, if present. */
     remote_key?: string;
-    /** Client-generated draft id, echoed by the server. */
     draft_id: string | null;
 
-    // ---- Local queue state -------------------------------------------------
-    /** "TRUE" once CreateCustomerOrder succeeds, "FALSE" while pending. */
     synced?: 'TRUE' | 'FALSE';
 
-    // ---- Local form fields captured at save time ---------------------------
     customerName?: string;
     customerPhone?: string;
     dueDate?: string;
@@ -391,7 +464,6 @@ export interface CustomerOrder {
     paymentAccountNumber?: string;
     customerOrderItems?: CustomerOrderItemLine[];
 
-    // ---- Server content ----------------------------------------------------
     status: string;
     reference_number: string | null;
     psp_reference_number: string;
@@ -458,7 +530,6 @@ export interface CustomerOrder {
     bodaboda_farness: string;
     city_name: string | null;
 
-    // ---- Derived convenience ----------------------------------------------
     total_amount: string;
     fulfillment_status: string;
     updated_at?: string;
@@ -532,4 +603,690 @@ export interface EntityItem {
     postal_address: string | null;
     postal_code: string | null;
     postal_town: string | null;
+}
+
+
+// @/databases/types/retailerOutOfStocks.ts
+
+/* ================================================================== */
+/* NESTED: categories_array[] (inside received_from_details)           */
+/* ================================================================== */
+export interface OutOfStockCategory {
+    id: string;
+    icon: null;
+    icon_category: null;
+    category_class: string;
+    title: string;
+    description: string;
+    created: string;
+    updated: string;
+    subcategories: never[];      // always [] in sample
+}
+
+/* ================================================================== */
+/* NESTED: received_from_details                                       */
+/* Present on wholesaler_offers where received_from != null.           */
+/* ================================================================== */
+export interface OutOfStockReceivedFromDetails {
+    id: string;
+    entity_code: string;
+    bank_code: null;
+    title: string;
+    rating: number;
+    administrator: null;
+    owner: string;
+    registration: null;
+    phone: null;
+    phone1: null;
+    phone2: null;
+    phone3: null;
+    email: null;
+    entity_type: string;         // "MANUFACTURING" | "GeneralWholesaler" | ...
+    entity_ownership: string;    // "PRIVATE"
+    categories: string[];
+    town: string;
+    country: string;
+    county: string | null;
+    constituency: null;
+    road: string | null;
+    building: string | null;
+    images: never[];
+    logos: never[];
+    licences: never[];
+    is_subscribed: boolean;
+    is_verified: string;         // "true" | "false"
+    trial_from: null;
+    trial_to: null;
+    registration_fee: string;    // "0.00"
+    commission_percentage: string;
+    registration_fee_paid: string;
+    offer_trial: string;
+    created: string;
+    updated: string;
+    departments: null;
+    description: string | null;
+    categories_array: OutOfStockCategory[];
+    owner_details: string;
+    country_title: string;
+    county_title: string;
+    constituency_title: string;
+    plan: null;
+    plan_title: string;
+    postal_address: null;
+    postal_code: null;
+    postal_town: null;
+}
+
+/* ================================================================== */
+/* NESTED: images[]  (used at product level and inside offers)         */
+/* ================================================================== */
+export interface RetailerOutOfStockImage {
+    id: string;
+    image: string;
+    thumbnail: string;
+    owner: string;
+    product: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+/* ================================================================== */
+/* NESTED: quantity_discounts[].bonus_ratio                            */
+/* ================================================================== */
+export interface OutOfStockBonusRatio {
+    buy: number;
+    free: number;
+    display: string;
+}
+
+/* ================================================================== */
+/* NESTED: quantity_discounts[].quantity_discount_banners[]            */
+/* ================================================================== */
+export interface OutOfStockQuantityDiscountBanner {
+    id: string;
+    quantity_discount_banner: string;
+    thumbnail: string | null;
+    owner: string;
+    wholesaler_quantity_discount: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+/* ================================================================== */
+/* NESTED: quantity_discounts[]                                        */
+/* ================================================================== */
+export interface OutOfStockQuantityDiscount {
+    id: string;
+    entity: string;
+    entity_title: string;
+    wholesaler_receipt: string;
+    wholesaler_receipt_title: string;
+    quantity_discount_banners: OutOfStockQuantityDiscountBanner[];
+    title: string;
+    limit_quantity: number;
+    awarded_quantity: number;
+    awarded_quantity_str: string;
+    limit_quantity_str: string;
+    bonus_ratio: OutOfStockBonusRatio;
+    start: string;               // "YYYY-MM-DD"
+    end: string;                 // "YYYY-MM-DD"
+    is_active: string;           // "true" | "false" — string in payload
+    is_currently_active: boolean;
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+/* ================================================================== */
+/* NESTED: price_discount.price_discount_banners[]                     */
+/* ================================================================== */
+export interface OutOfStockPriceDiscountBanner {
+    id: string;
+    price_discount_banner: string;
+    thumbnail: string | null;
+    owner: string;
+    wholesaler_price_discount: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+/* ================================================================== */
+/* NESTED: price_discount                                              */
+/* ================================================================== */
+export interface OutOfStockPriceDiscount {
+    id: string;
+    entity: string;
+    entity_title: string;
+    wholesaler_receipt: string;
+    wholesaler_receipt_title: string;
+    receipt_unit_selling_price: string;
+    receipt_final_unit_selling_price: string;
+    title: string;
+    percent: string;
+    normal_price: string;
+    offer_price: string;
+    start: string;               // "YYYY-MM-DD"
+    end: string;                 // "YYYY-MM-DD"
+    is_active: string;           // "true" | "false" — string in payload
+    is_currently_active: boolean;
+    price_discount_banners: OutOfStockPriceDiscountBanner[];
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+/* ================================================================== */
+/* NESTED: wholesaler_offers[]                                         */
+/* ================================================================== */
+export interface RetailerOutOfStockWholesalerOffer {
+    id: string;
+    title: string;
+    unit_of_receipt: string;
+    product_title: string;
+    preparation_title: string;
+    product: string;
+    bar_code: string | null;
+    wholesaler_variation: string;
+    received_from: string | null;
+    wholesaler_order_item: null;
+    retailer_order_item: null;
+    retailer_order_item_details: null;
+    batch: string | null;
+    employee: string;
+    manufacture_date: string | null;
+    days_to_expiry: number | null;
+    expiry_date: string | null;
+    unit_buying_price: string;
+    unit_selling_price: string;
+    final_unit_selling_price: string;
+    discount_unit_selling_price: string;
+    current_unit_quantity: number;
+    received_unit_quantity: number;
+    received_pack_quantity: number;
+    recommended_retail_price: null;
+    in_placement: string;        // "true" | "false" — string in payload
+    description: string;
+    created: string;
+    updated: string;
+    expiry_status: string | null;
+    received_from_details: OutOfStockReceivedFromDetails | null;
+    manufacturer: string | null;
+    manufacturer_title: string | null;
+    origin_country: string | null;
+    packaging: string | null;
+    units_per_pack: number;
+    quantity_discounts: OutOfStockQuantityDiscount[] | null;
+    price_discount: OutOfStockPriceDiscount | null;
+    images: RetailerOutOfStockImage[];
+    owner: string;
+}
+
+/* ================================================================== */
+/* ROOT: out_of_stocks[] entry                                         */
+/* ================================================================== */
+export interface RetailerOutOfStock {
+    id: string;
+    entity: string;
+    product: string;
+    unit_of_receipt: string;
+    product_title: string;
+    units_per_pack: number;
+
+    customer: null;                     // always null in sample
+    customer_name: string | null;       // string OR null (record #14)
+    customer_phone: string | null;      // string OR null (record #14)
+
+    required_quantity: number;
+    is_special_order: string;           // "true" | "false" | "False"
+    is_ordered: string;                 // always "false" in sample
+    retailer_indent: null;
+
+    created: string;                    // "YYYY-MM-DD HH:mm:ss"
+    updated: string;
+    owner: string;
+
+    images: RetailerOutOfStockImage[];
+    wholesaler_offers: RetailerOutOfStockWholesalerOffer[];
+}
+
+/* ================================================================== */
+/* TOP-LEVEL ENVELOPE                                                  */
+/* ================================================================== */
+export interface RetailerOutOfStocksResponse {
+    out_of_stocks: RetailerOutOfStock[];
+}
+
+/* ================================================================== */
+/* Normalized cache form (added by the sync context)                   */
+/* `id` -> `remote_id`, string booleans -> real booleans, cached_at    */
+/* ================================================================== */
+// @/databases/types.ts
+
+/* ------------------------------------------------------------------ */
+/* Retailer Out of Stock — normalized cache shape                      */
+/* ------------------------------------------------------------------ */
+export interface RetailerOutOfStockNormalized {
+    cached_at: string;
+    remote_id: string;
+
+    /**
+     * Stable identifier for rows that were created locally and
+     * have not yet been confirmed by the server. Sent on the
+     * create payload so the server can echo it back and we can
+     * reconcile the optimistic row.
+     *
+     * - Present while the row is a local draft.
+     * - Cleared (set to `undefined`) once the server confirms
+     *   and the row's `remote_id` becomes the real UUID.
+     */
+    draft_id?: string;
+
+    /**
+     * True while the record exists only on the client (waiting
+     * for the create flush to succeed). UI can use this to show
+     * a "Draft" chip and to disable actions that require a real
+     * server id (e.g. viewing offers).
+     *
+     * - `true`  → local-only draft, `remote_id` starts with `local-`
+     * - `false` → server has confirmed; `remote_id` is the real UUID
+     * - `undefined` → legacy row from before drafts were tracked
+     */
+    is_pending?: boolean;
+
+    entity: string;
+    product: string;
+    unit_of_receipt: string;
+    product_title: string;
+    units_per_pack: number;
+
+    customer: null;
+    customer_name: string | null;
+    customer_phone: string | null;
+
+    required_quantity: number;
+    is_special_order: boolean;
+    is_ordered: boolean;
+    retailer_indent: null;
+
+    images: RetailerOutOfStockImage[];
+    wholesaler_offers: RetailerOutOfStockWholesalerOffer[];
+
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pending create queue entry                                          */
+/* ------------------------------------------------------------------ */
+export interface PendingOutOfStockCreate {
+    /**
+     * Internal queue id. Unique per attempt. Never sent on the
+     * wire — kept so the queue can be filtered and persisted.
+     */
+    id: string;
+
+    /**
+     * Stable identifier for the record. Sent on the create
+     * payload as `draft_id` so the server can echo it back and
+     * we can reconcile the optimistic row.
+     */
+    draft_id: string;
+
+    /**
+     * The `remote_id` used on the optimistic local row while the
+     * server hasn't confirmed. Convention: `local-<draft_id>`.
+     */
+    local_row_id: string;
+
+    params: {
+        product: string;
+        required_quantity: number;
+        /** Accept both — normalised to a string on the wire. */
+        is_special_order: boolean | string;
+        customer_name?: string | null;
+        customer_phone?: string | null;
+        unit_of_receipt?: string | null;
+    };
+
+    /** ISO timestamp of when the entry was queued. */
+    created_at: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pending edit queue entry                                            */
+/* ------------------------------------------------------------------ */
+export interface PendingOutOfStockEdit {
+    id: string;
+    remote_id: string;
+    params: Partial<RetailerOutOfStockNormalized>;
+    created_at: string;
+}
+
+/* ================================================================== */
+/* Server-patch response shape (single-item merge)                     */
+/* ================================================================== */
+export interface OutOfStockItemParamsResponse {
+    status?: string;
+    item_id?: string;
+    params?: Partial<RetailerOutOfStock>;
+}
+
+/* =========================================================
+ * Forecast feature — normalized view models
+ *
+ * Mirrors the shape of the stock-outs normalized types so the
+ * mobile and web views feel identical to work with.
+ * ======================================================= */
+
+export interface RetailerForecastDailyRow {
+    forecast_date: string;
+    horizon_days: number;
+    point_forecast: number;
+    p10: number | null;
+    p50: number | null;
+    p90: number | null;
+    model_name: string;
+    segment: string;
+}
+
+export interface RetailerForecastOffer {
+    receipt_id: string;
+    wholesaler_id: string;
+    wholesaler_title: string;
+    batch: string | null;
+    expiry_date: string | null;
+    days_to_expiry: number | null;
+    current_quantity: number;
+    list_unit_price: string;
+    effective_unit_price: string;
+    price_discount_percent: number;
+    wholesaler_price_discount_id: string | null;
+    quantity_discount: {
+        limit_quantity: number;
+        awarded_quantity: number;
+        bonus_pct: number;
+    } | null;
+    wholesaler_quantity_discount_id: string | null;
+    effective_unit_cost_after_bonus: string;
+    score: number;
+    rationale: string;
+
+    /* Placement / consignment flags */
+    in_placement: boolean;
+    placement_note: string | null;
+}
+
+export interface RetailerForecastCampaign {
+    campaign_id: string;
+    campaign_title: string;
+    campaign_status: string;
+    campaign_end: string;
+    days_remaining: number;
+    wholesaler_id: string;
+    wholesaler_title: string;
+    receipt_id: string;
+    batch: string | null;
+    days_to_expiry: number | null;
+    published_unit_price: string;
+    published_bonus_quantity: number;
+    suggested_quantity: number;
+    per_retailer_limit: number | null;
+    expected_margin_estimate: string | null;
+    opted_in: boolean;
+    score: number;
+    rationale: string;
+}
+
+export interface RetailerForecastNormalized {
+    /** Stable identifier for the product row. Sourced from `product_id`. */
+    remote_id: string;
+
+    entity: string;
+    entity_title: string;
+
+    product_title: string;
+
+    /** Total forecast over the horizon (`lead_time_days + order_days`). */
+    total_forecast: number;
+    total_p10: number;
+    total_p90: number;
+    avg_daily_forecast: number;
+
+    /** How many of the horizon days actually have forecasts. */
+    days_covered: number;
+
+    /** Per-day breakdown (empty when `include_daily` was false). */
+    daily: RetailerForecastDailyRow[];
+
+    /** Wholesaler lots to buy from, ranked by score desc. */
+    wholesaler_offers: RetailerForecastOffer[];
+
+    /** Active campaigns the retailer can opt into. */
+    wholesaler_campaigns: RetailerForecastCampaign[];
+
+    /** Suggested default order quantity — `ceil(total_forecast)`, min 1. */
+    required_quantity: number;
+
+    /** Convenience flags for UI toggles and badges. */
+    has_offers: boolean;
+    has_campaigns: boolean;
+
+    /** Highest offer score — 0 when there are no offers. */
+    best_offer_score: number;
+
+    /** Forecast run date, formatted as "YYYY-MM-DD HH:mm:ss". */
+    created: string;
+}
+
+
+// @/databases/types.ts — APPEND
+
+/* =========================================================
+ * Product Request feature — normalized view models
+ * ======================================================= */
+
+export interface ProductRequestOffer {
+    id: string;
+    request_item: string;
+    wholesaler: string;
+    wholesaler_title: string;
+    wholesaler_receipt: string | null;
+    wholesaler_receipt_title: string;
+    offered_quantity: number;
+    offered_unit_price: string | null;
+    batch: string | null;
+    expiry_date: string | null;
+    manufacture_date: string | null;
+    is_placement: boolean;
+    status: string;
+    status_display: string;
+    retailer_confirmed_at: string | null;
+    retailer_response_note: string;
+    responded_by_user: string | null;
+    responded_by_user_name: string | null;
+    responded_at: string | null;
+    response_note: string;
+    resulting_order_item: string | null;
+    created: string;
+    updated: string;
+}
+
+export interface ProductRequestItem {
+    id: string;
+    request: string;
+    product: string;
+    product_title: string;
+    product_bar_code: string;
+    requested_quantity: number;
+    urgency: string;
+    urgency_display: string;
+    note: string;
+    status: string;
+    status_display: string;
+    offer_count: number;
+    total_offered_quantity: number;
+    confirmed_quantity: number;
+    offers: ProductRequestOffer[];
+    created: string;
+    updated: string;
+}
+
+export interface ProductRequestResponse {
+    id: string;
+    request: string;
+    wholesaler: string;
+    wholesaler_title: string;
+    response_type: string;
+    response_type_display: string;
+    note: string;
+    offered_line_count: number;
+    rejected_line_count: number;
+    resulting_orders: string[];
+    created: string;
+}
+
+export interface ProductRequest {
+    id: string;
+    request_number: string;
+    entity: string;
+    entity_title: string;
+    urgency: string;
+    urgency_display: string;
+    note: string;
+    status: string;
+    status_display: string;
+    total_line_count: number;
+    fulfilled_line_count: number;
+    pending_line_count: number;
+    expires_at: string | null;
+    fulfilled_at: string | null;
+    cancelled_at: string | null;
+    items: ProductRequestItem[];
+    responses: ProductRequestResponse[];
+    created: string;
+    updated: string;
+}
+
+
+
+/* Payloads used by the client when submitting */
+
+export interface CreateProductRequestPayload {
+    items: Array<{
+        product_id: string;
+        requested_quantity: number;
+        urgency?: "low" | "medium" | "high";
+        note?: string;
+    }>;
+    urgency?: "low" | "medium" | "high";
+    note?: string;
+}
+
+export interface ConfirmProductRequestOffersPayload {
+    request_id: string;
+    confirmations: Array<{ offer_id: string; response_note?: string }>;
+    declinations: Array<{ offer_id: string; reason?: string }>;
+    note?: string;
+}
+
+
+// @/databases/types.ts
+
+/* =========================================================
+ * Product requests — mirrors backend
+ *   RetailerProductRequest
+ *   RetailerProductRequestItem
+ *   RetailerProductRequestOffer
+ * ======================================================= */
+
+/**
+ * One line item inside a ProductRequestSummary.
+ *
+ * Mirrors `RetailerProductRequestItem` on the server. Local-only
+ * display fields (`wholesaler_titles`, `target_wholesaler_ids`)
+ * are never sent to the API — they're here so the UI can render
+ * "which wholesalers the user had in mind" before offers arrive.
+ */
+export interface ProductRequestSummaryLineItem {
+    // Server fields (from RetailerProductRequestItem)
+    product_id: string;
+    product_title?: string;
+    requested_quantity?: number;
+    urgency?: 'low' | 'medium' | 'high';
+    note?: string;
+    status?: string;
+    offer_count?: number;
+    total_offered_quantity?: number;
+    confirmed_quantity?: number;
+
+    // Local-only display data (never sent)
+    /**
+     * Full wholesaler objects as picked by the user. This is the
+     * source of truth for local display. Ids and titles are
+     * derived from this when building the wire payload.
+     */
+    wholesalers?: Array<{ id: string; title: string }>;
+
+    /** @deprecated kept for backward compat; prefer `wholesalers`. */
+    wholesaler_titles?: string[];
+    /** @deprecated kept for backward compat; prefer `wholesalers`. */
+    target_wholesaler_ids?: string[];
+}
+
+/**
+ * Mirrors `RetailerProductRequest`.
+ */
+export interface ProductRequestSummary {
+    /**
+     * Server-side UUID for this request. Null while the row is a
+     * purely local draft. Populated once the server echoes back a
+     * `RetailerProductRequest` for it.
+     */
+    remote_id: string | null;
+
+    request_number: string;
+    entity: string;
+    entity_title: string;
+    urgency: string;
+    urgency_display: string;
+    status: string;
+    status_display: string;
+    total_line_count: number;
+    fulfilled_line_count: number;
+    pending_line_count: number;
+    expires_at: string | null;
+    created: string;
+    cached_at: string;
+
+    /**
+     * True while this row is a client-side draft that hasn't been
+     * published. Mirrors `status === 'DRAFT'` on the server.
+     */
+    is_pending: boolean;
+    draft_id?: string;
+
+    items_preview?: ProductRequestSummaryLineItem[];
+}
+
+/**
+ * Draft basket item. Everything the user picks in the forecast
+ * modal before submitting. Turns into a
+ * `ProductRequestSummaryLineItem` when written into a pending
+ * `ProductRequestSummary`.
+ */
+export interface RequestDraftItem {
+    product_id: string;
+    product_title?: string;
+    quantity: number;
+    urgency: 'low' | 'medium' | 'high';
+    note: string;
+    target_wholesaler_ids: string[];
+    target_wholesaler_titles?: string[];
+    wholesalers?: Array<{ id: string; title: string }>;
+    added_at: string;
+    best_forecast_quantity?: number;
 }

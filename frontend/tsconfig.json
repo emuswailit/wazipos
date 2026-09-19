@@ -16,8 +16,6 @@
     "**/*.jsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "nativewind-env.d.ts",
-    "app/(wholesalers)/wholesaleOrders/InvoiceLineItemsTable.jsx",
-    "app/(wholesalers)/wholesaleOrders/index.jsx"
+    "nativewind-env.d.ts"
   ]
 }

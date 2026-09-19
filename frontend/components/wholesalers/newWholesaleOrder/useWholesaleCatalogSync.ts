@@ -4,7 +4,7 @@ import wholesalersApi from '@/api/wholesalersApi';
 import { useApi } from '@/hooks/useApi';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import { ProductCatalogItem, RetailerOption } from '../../../app/(wholesalers)/newWholesaleOrder/types';
+import { ProductCatalogItem, RetailerOption } from './types';
 
 let SecureStore: any = null;
 if (Platform.OS !== 'web') {

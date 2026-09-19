@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { RetailerOption } from '../../../app/(wholesalers)/newWholesaleOrder/types';
+import { RetailerOption } from './types';
 
 interface RetailerAutocompleteProps {
     theme: any;

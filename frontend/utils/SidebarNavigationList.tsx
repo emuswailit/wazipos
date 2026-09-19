@@ -1,7 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { SIDEBAR_NAV_MANIFEST } from "@/utils/navigationData";
 import { usePathname, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 interface NavListProps {
@@ -19,6 +19,10 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
     const userRolesArray: string[] = React.useMemo(() => {
         return user?.roles?.map((r: any) => r?.value).filter(Boolean) || ["Client"];
     }, [user]);
+
+    useEffect(() => {
+        console.log("userRolesArray", userRolesArray)
+    }, [userRolesArray])
 
     const handleMenuClick = (link: any) => {
         const hasSubroutes = link.subRoutes && link.subRoutes.length > 0;

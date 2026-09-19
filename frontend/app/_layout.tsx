@@ -2,10 +2,11 @@
 
 import {
   useOfflineOrderSync,
-} from '@/app/(retailers)/newCustomerOrder/useOfflineOrderSync';
+} from '@/components/retailers/newCustomerOrder/useOfflineOrderSync';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { registerBackgroundSyncTask } from '@/context/backgroundSyncTask';
 import { EntitiesSyncProvider } from '@/context/EntitiesSyncContext';
+import { ForecastProvider } from '@/context/ForecastContext';
 import { InventorySyncProvider } from '@/context/InventorySyncContext';
 import {
   NetworkMonitorProvider,
@@ -14,6 +15,9 @@ import {
 import { OrdersSyncProvider } from '@/context/OrdersSyncContext';
 import { PaymentMethodsSyncProvider } from '@/context/PaymentMethodsSyncContext';
 import { ProductsSyncProvider } from '@/context/ProductsSyncContext';
+import { RetailerIndentsSyncProvider } from '@/context/RetailerIndentsSyncContext';
+import { RetailerOutOfStocksSyncProvider } from '@/context/RetailerOutOfStocksSyncContext';
+import { RetailerProductRequestsSyncProvider } from '@/context/RetailerProductRequestsSyncContext';
 import SidebarNavigationList from '@/utils/SidebarNavigationList';
 import WebTopNavbar from '@/utils/WebTopNavbar';
 import { useFonts } from 'expo-font';
@@ -215,8 +219,8 @@ function GlobalAppShellLayout() {
                 borderColor: customBorderColor,
               }}
               className={`flex flex-col h-full p-5 justify-between border-r shadow-sm z-40 ${isLargeScreen
-                  ? 'w-64 min-w-[256px] max-w-[256px]'
-                  : 'absolute left-0 top-0 bottom-0 w-64 shadow-2xl'
+                ? 'w-64 min-w-[256px] max-w-[256px]'
+                : 'absolute left-0 top-0 bottom-0 w-64 shadow-2xl'
                 }`}
             >
               <View className="flex-1">
@@ -405,21 +409,29 @@ export default function RootLayout() {
     <GestureHandlerRootView className="flex-1">
       <AuthProvider>
         <NetworkMonitorProvider>
-          <EntitiesSyncProvider>
-            <InventorySyncProvider>
-              <PaymentMethodsSyncProvider>
-                <ProductsSyncProvider>
-                  <OrdersSyncProvider>
-                    <SafeAreaProvider>
-                      <GlobalAppShellLayout />
-                    </SafeAreaProvider>
-                  </OrdersSyncProvider>
-                </ProductsSyncProvider>
-              </PaymentMethodsSyncProvider>
-            </InventorySyncProvider>
-          </EntitiesSyncProvider>
+          <RetailerIndentsSyncProvider>
+            <EntitiesSyncProvider>
+              <InventorySyncProvider>
+                <PaymentMethodsSyncProvider>
+                  <ProductsSyncProvider>
+                    <OrdersSyncProvider>
+                      <RetailerOutOfStocksSyncProvider>
+                        <RetailerProductRequestsSyncProvider>
+                          <ForecastProvider>
+                            <SafeAreaProvider>
+                              <GlobalAppShellLayout />
+                            </SafeAreaProvider>
+                          </ForecastProvider>
+                        </RetailerProductRequestsSyncProvider>
+                      </RetailerOutOfStocksSyncProvider>
+                    </OrdersSyncProvider>
+                  </ProductsSyncProvider>
+                </PaymentMethodsSyncProvider>
+              </InventorySyncProvider>
+            </EntitiesSyncProvider>
+          </RetailerIndentsSyncProvider>
         </NetworkMonitorProvider>
       </AuthProvider>
-    </GestureHandlerRootView>
+    </GestureHandlerRootView >
   );
 }

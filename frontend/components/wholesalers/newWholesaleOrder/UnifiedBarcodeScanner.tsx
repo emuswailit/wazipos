@@ -1,7 +1,7 @@
 import { Camera, CameraView } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ProductCatalogItem } from '../../../app/(wholesalers)/newWholesaleOrder/types';
+import { ProductCatalogItem } from './types';
 
 let AudioModule: any = null;
 try {

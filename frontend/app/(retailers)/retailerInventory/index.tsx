@@ -22,9 +22,9 @@ import {
     View,
 } from 'react-native';
 
-import CardView from './CardView';
-import InventoryAddModal from './InventoryAddModal';
-import TableView from './TableView';
+import CardView from '../../../components/retailers/retailerInventory/CardView';
+import InventoryAddModal from '../../../components/retailers/retailerInventory/InventoryAddModal';
+import TableView from '../../../components/retailers/retailerInventory/TableView';
 
 export type FilterTab = 'ALL' | 'ACTIVE' | 'EXPIRED';
 
@@ -558,8 +558,8 @@ export default function InventoryContainer() {
                         <View className="flex-row items-center mb-1">
                             <View
                                 className={`w-1.5 h-1.5 rounded-full mr-1 ${isLiveConnected
-                                        ? 'bg-green-500'
-                                        : 'bg-red-500'
+                                    ? 'bg-green-500'
+                                    : 'bg-red-500'
                                     }`}
                             />
                             <Text

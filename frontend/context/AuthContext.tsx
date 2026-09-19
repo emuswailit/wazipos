@@ -55,6 +55,7 @@ interface ThemeShape {
         base: number;
         lg: number;
         xl: number;
+        xxl: number;
     };
 }
 
@@ -118,11 +119,12 @@ const FONTS = {
 };
 
 const FONT_SIZES = {
-    xs: 10,
-    sm: 12,
-    base: 14,
-    lg: 16,
-    xl: 20,
+    xs: 11,
+    sm: 13,
+    base: 15,
+    lg: 17,
+    xl: 21,
+    xxl: 26,
 };
 
 export function AuthProvider({
@@ -132,6 +134,9 @@ export function AuthProvider({
 }) {
     const [user, setUser] =
         useState<UserProfile | null>(null);
+    useEffect(() => {
+        console.log("xyz", user)
+    }, [user])
     const [token, setToken] = useState('');
     const [isDarkMode, setIsDarkMode] =
         useState<boolean>(false);

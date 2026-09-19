@@ -1,11 +1,11 @@
 import retailersApi from '@/api/retailersApi';
+import OrderInvoiceModal from '@/components/retailers/retailerRequisitions/OrderInvoiceModal';
+import { OrderCardDeck, OrderTable } from '@/components/retailers/retailerRequisitions/OrderViews';
 import { useAuth } from '@/context/AuthContext';
 import useApi from '@/hooks/useApi';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import OrderInvoiceModal from './OrderInvoiceModal';
-import { OrderCardDeck, OrderTable } from './OrderViews';
 
 export default function OrderTrackingDashboard() {
     const { theme, isDarkMode } = useAuth();

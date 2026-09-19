@@ -13,9 +13,9 @@ import {
     useWindowDimensions,
     View,
 } from 'react-native';
-import { InvoiceModal } from './InvoiceModal';
-import { RowItem } from './RowItem';
-import { useOrdersData } from './useOrdersData';
+import { InvoiceModal } from '../../../components/retailers/customerOrders/InvoiceModal';
+import { RowItem } from '../../../components/retailers/customerOrders/RowItem';
+import { useOrdersData } from '../../../components/retailers/customerOrders/useOrdersData';
 
 /* ---------------------------------------------------------
  * Row identity: server UUID when present, else the client
@@ -149,10 +149,10 @@ export default function CustomerOrdersRoute() {
                 <View className="px-2.5 py-1.5 bg-white border border-gray-100 rounded-xl shadow-xs">
                     <Text
                         className={`text-[10px] font-bold ${isRefreshing
-                                ? 'text-blue-500'
-                                : isConnected
-                                    ? 'text-green-600'
-                                    : 'text-amber-500'
+                            ? 'text-blue-500'
+                            : isConnected
+                                ? 'text-green-600'
+                                : 'text-amber-500'
                             }`}
                     >
                         •{' '}

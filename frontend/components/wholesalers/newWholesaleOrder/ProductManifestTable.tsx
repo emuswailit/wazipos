@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import { ProductCatalogItem, WholesaleItemRow } from '../../../app/(wholesalers)/newWholesaleOrder/types';
+import { ProductCatalogItem, WholesaleItemRow } from './types';
 import WholesaleItemRowItem from './WholesaleItemRowItem';
 
 interface ProductManifestTableProps {

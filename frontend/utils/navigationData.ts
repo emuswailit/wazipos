@@ -2,7 +2,7 @@ export interface SidebarRoute {
     id: number;
     title: string;
     route: string;
-    allowedRoles: string[]; // e.g. ["Client"], ["Admin"], ["Vendor"]
+    allowedRoles: string[]; // e.g. ["Client"], ["Admin"], ["GeneralWholesalerSuperAdmin"]
     showInSidebar: boolean;
     subRoutes?: SidebarRoute[];
 }
@@ -12,7 +12,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 1,
         title: "Dashboard",
         route: "/(tabs)",
-        allowedRoles: ["Client", "Admin", "Vendor"],
+        allowedRoles: ["Client", "Admin",],
         showInSidebar: true,
     },
     {
@@ -76,7 +76,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 id: 8,
                 title: "Routes",
                 route: "/routes?tab=index", // 🌟 FIXED: Pluralized string to resolve straight to app/(admin)/routes/index.tsx
-                allowedRoles: ["Admin", "Vendor"],
+                allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
             {
@@ -92,35 +92,42 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 3,
         title: "Wholesalers",
         route: "/routes", // 🌟 FIXED: Pluralized to match your routes folder exactly
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
         subRoutes: [
             {
                 id: 1,
                 title: "New Order",
                 route: "/newWholesaleOrder?tab=newWholesaleOrder", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
             {
                 id: 2,
                 title: "Orders",
                 route: "/wholesaleOrders?tab=wholesaleOrders", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
             {
                 id: 3,
                 title: "Inventory",
                 route: "/wholesaleInventory?tab=wholesaleInventory", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
             {
                 id: 4,
                 title: "Payments",
                 route: "/wholesalePayments?tab=wholesalePayments", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 5,
+                title: "Retailer Requests",
+                route: "/retailerRequests?tab=retailerRequests", // Points directly to app/(admin)/
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
         ]
@@ -131,10 +138,10 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 4,
         title: "Orders",
         route: "/(tabs)/business",
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
         subRoutes: [
-            { id: 1, title: "Orders Monitor", route: "/(tabs)/business?tab=stock", allowedRoles: ["Admin", "Vendor"], showInSidebar: true },
+            { id: 1, title: "Orders Monitor", route: "/(tabs)/business?tab=stock", allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"], showInSidebar: true },
             { id: 2, title: "Restock Orders", route: "/(tabs)/business?tab=orders", allowedRoles: ["Admin"], showInSidebar: true },
         ]
     },
@@ -142,31 +149,31 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 5,
         title: "Accounts Ledger",
         route: "/(tabs)/business",
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
     },
     {
         id: 6,
         title: "Adjacent Stores",
         route: "/(tabs)",
-        allowedRoles: ["Client", "Admin", "Vendor"],
+        allowedRoles: ["Client", "Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
     },
     {
         id: 7,
         title: "Client Orders Ledger",
         route: "/(home)/orders", // Points correctly to the standalone stacks route
-        allowedRoles: ["Client", "Admin", "Vendor"],
+        allowedRoles: ["Client", "Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
     },
     {
         id: 8,
         title: "Inventory Control",
         route: "/(tabs)/business",
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
         subRoutes: [
-            { title: "Stock Monitor", route: "/(tabs)/business?tab=stock", allowedRoles: ["Admin", "Vendor"], showInSidebar: true },
+            { title: "Stock Monitor", route: "/(tabs)/business?tab=stock", allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"], showInSidebar: true },
             { title: "Restock Orders", route: "/(tabs)/business?tab=orders", allowedRoles: ["Admin"], showInSidebar: true },
         ]
     },
@@ -174,10 +181,10 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 9,
         title: "Account",
         route: "/(tabs)/account",
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
         subRoutes: [
-            { title: "Account", route: "/(tabs)/account?tab=account", allowedRoles: ["Admin", "Vendor"], showInSidebar: true },
+            { title: "Account", route: "/(tabs)/account?tab=account", allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"], showInSidebar: true },
             { title: "Subscriptions", route: "/(tabs)/account?tab=subscriptions", allowedRoles: ["Admin"], showInSidebar: true },
         ]
     },
@@ -185,14 +192,14 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 10,
         title: "Accounts Ledger",
         route: "/(tabs)/business",
-        allowedRoles: ["Admin", "Vendor"],
+        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
     },
     {
         id: 11,
         title: "My Profile",
         route: "/(tabs)/profile",
-        allowedRoles: ["Client", "Admin", "Vendor"],
+        allowedRoles: ["Client", "Admin", "GeneralWholesalerSuperAdmin"],
         showInSidebar: true,
     },
 
@@ -239,22 +246,36 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 showInSidebar: true
             }, {
                 id: 6,
-                title: "Indenting",
-                route: "/indenting?tab=indenting", // Points directly to app/(admin)/
+                title: "Forecasting",
+                route: "/forecasting?tab=forecasting", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
                 id: 7,
+                title: "Retailer Indents",
+                route: "/retailerIndents?tab=retailerIndents", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 8,
                 title: "Stock Outs",
                 route: "/stockOuts?tab=stockOuts", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 8,
+                id: 9,
                 title: "Wholesale Marketplace",
                 route: "/wholesaleMarketplace?tab=wholesaleMarketplace", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 10,
+                title: "Products Requests",
+                route: "/productRequests?tab=productRequests", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
