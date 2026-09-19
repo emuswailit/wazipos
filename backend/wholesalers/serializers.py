@@ -570,7 +570,6 @@ class WholesalerReceiptsWithAnalyticsSerializer(serializers.ModelSerializer):
             "preparation_title",
             "product",
             "bar_code",
-            "wholesaler_variation",
             "received_from",
             "wholesaler_order_item",
             "unit_of_receipt",
@@ -649,13 +648,6 @@ class WholesalerReceiptsWithAnalyticsSerializer(serializers.ModelSerializer):
     def get_received_from_details(self, obj):
         if obj.received_from:
             return EntitySerializer(obj.received_from, context=self.context, many=False).data
-        else:
-            return None
-
-
-    def get_wholesaler_variation_details(self, obj):
-        if obj.wholesaler_variation:
-            return WholesalerVariationSerializer(obj.wholesaler_variation, context=self.context, many=False).data
         else:
             return None
 

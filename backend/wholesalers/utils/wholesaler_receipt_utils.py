@@ -115,7 +115,6 @@ def create_wholesaler_receipt(data, user):
             raise exceptions.ValidationError(
                 f'You added similar item 1 minutes ago i.e at {item.created}')
         created = WholesalerReceipts.objects.create(
-            wholesaler_variation=wholesaler_variation,
             product=product_obj,
             received_from=received_from_obj,
             entity=user.entity,
