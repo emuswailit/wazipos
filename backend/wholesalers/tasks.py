@@ -3,11 +3,27 @@ from celery import shared_task
 from django.utils import timezone
 from .models import WholesalerPriceDiscounts
 from utils.logging import create_log
-app = Celery()
+# app = Celery()
+from wazi.celery import app   
 from . import models
-import json
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 
 from intergrations.jambopay.jambopay_check_payment_status import jambopay_check_payment_status
+
+channel_layer = get_channel_layer()
+
+@app.task
+def load_wholesaler_receipts():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'wholesaler-inventory',
+            {
+                "type": "send_wholesaler_receipts"
+            },
+        )
+    return result
 
 #### FOOD ORDERS
 def get_non_cash_today_wholesale_order_payments():
