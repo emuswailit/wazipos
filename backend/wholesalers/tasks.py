@@ -3,8 +3,8 @@ from celery import shared_task
 from django.utils import timezone
 from .models import WholesalerPriceDiscounts
 from utils.logging import create_log
-# app = Celery()
-from wazi.celery import app   
+app = Celery()
+# from wazi.celery import app   
 from . import models
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
