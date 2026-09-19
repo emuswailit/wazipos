@@ -28,7 +28,7 @@ from analytics.routing import analytics_websocket_urlpatterns   # NEW
 routes = (
     chats_websocket_urlpatterns
     + retailers_websocket_urlpatterns
-    # + wholesalers_websocket_urlpatterns
+    + wholesalers_websocket_urlpatterns
     + transport_websocket_urlpatterns
     + authentication_websocket_urlpatterns
     + messaging_websocket_urlpatterns

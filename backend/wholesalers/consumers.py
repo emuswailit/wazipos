@@ -2,7 +2,7 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer,JsonWebsocketConsumer
 from asgiref.sync import async_to_sync
 from wholesalers.models import WholesalerReceipts
-from wholesaler.serializers import WholesalerReceiptsSerializer
+from wholesalers.serializers import WholesalerReceiptsSerializer
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
