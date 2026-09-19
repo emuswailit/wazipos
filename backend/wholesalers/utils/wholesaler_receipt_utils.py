@@ -26,6 +26,17 @@ def create_wholesaler_receipt(data, user):
     wholesaler_order_item_obj = None
     employee_obj = None
     batch = None
+    draft_id=None
+    try:
+        draft_id = data["wholesaler_receipt_details"]["draft_id"]
+        if draft_id and not draft_id== "":
+            if WholesalerReceipts.objects.filter(draft_id=draft_id).exists():
+                errors.append("Order with similar draft ID is already synced")
+                return errors, None
+        
+   
+    except KeyError:
+        errors.append("Unit buying price is required")
 
     employee_obj = employees_models_validators.validate_employee(user)
 
