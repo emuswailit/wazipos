@@ -36,7 +36,7 @@ def create_wholesaler_receipt(data, user):
         
    
     except KeyError:
-        errors.append("Unit buying price is required")
+        errors.append(f"Draft ID is required")
 
     employee_obj = employees_models_validators.validate_employee(user)
 
