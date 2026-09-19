@@ -153,7 +153,7 @@ def load_retailer_indents():
     result= async_to_sync(channel_layer.group_send)(
             'retailer-indents',
             {
-                "type": "send_retailer-indents"
+                "type": "send_retailer_indents"
             },
         )
     return result
