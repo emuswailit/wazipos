@@ -52,7 +52,7 @@ class WholesalerInventoryConsumer(AsyncJsonWebsocketConsumer):
         self.datum=data
 
 
-    async def send_retailer_receipts(self, event):
+    async def send_wholesaler_receipts(self, event):
         # Call the heper async Function
         await self.helper_func()
 
