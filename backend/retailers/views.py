@@ -2739,14 +2739,14 @@ def productRequestsAPIView(request):
             "GeneralWholesaler",
             "PharmaceuticalWholesaler",
         )
-        if __debug__:
-            import logging
-            logging.getLogger(__name__).warning(
-                "[GetWholesalerTaggedRequests] user=%s entity=%s entity_id=%s",
-                getattr(request.user, "id", None),
-                getattr(getattr(request.user, "entity", None), "id", None),
-                getattr(request.user, "entity_id", None),
-            )
+       
+        import logging
+        logging.getLogger(__name__).warning(
+            "[GetWholesalerTaggedRequests] user=%s entity=%s entity_id=%s",
+            getattr(request.user, "id", None),
+            getattr(getattr(request.user, "entity", None), "id", None),
+            getattr(request.user, "entity_id", None),
+        )
 
         from retailers.querysets import tagged_requests_for_wholesaler
         from retailers.serializers import WholesalerFacingListSerializer
