@@ -2431,7 +2431,7 @@ WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
 from rest_framework import exceptions, permissions
 from rest_framework.decorators import api_view, permission_classes
 
-from authentication.permissions import EntitySubscriptionPermission
+from retailers.retail_permissions import EntitySubscriptionPermission
 from .services.product_requests import product_requests_dispatch
 from .utils import custom_errors_response, custom_success_message
 
