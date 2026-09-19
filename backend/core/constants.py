@@ -117,3 +117,13 @@ class EntityType(Enum):
             cls.GENERAL_DISTRIBUTOR.value,
             cls.GENERAL_MANUFACTURER.value,
         }
+
+
+# retailers/constants.py
+
+WHOLESALER_ENTITY_TYPES = [
+    "GeneralWholesaler",
+    "PharmaceuticalWholesaler",
+]
+
+REQUEST_EXPIRY_DAYS = 14
