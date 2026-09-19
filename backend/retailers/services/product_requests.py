@@ -21,7 +21,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from authentication.models import Entities
 from products.models import Products
-from retailers.constants import (
+from core.constants import (
     REQUEST_EXPIRY_DAYS,
     WHOLESALER_ENTITY_TYPES,
 )
