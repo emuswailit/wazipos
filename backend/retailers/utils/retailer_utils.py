@@ -836,9 +836,14 @@ def validate_retailer_receipt_data(data, user):
 @transaction.atomic
 def create_retailer_receipt_directly(data, user):
     errors = []
+    draft_id=None
     details = data.get("retailer_receipt_details", {})
 
-    draft_id = details.get("draft_id")
+    if not "draft_id" in data["retailer_receipt_details"] or  data["retailer_receipt_details"]["draft_id"]=="":
+        errors.append("Draft ID is required")
+        return errors, None
+    else:
+        draft_id = details.get("draft_id")
     if draft_id:
         existing = RetailerReceipts.objects.filter(draft_id=draft_id).first()
         if existing:
