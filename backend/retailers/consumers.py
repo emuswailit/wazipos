@@ -609,6 +609,8 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
                     'customer_orders': json.loads(self.customer_orders),
                     
                 })
+
+        
 class UserOrdersConsumer(AsyncJsonWebsocketConsumer):
     
     async def connect(self):

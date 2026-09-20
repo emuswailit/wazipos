@@ -1,8 +1,8 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer,JsonWebsocketConsumer
 from asgiref.sync import async_to_sync
-from wholesalers.models import WholesalerReceipts
-from wholesalers.serializers import WholesalerReceiptsSerializer
+from wholesalers.models import WholesalerReceipts, RetailerOrders
+from wholesalers.serializers import WholesalerReceiptsSerializer,RetailerOrdersSerializer
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -10,6 +10,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 from utils.UUIDEncoder import UUIDEncoder
+import dateutil.parser
 
 
 
@@ -61,3 +62,112 @@ class WholesalerInventoryConsumer(AsyncJsonWebsocketConsumer):
                     'inventory': json.loads(self.datum),
                     
                 })
+
+
+class RetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
+    
+    async def connect(self):
+        self.user = self.scope["user"]
+        if not self.user.is_authenticated:
+            return
+        
+        await self.channel_layer.group_add(
+            f'retailer-orders',
+            self.channel_name
+        )
+        await self.accept()
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+                    'retailer_orders': json.loads(self.retailer_orders),
+                    
+                })
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            'retailer-orders',
+            self.channel_name
+        )
+        await self.close()
+
+    @sync_to_async
+    def helper_func(self):
+        formatted_from_date = dateutil.parser.parse(str(timezone.now().date())).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        retailer_orders = RetailerOrders.objects.filter(entity=self.user.entity,created__gte=formatted_from_date).order_by('-created')
+
+        self.retailer_orders = retailer_orders
+        
+        orders =RetailerOrdersSerializer(retailer_orders,many=True,context={'request': None}).data
+        data=json.dumps(orders,cls=UUIDEncoder)
+        
+        self.retailer_orders=data
+
+
+    async def send_retailer_orders(self, event):
+        # Call the heper async Function
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+                    'retailer_orders': json.loads(self.retailer_orders),
+                    
+                })
+
+        
+class FilteredRetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
+    
+    async def connect(self):
+        self.user = self.scope["user"]
+        if not self.user.is_authenticated:
+            return
+        
+        await self.channel_layer.group_add(
+            f'filtered-retailer-orders',
+            self.channel_name
+        )
+        await self.accept()
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+                    'filtered_retailer_orders': json.loads(self.retailer_orders),
+                    
+                })
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            'filtered-retailer-orders',
+            self.channel_name
+        )
+        await self.close()
+
+    @sync_to_async
+    def helper_func(self):
+        formatted_from_date = dateutil.parser.parse(str(timezone.now().date())).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        retailer_orders = RetailerOrders.objects.filter(retailer=self.user.entity,created__gte=formatted_from_date).order_by('-created')
+
+        self.retailer_orders = retailer_orders
+        
+        orders =RetailerOrdersSerializer(retailer_orders,many=True,context={'request': None}).data
+        data=json.dumps(orders,cls=UUIDEncoder)
+        
+        self.retailer_orders=data
+
+
+    async def send_filtered_retailer_orders(self, event):
+        # Call the heper async Function
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+                    'filtered_retailer_orders': json.loads(self.retailer_orders),
+                    
+                })
+
+
+        

@@ -93,10 +93,22 @@ app.conf.beat_schedule = {
     },
 
     # WHOLESALERS
-    #     "load_wholesaler_receipts": {
-    #     "task": "wholesalers.tasks.load_wholesaler_receipts",
-    #     "schedule": 120.0,
-    #     "args": None,
-    # },
+        "load_wholesaler_receipts": {
+        "task": "wholesalers.tasks.load_wholesaler_receipts",
+        "schedule": 120.0,
+        "args": None,
+    },
+
+        "load_retailer_orders": {
+        "task": "wholesalers.tasks.load_retailer_orders",
+        "schedule": 120.0,
+        "args": None,
+    },
+    # retailer filtered
+        "load_filtered_retailer_orders": {
+        "task": "wholesalers.tasks.load_filtered_retailer_orders",
+        "schedule": 120.0,
+        "args": None,
+    },
 
 }

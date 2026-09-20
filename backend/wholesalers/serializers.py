@@ -807,7 +807,6 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "shipping_amount",
             "order_discount_total",
             "order_gross_price_total",
-            "order_price_total",
             "order_tax_total",
             "order_terms",
             "final_price",

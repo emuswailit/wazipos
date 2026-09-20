@@ -100,3 +100,27 @@ def deactivate_expired_price_discounts():
     create_log("info", f"Expired price discounts: {count}")
     
     return f"Deactivated {count} expired wholesaler discounts."
+
+
+@app.task
+def load_retailer_orders():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'retailer-orders',
+            {
+                "type": "send_retailer_orders"
+            },
+        )
+    return result
+
+
+@app.task
+def load_filtered_retailer_orders():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'filtered-retailer-orders',
+            {
+                "type": "send_filtered_retailer_orders"
+            },
+        )
+    return result
