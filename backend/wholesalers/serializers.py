@@ -6,10 +6,10 @@ from authentication.serializers import EntitySerializer
 from retailers.models import RetailerReceipts, CustomerOrderItems, OutOfStock
 from products.models import ProductImages
 from datetime import datetime, timedelta, date
-from django.utils import timezone
+from django.db.models import Sum
 from rest_framework.response import Response
 from rest_framework import exceptions, generics, permissions, status
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from core.serializers import BaseModelSerializer
 from decimal import Decimal
 from core.date_utils import numOfDays

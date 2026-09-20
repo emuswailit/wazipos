@@ -70,7 +70,7 @@ class WholesalerReceipts(EntityRelatedModel):
     distributor. The wholesaler prices retailer indents against
     these rows.
     """
-
+    draft_id = models.CharField(max_length=100, null=True, blank=True)
     product = models.ForeignKey(
         "products.Products",
         on_delete=models.CASCADE,
