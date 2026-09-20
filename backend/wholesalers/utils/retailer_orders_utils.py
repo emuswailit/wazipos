@@ -1043,9 +1043,10 @@ def create_retailer_order(data, user):
 
     # Check for duplicate orders
     five_minutes_ago = datetime.now() - timedelta(minutes=5)
-    if RetailerOrders.objects.filter(draft_id=draft_id, wholesaler=wholesaler_obj, created__gte=five_minutes_ago, owner=user).exists():
-        errors.append("You created a similar order within less than 5 minutes ago")
-        return errors, None
+    if RetailerOrders.objects.filter(draft_id=draft_id, wholesaler=wholesaler_obj, owner=user).exists():
+        order = RetailerOrders.objects.filter(draft_id=draft_id, wholesaler=wholesaler_obj, owner=user).first()
+        
+        return [], order
 
     # Create the order
     document_number = generate_document_number(user.entity, user,"RETAILERORDER")
