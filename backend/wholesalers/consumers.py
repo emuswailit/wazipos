@@ -3,6 +3,8 @@ from channels.generic.websocket import AsyncWebsocketConsumer,JsonWebsocketConsu
 from asgiref.sync import async_to_sync
 from wholesalers.models import WholesalerReceipts, RetailerOrders
 from wholesalers.serializers import WholesalerReceiptsSerializer,RetailerOrdersSerializer
+from retailers.models import RetailerProductRequest,RetailerProductRequestItem,RetailerProductRequestItemWholesaler
+from retailers.serializers import RetailerProductRequestSerializer
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -166,6 +168,74 @@ class FilteredRetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
         # Broadcast result to the group
         await self.send_json({
                     'filtered_retailer_orders': json.loads(self.retailer_orders),
+                    
+                })
+
+        
+class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
+    async def connect(self):
+        self.user = self.scope["user"]
+        if not self.user.is_authenticated:
+            return
+        
+        await self.channel_layer.group_add(
+            f'wholesaler-product-requests',
+            self.channel_name
+        )
+        await self.accept()
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+                    'wholesaler_product_requests': json.loads(self.retailer_orders),
+                    
+                })
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            'wholesaler-product-requests',
+            self.channel_name
+        )
+        await self.close()
+
+    @sync_to_async
+    def helper_func(self):
+        formatted_from_date = dateutil.parser.parse(str(timezone.now().date())).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        # wholesaler_product_requests = RetailerProductRequest.objects.filter(retailer=self.user.entity,created__gte=formatted_from_date).order_by('-created')
+        wholesaler_product_requests = (
+            RetailerProductRequest.objects
+            .filter(
+                items__target_pairs__wholesaler=self.user.entity.entity,
+                items__target_pairs__is_active=True,
+            )
+            .exclude(
+                status__in=[
+                    RetailerProductRequest.Status.CANCELLED,
+                    RetailerProductRequest.Status.FULFILLED,
+                    RetailerProductRequest.Status.EXPIRED,
+                ]
+            )
+            .distinct()
+            .order_by('-created')
+        )
+        
+        self.wholesaler_product_requests = wholesaler_product_requests
+        
+        product_requests =RetailerProductRequestSerializer(wholesaler_product_requests,many=True,context={'request': None}).data
+        data=json.dumps(product_requests,cls=UUIDEncoder)
+        
+        self.wholesaler_product_requests=data
+
+
+    async def send_wholesaler_product_requests(self, event):
+        # Call the heper async Function
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+                    'wholesaler_product_requests': json.loads(self.wholesaler_product_requests),
                     
                 })
 

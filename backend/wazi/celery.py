@@ -110,5 +110,10 @@ app.conf.beat_schedule = {
         "schedule": 120.0,
         "args": None,
     },
+        "load_wholesaler_product_requests": {
+        "task": "wholesalers.tasks.load_wholesaler_product_requests",
+        "schedule": 120.0,
+        "args": None,
+    },
 
 }

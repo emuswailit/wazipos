@@ -124,3 +124,15 @@ def load_filtered_retailer_orders():
             },
         )
     return result
+
+
+@app.task
+def load_wholesaler_product_requests():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'wholesaler-product-requests',
+            {
+                "type": "send_wholesaler_product_requests"
+            },
+        )
+    return result
