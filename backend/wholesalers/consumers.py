@@ -207,7 +207,7 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
         wholesaler_product_requests = (
             RetailerProductRequest.objects
             .filter(
-                items__target_pairs__wholesaler=self.user.entity.entity,
+                items__target_pairs__wholesaler=self.user.entity,
                 items__target_pairs__is_active=True,
             )
             .exclude(
