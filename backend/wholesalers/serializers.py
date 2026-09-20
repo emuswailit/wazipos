@@ -389,7 +389,6 @@ class WholesalerReceiptsSerializer(serializers.ModelSerializer):
             "unit_buying_price", "unit_selling_price", "final_unit_selling_price",
             "discount_unit_selling_price",
             "current_unit_quantity", "received_unit_quantity",
-            "received_pack_quantity",
             "recommended_retail_price",
             "in_placement", "description", "created", "updated", "expiry_status",
             "received_from_details", "manufacturer", "manufacturer_title",
