@@ -187,7 +187,7 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
 
         # Broadcast result to the group
         await self.send_json({
-                    'wholesaler_product_requests': json.loads(self.retailer_orders),
+                    'wholesaler_product_requests': json.loads(self.wholesaler_product_requests),
                     
                 })
 
