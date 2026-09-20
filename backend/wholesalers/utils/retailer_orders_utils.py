@@ -328,7 +328,7 @@ def create_draft_retailer_order(data, user):
     draft_id=None
 
 
-    if not "draft_id" in data["retailer_order_details"]:
+    if not "draft_id" in data["retailer_order_details"] or data["retailer_order_details"]["draft_id"]=="":
         errors.append("Payment method ID is required")
         return errors,None,None
     else:
