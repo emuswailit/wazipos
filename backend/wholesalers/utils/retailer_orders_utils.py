@@ -325,9 +325,23 @@ def create_draft_retailer_order(data, user):
     reference = None
     payment_method = None
     payment_account_number=None
+    draft_id=None
+
+
+    if not "draft_id" in data["retailer_order_details"]:
+        errors.append("Payment method ID is required")
+        return errors,None,None
+    else:
+        draft_id = data["retailer_order_details"]["draft_id"]
+        if RetailerOrders.objects.filter(draft_id=draft_id).exists():
+            errors.append("Order is already synced")
+            return errors,None,None
+
 
     if "payment_method_id" in data["retailer_order_details"]:
         payment_method_id = data["retailer_order_details"]["payment_method_id"]
+
+
     if payment_method_id == "" or not payment_method_id:
         errors.append("Payment method ID is required")
         return errors,None,None
