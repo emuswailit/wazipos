@@ -132,35 +132,35 @@ class DrugSubClass(EntityRelatedModel):
         return self.title
 
 
-class Generic(EntityRelatedModel):
-    drug_class = models.ManyToManyField(DrugClass)
-    drug_sub_class = models.ManyToManyField(
-        DrugSubClass
-    )
-    image = models.ImageField(upload_to="generic_images_upload", null=True, blank=True)
-    owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
-    title = models.CharField(max_length=360, blank=True, null=True)
-    description = models.TextField(null=True, blank=True)
-    synonym = models.TextField(null=True, blank=True)
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
+# class Generics(EntityRelatedModel):
+#     drug_class = models.ManyToManyField(DrugClass)
+#     drug_sub_class = models.ManyToManyField(
+#         DrugSubClass
+#     )
+#     image = models.ImageField(upload_to="generic_images_upload", null=True, blank=True)
+#     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
+#     title = models.CharField(max_length=360, blank=True, null=True)
+#     description = models.TextField(null=True, blank=True)
+#     synonym = models.TextField(null=True, blank=True)
+#     created = models.DateTimeField(auto_now_add=True)
+#     updated = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return self.title
+#     def __str__(self):
+#         return self.title
 
-    def save(self, *args, **kwargs):
-        self.title = self.title.upper()
-        super(Generic, self).save(*args, **kwargs)
+#     def save(self, *args, **kwargs):
+#         self.title = self.title.upper()
+#         super(Generics, self).save(*args, **kwargs)
 
-    class Meta:
-        db_table = "generic"
-        constraints = [
-            UniqueConstraint(
-                Lower("title"),
-                name="unique_title",
+#     class Meta:
+#         db_table = "generic"
+#         constraints = [
+#             UniqueConstraint(
+#                 Lower("title"),
+#                 name="unique_title",
                
-            ),
-        ]
+#             ),
+#         ]
 
 
 class Indications(EntityRelatedModel):
@@ -228,7 +228,7 @@ class Interactions(EntityRelatedModel):
     # generic = models.ForeignKey(
     #     Generic, related_name="generic_drug_interactions", on_delete=models.CASCADE
     # )
-    contra_indicated = models.ForeignKey(Generic, on_delete=models.CASCADE)
+    # contra_indicated = models.ForeignKey(Generics, on_delete=models.CASCADE)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)

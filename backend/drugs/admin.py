@@ -8,11 +8,11 @@ admin.site.register(models.DrugSubClass)
 
 
 
-@admin.register(models.Generic)
-class GenericsAdmin(admin.ModelAdmin):
-    list_display = ('title', 'description', )
-    list_filter = ('title', )
-    search_fields = ('title', )
+# @admin.register(models.Generics)
+# class GenericsAdmin(admin.ModelAdmin):
+#     list_display = ('title', 'description', )
+#     list_filter = ('title', )
+#     search_fields = ('title', )
 
 @admin.register(models.Formulations)
 class FormulationsAdmin(admin.ModelAdmin):

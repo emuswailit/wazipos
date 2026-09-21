@@ -1,6 +1,6 @@
 
 from rest_framework import exceptions
-from ..models import Preparation, Generic, Formulations
+from ..models import Preparation,  Formulations
 from django.db.models import Q
 
 
@@ -35,15 +35,15 @@ def validate_preparation_data(data):
         errors.append("Formulation ID is required")
     try:
         generics = data["preparation_details"]["generics"]
-        if data["preparation_details"]["generics"] == []:
-            errors.append("Generics cannot be empty")
-        else:
-            for generic in data["preparation_details"]["generics"]:
-                if Generic.objects.filter(id=generic).exists():
-                    pass
-                else:
-                    errors.append(
-                        f"Generic with  ID {generic} does not exist")
+        # if data["preparation_details"]["generics"] == []:
+        #     errors.append("Generics cannot be empty")
+        # else:
+        #     for generic in data["preparation_details"]["generics"]:
+        #         if Generics.objects.filter(id=generic).exists():
+        #             pass
+        #         else:
+        #             errors.append(
+        #                 f"Generic with  ID {generic} does not exist")
 
     except KeyError:
         errors.append("At least one generic is required")
@@ -63,15 +63,15 @@ def create_preparation(data, user):
             owner=user,
             entity=user.entity,
         )
-        if created:
-            if 'generics' in data["preparation_details"] and data["preparation_details"]["generics"]:
-                for id in data["preparation_details"]["generics"]:
-                    if Generic.objects.filter(id=id).exists():
-                        generic = Generic.objects.filter(id=id).first()
-                        created.generics.add(generic)
-            return created
-        else:
-            return None
+        # if created:
+        #     if 'generics' in data["preparation_details"] and data["preparation_details"]["generics"]:
+        #         for id in data["preparation_details"]["generics"]:
+        #             if Generics.objects.filter(id=id).exists():
+        #                 generic = Generics.objects.filter(id=id).first()
+        #                 created.generics.add(generic)
+        #     return created
+        # else:
+        #     return None
     except Exception as e:
         raise exceptions.ValidationError(e)
 
@@ -118,16 +118,17 @@ def update_preparation(data, user):
         raise exceptions.ValidationError(
             "Preparation details to update are required")
     try:
-        generics = data["preparation_details"]["generics"]
-        if data["preparation_details"]["generics"] == []:
-            raise exceptions.ValidationError("Generics cannot be empty")
-        else:
-            for generic in data["preparation_details"]["generics"]:
-                if Generic.objects.filter(id=generic).exists():
-                    pass
-                else:
-                    raise exceptions.ValidationError(
-                        f"Generic with  ID {generic} does not exist")
+        pass
+        # generics = data["preparation_details"]["generics"]
+        # if data["preparation_details"]["generics"] == []:
+        #     raise exceptions.ValidationError("Generics cannot be empty")
+        # else:
+        #     for generic in data["preparation_details"]["generics"]:
+        #         if Generics.objects.filter(id=generic).exists():
+        #             pass
+        #         else:
+        #             raise exceptions.ValidationError(
+        #                 f"Generic with  ID {generic} does not exist")
 
     except KeyError:
         raise exceptions.ValidationError("At least one generic is required")
@@ -142,12 +143,12 @@ def update_preparation(data, user):
             description = data["preparation_details"]["description"]
 
     try:
-        if 'generics' in data["preparation_details"] and data["preparation_details"]["generics"]:
-            preparation.generics.clear()
-            for id in data["preparation_details"]["generics"]:
-                if Generic.objects.filter(id=id).exists():
-                    generic = Generic.objects.filter(id=id).first()
-                    preparation.generics.add(generic)
+        # if 'generics' in data["preparation_details"] and data["preparation_details"]["generics"]:
+        #     preparation.generics.clear()
+        #     for id in data["preparation_details"]["generics"]:
+        #         if Generics.objects.filter(id=id).exists():
+        #             generic = Generics.objects.filter(id=id).first()
+        #             preparation.generics.add(generic)
 
         if title:
             preparation.title = title

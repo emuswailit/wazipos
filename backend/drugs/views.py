@@ -268,7 +268,7 @@ def generics_api_view(request):
         generic = generics_utils.create_generic(
             request.data, request.user)
         if generic:
-            serializer = serializers.GenericSerializer(
+            serializer = serializers.GenericsSerializer(
                 generic, many=False, context={"request": request}
             )
             return responses.custom_success_message(
@@ -284,7 +284,7 @@ def generics_api_view(request):
             request.user)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(generics, request)
-        serializer = serializers.GenericSerializer(
+        serializer = serializers.GenericsSerializer(
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
@@ -295,7 +295,7 @@ def generics_api_view(request):
             request.data, request.user)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(generics, request)
-        serializer = serializers.GenericSerializer(
+        serializer = serializers.GenericsSerializer(
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
@@ -304,7 +304,7 @@ def generics_api_view(request):
         product = generics_utils.update_generic(
             request.data, request.user)
         if product:
-            serializer = serializers.GenericSerializer(
+            serializer = serializers.GenericsSerializer(
                 product, many=False, context={"request": request}
             )
             return responses.custom_success_message(
@@ -316,10 +316,10 @@ def generics_api_view(request):
         body_system = None
         try:
             generic_id = request.data["generic"]
-            if models.Generic.objects.filter(id=generic_id).exists():
-                drug_class = models.Generic.objects.filter(
+            if models.Generics.objects.filter(id=generic_id).exists():
+                drug_class = models.Generics.objects.filter(
                     id=generic_id).first()
-                serializer = serializers.GenericSerializer(
+                serializer = serializers.GenericsSerializer(
                     drug_class, many=False, context={"request": request}
                 )
                 return responses.custom_success_message(

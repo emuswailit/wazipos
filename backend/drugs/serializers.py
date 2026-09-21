@@ -202,9 +202,9 @@ class DrugSubClassSerializer(serializers.ModelSerializer):
             return ""
 
 
-class GenericDisplaySerializer(serializers.ModelSerializer):
+class GenericsDisplaySerializer(serializers.ModelSerializer):
     class Meta:
-        model = models.Generic
+        # model = models.Generics
         extra_kwargs = {"response_message": "Request successful"}
         fields = (
             "id",
@@ -236,7 +236,7 @@ class PreparationSerializer(serializers.ModelSerializer):
     generics_string = serializers.SerializerMethodField(read_only=True)
     long_title = serializers.SerializerMethodField(read_only=True)
     key = serializers.SerializerMethodField(read_only=True)
-    # generics = GenericSerializer(many=True)
+    # generics = GenericsSerializer(many=True)
 
     class Meta:
         model = models.Preparation
@@ -263,7 +263,7 @@ class PreparationSerializer(serializers.ModelSerializer):
     def get_gen_array(self, obj):
         generics = obj.generics.all()
         if generics.count() > 0:
-            return GenericSerializer(generics, context=self.context, many=True).data
+            return GenericsSerializer(generics, context=self.context, many=True).data
         else:
             return None
 
@@ -290,7 +290,7 @@ class PreparationSerializer(serializers.ModelSerializer):
         return f"{obj.title}-{formulation.title}"
 
 
-class GenericSerializer(serializers.ModelSerializer):
+class GenericsSerializer(serializers.ModelSerializer):
     # preparations = PreparationSerializer(many=True, read_only=True)
     # preparation_details = serializers.SerializerMethodField(read_only=True)
     drug_class_id = serializers.SerializerMethodField(read_only=True)
@@ -299,15 +299,15 @@ class GenericSerializer(serializers.ModelSerializer):
     drug_sub_class_title = serializers.SerializerMethodField(read_only=True)
 
     # Implement a case sensitive check for uniqueness
-    title = serializers.CharField(
-        max_length=240,
-        validators=[
-            UniqueValidator(queryset=models.Generic.objects.all(), lookup="iexact")
-        ],
-    )
+    # title = serializers.CharField(
+    #     max_length=240,
+    #     validators=[
+    #         UniqueValidator(queryset=models.Generics.objects.all(), lookup="iexact")
+    #     ],
+    # )
 
     class Meta:
-        model = models.Generic
+        # model = models.Generics
 
         fields = (
             "id",
@@ -387,7 +387,7 @@ class PreparationDisplaySerializer(serializers.ModelSerializer):
     # owner_details = serializers.SerializerMethodField(read_only=True)
     gen_array = serializers.SerializerMethodField(read_only=True)
     formulation_details = serializers.SerializerMethodField(read_only=True)
-    generics = GenericSerializer(many=True, read_only=True)
+    generics = GenericsSerializer(many=True, read_only=True)
 
     # Implement a case sensitive check for uniqueness
     title = serializers.CharField(
@@ -423,7 +423,7 @@ class PreparationDisplaySerializer(serializers.ModelSerializer):
     def get_gen_array(self, obj):
         generics = obj.generics.all()
         if generics.count() > 0:
-            return GenericSerializer(generics, context=self.context, many=True).data
+            return GenericsSerializer(generics, context=self.context, many=True).data
         else:
             return None
 
@@ -485,7 +485,7 @@ class FrequencyDisplaySerializer(serializers.HyperlinkedModelSerializer):
 
 class GenericDisplaySerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        model = models.Generic
+        # model = models.Generics
         fields = ("title", "description")
 
 
@@ -691,15 +691,15 @@ class GenericReferenceSerializer(serializers.ModelSerializer):
     drug_sub_class_details = serializers.SerializerMethodField(read_only=True)
 
     # Implement a case sensitive check for uniqueness
-    title = serializers.CharField(
-        max_length=240,
-        validators=[
-            UniqueValidator(queryset=models.Generic.objects.all(), lookup="iexact")
-        ],
-    )
+    # title = serializers.CharField(
+    #     max_length=240,
+    #     validators=[
+    #         UniqueValidator(queryset=models.Generics.objects.all(), lookup="iexact")
+    #     ],
+    # )
 
     class Meta:
-        model = models.Generic
+        # model = models.Generics
         fields = (
             "id",
             "owner",
