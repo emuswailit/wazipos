@@ -10,8 +10,7 @@ admin.site.register(models.DrugSubClass)
 
 @admin.register(models.Generic)
 class GenericsAdmin(admin.ModelAdmin):
-    list_display = ('title', 'description', 'drug_class',
-                    'drug_sub_class',  )
+    list_display = ('title', 'description', )
     list_filter = ('title', )
     search_fields = ('title', )
 
@@ -38,7 +37,7 @@ class RoutesAdmin(admin.ModelAdmin):
 
 @admin.register(models.Preparation)
 class PreparationsAdmin(admin.ModelAdmin):
-    list_display = ('title', 'description', 'get_generics',
+    list_display = ('title', 'description',
                     'formulation',  )
     list_filter = ('title', )
     search_fields = ('title', )
