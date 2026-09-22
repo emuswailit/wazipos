@@ -189,80 +189,80 @@ class DrugSubClass(EntityRelatedModel):
 
 
 
-# class Generics(EntityRelatedModel):
-#     drug_class = models.ManyToManyField(
-#         DrugClass,
-#         related_name="generics",
-#         blank=True,
-#         help_text="Classes this generic belongs to.",
-#     )
-#     drug_sub_class = models.ManyToManyField(
-#         DrugSubClass,
-#         related_name="generics",
-#         blank=True,
-#         help_text="Sub-classes this generic belongs to.",
-#     )
+class Generics(EntityRelatedModel):
+    drug_class = models.ManyToManyField(
+        DrugClass,
+        related_name="generics",
+        blank=True,
+        help_text="Classes this generic belongs to.",
+    )
+    drug_sub_class = models.ManyToManyField(
+        DrugSubClass,
+        related_name="generics",
+        blank=True,
+        help_text="Sub-classes this generic belongs to.",
+    )
 
-#     owner = models.ForeignKey(
-#         Users,
-#         on_delete=models.SET_NULL,
-#         null=True,
-#         blank=True,
-#         related_name="generics",
-#     )
+    owner = models.ForeignKey(
+        Users,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generics",
+    )
 
-#     title = models.CharField(max_length=360, blank=True, null=True)
-#     description = models.TextField(null=True, blank=True)
-#     synonym = models.TextField(null=True, blank=True)
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
+    title = models.CharField(max_length=360, blank=True, null=True)
+    description = models.TextField(null=True, blank=True)
+    synonym = models.TextField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
 
-#     class Meta:
-#         verbose_name = "Generics"
-#         verbose_name_plural = "Generics"
-#         ordering = ["title"]
-#         constraints = [
-#             UniqueConstraint(Lower("title"), name="generics_unique_title_ci"),
-#         ]
+    class Meta:
+        verbose_name = "Generics"
+        verbose_name_plural = "Generics"
+        ordering = ["title"]
+        constraints = [
+            UniqueConstraint(Lower("title"), name="generics_unique_title_ci"),
+        ]
 
-#     def __str__(self):
-#         return self.title or f"Generics #{self.pk}"
+    def __str__(self):
+        return self.title or f"Generics #{self.pk}"
 
-#     def save(self, *args, **kwargs):
-#         if self.title:
-#             self.title = self.title.strip().upper()
-#         super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        if self.title:
+            self.title = self.title.strip().upper()
+        super().save(*args, **kwargs)
 
-#     def clean(self):
-#         """
-#         Enforce: every subclass's parent class must also be selected.
-#         Note: M2M relations can't be checked before the row has a pk,
-#         so this only runs meaningfully on updates. Real enforcement
-#         happens in the serializer for create/update.
-#         """
-#         super().clean()
-#         if not self.pk:
-#             return
-#         self._check_class_subclass_invariant(
-#             class_ids=set(self.drug_class.values_list("id", flat=True)),
-#             subclass_parent_ids=set(
-#                 self.drug_sub_class.values_list("drug_class_id", flat=True)
-#             ),
-#         )
+    def clean(self):
+        """
+        Enforce: every subclass's parent class must also be selected.
+        Note: M2M relations can't be checked before the row has a pk,
+        so this only runs meaningfully on updates. Real enforcement
+        happens in the serializer for create/update.
+        """
+        super().clean()
+        if not self.pk:
+            return
+        self._check_class_subclass_invariant(
+            class_ids=set(self.drug_class.values_list("id", flat=True)),
+            subclass_parent_ids=set(
+                self.drug_sub_class.values_list("drug_class_id", flat=True)
+            ),
+        )
 
-#     @staticmethod
-#     def _check_class_subclass_invariant(class_ids, subclass_parent_ids):
-#         missing = subclass_parent_ids - class_ids
-#         if missing:
-#             missing_titles = list(
-#                 DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
-#             )
-#             raise ValidationError({
-#                 "drug_class": (
-#                     "Every subclass's parent class must also be selected. "
-#                     f"Missing: {missing_titles}"
-#                 )
-#             })
+    @staticmethod
+    def _check_class_subclass_invariant(class_ids, subclass_parent_ids):
+        missing = subclass_parent_ids - class_ids
+        if missing:
+            missing_titles = list(
+                DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
+            )
+            raise ValidationError({
+                "drug_class": (
+                    "Every subclass's parent class must also be selected. "
+                    f"Missing: {missing_titles}"
+                )
+            })
         
 class Indications(EntityRelatedModel):
     # generic = models.ForeignKey(Generic, on_delete=models.CASCADE)

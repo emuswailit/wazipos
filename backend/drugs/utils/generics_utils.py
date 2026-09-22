@@ -1,5 +1,5 @@
 from rest_framework import exceptions
-from ..models import  DrugClass, DrugSubClass
+from ..models import  DrugClass, DrugSubClass,Generics
 from django.db.models import Q
 from products.models import Products
 
@@ -101,9 +101,8 @@ def create_generic(data, user):
 
 
 def get_all_generics(user):
-    pass
     
-    # return Generics.objects.all()
+    return Generics.objects.all()
 
 
 def update_generic(data, user):
