@@ -121,7 +121,6 @@ class DrugClass(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "drug_classes"
         verbose_name = "Drug Class"
         verbose_name_plural = "Drug Classes"
         ordering = ["title"]
@@ -165,10 +164,9 @@ class DrugSubClass(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "drug_sub_classes"
         verbose_name = "Drug Sub-Class"
         verbose_name_plural = "Drug Sub-Classes"
-        ordering = ["drug_class__title", "title"]
+      
         constraints = [
             # Unique per parent class, case-insensitive.
             # Drop this and use `unique=True` on title if you want
@@ -220,7 +218,6 @@ class DrugSubClass(EntityRelatedModel):
 #     updated = models.DateTimeField(auto_now=True)
 
 #     class Meta:
-#         db_table = "generics"
 #         verbose_name = "Generics"
 #         verbose_name_plural = "Generics"
 #         ordering = ["title"]
