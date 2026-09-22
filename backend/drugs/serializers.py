@@ -4,6 +4,11 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers, status, exceptions
 from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
+from django.db import transaction
+from rest_framework import serializers
+
+
+
 
 
 from . import models
@@ -201,109 +206,14 @@ class DrugSubClassSerializer(serializers.ModelSerializer):
         else:
             return ""
 
-
-class GenericsDisplaySerializer(serializers.ModelSerializer):
-    class Meta:
-        # model = models.Generics
-        extra_kwargs = {"response_message": "Request successful"}
-        fields = (
-            "id",
-            "url",
-            "title",
-            "description",
-            "drug_class",
-            "drug_sub_class",
-            "drug_class_details",
-            "drug_sub_class_details",
-            "owner",
-            "created",
-            "updated",
-            "preparations",
-        )
-
-        read_only_fields = (
-            "id",
-            "url",
-            "created",
-            "updated",
-            "owner",
-        )
-
-
-class PreparationSerializer(serializers.ModelSerializer):
-    gen_array = serializers.SerializerMethodField(read_only=True)
-    formulation_title = serializers.SerializerMethodField(read_only=True)
-    generics_string = serializers.SerializerMethodField(read_only=True)
-    long_title = serializers.SerializerMethodField(read_only=True)
-    key = serializers.SerializerMethodField(read_only=True)
-    # generics = GenericsSerializer(many=True)
-
-    class Meta:
-        model = models.Preparation
-        fields = (
-            "id",
-            "generics",
-            "title",
-            "long_title",
-            "formulation",
-            "description",
-            "formulation_title",
-            "generics_string",
-            "key",
-            "gen_array",
-        )
-        # extra_kwargs = {'generics': {'required': False}}
-        read_only_fields = ("owner", "gen_array")
-        validators = [
-            UniqueTogetherValidator(
-                queryset=models.Preparation.objects.all(), fields=["title"]
-            )
-        ]
-
-    def get_gen_array(self, obj):
-        generics = obj.generics.all()
-        if generics.count() > 0:
-            return GenericsSerializer(generics, context=self.context, many=True).data
-        else:
-            return None
-
-    def get_formulation_title(self, obj):
-        if obj.formulation:
-            return f"{obj.formulation.title}"
-        else:
-            return ""
-    def get_key(self, obj):
-            return obj.id
-
-    def get_generics_string(self, obj):
-        generics = obj.generics.all()
-        generics_string = ""
-        generics_string_arr = []
-        if len(generics) > 0:
-            for item in generics:
-                generics_string_arr.append(item.title)
-        generics_string = ", ".join(map(str, generics_string_arr))
-        return generics_string.rstrip(',') 
-
-    def get_long_title(self, obj):
-        formulation = models.Formulations.objects.get(id=obj.formulation.id)
-        return f"{obj.title}-{formulation.title}"
-
-
-from django.db import transaction
-from rest_framework import serializers
-
-from .models import  DrugClass, DrugSubClass
-
-
 class GenericsSerializer(serializers.ModelSerializer):
     drug_class = serializers.PrimaryKeyRelatedField(
-        queryset=DrugClass.objects.all(),
+        queryset=models.DrugClass.objects.all(),
         many=True,
         required=False,
     )
     drug_sub_class = serializers.PrimaryKeyRelatedField(
-        queryset=DrugSubClass.objects.all(),
+        queryset=models.DrugSubClass.objects.all(),
         many=True,
         required=False,
     )
@@ -313,7 +223,7 @@ class GenericsSerializer(serializers.ModelSerializer):
     drug_sub_class_titles = serializers.SerializerMethodField()
 
     class Meta:
-        # model = Generics
+        model = models.Generics
         fields = [
             "id",
             "title",
@@ -357,7 +267,7 @@ class GenericsSerializer(serializers.ModelSerializer):
 
         if missing:
             missing_titles = list(
-                DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
+                models.DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
             )
             raise serializers.ValidationError({
                 "drug_class": (
@@ -377,7 +287,7 @@ class GenericsSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             validated_data.setdefault("owner", request.user)
 
-        instance = Generics.objects.create(**validated_data)
+        instance = models.Generics.objects.create(**validated_data)
         instance.drug_class.set(classes)
         instance.drug_sub_class.set(subclasses)
         return instance
@@ -397,6 +307,203 @@ class GenericsSerializer(serializers.ModelSerializer):
             instance.drug_sub_class.set(subclasses)
 
         return instance
+
+
+class GenericsSerializer(serializers.ModelSerializer):
+    drug_class = serializers.PrimaryKeyRelatedField(
+        queryset= models.DrugClass.objects.all(),
+        many=True,
+        required=False,
+    )
+    drug_sub_class = serializers.PrimaryKeyRelatedField(
+        queryset=models.DrugSubClass.objects.all(),
+        many=True,
+        required=False,
+    )
+
+    # Read-only convenience fields
+    drug_class_titles = serializers.SerializerMethodField()
+    drug_sub_class_titles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.Generics
+        fields = [
+            "id",
+            "title",
+            "description",
+            "synonym",
+            "drug_class",
+            "drug_sub_class",
+            "drug_class_titles",
+            "drug_sub_class_titles",
+            "owner",
+            "created",
+            "updated",
+        ]
+        read_only_fields = ["owner", "created", "updated"]
+
+    def get_drug_class_titles(self, obj):
+        return list(obj.drug_class.values_list("title", flat=True))
+
+    def get_drug_sub_class_titles(self, obj):
+        return list(obj.drug_sub_class.values_list("title", flat=True))
+
+    def validate_title(self, value):
+        if value:
+            return value.strip().upper()
+        return value
+
+    def validate(self, attrs):
+        # On PATCH, fall back to the instance's current M2M values
+        if self.instance:
+            classes = attrs.get("drug_class", list(self.instance.drug_class.all()))
+            subclasses = attrs.get(
+                "drug_sub_class", list(self.instance.drug_sub_class.all())
+            )
+        else:
+            classes = attrs.get("drug_class", [])
+            subclasses = attrs.get("drug_sub_class", [])
+
+        class_ids = {c.id for c in classes}
+        subclass_parent_ids = {sc.drug_class_id for sc in subclasses}
+        missing = subclass_parent_ids - class_ids
+
+        if missing:
+            missing_titles = list(
+                 models.DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
+            )
+            raise serializers.ValidationError({
+                "drug_class": (
+                    "Every subclass's parent class must also be selected. "
+                    f"Missing: {missing_titles}"
+                )
+            })
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        classes = validated_data.pop("drug_class", [])
+        subclasses = validated_data.pop("drug_sub_class", [])
+
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            validated_data.setdefault("owner", request.user)
+
+        instance = models.Generics.objects.create(**validated_data)
+        instance.drug_class.set(classes)
+        instance.drug_sub_class.set(subclasses)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        classes = validated_data.pop("drug_class", None)
+        subclasses = validated_data.pop("drug_sub_class", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if classes is not None:
+            instance.drug_class.set(classes)
+        if subclasses is not None:
+            instance.drug_sub_class.set(subclasses)
+
+        return instance
+
+
+
+class GenericsDisplaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Generics
+        extra_kwargs = {"response_message": "Request successful"}
+        fields = (
+            "id",
+            "url",
+            "title",
+            "description",
+            "drug_class",
+            "drug_sub_class",
+            "drug_class_details",
+            "drug_sub_class_details",
+            "owner",
+            "created",
+            "updated",
+            "preparations",
+        )
+
+        read_only_fields = (
+            "id",
+            "url",
+            "created",
+            "updated",
+            "owner",
+        )
+
+
+class PreparationSerializer(serializers.ModelSerializer):
+    gen_array = serializers.SerializerMethodField(read_only=True)
+    formulation_title = serializers.SerializerMethodField(read_only=True)
+    generics_string = serializers.SerializerMethodField(read_only=True)
+    long_title = serializers.SerializerMethodField(read_only=True)
+    key = serializers.SerializerMethodField(read_only=True)
+
+    # Optional: make generics non-required on write
+    generics = serializers.PrimaryKeyRelatedField(
+        queryset=models.Generics.objects.all(),
+        many=True,
+        required=False,
+    )
+
+    class Meta:
+        model = models.Preparation
+        fields = (
+            "id",
+            "generics",
+            "title",
+            "long_title",
+            "formulation",
+            "description",
+            "formulation_title",
+            "generics_string",
+            "key",
+            "gen_array",
+        )
+        read_only_fields = ("owner", "gen_array")
+        validators = [
+            UniqueTogetherValidator(
+                queryset=models.Preparation.objects.all(),
+                fields=["title"],
+            )
+        ]
+
+    def get_gen_array(self, obj):
+        """Full nested generics objects for read-heavy consumers."""
+        generics = obj.generics.all()
+        if not generics:
+            return []
+        return GenericsSerializer(
+            generics, context=self.context, many=True
+        ).data
+
+    def get_generics_string(self, obj):
+        """Comma-joined titles — used in product listings."""
+        generics = obj.generics.all()
+        if not generics:
+            return ""
+        return ", ".join(g.title for g in generics if g.title)
+
+    def get_formulation_title(self, obj):
+        return f"{obj.formulation.title}" if obj.formulation else ""
+
+    def get_long_title(self, obj):
+        if not obj.formulation:
+            return obj.title or ""
+        return f"{obj.title}-{obj.formulation.title}"
+
+    def get_key(self, obj):
+        return obj.id
+
 
 class PreparationDisplaySerializer(serializers.ModelSerializer):
     # owner_details = serializers.SerializerMethodField(read_only=True)
@@ -500,7 +607,7 @@ class FrequencyDisplaySerializer(serializers.HyperlinkedModelSerializer):
 
 class GenericDisplaySerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        # model = models.Generics
+        model = models.Generics
         fields = ("title", "description")
 
 
@@ -714,7 +821,7 @@ class GenericReferenceSerializer(serializers.ModelSerializer):
     # )
 
     class Meta:
-        # model = models.Generics
+        model = models.Generics
         fields = (
             "id",
             "owner",

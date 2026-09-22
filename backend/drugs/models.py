@@ -326,29 +326,29 @@ class Contraindications(EntityRelatedModel):
 
 
 class Interactions(EntityRelatedModel):
-    # generic = models.ForeignKey(
-    #     Generic, related_name="generic_drug_interactions", on_delete=models.CASCADE
-    # )
-    # contra_indicated = models.ForeignKey(Generics, on_delete=models.CASCADE)
+    generic = models.ForeignKey(
+        Generics, related_name="generic_drug_interactions", on_delete=models.CASCADE
+    )
+    contra_indicated = models.ForeignKey(Generics, on_delete=models.CASCADE)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
-    # class Meta:
-    #     db_table = "interactions"
-    #     constraints = [
-    #         models.UniqueConstraint(
-    #             fields=["generic", "contra_indicated"],
-    #             name="Drug cannot be contraindicated with itself",
-    #         )
-    #     ]
+    class Meta:
+        db_table = "interactions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["generic", "contra_indicated"],
+                name="Drug cannot be contraindicated with itself",
+            )
+        ]
 
 
 class SideEffects(EntityRelatedModel):
-    # generic = models.ForeignKey(
-    #     Generic, related_name="generic_side_effects", on_delete=models.CASCADE
-    # )
+    generic = models.ForeignKey(
+        Generics, related_name="generic_side_effects", on_delete=models.CASCADE
+    )
     title = models.TextField(max_length=200)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
@@ -364,9 +364,9 @@ class SideEffects(EntityRelatedModel):
 
 
 class Precautions(EntityRelatedModel):
-    # generic = models.ForeignKey(
-    #     Generic, related_name="generic_precautions", on_delete=models.CASCADE
-    # )
+    generic = models.ForeignKey(
+        Generics, related_name="generic_precautions", on_delete=models.CASCADE
+    )
     title = models.TextField(max_length=200, unique=True)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
@@ -386,9 +386,9 @@ class Precautions(EntityRelatedModel):
 
 
 class SpecialConsiderations(EntityRelatedModel):
-    # generic = models.ForeignKey(
-    #     Generic, related_name="generic_special_info", on_delete=models.CASCADE
-    # )
+    generic = models.ForeignKey(
+        Generics, related_name="generic_special_info", on_delete=models.CASCADE
+    )
     title = models.TextField(max_length=200)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
@@ -426,10 +426,10 @@ class Formulations(EntityRelatedModel):
 
 class Preparation(EntityRelatedModel):
     title = models.CharField(max_length=240, unique=True)
-    # generics = models.ManyToManyField(
-    #     "Generic",
-    #     related_name="preparations",
-    # )
+    generics = models.ManyToManyField(
+        "Generics",
+        related_name="preparations",
+    )
     formulation = models.ForeignKey(Formulations, on_delete=models.CASCADE)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
@@ -445,5 +445,5 @@ class Preparation(EntityRelatedModel):
         self.title = self.title.upper()
         super(Preparation, self).save(*args, **kwargs)
 
-    # def get_generics(self):
-    #     return ",".join([str(p) for p in self.generics.all()])
+    def get_generics(self):
+        return ",".join([str(p) for p in self.generics.all()])
