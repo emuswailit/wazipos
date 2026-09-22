@@ -39,16 +39,119 @@ from retailers.services.product_requests_respond import (
 # Role resolution
 # =========================================================
 
+# =========================================================
+# Role resolution
+# =========================================================
+
+# Canonical role strings returned by _resolve_role. Handlers compare
+# against these, so changing the strings means updating the guards
+# in handle_respond and any other role-restricted handler.
+ROLE_RETAILER = "retailer"
+ROLE_WHOLESALER = "wholesaler"
+ROLE_UNKNOWN = "unknown"
+
+
 def _resolve_role(user) -> str:
     """
-    Return the caller's role: 'retailer', 'wholesaler', or 'unknown'.
+    Determine the caller's product-requests role.
 
-    TODO: paste the original implementation. Every handler below
-    assumes the return value is one of those three strings.
+    Reads the JWT-decoded `user.roles` array. Each entry may carry
+    any of:
+        - level:        'wholesaler' | 'retailer' | ... (case-insensitive)
+        - entity_type:  'wholesaler' | 'retailer' | ...
+        - value:        free-form role identifier (e.g.
+                        'GeneralWholesalerSuperAdmin')
+
+    Wholesaler wins ties: a user who has both a retailer and a
+    wholesaler role is treated as a wholesaler for product-request
+    purposes, because a wholesaler responding on behalf of a retailer
+    would be a data leak.
+
+    Returns one of ROLE_RETAILER, ROLE_WHOLESALER, ROLE_UNKNOWN.
     """
-    raise NotImplementedError(
-        "Paste the original _resolve_role implementation."
-    )
+    if user is None or not getattr(user, "is_authenticated", False):
+        return ROLE_UNKNOWN
+
+    # Some deployments surface a single role as a scalar field on the
+    # user rather than an array. Handle both.
+    raw_roles = getattr(user, "roles", None)
+
+    if raw_roles is None:
+        # Fall back to a single-role shape if present.
+        single = (
+            getattr(user, "role", None)
+            or getattr(user, "role_level", None)
+            or getattr(user, "entity_type", None)
+        )
+        if single:
+            return _classify_role_string(single)
+        return ROLE_UNKNOWN
+
+    # Normalize: accept list, tuple, or a QuerySet of role objects.
+    if not isinstance(raw_roles, (list, tuple)):
+        try:
+            raw_roles = list(raw_roles)
+        except TypeError:
+            return ROLE_UNKNOWN
+
+    saw_retailer = False
+
+    for entry in raw_roles:
+        # Each entry may be a dict (decoded JWT) or a model instance.
+        if isinstance(entry, dict):
+            candidates = (
+                entry.get("level"),
+                entry.get("entity_type"),
+                entry.get("value"),
+                entry.get("title"),
+            )
+        else:
+            candidates = (
+                getattr(entry, "level", None),
+                getattr(entry, "entity_type", None),
+                getattr(entry, "value", None),
+                getattr(entry, "title", None),
+            )
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            role = _classify_role_string(candidate)
+            if role == ROLE_WHOLESALER:
+                return ROLE_WHOLESALER
+            if role == ROLE_RETAILER:
+                saw_retailer = True
+
+    return ROLE_RETAILER if saw_retailer else ROLE_UNKNOWN
+
+
+def _classify_role_string(raw) -> str:
+    """
+    Map a role-ish string to one of the canonical values.
+
+    Matches on substring so 'GeneralWholesalerSuperAdmin',
+    'WHOLESALER', 'wholesaler_admin', and 'Wholesale' all classify
+    the same way. Retailer matches only when it isn't already a
+    wholesaler token.
+    """
+    if not raw:
+        return ROLE_UNKNOWN
+
+    s = str(raw).strip().lower()
+
+    if not s:
+        return ROLE_UNKNOWN
+
+    # Check wholesaler first — 'wholesaler' contains no 'retailer',
+    # but the reverse isn't true, so order matters less here than it
+    # looks. Still, keep the order for clarity.
+    if "wholesal" in s:
+        return ROLE_WHOLESALER
+
+    if "retail" in s:
+        return ROLE_RETAILER
+
+    return ROLE_UNKNOWN
 
 
 # =========================================================
