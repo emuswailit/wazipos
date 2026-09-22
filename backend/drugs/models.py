@@ -94,75 +94,179 @@ class BodySystem(EntityRelatedModel):
         return self.title
 
 
+from django.db import models
+from django.db.models import UniqueConstraint
+from django.db.models.functions import Lower
+from django.core.exceptions import ValidationError
+from  core.models import EntityRelatedModel   # adjust import to wherever yours lives
+from authentication.models import Users          # adjust import
+
+
 class DrugClass(EntityRelatedModel):
-    # body_system = models.ForeignKey(BodySystem, on_delete=models.CASCADE)
     title = models.CharField(max_length=360)
     image = models.ImageField(
-        upload_to="drug_class_image_upload", null=True, blank=True
+        upload_to="drug_class_image_upload",
+        null=True,
+        blank=True,
     )
-    owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
+    owner = models.ForeignKey(
+        Users,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drug_classes",
+    )
     description = models.TextField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
-    def save(self, *args, **kwargs):
-        self.title = self.title.upper()
-        super(DrugClass, self).save(*args, **kwargs)
+    class Meta:
+        db_table = "drug_classes"
+        verbose_name = "Drug Class"
+        verbose_name_plural = "Drug Classes"
+        ordering = ["title"]
+        constraints = [
+            UniqueConstraint(
+                Lower("title"),
+                name="drug_classes_unique_title_ci",
+            ),
+        ]
 
     def __str__(self):
-        return self.title
+        return self.title or f"DrugClass #{self.pk}"
+
+    def save(self, *args, **kwargs):
+        if self.title:
+            self.title = self.title.strip().upper()
+        super().save(*args, **kwargs)
 
 
 class DrugSubClass(EntityRelatedModel):
-    drug_class = models.ForeignKey(DrugClass, on_delete=models.CASCADE)
-    title = models.CharField(max_length=360, unique=True)
-    image = models.ImageField(
-        upload_to="drug_subclass_image_upload", null=True, blank=True
+    drug_class = models.ForeignKey(
+        DrugClass,
+        on_delete=models.CASCADE,
+        related_name="subclasses",
     )
-    owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
+    title = models.CharField(max_length=360)
+    image = models.ImageField(
+        upload_to="drug_subclass_image_upload",
+        null=True,
+        blank=True,
+    )
+    owner = models.ForeignKey(
+        Users,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drug_sub_classes",
+    )
     description = models.TextField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
-    def save(self, *args, **kwargs):
-        self.title = self.title.upper()
-        super(DrugSubClass, self).save(*args, **kwargs)
+    class Meta:
+        db_table = "drug_sub_classes"
+        verbose_name = "Drug Sub-Class"
+        verbose_name_plural = "Drug Sub-Classes"
+        ordering = ["drug_class__title", "title"]
+        constraints = [
+            # Unique per parent class, case-insensitive.
+            # Drop this and use `unique=True` on title if you want
+            # subclasses to be globally unique.
+            UniqueConstraint(
+                Lower("title"),
+                "drug_class",
+                name="drug_sub_classes_unique_title_per_class_ci",
+            ),
+        ]
 
     def __str__(self):
-        return self.title
+        return f"{self.drug_class.title} → {self.title}" if self.drug_class_id else self.title
+
+    def save(self, *args, **kwargs):
+        if self.title:
+            self.title = self.title.strip().upper()
+        super().save(*args, **kwargs)
+
+
 
 
 # class Generics(EntityRelatedModel):
-#     drug_class = models.ManyToManyField(DrugClass)
-#     drug_sub_class = models.ManyToManyField(
-#         DrugSubClass
+#     drug_class = models.ManyToManyField(
+#         DrugClass,
+#         related_name="generics",
+#         blank=True,
+#         help_text="Classes this generic belongs to.",
 #     )
-#     image = models.ImageField(upload_to="generic_images_upload", null=True, blank=True)
-#     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
+#     drug_sub_class = models.ManyToManyField(
+#         DrugSubClass,
+#         related_name="generics",
+#         blank=True,
+#         help_text="Sub-classes this generic belongs to.",
+#     )
+
+#     owner = models.ForeignKey(
+#         Users,
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name="generics",
+#     )
+
 #     title = models.CharField(max_length=360, blank=True, null=True)
 #     description = models.TextField(null=True, blank=True)
 #     synonym = models.TextField(null=True, blank=True)
 #     created = models.DateTimeField(auto_now_add=True)
 #     updated = models.DateTimeField(auto_now=True)
 
-#     def __str__(self):
-#         return self.title
-
-#     def save(self, *args, **kwargs):
-#         self.title = self.title.upper()
-#         super(Generics, self).save(*args, **kwargs)
-
 #     class Meta:
-#         db_table = "generic"
+#         db_table = "generics"
+#         verbose_name = "Generics"
+#         verbose_name_plural = "Generics"
+#         ordering = ["title"]
 #         constraints = [
-#             UniqueConstraint(
-#                 Lower("title"),
-#                 name="unique_title",
-               
-#             ),
+#             UniqueConstraint(Lower("title"), name="generics_unique_title_ci"),
 #         ]
 
+#     def __str__(self):
+#         return self.title or f"Generics #{self.pk}"
 
+#     def save(self, *args, **kwargs):
+#         if self.title:
+#             self.title = self.title.strip().upper()
+#         super().save(*args, **kwargs)
+
+#     def clean(self):
+#         """
+#         Enforce: every subclass's parent class must also be selected.
+#         Note: M2M relations can't be checked before the row has a pk,
+#         so this only runs meaningfully on updates. Real enforcement
+#         happens in the serializer for create/update.
+#         """
+#         super().clean()
+#         if not self.pk:
+#             return
+#         self._check_class_subclass_invariant(
+#             class_ids=set(self.drug_class.values_list("id", flat=True)),
+#             subclass_parent_ids=set(
+#                 self.drug_sub_class.values_list("drug_class_id", flat=True)
+#             ),
+#         )
+
+#     @staticmethod
+#     def _check_class_subclass_invariant(class_ids, subclass_parent_ids):
+#         missing = subclass_parent_ids - class_ids
+#         if missing:
+#             missing_titles = list(
+#                 DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
+#             )
+#             raise ValidationError({
+#                 "drug_class": (
+#                     "Every subclass's parent class must also be selected. "
+#                     f"Missing: {missing_titles}"
+#                 )
+#             })
+        
 class Indications(EntityRelatedModel):
     # generic = models.ForeignKey(Generic, on_delete=models.CASCADE)
     title = models.CharField(max_length=360, blank=True, null=True)

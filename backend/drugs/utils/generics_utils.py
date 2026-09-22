@@ -102,6 +102,7 @@ def create_generic(data, user):
 
 def get_all_generics(user):
     pass
+    
     # return Generics.objects.all()
 
 
