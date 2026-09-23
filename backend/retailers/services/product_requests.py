@@ -91,36 +91,46 @@ def _split_role_value(raw) -> list[str]:
 
 
 def _get_user_roles(user) -> list[str]:
-    create_log("info", f"User roles: {user.roles.all()}")
-    
     """
     Flatten every role token the user holds into one array.
+
+    Handles every shape `user.roles` may take:
+      - Django reverse FK manager (user.roles.all())
+      - A QuerySet
+      - A plain list of role model instances
+      - A list of dicts (JWT-decoded shape)
     """
     if user is None:
         return []
 
     raw_roles = getattr(user, "roles", None)
-    if not raw_roles:
+    if raw_roles is None:
         return []
 
-    if not isinstance(raw_roles, (list, tuple)):
+    # Django related manager: call .all() to get the QuerySet.
+    if hasattr(raw_roles, "all") and callable(raw_roles.all):
         try:
-            raw_roles = list(raw_roles)
-        except TypeError:
+            raw_roles = raw_roles.all()
+        except Exception:
             return []
 
+    # Cache the iterable once so we don't issue multiple queries.
+    try:
+        role_list = list(raw_roles)
+    except TypeError:
+        return []
+
     out: list[str] = []
-    for entry in raw_roles:
-        value = (
-            entry.get("value") if isinstance(entry, dict)
-            else getattr(entry, "value", None)
-        )
+    for entry in role_list:
+        if isinstance(entry, dict):
+            value = entry.get("value")
+        else:
+            value = getattr(entry, "value", None)
+
         if value:
             out.extend(_split_role_value(value))
-            create_log("info",f"Emitted roles : {out}")
+
     return out
-
-
 # =========================================================
 # Shared helpers
 # =========================================================
@@ -138,15 +148,23 @@ def _resolve_entity_id(user) -> str | None:
         if v:
             return str(getattr(v, "pk", v))
 
-    roles = getattr(user, "roles", None) or []
-    if not isinstance(roles, (list, tuple)):
+    raw_roles = getattr(user, "roles", None)
+    if raw_roles is None:
+        return None
+
+    if hasattr(raw_roles, "all") and callable(raw_roles.all):
         try:
-            roles = list(roles)
-        except TypeError:
-            roles = []
+            raw_roles = raw_roles.all()
+        except Exception:
+            return None
+
+    try:
+        role_list = list(raw_roles)
+    except TypeError:
+        return None
 
     # Prefer the wholesaler role's entity.
-    for entry in roles:
+    for entry in role_list:
         if isinstance(entry, dict):
             value = entry.get("value") or ""
             entity = entry.get("entity")
@@ -159,7 +177,7 @@ def _resolve_entity_id(user) -> str | None:
             return str(getattr(entity, "pk", entity))
 
     # Fall back to any role with an entity.
-    for entry in roles:
+    for entry in role_list:
         entity = (
             entry.get("entity") if isinstance(entry, dict)
             else getattr(entry, "entity", None)
@@ -168,8 +186,6 @@ def _resolve_entity_id(user) -> str | None:
             return str(getattr(entity, "pk", entity))
 
     return None
-
-
 def _to_decimal(value, default=None):
     if value is None or value == "":
         return default
