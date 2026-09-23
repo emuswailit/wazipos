@@ -1,41 +1,29 @@
 # retailers/services/product_requests_respond.py
 #
-# Domain logic for the wholesaler "Respond" action on a product request.
+# Domain logic for a wholesaler responding to a product request.
 #
 # The dispatcher (retailers/services/product_requests.py → handle_respond)
 # validates the payload and calls into this module to apply the change.
-# Keeping the transaction here means the dispatcher stays thin and the
-# business rules live next to the models they touch.
 #
-# Called as:
-#     wholesaler_respond_to_request(
-#         request_obj=req,
-#         wholesaler_entity=user.entity,
-#         accepted_lines=[{"item_id": ..., "receipt_id": ...}],
-#         rejected_lines=[{"item_id": ...}],
-#         response_note=note,
-#         by_user=user,
-#     )
+# Model shapes used:
+#   RetailerProductRequest          — parent request
+#   RetailerProductRequestItem      — one line
+#   RetailerProductRequestOffer     — wholesaler's offer on a line
+#   RetailerProductRequestResponse  — wholesaler's header response
 #
-# Returns: the created RetailerProductRequestResponse with
-#          .id, .offered_line_count, .rejected_line_count populated.
-#
-# Raises: ValueError for malformed input that reaches this layer.
-#         The dispatcher catches ValueError and returns a clean error
-#         tuple to the HTTP client.
+# Returns (response_obj, offered_count, rejected_count).
+# The response model has no line-count fields, so the counts are
+# returned to the caller and echoed back in the HTTP payload.
 
 from __future__ import annotations
 
 import logging
 
 from django.db import transaction
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-
-# =========================================================
-# Helpers
-# =========================================================
 
 def _get_entity_id(entity) -> str | None:
     """Accept either an Entity instance or a UUID/string id."""
@@ -43,10 +31,6 @@ def _get_entity_id(entity) -> str | None:
         return None
     return str(getattr(entity, "pk", entity))
 
-
-# =========================================================
-# Public API
-# =========================================================
 
 def wholesaler_respond_to_request(
     *,
@@ -60,16 +44,29 @@ def wholesaler_respond_to_request(
     """
     Apply a wholesaler's response to a product request.
 
-    All writes happen inside a single transaction. If any line fails
-    validation, nothing is persisted.
+    For each accepted line:
+        - upsert a RetailerProductRequestOffer
+        - status = OFFERED
+        - snapshot the receipt, quantity, price and batch/expiry
+
+    For each rejected line:
+        - upsert a RetailerProductRequestOffer
+        - status = CANCELLED (the closest "not supplying this" state)
+
+    Also upserts a RetailerProductRequestResponse header row
+    (unique per request + wholesaler).
+
+    Returns
+    -------
+    (response_obj, offered_count, rejected_count)
     """
     from retailers.models import (
-        RetailerProductRequestResponse,
+        RetailerProductRequestItem,
         RetailerProductRequestOffer,
+        RetailerProductRequestResponse,
     )
 
     entity_id = _get_entity_id(wholesaler_entity)
-
     if not entity_id:
         raise ValueError(
             "wholesaler_entity is required to record a response."
@@ -77,12 +74,14 @@ def wholesaler_respond_to_request(
 
     with transaction.atomic():
         # --------------------------------------------------
-        # 1. Create the parent response row
+        # 1. Upsert the header response row
         # --------------------------------------------------
-        response_obj = RetailerProductRequestResponse.objects.create(
-            request=request_obj,
-            wholesaler_id=entity_id,
-            note=response_note or "",
+        response_obj, _created = (
+            RetailerProductRequestResponse.objects.update_or_create(
+                request=request_obj,
+                wholesaler_id=entity_id,
+                defaults={"note": response_note or ""},
+            )
         )
 
         offered_count = 0
@@ -96,7 +95,11 @@ def wholesaler_respond_to_request(
             if not item_id:
                 raise ValueError("Accepted line is missing item_id.")
 
-            item = request_obj.items.filter(id=item_id).first()
+            item = (
+                RetailerProductRequestItem.objects
+                .filter(id=item_id, request=request_obj)
+                .first()
+            )
             if item is None:
                 raise ValueError(
                     f"Item {item_id} does not belong to this request."
@@ -105,37 +108,67 @@ def wholesaler_respond_to_request(
             receipt_id = payload.get("receipt_id")
             receipt_payload = payload.get("receipt")
 
+            resolved_receipt_id = None
+            if receipt_id:
+                resolved_receipt_id = receipt_id
+            elif isinstance(receipt_payload, dict):
+                resolved_receipt_id = (
+                    receipt_payload.get("id")
+                    or receipt_payload.get("remote_id")
+                )
+
+            # Snapshot fields from the receipt (so the offer survives
+            # receipt edits later).
+            receipt = None
+            if resolved_receipt_id:
+                from wholesalers.models import WholesalerReceipts
+
+                receipt = (
+                    WholesalerReceipts.objects
+                    .filter(id=resolved_receipt_id)
+                    .first()
+                )
+
             defaults = {
-                "response": response_obj,
                 "wholesaler_id": entity_id,
-                "status": "OFFERED",
-                # Default the offered quantity to whatever the
-                # retailer asked for; the receipt's price picks up
-                # the actual unit cost at read time.
-                "offered_quantity": getattr(
-                    item, "requested_quantity", 0
+                "status": RetailerProductRequestOffer.Status.OFFERED,
+                "offered_quantity": int(
+                    payload.get("offered_quantity")
+                    or getattr(item, "requested_quantity", 0)
                 ),
+                "offered_unit_price": payload.get("offered_unit_price"),
+                "responded_by_user": by_user,
+                "responded_at": timezone.now(),
+                "response_note": response_note or "",
             }
 
-            # Exactly one of receipt_id / receipt should be present —
-            # the dispatcher already validated that. Prefer receipt_id.
-            if receipt_id:
-                defaults["wholesaler_receipt_id"] = receipt_id
-            elif isinstance(receipt_payload, dict):
-                # Inline payload path — use whatever server id it
-                # carries. If your backend never uses this variant,
-                # the dispatcher still rejects it before we get here.
-                inline_id = receipt_payload.get("id") or receipt_payload.get(
-                    "remote_id"
+            if resolved_receipt_id:
+                defaults["wholesaler_receipt_id"] = resolved_receipt_id
+            if receipt is not None:
+                defaults["batch"] = getattr(receipt, "batch", None)
+                defaults["expiry_date"] = getattr(
+                    receipt, "expiry_date", None
                 )
-                if inline_id:
-                    defaults["wholesaler_receipt_id"] = inline_id
+                defaults["manufacture_date"] = getattr(
+                    receipt, "manufacture_date", None
+                )
+                # Prefer the receipt's price if the payload didn't
+                # provide one.
+                if defaults["offered_unit_price"] is None:
+                    price = (
+                        getattr(receipt, "final_unit_selling_price", None)
+                        or getattr(receipt, "unit_selling_price", None)
+                    )
+                    if price is not None:
+                        defaults["offered_unit_price"] = price
 
             RetailerProductRequestOffer.objects.update_or_create(
                 request_item=item,
                 wholesaler_id=entity_id,
                 defaults=defaults,
             )
+
+            item.recalculate(save=True)
             offered_count += 1
 
         # --------------------------------------------------
@@ -146,7 +179,11 @@ def wholesaler_respond_to_request(
             if not item_id:
                 raise ValueError("Rejected line is missing item_id.")
 
-            item = request_obj.items.filter(id=item_id).first()
+            item = (
+                RetailerProductRequestItem.objects
+                .filter(id=item_id, request=request_obj)
+                .first()
+            )
             if item is None:
                 raise ValueError(
                     f"Item {item_id} does not belong to this request."
@@ -156,26 +193,22 @@ def wholesaler_respond_to_request(
                 request_item=item,
                 wholesaler_id=entity_id,
                 defaults={
-                    "response": response_obj,
-                    "wholesaler_id": entity_id,
-                    "status": "REJECTED",
+                    "status": RetailerProductRequestOffer.Status.CANCELLED,
                     "offered_quantity": 0,
-                    "wholesaler_receipt_id": None,
+                    "offered_unit_price": None,
+                    "responded_by_user": by_user,
+                    "responded_at": timezone.now(),
+                    "response_note": response_note or "",
                 },
             )
+
+            item.recalculate(save=True)
             rejected_count += 1
 
         # --------------------------------------------------
-        # 4. Rollups on the response
+        # 4. Refresh parent request rollups
         # --------------------------------------------------
-        response_obj.offered_line_count = offered_count
-        response_obj.rejected_line_count = rejected_count
-        response_obj.save(
-            update_fields=[
-                "offered_line_count",
-                "rejected_line_count",
-            ]
-        )
+        request_obj.recalculate(save=True)
 
     logger.info(
         "wholesaler_respond_to_request: request=%s wholesaler=%s "
@@ -186,4 +219,4 @@ def wholesaler_respond_to_request(
         rejected_count,
     )
 
-    return response_obj
+    return response_obj, offered_count, rejected_count
