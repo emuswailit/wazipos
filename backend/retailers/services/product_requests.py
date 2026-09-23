@@ -91,7 +91,7 @@ def _split_role_value(raw) -> list[str]:
 
 
 def _get_user_roles(user) -> list[str]:
-    create_log("info", f"User roles: {user.roles}")
+    create_log("info", f"User roles: {user.roles.all()}")
     
     """
     Flatten every role token the user holds into one array.
