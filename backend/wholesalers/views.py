@@ -1900,12 +1900,12 @@ from rest_framework.pagination import PageNumberPagination
 from core.responses import custom_success_message, custom_errors_response
 from retailers.retail_permissions import EntitySubscriptionPermission
 
-from retailers.models import (
-    RetailerProductRequest,
-    RetailerProductRequestItem,
-    RetailerProductRequestOffer,
-    RetailerProductRequestResponse,
-)
+# from retailers.models import (
+#     RetailerProductRequest,
+#     RetailerProductRequestItem,
+#     RetailerProductRequestOffer,
+#     RetailerProductRequestResponse,
+# )
 from retailers.serializers import (
     RetailerProductRequestSerializer,
     RetailerProductRequestListSerializer,

@@ -14,12 +14,12 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from retailers.models import (
-    RetailerProductRequest,
-    RetailerProductRequestItem,
-    RetailerProductRequestOffer,
-    RetailerProductRequestResponse,
-)
+# from retailers.models import (
+#     RetailerProductRequest,
+#     RetailerProductRequestItem,
+#     RetailerProductRequestOffer,
+#     RetailerProductRequestResponse,
+# )
 from wholesalers.models import WholesalerReceipts
 
 

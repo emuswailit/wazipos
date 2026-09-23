@@ -81,32 +81,32 @@ class RetailQuantityDiscountsAdmin(admin.ModelAdmin):
 #         "updated",
 #     )
 
-@admin.register(models.RetailerProductRequest)
-class RetailerProductRequestAdmin(admin.ModelAdmin):
-    list_display = (
-              "draft_id",
-                    "request_number",
-                    "entity",
+# @admin.register(models.RetailerProductRequest)
+# class RetailerProductRequestAdmin(admin.ModelAdmin):
+#     list_display = (
+#               "draft_id",
+#                     "request_number",
+#                     "entity",
                    
-                    "urgency",
+#                     "urgency",
                     
-                    "status",
+#                     "status",
                  
-                    "created",
-    )
-@admin.register(models.RetailerProductRequestItem)
-class RetailerProductRequestItemAdmin(admin.ModelAdmin):
-    list_display = (
-                         "draft_id",
-            "request",
-            "product",
+#                     "created",
+#     )
+# @admin.register(models.RetailerProductRequestItem)
+# class RetailerProductRequestItemAdmin(admin.ModelAdmin):
+#     list_display = (
+#                          "draft_id",
+#             "request",
+#             "product",
 
-            "urgency",
+#             "urgency",
         
-            "note",
-            "status",
+#             "note",
+#             "status",
  
-    )
+#     )
 
 @admin.register(models.OutOfStock)
 class OutOfStockAdmin(admin.ModelAdmin):

@@ -3029,13 +3029,13 @@ class RetailerIndentItemParamsUpdateSerializer(
 
 from rest_framework import serializers
 
-from .models import (
-    RetailerProductRequest,
-    RetailerProductRequestItem,
-    RetailerProductRequestItemWholesaler,
-    RetailerProductRequestOffer,
-    RetailerProductRequestResponse,
-)
+# from .models import (
+#     RetailerProductRequest,
+#     RetailerProductRequestItem,
+#     RetailerProductRequestItemWholesaler,
+#     RetailerProductRequestOffer,
+#     RetailerProductRequestResponse,
+# )
 
 
 # =====================================================================
@@ -3062,7 +3062,7 @@ class RetailerProductRequestOfferSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = RetailerProductRequestOffer
+        # model = RetailerProductRequestOffer
         fields = [
             "id",
             "request_item",
@@ -3099,7 +3099,7 @@ class WholesalerFacingOfferSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = RetailerProductRequestOffer
+        # model = RetailerProductRequestOffer
         fields = [
             "id",
             "request_item",
@@ -3149,7 +3149,7 @@ class RetailerProductRequestItemSerializer(serializers.ModelSerializer):
     target_wholesalers = serializers.SerializerMethodField()
 
     class Meta:
-        model = RetailerProductRequestItem
+        # model = RetailerProductRequestItem
         fields = [
             "id",
             "request",
@@ -3218,7 +3218,7 @@ class RetailerProductRequestListItemSerializer(
     )
 
     class Meta:
-        model = RetailerProductRequestItem
+        # model = RetailerProductRequestItem
         fields = [
             "id",
             "product",
@@ -3254,7 +3254,7 @@ class WholesalerFacingItemSerializer(serializers.ModelSerializer):
     my_offers = serializers.SerializerMethodField()
 
     class Meta:
-        model = RetailerProductRequestItem
+        # model = RetailerProductRequestItem
         fields = [
             "id",
             "product",
@@ -3310,7 +3310,7 @@ class RetailerProductRequestSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = RetailerProductRequest
+        # model = RetailerProductRequest
         fields = [
             "id",
             "draft_id",
@@ -3361,7 +3361,7 @@ class RetailerProductRequestListSerializer(
     )
 
     class Meta:
-        model = RetailerProductRequest
+        # model = RetailerProductRequest
         fields = [
             "id",
             "draft_id",
@@ -3418,7 +3418,7 @@ class WholesalerFacingListSerializer(serializers.ModelSerializer):
     items = serializers.SerializerMethodField()
 
     class Meta:
-        model = RetailerProductRequest
+        # model = RetailerProductRequest
         fields = [
             "id",
             "request_number",
@@ -3508,7 +3508,7 @@ class RetailerProductRequestItemWholesalerSerializer(
     )
 
     class Meta:
-        model = RetailerProductRequestItemWholesaler
+        # model = RetailerProductRequestItemWholesaler
         fields = [
             "id",
             "request_item",
@@ -3536,7 +3536,7 @@ class RetailerProductRequestResponseSerializer(
     )
 
     class Meta:
-        model = RetailerProductRequestResponse
+        # model = RetailerProductRequestResponse
         fields = [
             "id",
             "request",

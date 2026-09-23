@@ -36,13 +36,13 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.pagination import PageNumberPagination
 
-from retailers.models import (
-    RetailerProductRequest,
-    RetailerProductRequestItem,
-    RetailerProductRequestItemWholesaler,
-    RetailerProductRequestOffer,
-    RetailerProductRequestResponse,
-)
+# from retailers.models import (
+#     RetailerProductRequest,
+#     RetailerProductRequestItem,
+#     RetailerProductRequestItemWholesaler,
+#     RetailerProductRequestOffer,
+#     RetailerProductRequestResponse,
+# )
 from retailers.services.product_requests_respond import (
     wholesaler_respond_to_request,
 )
