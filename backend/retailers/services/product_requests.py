@@ -2,18 +2,15 @@
 #
 # Product requests dispatcher.
 #
-# All paginated list responses use the DRF PageNumberPagination shape:
+# Return-tuple shapes:
 #
-#     {
-#         "count": <int>,
-#         "next": <url|null>,
-#         "previous": <url|null>,
-#         "results": [ ... ]
-#     }
+#     ("success",  message, payload, payload_key)  → wrapped in custom_success_message
+#     ("paginated", {count, next, previous, results}) → emitted raw by the view
+#     ("error",    message, errors)                 → wrapped in custom_errors_response
 #
-# `page` and `page_size` are read from the JSON request body via
-# BodyPageNumberPagination, not the query string — the whole API is
-# POST + JSON.
+# List endpoints use the "paginated" shape so the response body matches
+# DRF's PageNumberPagination output exactly, identical to the receipts
+# endpoints the frontend already consumes.
 #
 # -----------------------------------------------------------------------
 # ACTION MAP
@@ -79,8 +76,7 @@ class BodyPageNumberPagination(PageNumberPagination):
 
     The entire product-requests API is POST + JSON, so query params
     are unavailable. `next` and `previous` still point at the same
-    endpoint — the client is expected to keep sending the body and
-    bump `page`.
+    endpoint — the client keeps sending the body and bumps `page`.
     """
 
     page_size = 20
@@ -110,23 +106,20 @@ class BodyPageNumberPagination(PageNumberPagination):
 
 def _paginate(queryset, request, serializer) -> dict:
     """
-    Apply BodyPageNumberPagination to a queryset and return the
-    DRF-standard paginated dict:
+    Apply BodyPageNumberPagination and return the DRF-standard dict:
 
         {"count": N, "next": url|null, "previous": url|null, "results": [...]}
 
     `serializer` is a callable that takes a list of model instances
     and returns a list of dicts.
 
-    When `request` is None (unit tests, internal callers), the
-    envelope is still produced but `next` and `previous` are None.
+    When `request` is None (unit tests), the envelope is produced
+    with `next`/`previous` set to None.
     """
     paginator = BodyPageNumberPagination()
     page = paginator.paginate_queryset(queryset, request)
 
     if page is None:
-        # paginate_queryset returns None only when pagination is
-        # disabled. Fall back to a single-page envelope.
         items = list(queryset)
         return {
             "count": len(items),
@@ -140,7 +133,6 @@ def _paginate(queryset, request, serializer) -> dict:
     if request is not None:
         return paginator.get_paginated_response(payload).data
 
-    # No request in scope — build the envelope by hand.
     return {
         "count": paginator.page.paginator.count,
         "next": None,
@@ -183,9 +175,6 @@ def _split_role_value(raw) -> list[str]:
 def _get_user_roles(user) -> list[str]:
     """
     Flatten every role token the user holds into one array.
-
-    `user.roles` is a Django reverse FK manager. Each role row
-    carries a `value` field that may itself be pipe-separated.
     """
     if user is None:
         return []
@@ -228,7 +217,6 @@ def _resolve_entity_id(user) -> str | None:
 
     role_list = list(raw_roles)
 
-    # Prefer the wholesaler role's entity.
     for entry in role_list:
         value = getattr(entry, "value", "") or ""
         entity = getattr(entry, "entity", None)
@@ -237,7 +225,6 @@ def _resolve_entity_id(user) -> str | None:
         if entity and any(t in WHOLESALER_ROLES for t in tokens):
             return str(getattr(entity, "pk", entity))
 
-    # Fall back to any role with an entity.
     for entry in role_list:
         entity = getattr(entry, "entity", None)
         if entity:
@@ -396,9 +383,7 @@ def _prefetch_for_list():
 # =========================================================
 
 def handle_create_request(user, data, request=None):
-    """
-    Retailer creates a new product request.
-    """
+    """Retailer creates a new product request."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can create requests", {})
@@ -506,13 +491,8 @@ def handle_get_my_requests(user, data, request=None):
     """
     Retailer fetches their own product requests.
 
-    Response shape (key "data"):
-        {
-            "count": 42,
-            "next": "...",
-            "previous": null,
-            "results": [ ... ]
-        }
+    Returns ("paginated", {...}) — the view emits the envelope raw:
+        {"count": N, "next": url|null, "previous": url|null, "results": [...]}
     """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
@@ -542,25 +522,15 @@ def handle_get_my_requests(user, data, request=None):
         qs, request, lambda rows: [_serialize_request(r) for r in rows]
     )
 
-    return (
-        "success",
-        "My product requests",
-        paginated,
-        "data",
-    )
+    return ("paginated", paginated)
 
 
 def handle_get_wholesaler_tagged_requests(user, data, request=None):
     """
     Wholesaler fetches requests where their entity is a target.
 
-    Response shape (key "data"):
-        {
-            "count": 42,
-            "next": "...",
-            "previous": null,
-            "results": [ ... ]
-        }
+    Returns ("paginated", {...}) — the view emits the envelope raw:
+        {"count": N, "next": url|null, "previous": url|null, "results": [...]}
     """
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
@@ -597,18 +567,11 @@ def handle_get_wholesaler_tagged_requests(user, data, request=None):
         qs, request, lambda rows: [_serialize_request(r) for r in rows]
     )
 
-    return (
-        "success",
-        "Wholesaler tagged requests",
-        paginated,
-        "data",
-    )
+    return ("paginated", paginated)
 
 
 def handle_get_request_details(user, data, request=None):
-    """
-    Fetch details for a single request (either role).
-    """
+    """Fetch details for a single request (either role)."""
     roles = _get_user_roles(user)
 
     is_retailer = any(r in roles for r in RETAILER_ROLES)
@@ -624,8 +587,6 @@ def handle_get_request_details(user, data, request=None):
             "Request could not be loaded",
             {"request_id": "This field is required."},
         )
-
-    from django.db.models import Prefetch
 
     try:
         req = RetailerProductRequest.objects.prefetch_related(
@@ -1330,9 +1291,10 @@ def product_requests_dispatch(user, data, request=None):
     """
     Route a product-requests action.
 
-    `request` is threaded through to handlers that need it for
-    pagination URL building. Optional so unit tests can call the
-    dispatcher without a real request object.
+    Return tuples:
+        ("success",  message, payload, payload_key)   — wrapped by the view
+        ("paginated", paginated_dict)                 — emitted raw by the view
+        ("error",    message, errors)                 — wrapped by the view
     """
     action = data.get("action")
     if not action:

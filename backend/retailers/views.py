@@ -2442,27 +2442,29 @@ def productRequestsAPIView(request):
     """
     HTTP entry point for the product requests dispatcher.
 
-    All domain logic lives in
-    `retailers.services.product_requests.product_requests_dispatch`.
-
-    This function only:
-        - validates the request envelope
-        - calls the dispatcher with (user, data)
-        - wraps the returned tuple in the project's response shape
-
     The dispatcher returns one of:
-        ("success", message, payload, payload_key)
-        ("error", message, errors)
+        ("success",   message, payload, payload_key)
+        ("paginated", {count, next, previous, results})
+        ("error",     message, errors)
     """
     action = request.data.get("action")
     if not action:
         raise exceptions.ValidationError("Action is not supplied")
 
-    result = product_requests_dispatch(request.user, request.data)
+    result = product_requests_dispatch(
+        request.user, request.data, request
+    )
 
+    # -------- Paginated: emit the envelope raw --------
+    if result[0] == "paginated":
+        _, page_data = result
+        return Response(page_data)
+
+    # -------- Success: wrap in custom_success_message --------
     if result[0] == "success":
         _, message, payload, payload_key = result
         return custom_success_message(0, message, payload, payload_key)
 
+    # -------- Error: wrap in custom_errors_response --------
     _, message, errors = result
     return custom_errors_response(1, message, errors)
