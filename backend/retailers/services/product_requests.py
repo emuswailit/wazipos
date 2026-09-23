@@ -48,14 +48,20 @@ logger = logging.getLogger(__name__)
 # Role constants — individual tokens
 # =========================================================
 
+# =========================================================
+# Role constants
+# =========================================================
+
 RETAILER_ROLES = (
-    "GeneralRetailer",
-    "PharmaceuticalRetailer",
+    
+    "GeneralRetailerSuperAdmin",
+    "PharmaceuticalRetailerSuperAdmin",
 )
 
 WHOLESALER_ROLES = (
-    "GeneralWholesaler",
-    "PharmaceuticalWholesaler",
+
+    "GeneralWholesalerSuperAdmin",
+    "PharmaceuticalWholesalerSuperAdmin",
 )
 
 
