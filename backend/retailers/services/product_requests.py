@@ -9,8 +9,11 @@
 #     ("success", message, payload, payload_key)
 #     ("error",   message, errors)
 #
+# The view `productRequestsAPIView` wraps whichever tuple comes back in
+# the project's standard response envelope.
+#
 # -----------------------------------------------------------------------
-# ACTION MAP (with sample payloads — see each handler for details)
+# ACTION MAP
 #
 #   CreateRequest               — retailer creates a new request
 #   GetMyRequests               — retailer fetches their own requests
@@ -48,39 +51,145 @@ logger = logging.getLogger(__name__)
 
 # =========================================================
 # Role resolution
+#
+# role.value arrives from the JWT as a pipe-separated string of
+# every role the user holds. Two known shapes:
+#
+#   "GeneralRetailer||PharmaceuticalRetailer"
+#   "GeneralWholesaler||PharmaceuticalWholesaler"
+#
+# A user holding both would present as a combined string; we split
+# on `||` and classify each token, so any superset still resolves.
 # =========================================================
 
-ROLE_RETAILER = "GeneralRetailer||PharmaceuticalRetailer"
-ROLE_WHOLESALER = "GeneralWholesaler||PharmaceuticalWholesaler"
+ROLE_RETAILER = "retailer"
+ROLE_WHOLESALER = "wholesaler"
 ROLE_UNKNOWN = "unknown"
 
+# The exact value strings the backend emits.
+RETAILER_ROLE_VALUE = "GeneralRetailer||PharmaceuticalRetailer"
+WHOLESALER_ROLE_VALUE = "GeneralWholesaler||PharmaceuticalWholesaler"
 
-def _classify_role_string(raw) -> str:
-    if not raw:
-        return ROLE_UNKNOWN
-    s = str(raw).strip().lower()
+# Individual tokens that make up each group.
+_RETAILER_TOKENS = frozenset({
+    "GeneralRetailer",
+    "PharmaceuticalRetailer",
+})
+
+_WHOLESALER_TOKENS = frozenset({
+    "GeneralWholesaler",
+    "PharmaceuticalWholesaler",
+})
+
+
+def _split_role_value(raw) -> list[str]:
+    """
+    Split a `role.value` string into individual role tokens.
+
+    Handles pipe-separated strings, plain strings, and lists of
+    strings (in case a caller flattens roles differently).
+    """
+    if raw is None:
+        return []
+
+    if isinstance(raw, (list, tuple, set)):
+        out: list[str] = []
+        for item in raw:
+            out.extend(_split_role_value(item))
+        return out
+
+    s = str(raw).strip()
     if not s:
+        return []
+
+    if "||" in s:
+        parts = s.split("||")
+    elif "|" in s:
+        parts = s.split("|")
+    else:
+        parts = [s]
+
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _classify_role_token(token: str) -> str:
+    """
+    Classify a single role token, e.g. "GeneralWholesaler".
+    """
+    if not token:
         return ROLE_UNKNOWN
-    if "wholesal" in s:
+
+    t = token.strip()
+    if not t:
+        return ROLE_UNKNOWN
+
+    if t in _WHOLESALER_TOKENS:
         return ROLE_WHOLESALER
-    if "retail" in s:
+    if t in _RETAILER_TOKENS:
         return ROLE_RETAILER
+
+    lower = t.lower()
+    if "wholesal" in lower:
+        return ROLE_WHOLESALER
+    if "retail" in lower:
+        return ROLE_RETAILER
+
     return ROLE_UNKNOWN
 
 
+def _classify_role_value(raw) -> str:
+    """
+    Classify a complete `role.value` string.
+
+    Fast path: exact match against either known format. Slow path:
+    split on `||` and classify each token, so combined or extended
+    values resolve correctly. Wholesaler wins ties.
+    """
+    if not raw:
+        return ROLE_UNKNOWN
+
+    s = str(raw).strip()
+    if not s:
+        return ROLE_UNKNOWN
+
+    if s == WHOLESALER_ROLE_VALUE:
+        return ROLE_WHOLESALER
+    if s == RETAILER_ROLE_VALUE:
+        return ROLE_RETAILER
+
+    saw_retailer = False
+    for token in _split_role_value(s):
+        classified = _classify_role_token(token)
+        if classified == ROLE_WHOLESALER:
+            return ROLE_WHOLESALER
+        if classified == ROLE_RETAILER:
+            saw_retailer = True
+
+    return ROLE_RETAILER if saw_retailer else ROLE_UNKNOWN
+
+
 def _resolve_role(user) -> str:
+    """
+    Resolve the caller's product-requests role from `role.value`.
+
+    Iterates the JWT-decoded `user.roles` array; each entry's `value`
+    field is classified via `_classify_role_value`. Wholesaler wins
+    ties.
+    """
     if user is None or not getattr(user, "is_authenticated", False):
         return ROLE_UNKNOWN
 
     raw_roles = getattr(user, "roles", None)
+
+    # -------- Single scalar fallback --------
     if raw_roles is None:
         single = (
             getattr(user, "role", None)
-            or getattr(user, "role_level", None)
+            or getattr(user, "role_value", None)
             or getattr(user, "entity_type", None)
         )
         if single:
-            return _classify_role_string(single)
+            return _classify_role_value(single)
         return ROLE_UNKNOWN
 
     if not isinstance(raw_roles, (list, tuple)):
@@ -90,29 +199,33 @@ def _resolve_role(user) -> str:
             return ROLE_UNKNOWN
 
     saw_retailer = False
+
     for entry in raw_roles:
+        # Prioritize `value` — that's the canonical field carrying
+        # the pipe-separated role groups.
         if isinstance(entry, dict):
-            candidates = (
-                entry.get("level"),
-                entry.get("entity_type"),
-                entry.get("value"),
-                entry.get("title"),
+            raw_value = (
+                entry.get("value")
+                or entry.get("level")
+                or entry.get("entity_type")
+                or entry.get("title")
             )
         else:
-            candidates = (
-                getattr(entry, "level", None),
-                getattr(entry, "entity_type", None),
-                getattr(entry, "value", None),
-                getattr(entry, "title", None),
+            raw_value = (
+                getattr(entry, "value", None)
+                or getattr(entry, "level", None)
+                or getattr(entry, "entity_type", None)
+                or getattr(entry, "title", None)
             )
-        for candidate in candidates:
-            if not candidate:
-                continue
-            role = _classify_role_string(candidate)
-            if role == ROLE_WHOLESALER:
-                return ROLE_WHOLESALER
-            if role == ROLE_RETAILER:
-                saw_retailer = True
+
+        if not raw_value:
+            continue
+
+        classified = _classify_role_value(raw_value)
+        if classified == ROLE_WHOLESALER:
+            return ROLE_WHOLESALER
+        if classified == ROLE_RETAILER:
+            saw_retailer = True
 
     return ROLE_RETAILER if saw_retailer else ROLE_UNKNOWN
 
@@ -122,6 +235,10 @@ def _resolve_role(user) -> str:
 # =========================================================
 
 def _resolve_entity_id(user) -> str | None:
+    """
+    Return the caller's entity UUID, trying every shape the JWT or
+    user object may carry it in.
+    """
     if user is None:
         return None
 
@@ -137,23 +254,23 @@ def _resolve_entity_id(user) -> str | None:
         except TypeError:
             roles = []
 
+    # Prefer the wholesaler role's entity when the classifier says
+    # it's a wholesaler token.
     for entry in roles:
-        level = (
-            entry.get("level") if isinstance(entry, dict)
-            else getattr(entry, "level", None)
-        )
-        etype = (
-            entry.get("entity_type") if isinstance(entry, dict)
-            else getattr(entry, "entity_type", None)
-        )
-        entity = (
-            entry.get("entity") if isinstance(entry, dict)
-            else getattr(entry, "entity", None)
-        )
-        haystack = f"{level or ''} {etype or ''}".lower()
-        if "wholesal" in haystack and entity:
+        if isinstance(entry, dict):
+            value = entry.get("value") or ""
+            entity = entry.get("entity")
+        else:
+            value = getattr(entry, "value", "") or ""
+            entity = getattr(entry, "entity", None)
+
+        if (
+            entity
+            and _classify_role_value(value) == ROLE_WHOLESALER
+        ):
             return str(getattr(entity, "pk", entity))
 
+    # Fall back to any role with an entity.
     for entry in roles:
         entity = (
             entry.get("entity") if isinstance(entry, dict)
@@ -166,6 +283,7 @@ def _resolve_entity_id(user) -> str | None:
 
 
 def _to_decimal(value, default=None):
+    """Coerce to Decimal, returning `default` on failure."""
     if value is None or value == "":
         return default
     try:
@@ -175,6 +293,10 @@ def _to_decimal(value, default=None):
 
 
 def _status_display(obj, field="status") -> str:
+    """
+    TextChoices fields expose get_<field>_display(). Fall back to
+    the raw value if the method doesn't exist.
+    """
     getter = getattr(obj, f"get_{field}_display", None)
     if callable(getter):
         try:
@@ -185,6 +307,7 @@ def _status_display(obj, field="status") -> str:
 
 
 def _serialize_item(item) -> dict:
+    """Serializer for one RetailerProductRequestItem."""
     target_pairs = (
         item.target_pairs
         .filter(is_active=True)
@@ -259,6 +382,7 @@ def _serialize_item(item) -> dict:
 
 
 def _serialize_request(req) -> dict:
+    """Serializer for a RetailerProductRequest with its items."""
     items = list(req.items.all())
 
     return {
@@ -434,6 +558,14 @@ def handle_get_my_requests(user, data, role):
         {
             "action": "GetMyRequests",
             "status": "PUBLISHED",
+            "page": 1,
+            "page_size": 20
+        }
+
+    Success payload (key "data"):
+        {
+            "requests": [ ... ],
+            "total": 42,
             "page": 1,
             "page_size": 20
         }
@@ -1439,6 +1571,10 @@ def handle_respond(user, data, role):
 def product_requests_dispatch(user, data):
     """
     Route a product-requests action.
+
+    Returns a 4-tuple:
+        ("success", message, payload, payload_key)
+        ("error", message, errors)
     """
     action = data.get("action")
     if not action:
