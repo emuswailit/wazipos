@@ -383,7 +383,35 @@ def _prefetch_for_list():
 # =========================================================
 
 def handle_create_request(user, data, request=None):
-    """Retailer creates a new product request."""
+    """
+    Retailer creates a new product request.
+
+    Sample request:
+        {
+            "action": "CreateRequest",
+            "urgency": "medium",
+            "note": "Please supply asap",
+            "draft_id": "user-123:db635cbd-...:1789751110596",
+            "items": [
+                {
+                    "product_id": "db635cbd-bc49-4d37-9655-e70fa11fe21d",
+                    "requested_quantity": 21,
+                    "urgency": "medium",
+                    "note": "",
+                    "target_wholesaler_ids": [
+                        "10df5e17-7c55-44f9-b762-ed5dfda323b7",
+                        "165f2dd8-f092-42c9-afa1-f32260bc11f7"
+                    ]
+                }
+            ]
+        }
+
+    Success payload (key "request"):
+        {
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "request_number": "PR0000000002"
+        }
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can create requests", {})
@@ -491,8 +519,21 @@ def handle_get_my_requests(user, data, request=None):
     """
     Retailer fetches their own product requests.
 
-    Returns ("paginated", {...}) — the view emits the envelope raw:
-        {"count": N, "next": url|null, "previous": url|null, "results": [...]}
+    Sample request:
+        {
+            "action": "GetMyRequests",
+            "status": "PUBLISHED",
+            "page": 1,
+            "page_size": 20
+        }
+
+    Response (raw paginated envelope):
+        {
+            "count": 42,
+            "next": "https://.../product-requests?page=2",
+            "previous": null,
+            "results": [ ...RetailerProductRequest shapes... ]
+        }
     """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
@@ -529,8 +570,22 @@ def handle_get_wholesaler_tagged_requests(user, data, request=None):
     """
     Wholesaler fetches requests where their entity is a target.
 
-    Returns ("paginated", {...}) — the view emits the envelope raw:
-        {"count": N, "next": url|null, "previous": url|null, "results": [...]}
+    Sample request:
+        {
+            "action": "GetWholesalerTaggedRequests",
+            "status": "PUBLISHED",
+            "urgency": "high",
+            "page": 1,
+            "page_size": 20
+        }
+
+    Response (raw paginated envelope):
+        {
+            "count": 42,
+            "next": "https://.../product-requests?page=2",
+            "previous": null,
+            "results": [ ...WholesalerProductRequest shapes... ]
+        }
     """
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
@@ -571,7 +626,20 @@ def handle_get_wholesaler_tagged_requests(user, data, request=None):
 
 
 def handle_get_request_details(user, data, request=None):
-    """Fetch details for a single request (either role)."""
+    """
+    Fetch details for a single request (either role).
+
+    Sample request:
+        {
+            "action": "GetRequestDetails",
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf"
+        }
+
+    Success payload (key "request"):
+        {
+            "request": { ...full RetailerProductRequest with items... }
+        }
+    """
     roles = _get_user_roles(user)
 
     is_retailer = any(r in roles for r in RETAILER_ROLES)
@@ -630,7 +698,25 @@ def handle_get_request_details(user, data, request=None):
 
 
 def handle_create_offer(user, data, request=None):
-    """Wholesaler submits an offer on a specific request line."""
+    """
+    Wholesaler submits an offer on a specific request line.
+
+    Sample request:
+        {
+            "action": "CreateOffer",
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "line_id": "9d2dafa2-bdf6-48c7-94c2-f3accb636e9c",
+            "offered_quantity": 21,
+            "offered_unit_price": 8.00,
+            "note": ""
+        }
+
+    Success payload (key "offer"):
+        {
+            "offer_id": "f2a1a2b3-...",
+            "status": "OFFERED"
+        }
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
         return ("error", "Only wholesalers can submit offers", {})
@@ -749,7 +835,21 @@ def handle_create_offer(user, data, request=None):
 
 
 def handle_withdraw_offer(user, data, request=None):
-    """Wholesaler withdraws a previously submitted offer."""
+    """
+    Wholesaler withdraws a previously submitted offer.
+
+    Sample request:
+        {
+            "action": "WithdrawOffer",
+            "offer_id": "f2a1a2b3-..."
+        }
+
+    Success payload (key "offer"):
+        {
+            "offer_id": "f2a1a2b3-...",
+            "status": "WITHDRAWN"
+        }
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
         return ("error", "Only wholesalers can withdraw offers", {})
@@ -819,7 +919,29 @@ def handle_withdraw_offer(user, data, request=None):
 
 
 def handle_confirm_offers(user, data, request=None):
-    """Retailer confirms / declines offers on their request."""
+    """
+    Retailer confirms / declines offers on their request.
+
+    Sample request:
+        {
+            "action": "ConfirmOffers",
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "confirmations": [
+                { "offer_id": "f2a1a2b3-...", "response_note": "" }
+            ],
+            "declinations": [
+                { "offer_id": "f9e8d7c6-...", "reason": "out of budget" }
+            ],
+            "note": ""
+        }
+
+    Success payload (key "request"):
+        {
+            "request_id": "a54de545-...",
+            "confirmed_offer_count": 1,
+            "declined_offer_count": 1
+        }
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can confirm offers", {})
@@ -971,7 +1093,22 @@ def handle_confirm_offers(user, data, request=None):
 
 
 def handle_cancel_request(user, data, request=None):
-    """Retailer cancels an entire request."""
+    """
+    Retailer cancels an entire request.
+
+    Sample request:
+        {
+            "action": "CancelRequest",
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "reason": "no longer needed"
+        }
+
+    Success payload (key "request"):
+        {
+            "request_id": "a54de545-...",
+            "status": "CANCELLED"
+        }
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can cancel requests", {})
@@ -1054,7 +1191,23 @@ def handle_cancel_request(user, data, request=None):
 
 
 def handle_cancel_request_item(user, data, request=None):
-    """Retailer cancels a single line on a request."""
+    """
+    Retailer cancels a single line on a request.
+
+    Sample request:
+        {
+            "action": "CancelRequestItem",
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "item_id": "9d2dafa2-bdf6-48c7-94c2-f3accb636e9c",
+            "reason": "duplicate"
+        }
+
+    Success payload (key "request"):
+        {
+            "request_id": "a54de545-...",
+            "cancelled_item_id": "9d2dafa2-..."
+        }
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can cancel lines", {})
@@ -1126,7 +1279,39 @@ def handle_cancel_request_item(user, data, request=None):
 
 
 def handle_respond(user, data, request=None):
-    """Wholesaler responds to a request with accepted / rejected lines."""
+    """
+    Wholesaler responds to a request with accepted / rejected lines.
+
+    Sample request:
+        {
+            "action": "Respond",
+            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "note": "",
+            "accepted_lines": [
+                {
+                    "item_id": "9d2dafa2-bdf6-48c7-94c2-f3accb636e9c",
+                    "receipt_id": "0a1b2c3d-..."
+                }
+            ],
+            "rejected_lines": [
+                { "item_id": "5e6f7a8b-..." }
+            ]
+        }
+
+    Success payload (key "response"):
+        {
+            "response_id": "f2a1a2b3-...",
+            "offered_line_count": 1,
+            "rejected_line_count": 1
+        }
+
+    Rules enforced by the backend:
+        - at least one line must be accepted or rejected
+        - every accepted line requires exactly one of
+          `receipt_id` or `receipt` (not both)
+        - every item_id must belong to this request
+        - a line cannot appear in both accepted_lines and rejected_lines
+    """
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
         return (

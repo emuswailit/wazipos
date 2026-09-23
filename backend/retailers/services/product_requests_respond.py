@@ -72,15 +72,29 @@ def wholesaler_respond_to_request(
             "wholesaler_entity is required to record a response."
         )
 
+    # The response row carries BOTH the retailer entity (owner of
+    # the request) and the responding wholesaler. `entity` is
+    # NOT NULL on the DB, so it must be sourced from the request.
+    retailer_entity_id = getattr(request_obj, "entity_id", None)
+    if not retailer_entity_id:
+        raise ValueError(
+            "Cannot record a response: the product request has no "
+            "owning entity."
+        )
+
     with transaction.atomic():
         # --------------------------------------------------
         # 1. Upsert the header response row
         # --------------------------------------------------
         response_obj, _created = (
             RetailerProductRequestResponse.objects.update_or_create(
+            
                 request=request_obj,
                 wholesaler_id=entity_id,
-                defaults={"note": response_note or ""},
+                defaults={
+                    "note": response_note or "",
+                    "entity_id": retailer_entity_id,   # ← was missing
+                },
             )
         )
 

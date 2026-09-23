@@ -2657,7 +2657,7 @@ class RetailerProductRequestItem(EntityRelatedModel):
             ])
 
 
-class RetailerProductRequestItemWholesaler(models.Model):
+class RetailerProductRequestItemWholesaler(EntityRelatedModel):
     """
     One row per (line, wholesaler) target pair.
 
