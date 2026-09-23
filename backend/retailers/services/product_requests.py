@@ -34,7 +34,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
-
+from utils.logging import create_log
 from retailers.models import (
     RetailerProductRequest,
     RetailerProductRequestItem,
@@ -657,6 +657,7 @@ def handle_get_wholesaler_tagged_requests(user, data, role):
     Response shape (key "data"):
         { "wholesaler_product_requests": [ ... ] }
     """
+    create_log("info", f"Role here: {role}")
     if role != ROLE_WHOLESALER:
         return (
             "error",
