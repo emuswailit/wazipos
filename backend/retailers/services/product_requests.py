@@ -103,16 +103,10 @@ def _get_user_roles(user) -> list[str]:
     if user is None:
         return []
 
-    raw_roles = getattr(user, "roles", None)
+    raw_roles = user.roles.all()
     if raw_roles is None:
         return []
 
-    # Django related manager: call .all() to get the QuerySet.
-    if hasattr(raw_roles, "all") and callable(raw_roles.all):
-        try:
-            raw_roles = raw_roles.all()
-        except Exception:
-            return []
 
     # Cache the iterable once so we don't issue multiple queries.
     try:
@@ -137,8 +131,8 @@ def _get_user_roles(user) -> list[str]:
 
 def _resolve_entity_id(user) -> str | None:
     """
-    Return the caller's entity UUID, preferring the wholesaler role's
-    entity when the user holds one.
+    Return the caller's entity UUID, preferring the wholesaler
+    role's entity when the user holds one.
     """
     if user is None:
         return None
@@ -148,29 +142,16 @@ def _resolve_entity_id(user) -> str | None:
         if v:
             return str(getattr(v, "pk", v))
 
-    raw_roles = getattr(user, "roles", None)
+    raw_roles = user.roles.all()
     if raw_roles is None:
         return None
 
-    if hasattr(raw_roles, "all") and callable(raw_roles.all):
-        try:
-            raw_roles = raw_roles.all()
-        except Exception:
-            return None
-
-    try:
-        role_list = list(raw_roles)
-    except TypeError:
-        return None
+    role_list = list(raw_roles)
 
     # Prefer the wholesaler role's entity.
     for entry in role_list:
-        if isinstance(entry, dict):
-            value = entry.get("value") or ""
-            entity = entry.get("entity")
-        else:
-            value = getattr(entry, "value", "") or ""
-            entity = getattr(entry, "entity", None)
+        value = getattr(entry, "value", "") or ""
+        entity = getattr(entry, "entity", None)
 
         tokens = _split_role_value(value)
         if entity and any(t in WHOLESALER_ROLES for t in tokens):
@@ -178,14 +159,13 @@ def _resolve_entity_id(user) -> str | None:
 
     # Fall back to any role with an entity.
     for entry in role_list:
-        entity = (
-            entry.get("entity") if isinstance(entry, dict)
-            else getattr(entry, "entity", None)
-        )
+        entity = getattr(entry, "entity", None)
         if entity:
             return str(getattr(entity, "pk", entity))
 
     return None
+
+
 def _to_decimal(value, default=None):
     if value is None or value == "":
         return default
