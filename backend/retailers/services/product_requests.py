@@ -2,10 +2,18 @@
 #
 # Product requests dispatcher.
 #
-# Role access pattern:
-#   roles = _get_user_roles(user)      # flatten to list[str]
-#   if not any(r in roles for r in WHOLESALER_ROLES):
-#       return ("error", "...", {})
+# All paginated list responses use the DRF PageNumberPagination shape:
+#
+#     {
+#         "count": <int>,
+#         "next": <url|null>,
+#         "previous": <url|null>,
+#         "results": [ ... ]
+#     }
+#
+# `page` and `page_size` are read from the JSON request body via
+# BodyPageNumberPagination, not the query string — the whole API is
+# POST + JSON.
 #
 # -----------------------------------------------------------------------
 # ACTION MAP
@@ -23,12 +31,13 @@
 # -----------------------------------------------------------------------
 
 from __future__ import annotations
-from utils.logging import create_log
+
 import logging
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.pagination import PageNumberPagination
 
 from retailers.models import (
     RetailerProductRequest,
@@ -45,24 +54,99 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# Role constants — individual tokens
-# =========================================================
-
-# =========================================================
 # Role constants
 # =========================================================
 
 RETAILER_ROLES = (
-    
     "GeneralRetailerSuperAdmin",
     "PharmaceuticalRetailerSuperAdmin",
 )
 
 WHOLESALER_ROLES = (
-
     "GeneralWholesalerSuperAdmin",
     "PharmaceuticalWholesalerSuperAdmin",
 )
+
+
+# =========================================================
+# Pagination
+# =========================================================
+
+class BodyPageNumberPagination(PageNumberPagination):
+    """
+    PageNumberPagination variant that reads `page` and `page_size`
+    from the JSON request body instead of the query string.
+
+    The entire product-requests API is POST + JSON, so query params
+    are unavailable. `next` and `previous` still point at the same
+    endpoint — the client is expected to keep sending the body and
+    bump `page`.
+    """
+
+    page_size = 20
+    max_page_size = 200
+
+    def get_page_number(self, request, paginator):
+        if request is None:
+            return 1
+        try:
+            value = request.data.get(self.page_query_param)
+            return max(1, int(value)) if value is not None else 1
+        except (TypeError, ValueError):
+            return 1
+
+    def get_page_size(self, request):
+        if request is None:
+            return self.page_size
+        try:
+            value = request.data.get("page_size")
+            if value is None:
+                return self.page_size
+            size = int(value)
+            return max(1, min(size, self.max_page_size))
+        except (TypeError, ValueError):
+            return self.page_size
+
+
+def _paginate(queryset, request, serializer) -> dict:
+    """
+    Apply BodyPageNumberPagination to a queryset and return the
+    DRF-standard paginated dict:
+
+        {"count": N, "next": url|null, "previous": url|null, "results": [...]}
+
+    `serializer` is a callable that takes a list of model instances
+    and returns a list of dicts.
+
+    When `request` is None (unit tests, internal callers), the
+    envelope is still produced but `next` and `previous` are None.
+    """
+    paginator = BodyPageNumberPagination()
+    page = paginator.paginate_queryset(queryset, request)
+
+    if page is None:
+        # paginate_queryset returns None only when pagination is
+        # disabled. Fall back to a single-page envelope.
+        items = list(queryset)
+        return {
+            "count": len(items),
+            "next": None,
+            "previous": None,
+            "results": serializer(items),
+        }
+
+    payload = serializer(page)
+
+    if request is not None:
+        return paginator.get_paginated_response(payload).data
+
+    # No request in scope — build the envelope by hand.
+    return {
+        "count": paginator.page.paginator.count,
+        "next": None,
+        "previous": None,
+        "results": payload,
+    }
 
 
 # =========================================================
@@ -100,37 +184,27 @@ def _get_user_roles(user) -> list[str]:
     """
     Flatten every role token the user holds into one array.
 
-    Handles every shape `user.roles` may take:
-      - Django reverse FK manager (user.roles.all())
-      - A QuerySet
-      - A plain list of role model instances
-      - A list of dicts (JWT-decoded shape)
+    `user.roles` is a Django reverse FK manager. Each role row
+    carries a `value` field that may itself be pipe-separated.
     """
     if user is None:
         return []
 
     raw_roles = user.roles.all()
-    if raw_roles is None:
+    if not raw_roles:
         return []
 
-
-    # Cache the iterable once so we don't issue multiple queries.
-    try:
-        role_list = list(raw_roles)
-    except TypeError:
-        return []
+    role_list = list(raw_roles)
 
     out: list[str] = []
     for entry in role_list:
-        if isinstance(entry, dict):
-            value = entry.get("value")
-        else:
-            value = getattr(entry, "value", None)
-
+        value = getattr(entry, "value", None)
         if value:
             out.extend(_split_role_value(value))
 
     return out
+
+
 # =========================================================
 # Shared helpers
 # =========================================================
@@ -149,7 +223,7 @@ def _resolve_entity_id(user) -> str | None:
             return str(getattr(v, "pk", v))
 
     raw_roles = user.roles.all()
-    if raw_roles is None:
+    if not raw_roles:
         return None
 
     role_list = list(raw_roles)
@@ -297,32 +371,33 @@ def _serialize_request(req) -> dict:
     }
 
 
+def _prefetch_for_list():
+    """Shared prefetch chain for request-list queries."""
+    from django.db.models import Prefetch
+
+    return Prefetch(
+        "items",
+        queryset=RetailerProductRequestItem.objects.select_related(
+            "product"
+        ).prefetch_related(
+            "offers",
+            Prefetch(
+                "target_pairs",
+                queryset=RetailerProductRequestItemWholesaler.objects.select_related(
+                    "wholesaler"
+                ).filter(is_active=True),
+            ),
+        ),
+    )
+
+
 # =========================================================
 # Handlers
 # =========================================================
 
-def handle_create_request(user, data):
+def handle_create_request(user, data, request=None):
     """
     Retailer creates a new product request.
-
-    Sample request:
-        {
-            "action": "CreateRequest",
-            "urgency": "medium",
-            "note": "Please supply asap",
-            "draft_id": "user-123:db635cbd-...:1789751110596",
-            "items": [
-                {
-                    "product_id": "db635cbd-...",
-                    "requested_quantity": 21,
-                    "urgency": "medium",
-                    "note": "",
-                    "target_wholesaler_ids": [
-                        "10df5e17-...", "165f2dd8-..."
-                    ]
-                }
-            ]
-        }
     """
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
@@ -427,16 +502,16 @@ def handle_create_request(user, data):
     )
 
 
-def handle_get_my_requests(user, data):
+def handle_get_my_requests(user, data, request=None):
     """
     Retailer fetches their own product requests.
 
-    Sample request:
+    Response shape (key "data"):
         {
-            "action": "GetMyRequests",
-            "status": "PUBLISHED",
-            "page": 1,
-            "page_size": 20
+            "count": 42,
+            "next": "...",
+            "previous": null,
+            "results": [ ... ]
         }
     """
     roles = _get_user_roles(user)
@@ -455,73 +530,36 @@ def handle_get_my_requests(user, data):
             {},
         )
 
-    from django.db.models import Prefetch
-
     qs = RetailerProductRequest.objects.filter(entity_id=entity_id)
 
     status_filter = data.get("status")
     if status_filter:
         qs = qs.filter(status=str(status_filter).upper())
 
-    try:
-        page = max(1, int(data.get("page", 1)))
-    except (TypeError, ValueError):
-        page = 1
+    qs = qs.prefetch_related(_prefetch_for_list()).order_by("-created")
 
-    try:
-        page_size = int(data.get("page_size", 20))
-    except (TypeError, ValueError):
-        page_size = 20
-    page_size = max(1, min(page_size, 200))
-
-    start = (page - 1) * page_size
-    end = start + page_size
-
-    qs = qs.prefetch_related(
-        Prefetch(
-            "items",
-            queryset=RetailerProductRequestItem.objects.select_related(
-                "product"
-            ).prefetch_related(
-                "offers",
-                Prefetch(
-                    "target_pairs",
-                    queryset=RetailerProductRequestItemWholesaler.objects.select_related(
-                        "wholesaler"
-                    ).filter(is_active=True),
-                ),
-            ),
-        )
-    ).order_by("-created")
-
-    total = qs.count()
-    page_items = list(qs[start:end])
-    payload = [_serialize_request(r) for r in page_items]
+    paginated = _paginate(
+        qs, request, lambda rows: [_serialize_request(r) for r in rows]
+    )
 
     return (
         "success",
         "My product requests",
-        {
-            "requests": payload,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
+        paginated,
         "data",
     )
 
 
-def handle_get_wholesaler_tagged_requests(user, data):
+def handle_get_wholesaler_tagged_requests(user, data, request=None):
     """
     Wholesaler fetches requests where their entity is a target.
 
-    Sample request:
+    Response shape (key "data"):
         {
-            "action": "GetWholesalerTaggedRequests",
-            "status": "PUBLISHED",
-            "urgency": "high",
-            "page": 1,
-            "page_size": 20
+            "count": 42,
+            "next": "...",
+            "previous": null,
+            "results": [ ... ]
         }
     """
     roles = _get_user_roles(user)
@@ -540,8 +578,6 @@ def handle_get_wholesaler_tagged_requests(user, data):
             {},
         )
 
-    from django.db.models import Prefetch
-
     qs = RetailerProductRequest.objects.filter(
         items__target_pairs__wholesaler_id=entity_id,
         items__target_pairs__is_active=True,
@@ -555,63 +591,23 @@ def handle_get_wholesaler_tagged_requests(user, data):
     if urgency_filter:
         qs = qs.filter(urgency=str(urgency_filter).lower())
 
-    try:
-        page = max(1, int(data.get("page", 1)))
-    except (TypeError, ValueError):
-        page = 1
+    qs = qs.prefetch_related(_prefetch_for_list()).order_by("-created")
 
-    try:
-        page_size = int(data.get("page_size", 20))
-    except (TypeError, ValueError):
-        page_size = 20
-    page_size = max(1, min(page_size, 200))
-
-    start = (page - 1) * page_size
-    end = start + page_size
-
-    qs = qs.prefetch_related(
-        Prefetch(
-            "items",
-            queryset=RetailerProductRequestItem.objects.select_related(
-                "product"
-            ).prefetch_related(
-                "offers",
-                Prefetch(
-                    "target_pairs",
-                    queryset=RetailerProductRequestItemWholesaler.objects.select_related(
-                        "wholesaler"
-                    ).filter(is_active=True),
-                ),
-            ),
-        )
-    ).order_by("-created")
-
-    total = qs.count()
-    page_items = list(qs[start:end])
-    payload = [_serialize_request(r) for r in page_items]
+    paginated = _paginate(
+        qs, request, lambda rows: [_serialize_request(r) for r in rows]
+    )
 
     return (
         "success",
         "Wholesaler tagged requests",
-        {
-            "wholesaler_product_requests": payload,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
+        paginated,
         "data",
     )
 
 
-def handle_get_request_details(user, data):
+def handle_get_request_details(user, data, request=None):
     """
     Fetch details for a single request (either role).
-
-    Sample request:
-        {
-            "action": "GetRequestDetails",
-            "request_id": "a54de545-..."
-        }
     """
     roles = _get_user_roles(user)
 
@@ -633,20 +629,7 @@ def handle_get_request_details(user, data):
 
     try:
         req = RetailerProductRequest.objects.prefetch_related(
-            Prefetch(
-                "items",
-                queryset=RetailerProductRequestItem.objects.select_related(
-                    "product"
-                ).prefetch_related(
-                    "offers",
-                    Prefetch(
-                        "target_pairs",
-                        queryset=RetailerProductRequestItemWholesaler.objects.select_related(
-                            "wholesaler"
-                        ).filter(is_active=True),
-                    ),
-                ),
-            )
+            _prefetch_for_list()
         ).get(id=request_id)
     except RetailerProductRequest.DoesNotExist:
         return (
@@ -685,20 +668,8 @@ def handle_get_request_details(user, data):
     )
 
 
-def handle_create_offer(user, data):
-    """
-    Wholesaler submits an offer on a specific request line.
-
-    Sample request:
-        {
-            "action": "CreateOffer",
-            "request_id": "a54de545-...",
-            "line_id": "9d2dafa2-...",
-            "offered_quantity": 21,
-            "offered_unit_price": 8.00,
-            "note": ""
-        }
-    """
+def handle_create_offer(user, data, request=None):
+    """Wholesaler submits an offer on a specific request line."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
         return ("error", "Only wholesalers can submit offers", {})
@@ -816,16 +787,8 @@ def handle_create_offer(user, data):
     )
 
 
-def handle_withdraw_offer(user, data):
-    """
-    Wholesaler withdraws a previously submitted offer.
-
-    Sample request:
-        {
-            "action": "WithdrawOffer",
-            "offer_id": "f2a1a2b3-..."
-        }
-    """
+def handle_withdraw_offer(user, data, request=None):
+    """Wholesaler withdraws a previously submitted offer."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
         return ("error", "Only wholesalers can withdraw offers", {})
@@ -894,18 +857,8 @@ def handle_withdraw_offer(user, data):
     )
 
 
-def handle_confirm_offers(user, data):
-    """
-    Retailer confirms / declines offers on their request.
-
-    Sample request:
-        {
-            "action": "ConfirmOffers",
-            "request_id": "a54de545-...",
-            "confirmations": [{"offer_id": "f2a1a2b3-..."}],
-            "declinations":  [{"offer_id": "f9e8d7c6-...", "reason": "out of budget"}]
-        }
-    """
+def handle_confirm_offers(user, data, request=None):
+    """Retailer confirms / declines offers on their request."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can confirm offers", {})
@@ -1056,17 +1009,8 @@ def handle_confirm_offers(user, data):
     )
 
 
-def handle_cancel_request(user, data):
-    """
-    Retailer cancels an entire request.
-
-    Sample request:
-        {
-            "action": "CancelRequest",
-            "request_id": "a54de545-...",
-            "reason": "no longer needed"
-        }
-    """
+def handle_cancel_request(user, data, request=None):
+    """Retailer cancels an entire request."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can cancel requests", {})
@@ -1148,18 +1092,8 @@ def handle_cancel_request(user, data):
     )
 
 
-def handle_cancel_request_item(user, data):
-    """
-    Retailer cancels a single line on a request.
-
-    Sample request:
-        {
-            "action": "CancelRequestItem",
-            "request_id": "a54de545-...",
-            "item_id": "9d2dafa2-...",
-            "reason": "duplicate"
-        }
-    """
+def handle_cancel_request_item(user, data, request=None):
+    """Retailer cancels a single line on a request."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can cancel lines", {})
@@ -1230,23 +1164,8 @@ def handle_cancel_request_item(user, data):
     )
 
 
-def handle_respond(user, data):
-    """
-    Wholesaler responds to a request with accepted / rejected lines.
-
-    Sample request:
-        {
-            "action": "Respond",
-            "request_id": "a54de545-...",
-            "note": "",
-            "accepted_lines": [
-                {"item_id": "9d2dafa2-...", "receipt_id": "0a1b2c3d-..."}
-            ],
-            "rejected_lines": [
-                {"item_id": "5e6f7a8b-..."}
-            ]
-        }
-    """
+def handle_respond(user, data, request=None):
+    """Wholesaler responds to a request with accepted / rejected lines."""
     roles = _get_user_roles(user)
     if not any(r in roles for r in WHOLESALER_ROLES):
         return (
@@ -1407,11 +1326,13 @@ def handle_respond(user, data):
 # Dispatcher
 # =========================================================
 
-def product_requests_dispatch(user, data):
+def product_requests_dispatch(user, data, request=None):
     """
     Route a product-requests action.
 
-    Each handler performs its own role check via _get_user_roles().
+    `request` is threaded through to handlers that need it for
+    pagination URL building. Optional so unit tests can call the
+    dispatcher without a real request object.
     """
     action = data.get("action")
     if not action:
@@ -1435,4 +1356,4 @@ def product_requests_dispatch(user, data):
     if handler is None:
         return ("error", f"Action {action} is unknown", {})
 
-    return handler(user, data)
+    return handler(user, data, request)

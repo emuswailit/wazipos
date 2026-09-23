@@ -2252,7 +2252,7 @@ class RetailerIndentItemParamsUpdateView(APIView):
                 item.wholesaler_price_discount = None
             else:
                 discount = (
-                    WholesalerPriceDiscounts.objects.filter(
+                    models.WholesalerPriceDiscounts.objects.filter(
                         id=discount_id
                     ).first()
                 )
@@ -2275,7 +2275,7 @@ class RetailerIndentItemParamsUpdateView(APIView):
                 item.wholesaler_quantity_discount = None
             else:
                 discount = (
-                    WholesalerQuantityDiscounts.objects
+                    models.WholesalerQuantityDiscounts.objects
                     .filter(id=discount_id)
                     .first()
                 )
