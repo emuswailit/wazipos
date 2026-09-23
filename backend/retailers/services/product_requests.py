@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 # Role resolution
 # =========================================================
 
-ROLE_RETAILER = "retailer"
-ROLE_WHOLESALER = "wholesaler"
+ROLE_RETAILER = "GeneralRetailer||PharmaceuticalRetailer"
+ROLE_WHOLESALER = "GeneralWholesaler||PharmaceuticalWholesaler"
 ROLE_UNKNOWN = "unknown"
 
 
