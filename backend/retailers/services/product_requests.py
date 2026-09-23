@@ -23,7 +23,7 @@
 # -----------------------------------------------------------------------
 
 from __future__ import annotations
-
+from utils.logging import create_log
 import logging
 from decimal import Decimal, InvalidOperation
 
@@ -91,6 +91,8 @@ def _split_role_value(raw) -> list[str]:
 
 
 def _get_user_roles(user) -> list[str]:
+    create_log("info", f"User roles: {user.roles}")
+    
     """
     Flatten every role token the user holds into one array.
     """
@@ -115,6 +117,7 @@ def _get_user_roles(user) -> list[str]:
         )
         if value:
             out.extend(_split_role_value(value))
+            create_log("info",f"Emitted roles : {out}")
     return out
 
 
