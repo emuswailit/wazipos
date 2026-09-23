@@ -2,15 +2,10 @@
 #
 # Product requests dispatcher.
 #
-# All product-request actions funnel through `product_requests_dispatch`,
-# which resolves the caller's role and routes to a handler. Every handler
-# returns one of:
-#
-#     ("success", message, payload, payload_key)
-#     ("error",   message, errors)
-#
-# The view `productRequestsAPIView` wraps whichever tuple comes back in
-# the project's standard response envelope.
+# Role access pattern:
+#   roles = _get_user_roles(user)      # flatten to list[str]
+#   if not any(r in roles for r in WHOLESALER_ROLES):
+#       return ("error", "...", {})
 #
 # -----------------------------------------------------------------------
 # ACTION MAP
@@ -34,7 +29,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
-from utils.logging import create_log
+
 from retailers.models import (
     RetailerProductRequest,
     RetailerProductRequestItem,
@@ -50,45 +45,26 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# Role resolution
-#
-# role.value arrives from the JWT as a pipe-separated string of
-# every role the user holds. Two known shapes:
-#
-#   "GeneralRetailer||PharmaceuticalRetailer"
-#   "GeneralWholesaler||PharmaceuticalWholesaler"
-#
-# A user holding both would present as a combined string; we split
-# on `||` and classify each token, so any superset still resolves.
+# Role constants — individual tokens
 # =========================================================
 
-ROLE_RETAILER = "retailer"
-ROLE_WHOLESALER = "wholesaler"
-ROLE_UNKNOWN = "unknown"
-
-# The exact value strings the backend emits.
-RETAILER_ROLE_VALUE = "GeneralRetailer||PharmaceuticalRetailer"
-WHOLESALER_ROLE_VALUE = "GeneralWholesaler||PharmaceuticalWholesaler"
-
-# Individual tokens that make up each group.
-_RETAILER_TOKENS = frozenset({
+RETAILER_ROLES = (
     "GeneralRetailer",
     "PharmaceuticalRetailer",
-})
+)
 
-_WHOLESALER_TOKENS = frozenset({
+WHOLESALER_ROLES = (
     "GeneralWholesaler",
     "PharmaceuticalWholesaler",
-})
+)
 
+
+# =========================================================
+# Role utilities
+# =========================================================
 
 def _split_role_value(raw) -> list[str]:
-    """
-    Split a `role.value` string into individual role tokens.
-
-    Handles pipe-separated strings, plain strings, and lists of
-    strings (in case a caller flattens roles differently).
-    """
+    """Split a pipe-separated role value into individual tokens."""
     if raw is None:
         return []
 
@@ -106,128 +82,40 @@ def _split_role_value(raw) -> list[str]:
         parts = s.split("||")
     elif "|" in s:
         parts = s.split("|")
+    elif "," in s:
+        parts = s.split(",")
     else:
         parts = [s]
 
     return [p.strip() for p in parts if p.strip()]
 
 
-def _classify_role_token(token: str) -> str:
+def _get_user_roles(user) -> list[str]:
     """
-    Classify a single role token, e.g. "GeneralWholesaler".
+    Flatten every role token the user holds into one array.
     """
-    if not token:
-        return ROLE_UNKNOWN
-
-    t = token.strip()
-    if not t:
-        return ROLE_UNKNOWN
-
-    if t in _WHOLESALER_TOKENS:
-        return ROLE_WHOLESALER
-    if t in _RETAILER_TOKENS:
-        return ROLE_RETAILER
-
-    lower = t.lower()
-    if "wholesal" in lower:
-        return ROLE_WHOLESALER
-    if "retail" in lower:
-        return ROLE_RETAILER
-
-    return ROLE_UNKNOWN
-
-
-def _classify_role_value(raw) -> str:
-    """
-    Classify a complete `role.value` string.
-
-    Fast path: exact match against either known format. Slow path:
-    split on `||` and classify each token, so combined or extended
-    values resolve correctly. Wholesaler wins ties.
-    """
-    if not raw:
-        return ROLE_UNKNOWN
-
-    s = str(raw).strip()
-    if not s:
-        return ROLE_UNKNOWN
-
-    if s == WHOLESALER_ROLE_VALUE:
-        return ROLE_WHOLESALER
-    if s == RETAILER_ROLE_VALUE:
-        return ROLE_RETAILER
-
-    saw_retailer = False
-    for token in _split_role_value(s):
-        classified = _classify_role_token(token)
-        if classified == ROLE_WHOLESALER:
-            return ROLE_WHOLESALER
-        if classified == ROLE_RETAILER:
-            saw_retailer = True
-
-    return ROLE_RETAILER if saw_retailer else ROLE_UNKNOWN
-
-
-def _resolve_role(user) -> str:
-    """
-    Resolve the caller's product-requests role from `role.value`.
-
-    Iterates the JWT-decoded `user.roles` array; each entry's `value`
-    field is classified via `_classify_role_value`. Wholesaler wins
-    ties.
-    """
-    if user is None or not getattr(user, "is_authenticated", False):
-        return ROLE_UNKNOWN
+    if user is None:
+        return []
 
     raw_roles = getattr(user, "roles", None)
-
-    # -------- Single scalar fallback --------
-    if raw_roles is None:
-        single = (
-            getattr(user, "role", None)
-            or getattr(user, "role_value", None)
-            or getattr(user, "entity_type", None)
-        )
-        if single:
-            return _classify_role_value(single)
-        return ROLE_UNKNOWN
+    if not raw_roles:
+        return []
 
     if not isinstance(raw_roles, (list, tuple)):
         try:
             raw_roles = list(raw_roles)
         except TypeError:
-            return ROLE_UNKNOWN
+            return []
 
-    saw_retailer = False
-
+    out: list[str] = []
     for entry in raw_roles:
-        # Prioritize `value` — that's the canonical field carrying
-        # the pipe-separated role groups.
-        if isinstance(entry, dict):
-            raw_value = (
-                entry.get("value")
-                or entry.get("level")
-                or entry.get("entity_type")
-                or entry.get("title")
-            )
-        else:
-            raw_value = (
-                getattr(entry, "value", None)
-                or getattr(entry, "level", None)
-                or getattr(entry, "entity_type", None)
-                or getattr(entry, "title", None)
-            )
-
-        if not raw_value:
-            continue
-
-        classified = _classify_role_value(raw_value)
-        if classified == ROLE_WHOLESALER:
-            return ROLE_WHOLESALER
-        if classified == ROLE_RETAILER:
-            saw_retailer = True
-
-    return ROLE_RETAILER if saw_retailer else ROLE_UNKNOWN
+        value = (
+            entry.get("value") if isinstance(entry, dict)
+            else getattr(entry, "value", None)
+        )
+        if value:
+            out.extend(_split_role_value(value))
+    return out
 
 
 # =========================================================
@@ -236,8 +124,8 @@ def _resolve_role(user) -> str:
 
 def _resolve_entity_id(user) -> str | None:
     """
-    Return the caller's entity UUID, trying every shape the JWT or
-    user object may carry it in.
+    Return the caller's entity UUID, preferring the wholesaler role's
+    entity when the user holds one.
     """
     if user is None:
         return None
@@ -254,8 +142,7 @@ def _resolve_entity_id(user) -> str | None:
         except TypeError:
             roles = []
 
-    # Prefer the wholesaler role's entity when the classifier says
-    # it's a wholesaler token.
+    # Prefer the wholesaler role's entity.
     for entry in roles:
         if isinstance(entry, dict):
             value = entry.get("value") or ""
@@ -264,10 +151,8 @@ def _resolve_entity_id(user) -> str | None:
             value = getattr(entry, "value", "") or ""
             entity = getattr(entry, "entity", None)
 
-        if (
-            entity
-            and _classify_role_value(value) == ROLE_WHOLESALER
-        ):
+        tokens = _split_role_value(value)
+        if entity and any(t in WHOLESALER_ROLES for t in tokens):
             return str(getattr(entity, "pk", entity))
 
     # Fall back to any role with an entity.
@@ -283,7 +168,6 @@ def _resolve_entity_id(user) -> str | None:
 
 
 def _to_decimal(value, default=None):
-    """Coerce to Decimal, returning `default` on failure."""
     if value is None or value == "":
         return default
     try:
@@ -293,10 +177,6 @@ def _to_decimal(value, default=None):
 
 
 def _status_display(obj, field="status") -> str:
-    """
-    TextChoices fields expose get_<field>_display(). Fall back to
-    the raw value if the method doesn't exist.
-    """
     getter = getattr(obj, f"get_{field}_display", None)
     if callable(getter):
         try:
@@ -307,7 +187,6 @@ def _status_display(obj, field="status") -> str:
 
 
 def _serialize_item(item) -> dict:
-    """Serializer for one RetailerProductRequestItem."""
     target_pairs = (
         item.target_pairs
         .filter(is_active=True)
@@ -382,7 +261,6 @@ def _serialize_item(item) -> dict:
 
 
 def _serialize_request(req) -> dict:
-    """Serializer for a RetailerProductRequest with its items."""
     items = list(req.items.all())
 
     return {
@@ -418,7 +296,7 @@ def _serialize_request(req) -> dict:
 # Handlers
 # =========================================================
 
-def handle_create_request(user, data, role):
+def handle_create_request(user, data):
     """
     Retailer creates a new product request.
 
@@ -430,25 +308,19 @@ def handle_create_request(user, data, role):
             "draft_id": "user-123:db635cbd-...:1789751110596",
             "items": [
                 {
-                    "product_id": "db635cbd-bc49-4d37-9655-e70fa11fe21d",
+                    "product_id": "db635cbd-...",
                     "requested_quantity": 21,
                     "urgency": "medium",
                     "note": "",
                     "target_wholesaler_ids": [
-                        "10df5e17-7c55-44f9-b762-ed5dfda323b7",
-                        "165f2dd8-f092-42c9-afa1-f32260bc11f7"
+                        "10df5e17-...", "165f2dd8-..."
                     ]
                 }
             ]
         }
-
-    Success payload (key "request"):
-        {
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
-            "request_number": "PR0000000002"
-        }
     """
-    if role != ROLE_RETAILER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can create requests", {})
 
     entity_id = _resolve_entity_id(user)
@@ -550,7 +422,7 @@ def handle_create_request(user, data, role):
     )
 
 
-def handle_get_my_requests(user, data, role):
+def handle_get_my_requests(user, data):
     """
     Retailer fetches their own product requests.
 
@@ -561,16 +433,9 @@ def handle_get_my_requests(user, data, role):
             "page": 1,
             "page_size": 20
         }
-
-    Success payload (key "data"):
-        {
-            "requests": [ ... ],
-            "total": 42,
-            "page": 1,
-            "page_size": 20
-        }
     """
-    if role != ROLE_RETAILER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in RETAILER_ROLES):
         return (
             "error",
             "Only retailers can fetch their own requests",
@@ -641,7 +506,7 @@ def handle_get_my_requests(user, data, role):
     )
 
 
-def handle_get_wholesaler_tagged_requests(user, data, role):
+def handle_get_wholesaler_tagged_requests(user, data):
     """
     Wholesaler fetches requests where their entity is a target.
 
@@ -653,12 +518,9 @@ def handle_get_wholesaler_tagged_requests(user, data, role):
             "page": 1,
             "page_size": 20
         }
-
-    Response shape (key "data"):
-        { "wholesaler_product_requests": [ ... ] }
     """
-    create_log("info", f"Role here: {role}")
-    if role != ROLE_WHOLESALER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in WHOLESALER_ROLES):
         return (
             "error",
             "Only wholesalers can fetch tagged requests",
@@ -736,20 +598,22 @@ def handle_get_wholesaler_tagged_requests(user, data, role):
     )
 
 
-def handle_get_request_details(user, data, role):
+def handle_get_request_details(user, data):
     """
     Fetch details for a single request (either role).
 
     Sample request:
         {
             "action": "GetRequestDetails",
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf"
+            "request_id": "a54de545-..."
         }
-
-    Success payload (key "request"):
-        { "request": { ...full request with items... } }
     """
-    if role not in (ROLE_RETAILER, ROLE_WHOLESALER):
+    roles = _get_user_roles(user)
+
+    is_retailer = any(r in roles for r in RETAILER_ROLES)
+    is_wholesaler = any(r in roles for r in WHOLESALER_ROLES)
+
+    if not (is_retailer or is_wholesaler):
         return ("error", "Not authorized to view requests", {})
 
     request_id = data.get("request_id")
@@ -788,7 +652,7 @@ def handle_get_request_details(user, data, role):
 
     entity_id = _resolve_entity_id(user)
 
-    if role == ROLE_RETAILER:
+    if is_retailer:
         if str(req.entity_id) != str(entity_id):
             return (
                 "error",
@@ -816,24 +680,22 @@ def handle_get_request_details(user, data, role):
     )
 
 
-def handle_create_offer(user, data, role):
+def handle_create_offer(user, data):
     """
     Wholesaler submits an offer on a specific request line.
 
     Sample request:
         {
             "action": "CreateOffer",
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
-            "line_id": "9d2dafa2-bdf6-48c7-94c2-f3accb636e9c",
+            "request_id": "a54de545-...",
+            "line_id": "9d2dafa2-...",
             "offered_quantity": 21,
             "offered_unit_price": 8.00,
             "note": ""
         }
-
-    Success payload (key "offer"):
-        { "offer_id": "...", "status": "OFFERED" }
     """
-    if role != ROLE_WHOLESALER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in WHOLESALER_ROLES):
         return ("error", "Only wholesalers can submit offers", {})
 
     entity_id = _resolve_entity_id(user)
@@ -949,20 +811,18 @@ def handle_create_offer(user, data, role):
     )
 
 
-def handle_withdraw_offer(user, data, role):
+def handle_withdraw_offer(user, data):
     """
     Wholesaler withdraws a previously submitted offer.
 
     Sample request:
         {
             "action": "WithdrawOffer",
-            "offer_id": "f2a1a2b3-...-9d2dafa2"
+            "offer_id": "f2a1a2b3-..."
         }
-
-    Success payload (key "offer"):
-        { "offer_id": "...", "status": "WITHDRAWN" }
     """
-    if role != ROLE_WHOLESALER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in WHOLESALER_ROLES):
         return ("error", "Only wholesalers can withdraw offers", {})
 
     entity_id = _resolve_entity_id(user)
@@ -1029,31 +889,20 @@ def handle_withdraw_offer(user, data, role):
     )
 
 
-def handle_confirm_offers(user, data, role):
+def handle_confirm_offers(user, data):
     """
     Retailer confirms / declines offers on their request.
 
     Sample request:
         {
             "action": "ConfirmOffers",
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
-            "confirmations": [
-                { "offer_id": "f2a1a2b3-...", "response_note": "" }
-            ],
-            "declinations": [
-                { "offer_id": "f9e8d7c6-...", "reason": "out of budget" }
-            ],
-            "note": ""
-        }
-
-    Success payload (key "request"):
-        {
-            "request_id": "...",
-            "confirmed_offer_count": 1,
-            "declined_offer_count": 1
+            "request_id": "a54de545-...",
+            "confirmations": [{"offer_id": "f2a1a2b3-..."}],
+            "declinations":  [{"offer_id": "f9e8d7c6-...", "reason": "out of budget"}]
         }
     """
-    if role != ROLE_RETAILER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can confirm offers", {})
 
     entity_id = _resolve_entity_id(user)
@@ -1202,21 +1051,19 @@ def handle_confirm_offers(user, data, role):
     )
 
 
-def handle_cancel_request(user, data, role):
+def handle_cancel_request(user, data):
     """
     Retailer cancels an entire request.
 
     Sample request:
         {
             "action": "CancelRequest",
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "request_id": "a54de545-...",
             "reason": "no longer needed"
         }
-
-    Success payload (key "request"):
-        { "request_id": "...", "status": "CANCELLED" }
     """
-    if role != ROLE_RETAILER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can cancel requests", {})
 
     entity_id = _resolve_entity_id(user)
@@ -1296,25 +1143,20 @@ def handle_cancel_request(user, data, role):
     )
 
 
-def handle_cancel_request_item(user, data, role):
+def handle_cancel_request_item(user, data):
     """
     Retailer cancels a single line on a request.
 
     Sample request:
         {
             "action": "CancelRequestItem",
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
-            "item_id": "9d2dafa2-bdf6-48c7-94c2-f3accb636e9c",
+            "request_id": "a54de545-...",
+            "item_id": "9d2dafa2-...",
             "reason": "duplicate"
         }
-
-    Success payload (key "request"):
-        {
-            "request_id": "...",
-            "cancelled_item_id": "9d2dafa2-..."
-        }
     """
-    if role != ROLE_RETAILER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in RETAILER_ROLES):
         return ("error", "Only retailers can cancel lines", {})
 
     entity_id = _resolve_entity_id(user)
@@ -1383,34 +1225,25 @@ def handle_cancel_request_item(user, data, role):
     )
 
 
-def handle_respond(user, data, role):
+def handle_respond(user, data):
     """
     Wholesaler responds to a request with accepted / rejected lines.
 
     Sample request:
         {
             "action": "Respond",
-            "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf",
+            "request_id": "a54de545-...",
             "note": "",
             "accepted_lines": [
-                {
-                    "item_id": "9d2dafa2-bdf6-48c7-94c2-f3accb636e9c",
-                    "receipt_id": "0a1b2c3d-...-e4f5a6b7"
-                }
+                {"item_id": "9d2dafa2-...", "receipt_id": "0a1b2c3d-..."}
             ],
             "rejected_lines": [
-                { "item_id": "5e6f7a8b-...-1c2d3e4f" }
+                {"item_id": "5e6f7a8b-..."}
             ]
         }
-
-    Success payload (key "response"):
-        {
-            "response_id": "...",
-            "offered_line_count": 1,
-            "rejected_line_count": 1
-        }
     """
-    if role != ROLE_WHOLESALER:
+    roles = _get_user_roles(user)
+    if not any(r in roles for r in WHOLESALER_ROLES):
         return (
             "error",
             "Only wholesalers can respond to requests",
@@ -1573,15 +1406,11 @@ def product_requests_dispatch(user, data):
     """
     Route a product-requests action.
 
-    Returns a 4-tuple:
-        ("success", message, payload, payload_key)
-        ("error", message, errors)
+    Each handler performs its own role check via _get_user_roles().
     """
     action = data.get("action")
     if not action:
         return ("error", "Action is not supplied", {})
-
-    role = _resolve_role(user)
 
     handlers = {
         "CreateRequest": handle_create_request,
@@ -1601,4 +1430,4 @@ def product_requests_dispatch(user, data):
     if handler is None:
         return ("error", f"Action {action} is unknown", {})
 
-    return handler(user, data, role)
+    return handler(user, data)
