@@ -42,6 +42,8 @@ from retailers.models import (
     RetailerProductRequestItemWholesaler,
     RetailerProductRequestOffer,
     RetailerProductRequestResponse,
+    RetailerIndent,
+    RetailerIndentItem
 )
 from retailers.services.product_requests_respond import (
     wholesaler_respond_to_request,
