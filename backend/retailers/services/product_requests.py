@@ -922,6 +922,19 @@ def handle_confirm_offers(user, data, request=None):
     """
     Retailer confirms / declines offers on their request.
 
+    On confirmation:
+      - Each accepted offer flips to CONFIRMED.
+      - A RetailerIndentItem is appended to the retailer's open
+        indent (creating the indent if none exists), tagged with
+        source='PRODUCT_REQUEST' and the source request + offer so
+        the trace is intact.
+      - The indent totals recompute.
+      - The request status recomputes.
+
+    Declinations alone do NOT touch the indent. Only confirmed
+    offers create indent items. A submit with zero confirmations
+    is a pure decline — the request status updates, no indent work.
+
     Sample request:
         {
             "action": "ConfirmOffers",
@@ -939,7 +952,10 @@ def handle_confirm_offers(user, data, request=None):
         {
             "request_id": "a54de545-...",
             "confirmed_offer_count": 1,
-            "declined_offer_count": 1
+            "declined_offer_count": 1,
+            "indent_id": "…",            # null when nothing confirmed
+            "created_new_indent": true,  # true if created now
+            "items_added": 1,
         }
     """
     roles = _get_user_roles(user)
@@ -987,9 +1003,16 @@ def handle_confirm_offers(user, data, request=None):
     confirmed_count = 0
     declined_count = 0
     touched_items = set()
+    accepted_offers = []  # collected for the indent builder below
+
+    # Indent result — populated only when confirmations exist.
+    indent_id = None
+    created_new_indent = False
+    items_added = 0
 
     try:
         with transaction.atomic():
+            # ---------------- Confirmations ----------------
             for entry in confirmations:
                 offer_id = entry.get("offer_id")
                 if not offer_id:
@@ -1025,8 +1048,10 @@ def handle_confirm_offers(user, data, request=None):
                     ]
                 )
                 touched_items.add(offer.request_item_id)
+                accepted_offers.append(offer)
                 confirmed_count += 1
 
+            # ---------------- Declinations ----------------
             for entry in declinations:
                 offer_id = entry.get("offer_id")
                 if not offer_id:
@@ -1062,6 +1087,77 @@ def handle_confirm_offers(user, data, request=None):
                 touched_items.add(offer.request_item_id)
                 declined_count += 1
 
+            # ---------------- Indent construction ----------------
+            # Only touch the indent when there is at least one
+            # accepted offer. Pure-declination submits skip this
+            # block entirely.
+            if accepted_offers:
+                # Lock the indent row (or the absence of one) so
+                # concurrent ConfirmOffers calls for the same
+                # retailer serialise. NOTE: select_for_update()
+                # does not lock when no row matches. If two
+                # submits race before an indent exists, both may
+                # create one. Add a partial unique index on
+                # (entity, is_open='true') or lock the entity row
+                # itself to close this.
+                indent = (
+                    RetailerIndent.objects.select_for_update()
+                    .filter(
+                        entity=req.entity,
+                        # Adjust to is_open=True if the model uses
+                        # BooleanField instead of CharField.
+                        is_open="true",
+                    )
+                    .order_by("-created")
+                    .first()
+                )
+
+                if indent is None:
+                    indent = RetailerIndent.objects.create(
+                        entity=req.entity,
+                        entity_title=req.entity_title,
+                        is_open="true",
+                    )
+                    created_new_indent = True
+
+                for offer in accepted_offers:
+                    # request_item.product_id is the FK column
+                    # value (UUID). Adjust to `.product` if the
+                    # field is a plain UUIDField rather than a
+                    # ForeignKey.
+                    line_product_id = (
+                        offer.request_item.product_id
+                    )
+
+                    RetailerIndentItem.objects.create(
+                        retailer_indent=indent,
+                        source="PRODUCT_REQUEST",
+                        product_request=req,
+                        product_request_offer=offer,
+                        product_id=line_product_id,
+                        wholesale_receipt=offer.wholesaler_receipt,
+                        wholesaler=offer.wholesaler,
+                        wholesaler_title=offer.wholesaler_title,
+                        required_quantity=offer.offered_quantity,
+                        total_quantity=offer.offered_quantity,
+                        final_unit_price=offer.offered_unit_price,
+                        supplier_unit_selling_price=(
+                            offer.offered_unit_price
+                        ),
+                        manufacture_date=offer.manufacture_date,
+                        expiry_date=offer.expiry_date,
+                    )
+                    items_added += 1
+
+                # Recompute derived totals (total_cost, profit,
+                # over_budget, active_item_count, has_items).
+                if hasattr(indent, "recompute_totals"):
+                    indent.recompute_totals()
+                    indent.save()
+
+                indent_id = str(indent.id)
+
+            # ---------------- Recounts ----------------
             for item_id in touched_items:
                 try:
                     item = RetailerProductRequestItem.objects.get(
@@ -1087,6 +1183,9 @@ def handle_confirm_offers(user, data, request=None):
             "request_id": str(req.id),
             "confirmed_offer_count": confirmed_count,
             "declined_offer_count": declined_count,
+            "indent_id": indent_id,
+            "created_new_indent": created_new_indent,
+            "items_added": items_added,
         },
         "request",
     )
