@@ -2410,12 +2410,12 @@ from retailers.retail_permissions import EntitySubscriptionPermission
 from authentication.models import Entities
 from products.models import Products
 
-# from .models import (
-#     RetailerProductRequest,
-#     RetailerProductRequestItem,
-#     RetailerProductRequestOffer,
-#     RetailerProductRequestItemWholesaler
-# )
+from .models import (
+    RetailerProductRequest,
+    RetailerProductRequestItem,
+    RetailerProductRequestOffer,
+    RetailerProductRequestItemWholesaler
+)
 from .serializers import (
     RetailerProductRequestSerializer,
     RetailerProductRequestListSerializer,
