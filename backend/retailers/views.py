@@ -2440,6 +2440,7 @@ from .services.product_requests import product_requests_dispatch
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
 def productRequestsAPIView(request):
     """
+    bb
     HTTP entry point for the product requests dispatcher.
 
     The dispatcher returns one of:

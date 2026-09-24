@@ -253,6 +253,18 @@ def load_bodaboda_assigned_order():
     return result
 
 
+@app.task
+def load_retailer_product_requests():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'retailer-product-requests',
+            {
+                "type": "send_retailer_product_requests"
+            },
+        )
+    return result
+
+
 
 # @classmethod
 # def encode_json(cls, content):

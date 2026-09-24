@@ -115,5 +115,10 @@ app.conf.beat_schedule = {
         "schedule": 120.0,
         "args": None,
     },
+        "load_retailer_product_requests": {
+        "task": "retailers.tasks.load_retailer_product_requests",
+        "schedule": 120.0,
+        "args": None,
+    },
 
 }

@@ -172,7 +172,7 @@ class FilteredRetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
                 })
 
         
-class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
+class WholesalerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:

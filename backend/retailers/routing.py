@@ -17,5 +17,6 @@ retailers_websocket_urlpatterns = [
     path("ws/retailers/prescriptions/user/",consumers.UserPrescriptionsConsumer.as_asgi()),
     # path("ws/retailers/orders/notifications/",consumers.CustomerOrderNotificationConsumer.as_asgi()),
     path("ws/retailers/orders/bodaboda/assigned/",consumers.BodabodaAssignedOrdersConsumer.as_asgi()),
-    path("ws/retailers/dashboard/",consumers.RetailerDashboardsConsumer.as_asgi())
+    path("ws/retailers/dashboard/",consumers.RetailerDashboardsConsumer.as_asgi()),
+    path("ws/retailers/products/requests/",consumers.RetailerProductRequestsConsumer.as_asgi()),
 ]
