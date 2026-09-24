@@ -1140,7 +1140,7 @@ def handle_confirm_offers(user, data, request=None):
                         wholesale_receipt=offer.wholesaler_receipt,
                         required_quantity=offer.offered_quantity,
                         total_quantity=offer.offered_quantity,
-                        final_unit_price=offer.offered_unit_price,
+                        final_unit_selling_price=offer.offered_unit_price,
                         supplier_unit_selling_price=(
                             offer.offered_unit_price
                         ),
