@@ -11,16 +11,16 @@ def validate_category_data(data):
         category_details = data["category_details"]
 
     except KeyError:
-        errors.append("Body system details are required")
+        errors.append("Category details are required")
     try:
         title = data["category_details"]["title"]
         if data["category_details"]["title"] == "":
             errors.append("Title cannot be empty")
         if title and Category.objects.filter(title=title.upper()).exists():
-            errors.append(f"Body system titled {title} already exists")
+            errors.append(f"Category titled {title} already exists")
 
     except KeyError:
-        errors.append("Body system title is required")
+        errors.append("Category title is required")
 
     if len(errors) > 0:
         raise exceptions.ValidationError(errors)
@@ -55,7 +55,7 @@ def update_category(data, user):
         category_id = data["category_details"]['id']
         if data["category_details"]['id'] == "":
             raise exceptions.ValidationError(
-                "Body system ID must be valid UUID")
+                "Category ID must be valid UUID")
         if Category.objects.filter(id=category_id).exists():
             category = Category.objects.get(id=category_id)
             if user.is_staff:
@@ -69,7 +69,7 @@ def update_category(data, user):
                 "No body system exists for give ID")
 
     except KeyError:
-        raise exceptions.ValidationError("Body system ID is required")
+        raise exceptions.ValidationError("Drug category ID is required")
     try:
         category_details = data["category_details"]
         if data["category_details"] == {}:
