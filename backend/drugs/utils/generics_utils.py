@@ -70,14 +70,28 @@ def validate_generic_data(data):
 
 def create_generic(data, user):
     # Optional drug sub category ID
+    drug_class = None
+    drug_class_obj = None
     drug_sub_class = None
+    drug_sub_class_obj = None
     if (
         "drug_sub_class" in data["generic_details"]
         and not data["generic_details"]["drug_sub_class"] == ""
     ):
         drug_sub_class = data["generic_details"]["drug_sub_class"]
         if DrugSubClass.objects.filter(id=drug_sub_class).exists():
-            drug_sub_class = DrugSubClass.objects.filter(id=drug_sub_class_id).first()
+            drug_sub_class_obj = DrugSubClass.objects.filter(id=drug_sub_class).first()
+        else:
+            raise exceptions.ValidationError(
+                "Drug sub class with provided ID does not exist"
+            )
+    if (
+        "drug_class" in data["generic_details"]
+        and not data["generic_details"]["drug_class"] == ""
+    ):
+        drug_class = data["generic_details"]["drug_class"]
+        if DrugClass.objects.filter(id=drug_class).exists():
+            drug_class_obj = DrugClass.objects.filter(id=drug_class).first()
         else:
             raise exceptions.ValidationError(
                 "Drug sub class with provided ID does not exist"
@@ -87,8 +101,8 @@ def create_generic(data, user):
         created = Generics.objects.create(
             title=data["generic_details"]["title"],
             description=data["generic_details"]["description"],
-            drug_class_id=data["generic_details"]["drug_class"],
-            drug_sub_class=drug_sub_class,
+            drug_class=drug_class_obj,
+            drug_sub_class=drug_sub_class_obj,
             owner=user,
             entity=user.entity,
         )
