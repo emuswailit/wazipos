@@ -1,6 +1,6 @@
 
 from rest_framework import exceptions
-from ..models import DrugClass, BodySystem, DrugSubClass
+from ..models import DrugClass, Category, DrugSubClass
 from django.db import transaction
 from django.db.models import Q
 
@@ -36,6 +36,7 @@ def create_drug_class(data, user):
         created = DrugClass.objects.create(
             title=data["drug_class_details"]["title"],
             description=data["drug_class_details"]["description"],
+            category_id=data["drug_class_details"]["category"],
             owner=user,
             entity=user.entity,
         )
@@ -95,8 +96,8 @@ def update_drug_class(data, user):
     if "body_system" in data["drug_class_details"]:
         if data["drug_class_details"]["body_system"]:
             body_system_id = data["drug_class_details"]["body_system"]
-            if BodySystem.objects.filter(id=body_system_id).exists():
-                body_system = BodySystem.objects.filter(
+            if Category.objects.filter(id=body_system_id).exists():
+                body_system = Category.objects.filter(
                     id=body_system_id).first()
             else:
                 raise exceptions.ValidationError(

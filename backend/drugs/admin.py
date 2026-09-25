@@ -2,7 +2,7 @@ from django.contrib import admin
 from . import models
 
 # Register your models here.
-admin.site.register(models.BodySystem)
+admin.site.register(models.Category)
 admin.site.register(models.DrugClass)
 admin.site.register(models.DrugSubClass)
 

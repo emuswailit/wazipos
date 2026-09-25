@@ -1,22 +1,22 @@
 
 from rest_framework import exceptions
-from ..models import BodySystem
+from ..models import Category
 
 
-def validate_body_system_data(data):
+def validate_category_data(data):
     errors = []
     preparation = None
     category = None
     try:
-        body_system_details = data["body_system_details"]
+        category_details = data["category_details"]
 
     except KeyError:
         errors.append("Body system details are required")
     try:
-        title = data["body_system_details"]["title"]
-        if data["body_system_details"]["title"] == "":
+        title = data["category_details"]["title"]
+        if data["category_details"]["title"] == "":
             errors.append("Title cannot be empty")
-        if title and BodySystem.objects.filter(title=title.upper()).exists():
+        if title and Category.objects.filter(title=title.upper()).exists():
             errors.append(f"Body system titled {title} already exists")
 
     except KeyError:
@@ -28,11 +28,11 @@ def validate_body_system_data(data):
         return
 
 
-def create_body_system(data, user):
+def create_category(data, user):
     try:
-        created = BodySystem.objects.create(
-            title=data["body_system_details"]["title"],
-            description=data["body_system_details"]["title"],
+        created = Category.objects.create(
+            title=data["category_details"]["title"],
+            description=data["category_details"]["title"],
             owner=user,
             entity=user.entity,
         )
@@ -44,23 +44,23 @@ def create_body_system(data, user):
         raise exceptions.ValidationError(e)
 
 
-def get_all_body_systems(user):
-    return BodySystem.objects.all()
+def get_all_categorys(user):
+    return Category.objects.all()
 
 
-def update_body_system(data, user):
-    body_system = None
+def update_category(data, user):
+    category = None
 
     try:
-        body_system_id = data["body_system_details"]['id']
-        if data["body_system_details"]['id'] == "":
+        category_id = data["category_details"]['id']
+        if data["category_details"]['id'] == "":
             raise exceptions.ValidationError(
                 "Body system ID must be valid UUID")
-        if BodySystem.objects.filter(id=body_system_id).exists():
-            body_system = BodySystem.objects.get(id=body_system_id)
+        if Category.objects.filter(id=category_id).exists():
+            category = Category.objects.get(id=category_id)
             if user.is_staff:
                 pass
-            elif user == body_system.owner:
+            elif user == category.owner:
                 pass
             else:
                 raise exceptions.ValidationError("Not authorized")
@@ -71,8 +71,8 @@ def update_body_system(data, user):
     except KeyError:
         raise exceptions.ValidationError("Body system ID is required")
     try:
-        body_system_details = data["body_system_details"]
-        if data["body_system_details"] == {}:
+        category_details = data["category_details"]
+        if data["category_details"] == {}:
             raise exceptions.ValidationError(
                 "No body system details were supplied")
     except KeyError:
@@ -82,22 +82,22 @@ def update_body_system(data, user):
     title = None
     description = None
 
-    if "title" in data["body_system_details"]:
-        if data["body_system_details"]["title"]:
-            title = data["body_system_details"]["title"]
-    if "description" in data["body_system_details"]:
-        if data["body_system_details"]["description"]:
-            description = data["body_system_details"]["description"]
+    if "title" in data["category_details"]:
+        if data["category_details"]["title"]:
+            title = data["category_details"]["title"]
+    if "description" in data["category_details"]:
+        if data["category_details"]["description"]:
+            description = data["category_details"]["description"]
 
     try:
 
         if title:
-            body_system.title = title
-            body_system.save()
+            category.title = title
+            category.save()
         if description:
-            body_system.description = description
-            body_system.save()
+            category.description = description
+            category.save()
 
-        return body_system
+        return category
     except Exception as e:
         raise exceptions.ValidationError(e)

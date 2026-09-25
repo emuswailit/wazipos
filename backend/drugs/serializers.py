@@ -16,30 +16,18 @@ from . import models
 User = get_user_model()
 
 
-class BodySystemImagesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = models.BodySystemImages
-        fields = ("image", "entity", "system", "owner", "created", "updated")
-        read_only_fields = (
-            "owner",
-            "created",
-            "updated",
-            "entity",
-        )
 
 
-class BodySystemSerializer(serializers.ModelSerializer):
+class CategorySerializer(serializers.ModelSerializer):
     # owner_details = serializers.SerializerMethodField(read_only=True)
-    images = BodySystemImagesSerializer(many=True, read_only=True)
-
+  
     class Meta:
-        model = models.BodySystem
+        model = models.Category
         fields = (
             "id",
             "title",
             "description",
             "owner",
-            "images",
             "entity",
             "created",
             "updated",
@@ -60,13 +48,7 @@ class BodySystemSerializer(serializers.ModelSerializer):
             }
         }
 
-    # def get_owner_details(self, obj):
-    #     owner = User.objects.get(id=obj.owner.id)
-    #     return UserSerializer(owner, context=self.context).data
 
-    def get_images(self, obj):
-        images = models.BodySystemImages.objects.filter(body_system=obj)
-        return BodySystemImagesSerializer(images, context=self.context, many=True).data
 
 
 class InstructionSerializer(serializers.HyperlinkedModelSerializer):
@@ -163,11 +145,11 @@ class DrugClassSerializer(serializers.ModelSerializer):
             )
         ]
 
-    def get_body_system_title(self, obj):
-        body_system_title=""
-        if obj.body_system:
-            body_system_title = obj.body_system.title
-        return body_system_title
+    def get_category_title(self, obj):
+        category_title=""
+        if obj.category:
+            category_title = obj.category.title
+        return category_title
 
 
 class DrugSubClassSerializer(serializers.ModelSerializer):
@@ -581,9 +563,9 @@ class FormulationsSerializer(serializers.HyperlinkedModelSerializer):
         )
 
 
-class BodySystemDisplaySerializer(serializers.HyperlinkedModelSerializer):
+class CategoryDisplaySerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
-        model = models.BodySystem
+        model = models.Category
         fields = (
             "title",
             "description",

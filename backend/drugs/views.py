@@ -4,7 +4,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import permissions, exceptions
 from core import responses
 from . import serializers, models, utils
-from .utils import formulation_utils, frequency_utils, body_system_utils, drug_class_utils, drug_sub_class_utils, route_utils, generics_utils, preparation_utils
+from .utils import formulation_utils, frequency_utils, category_utils, drug_class_utils, drug_sub_class_utils, route_utils, generics_utils, preparation_utils
 from core.responses import custom_error_response
 
 # Create your views here.
@@ -12,62 +12,62 @@ from core.responses import custom_error_response
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
-def body_systems_api_view(request):
+def categories_api_view(request):
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-    if request.data["action"] == "CreateBodySystem":
-        body_system_utils.validate_body_system_data(request.data)
+    if request.data["action"] == "CreateCategory":
+        category_utils.validate_category_data(request.data)
 
-        body_system = body_system_utils.create_body_system(
+        category = category_utils.create_category(
             request.data, request.user)
-        if body_system:
-            serializer = serializers.BodySystemSerializer(
-                body_system, many=False, context={"request": request}
+        if category:
+            serializer = serializers.CategorySerializer(
+                category, many=False, context={"request": request}
             )
             return responses.custom_success_message(
-                0, "Body system created successfully", serializer.data, 'body_system'
+                0, "Body system created successfully", serializer.data, 'category'
             )
 
         else:
             return responses.custom_error_response(1, "Body systems could not be created")
-    elif request.data["action"] == "GetBodySystems":
-        """Retrieve body systems"""
+    elif request.data["action"] == "GetCategories":
+        """Retrieve drug category """
 
-        body_systems = body_system_utils.get_all_body_systems(request.user)
+        categories = category_utils.get_all_categories(request.user)
         paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(body_systems, request)
-        serializer = serializers.BodySystemSerializer(
+        page = paginator.paginate_queryset(categories, request)
+        serializer = serializers.CategorySerializer(
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
-    elif request.data["action"] == "UpdateBodySystem":
+    elif request.data["action"] == "UpdateCategory":
 
-        product = body_system_utils.update_body_system(
+        product = category_utils.update_category(
             request.data, request.user)
         if product:
-            serializer = serializers.BodySystemSerializer(
+            serializer = serializers.CategorySerializer(
                 product, many=False, context={"request": request}
             )
             return responses.custom_success_message(
-                0, "Body systems updated successfully", serializer.data, 'body_system'
+                0, "Body systems updated successfully", serializer.data, 'category'
             )
         else:
             return responses.custom_error_response(1, "Product could not be updated")
-    elif request.data["action"] == "BodySystemDetails":
-        body_system = None
+    elif request.data["action"] == "CategoryDetails":
+        category = None
         try:
-            body_system_id = request.data["body_system"]
-            if models.BodySystem.objects.filter(id=body_system_id).exists():
-                body_system = models.BodySystem.objects.filter(
-                    id=body_system_id).first()
-                serializer = serializers.BodySystemSerializer(
-                    body_system, many=False, context={"request": request}
+            category_id = request.data["category"]
+            if models.Category.objects.filter(id=category_id).exists():
+                category = models.Category.objects.filter(
+                    id=category_id).first()
+                serializer = serializers.CategorySerializer(
+                    category, many=False, context={"request": request}
                 )
                 return responses.custom_success_message(
-                    0, "Body system retrieved successfully", serializer.data, 'body_system'
+                    0, "Body system retrieved successfully", serializer.data, 'category'
                 )
             else:
                 return responses.custom_error_response(
@@ -135,7 +135,7 @@ def drug_classes_api_view(request):
             request.data, request.user)
         return custom_error_response(1, "Entity licence deleted succesfully")
     elif request.data["action"] == "DrugClassDetails":
-        body_system = None
+        category = None
         try:
             drug_class_id = request.data["drug_class"]
             if models.DrugClass.objects.filter(id=drug_class_id).exists():
@@ -229,7 +229,7 @@ def drug_sub_classes_api_view(request):
         else:
             return responses.custom_error_response(1, "Drug sub class could not be updated")
     elif request.data["action"] == "DrugSubClassDetails":
-        body_system = None
+        category = None
         try:
             drug_sub_class_id = request.data["drug_sub_class"]
             if models.DrugSubClass.objects.filter(id=drug_sub_class_id).exists():
@@ -313,7 +313,7 @@ def generics_api_view(request):
         else:
             return responses.custom_error_response(1, "Drug generic could not be updated")
     elif request.data["action"] == "GenericDetails":
-        body_system = None
+        category = None
         try:
             generic_id = request.data["generic"]
             if models.Generics.objects.filter(id=generic_id).exists():

@@ -64,31 +64,17 @@ class Instruction(EntityRelatedModel):
         super(Instruction, self).save(*args, **kwargs)
 
 
-class BodySystemImages(EntityRelatedModel):
-    system = models.ForeignKey(
-        "BodySystem", on_delete=models.CASCADE, null=True, blank=True
-    )
-    image = models.ImageField(upload_to="body_system_images")
-    owner = models.ForeignKey(Users, on_delete=models.CASCADE)
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-
-
-class BodySystem(EntityRelatedModel):
+class Category(EntityRelatedModel):
     title = models.CharField(max_length=100, unique=True)
     description = models.TextField(null=True, blank=True)
     owner = models.ForeignKey(Users, on_delete=models.CASCADE, null=True, blank=True)
-    images = models.ManyToManyField(
-        BodySystemImages,
-        related_name="images",
-        blank=True,
-    )
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
         self.title = self.title.upper()
-        super(BodySystem, self).save(*args, **kwargs)
+        super(Category, self).save(*args, **kwargs)
 
     def __str__(self):
         return self.title
@@ -103,6 +89,13 @@ from authentication.models import Users          # adjust import
 
 
 class DrugClass(EntityRelatedModel):
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drug_class_category",
+    )
     title = models.CharField(max_length=360)
     image = models.ImageField(
         upload_to="drug_class_image_upload",
