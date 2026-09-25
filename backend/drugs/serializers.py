@@ -450,6 +450,8 @@ class PreparationSerializer(serializers.ModelSerializer):
             "generics_string",
             "key",
             "gen_array",
+            "created",
+            "updated"
         )
         read_only_fields = ("owner", "gen_array")
         validators = [
