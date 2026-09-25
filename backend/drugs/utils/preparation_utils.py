@@ -6,76 +6,94 @@ from django.db.models import Q
 
 def validate_preparation_data(data):
     errors = []
-    preparation = None
-    category = None
+
+    # ---- 1. Envelope ----
     try:
         preparation_details = data["preparation_details"]
-
     except KeyError:
-        errors.append("Preparation details are required")
-    try:
-        title = data["preparation_details"]["title"]
-        if data["preparation_details"]["title"] == "":
-            errors.append("Title cannot be empty")
-        if title and Preparation.objects.filter(title=title.upper()).exists():
-            errors.append(f"Preparation titled {title} already exists")
+        raise exceptions.ValidationError(
+            ["Preparation details are required"]
+        )
 
-    except KeyError:
-        errors.append("Preparation title is required")
-    try:
-        formulation_id = data["preparation_details"]["formulation_id"]
-        if data["preparation_details"]["formulation_id"] == "":
-            errors.append("Formulation ID cannot be empty")
-        if formulation_id and Formulations.objects.filter(id=formulation_id).exists():
-            pass
-        else:
-            errors.append(f"Formulation with supplied ID does not exist")
+    # ---- 2. Title ----
+    title = preparation_details.get("title")
+    if not title or not str(title).strip():
+        errors.append("Title cannot be empty")
+    elif Preparation.objects.filter(
+        title=str(title).strip().upper()
+    ).exists():
+        errors.append(f"Preparation titled {title} already exists")
 
-    except KeyError:
-        errors.append("Formulation ID is required")
-    try:
-        generics = data["preparation_details"]["generics"]
-        # if data["preparation_details"]["generics"] == []:
-        #     errors.append("Generics cannot be empty")
-        # else:
-        #     for generic in data["preparation_details"]["generics"]:
-        #         if Generics.objects.filter(id=generic).exists():
-        #             pass
-        #         else:
-        #             errors.append(
-        #                 f"Generic with  ID {generic} does not exist")
+    # ---- 3. Formulation ----
+    formulation_id = preparation_details.get("formulation_id")
+    if not formulation_id:
+        errors.append("Formulation ID cannot be empty")
+    elif not Formulations.objects.filter(
+        id=formulation_id
+    ).exists():
+        errors.append(
+            "Formulation with supplied ID does not exist"
+        )
 
-    except KeyError:
+    # ---- 4. Generics (array) ----
+    raw_generics = preparation_details.get("generics", [])
+    if not isinstance(raw_generics, list):
+        raw_generics = [raw_generics] if raw_generics else []
+
+    generic_ids = [str(x) for x in raw_generics if x]
+
+    if len(generic_ids) == 0:
         errors.append("At least one generic is required")
-
-    if len(errors) > 0:
-        raise exceptions.ValidationError(errors)
     else:
-        return
+        found = Generics.objects.filter(id__in=generic_ids)
+        found_ids = set(
+            str(x) for x in found.values_list("id", flat=True)
+        )
+        missing = set(generic_ids) - found_ids
+        if missing:
+            errors.append(
+                "Generics with provided IDs do not exist: "
+                f"{list(missing)}"
+            )
+
+    # ---- 5. Bail if any errors collected ----
+    if errors:
+        raise exceptions.ValidationError(errors)
+
+    return
 
 
 def create_preparation(data, user):
+    details = data["preparation_details"]
+
+    # Normalize + fetch dependencies
+    raw_generics = details.get("generics", [])
+    if not isinstance(raw_generics, list):
+        raw_generics = [raw_generics] if raw_generics else []
+    generic_ids = [str(x) for x in raw_generics if x]
+    generic_qs = Generics.objects.filter(id__in=generic_ids)
+
+    # ---- 1. Create the row (no M2M in create()) ----
     try:
         created = Preparation.objects.create(
-            title=data["preparation_details"]["title"],
-            description=data["preparation_details"]["description"],
-            formulation_id=data["preparation_details"]["formulation_id"],
+            title=details["title"],
+            description=details.get("description", ""),
+            formulation_id=details["formulation_id"],
             owner=user,
             entity=user.entity,
         )
-        # if created:
-        #     if 'generics' in data["preparation_details"] and data["preparation_details"]["generics"]:
-        #         for id in data["preparation_details"]["generics"]:
-        #             if Generics.objects.filter(id=id).exists():
-        #                 generic = Generics.objects.filter(id=id).first()
-        #                 created.generics.add(generic)
-        #     return created
-        # else:
-        #     return None
     except Exception as e:
-        raise exceptions.ValidationError(e)
+        raise exceptions.ValidationError(str(e))
 
+    # ---- 2. Attach M2M AFTER create ----
+    created.generics.set(generic_qs)
 
+    # ---- 3. Refresh so downstream serialization sees the links ----
+    created.refresh_from_db()
+
+    return created
+
+    
 def get_all_preparations(user):
     return Preparation.objects.all()
     # return Preparation.objects.all().order_by("-created")[:10]
