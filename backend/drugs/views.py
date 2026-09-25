@@ -36,7 +36,7 @@ def categories_api_view(request):
     elif request.data["action"] == "GetCategories":
         """Retrieve drug category """
 
-        categories = category_utils.get_all_categories(request.user)
+        categories = models.Category.objects.all()
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(categories, request)
         serializer = serializers.CategorySerializer(
