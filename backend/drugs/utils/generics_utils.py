@@ -42,7 +42,7 @@ def validate_generic_data(data):
         if (
             title
             and Generics.objects.filter(
-                title=title.upper(), drug_class_id=drug_class
+                title=title.upper(), drug_class=drug_class
             ).exists()
         ):
             errors.append(
