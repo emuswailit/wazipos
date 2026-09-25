@@ -125,23 +125,23 @@ class OutOfStockAdmin(admin.ModelAdmin):
     search_fields = ("product",)
 
 
-@admin.register(models.OrderEstimate)
-class OrderEstimatesAdmin(admin.ModelAdmin):
-    list_display = (
-        "entity",
-        "owner",
-        "product",
-        "retailer_indent",
-        "required_estimate",
-        "is_ordered",
-        "created"
-    )
-    list_filter = ("product",)
-    search_fields = ("product",)
+# @admin.register(models.OrderEstimate)
+# class OrderEstimatesAdmin(admin.ModelAdmin):
+#     list_display = (
+#         "entity",
+#         "owner",
+#         "product",
+#         "retailer_indent",
+#         "required_estimate",
+#         "is_ordered",
+#         "created"
+#     )
+#     list_filter = ("product",)
+#     search_fields = ("product",)
 
 
 @admin.register(models.RetailerIndent)
-class OrderEstimatesAdmin(admin.ModelAdmin):
+class RetailerIndentsAdmin(admin.ModelAdmin):
     list_display = (
         "entity",
         "owner",

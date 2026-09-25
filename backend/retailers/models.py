@@ -1,31 +1,66 @@
-from django.utils import timezone
-from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models.fields.related import ManyToManyField
-from django.db import models
-from authentication.models import  Entities, Countries,Counties, Constituencies, DocumentNumbers,Dependants
-from wholesalers.models import WholesalerReceipts,WholesalerPriceDiscounts,WholesalerQuantityDiscounts
-from django.contrib.gis.db import models as geomodel
-from entitylocations.models import BodaLocations
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-from django_advance_thumbnail import AdvanceThumbnailField
-from django.core.files import File
-from io import BytesIO
-from PIL import Image
-from wholesalers.models import RetailerOrderItems, RetailerOrders
-from drugs.models import Frequency, Preparation, Routes, Users
-from core.models import EntityRelatedModel
-from django.contrib.auth import get_user_model
-from django.db.models.signals import post_save, pre_save
-from django.utils.text import slugify
-from employees.models import Employees
-from employees.models import DeliveryPersons
-from django.utils.translation import gettext_lazy as _
+# retailers/models.py
+
+# ---------- Standard library ----------
 import uuid
-from django.db.models.signals import post_save
-from django.dispatch import receiver
+
 import requests
-from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
+from decimal import Decimal
+from io import BytesIO
+
+# ---------- Third-party ----------
+from PIL import Image
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django_advance_thumbnail import AdvanceThumbnailField
+
+# ---------- Django core ----------
+from django.contrib.auth import get_user_model
+from django.contrib.gis.db import models as geomodel
+from django.core.exceptions import ValidationError
+from django.core.files import File
+from django.core.validators import (
+    MinValueValidator,
+    MaxValueValidator,
+)
+from django.db import models
+from django.db.models import Q, Sum
+from django.db.models.fields.related import ManyToManyField
+from django.db.models.signals import post_save, pre_save
+from django.dispatch import receiver
+from django.utils import timezone
+from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
+
+# ---------- Local apps ----------
+from authentication.models import (
+    Entities,
+    Countries,
+    Counties,
+    Constituencies,
+    DocumentNumbers,
+    Dependants,
+)
+from core.constants import (
+    TRUE_FALSE_OPTIONS,
+    UNITS_OF_ISSUE_CHOICES,
+)
+from core.models import EntityRelatedModel
+from drugs.models import (
+    Frequency,
+    Preparation,
+    Routes,
+    Users,
+)
+from employees.models import Employees, DeliveryPersons
+from entitylocations.models import BodaLocations
+from wholesalers.models import (
+    WholesalerReceipts,
+    WholesalerPriceDiscounts,
+    WholesalerQuantityDiscounts,
+    RetailerOrderItems,
+    RetailerOrders,
+)
 
 User = get_user_model()
 
@@ -166,12 +201,7 @@ class WholesalerInvoiceItems(EntityRelatedModel):
         User, related_name="wholesaler_invoice_owner", on_delete=models.CASCADE
     )
 
-from decimal import Decimal
 
-from django.core.exceptions import ValidationError
-from django.db import models
-from django.db.models import Sum
-from django.utils import timezone
 
 
 class RetailerReceipts(EntityRelatedModel):
@@ -457,12 +487,7 @@ class RetailQuantityDiscounts(EntityRelatedModel):
         on_delete=models.CASCADE,
     )
 
-# retailers/models.py
 
-from decimal import Decimal
-
-from django.db import models
-from django.utils import timezone
 
 
 class IndentItemSource(models.TextChoices):
@@ -498,12 +523,7 @@ class IndentItemSource(models.TextChoices):
     IMPORTED = "IMPORTED", "Imported from another source"
 
 
-from decimal import Decimal
-
-from django.db import models
-
-from authentication.models import Users
-
+# retailers/models.py — RetailerIndent
 
 class RetailerIndent(EntityRelatedModel):
     """
@@ -513,11 +533,27 @@ class RetailerIndent(EntityRelatedModel):
     that items are added to (manually, from prediction, or from
     campaigns) and later committed to orders. It is the sole
     commitment path — campaign or not.
+
+    Invariant: at most one open indent per retailer entity.
+    Enforced at three layers:
+      1. UniqueConstraint with a partial WHERE clause (the
+         database-level guarantee; survives races).
+      2. clean() — form/admin friendly error before hitting the DB.
+      3. save() — pre-check that turns the common sequential
+         conflict into a ValidationError instead of an
+         IntegrityError.
     """
 
     class Meta:
         verbose_name_plural = "Retailer Indents"
         ordering = ["-created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entity"],
+                condition=Q(is_open="true"),
+                name="unique_open_indent_per_entity",
+            ),
+        ]
 
     is_open = models.CharField(max_length=10, default="true")
     indent_number = models.CharField(
@@ -577,9 +613,68 @@ class RetailerIndent(EntityRelatedModel):
     def __str__(self):
         return f"{self.indent_number or '(unsaved)'} · {self.entity_title}"
 
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    def clean(self):
+        """
+        Surface a friendly error before the DB constraint fires.
+
+        Called by full_clean() — Django admin, DRF serializers, and
+        any explicit form validation. Not called by save(), so this
+        is not a race-safe guard on its own — see save() below and
+        the UniqueConstraint in Meta.
+        """
+        super().clean()
+
+        if self.is_open != "true" or not self.entity_id:
+            return
+
+        conflict = (
+            RetailerIndent.objects
+            .filter(entity_id=self.entity_id, is_open="true")
+            .exclude(pk=self.pk)
+            .exists()
+        )
+        if conflict:
+            raise ValidationError(
+                {
+                    "is_open": (
+                        "This retailer already has an open indent. "
+                        "Close it before opening a new one."
+                    )
+                }
+            )
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
     def save(self, *args, **kwargs):
         if not self.indent_number:
             self.indent_number = self._generate_indent_number()
+
+        # Pre-check: only relevant when this row is / will be open
+        # and has an entity. Closing a row is always safe.
+        #
+        # The check is not atomic — two concurrent saves can both
+        # pass it, and the UniqueConstraint catches the loser. That
+        # is intentional: the constraint is the guarantee, this is
+        # just a nicer error for the common case.
+        if self.is_open == "true" and self.entity_id:
+            conflict = (
+                RetailerIndent.objects
+                .filter(entity_id=self.entity_id, is_open="true")
+                .exclude(pk=self.pk)
+                .exists()
+            )
+            if conflict:
+                raise ValidationError(
+                    "This retailer already has an open indent. "
+                    "Close it before opening a new one."
+                )
+
         super().save(*args, **kwargs)
 
     def _generate_indent_number(self):
@@ -608,10 +703,18 @@ class RetailerIndent(EntityRelatedModel):
 
         return f"{prefix}{seq:010d}"
 
+    # ------------------------------------------------------------------
+    # Aggregates
+    # ------------------------------------------------------------------
+
     def recalculate(self, save=True):
         """
         Roll up item-level profit_estimate into header aggregates.
         Only counts items with a profit_estimate (i.e. priced).
+
+        Note: calls super().save() directly, bypassing the
+        open-indent pre-check in save(). That's intentional —
+        recomputing totals must never raise a conflict error.
         """
         items = self.indent_for_item.all()
 
@@ -656,13 +759,6 @@ class RetailerIndent(EntityRelatedModel):
                 "over_budget",
                 "updated",
             ])
-
-
-from decimal import Decimal
-
-from django.db import models
-from django.utils import timezone
-
 
 class RetailerIndentItem(EntityRelatedModel):
     """
