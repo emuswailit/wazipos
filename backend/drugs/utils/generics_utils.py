@@ -17,6 +17,7 @@ def validate_generic_data(data):
     errors = []
     preparation = None
     drug_sub_class = None
+    drug_class = None
     try:
         generic_details = data["generic_details"]
 
