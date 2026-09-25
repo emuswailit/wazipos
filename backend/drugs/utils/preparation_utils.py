@@ -2,6 +2,7 @@
 from rest_framework import exceptions
 from ..models import Preparation,  Formulations
 from django.db.models import Q
+from drugs.models import Generics
 
 
 def validate_preparation_data(data):
