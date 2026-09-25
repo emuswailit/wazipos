@@ -24,11 +24,11 @@ def validate_generic_data(data):
         errors.append("Drug generic details are required")
 
     try:
-        drug_class_id = data["generic_details"]["drug_class"]
+        drug_class = data["generic_details"]["drug_class"]
         if data["generic_details"]["drug_class"] == "":
             errors.append("Drug class ID cannot be empty")
-        if drug_class_id and DrugClass.objects.filter(id=drug_class_id).exists():
-            drug_sub_class = DrugClass.objects.filter(id=drug_class_id).first()
+        if drug_class and DrugClass.objects.filter(id=drug_class).exists():
+            drug_sub_class = DrugClass.objects.filter(id=drug_class).first()
         else:
             errors.append("Drug class with given ID does not exist")
 
@@ -56,8 +56,8 @@ def validate_generic_data(data):
         if data["generic_details"]["drug_sub_class"] == "":
             pass
         else:
-            drug_sub_class_id = data["generic_details"]["drug_sub_class"]
-            if DrugSubClass.objects.filter(id=drug_sub_class_id).exists():
+            drug_sub_class= data["generic_details"]["drug_sub_class"]
+            if DrugSubClass.objects.filter(id=drug_sub_class).exists():
                 pass
             else:
                 errors.append("Drug sub class with provided ID does not exist")
@@ -75,29 +75,29 @@ def create_generic(data, user):
         "drug_sub_class" in data["generic_details"]
         and not data["generic_details"]["drug_sub_class"] == ""
     ):
-        drug_sub_class_id = data["generic_details"]["drug_sub_class"]
-        if DrugSubClass.objects.filter(id=drug_sub_class_id).exists():
+        drug_sub_class = data["generic_details"]["drug_sub_class"]
+        if DrugSubClass.objects.filter(id=drug_sub_class).exists():
             drug_sub_class = DrugSubClass.objects.filter(id=drug_sub_class_id).first()
         else:
             raise exceptions.ValidationError(
                 "Drug sub class with provided ID does not exist"
             )
 
-    # try:
-    #     created = Generics.objects.create(
-    #         title=data["generic_details"]["title"],
-    #         description=data["generic_details"]["description"],
-    #         drug_class_id=data["generic_details"]["drug_class"],
-    #         drug_sub_class=drug_sub_class,
-    #         owner=user,
-    #         entity=user.entity,
-    #     )
-    #     if created:
-    #         return created
-    #     else:
-    #         return None
-    # except Exception as e:
-    #     raise exceptions.ValidationError(e)
+    try:
+        created = Generics.objects.create(
+            title=data["generic_details"]["title"],
+            description=data["generic_details"]["description"],
+            drug_class_id=data["generic_details"]["drug_class"],
+            drug_sub_class=drug_sub_class,
+            owner=user,
+            entity=user.entity,
+        )
+        if created:
+            return created
+        else:
+            return None
+    except Exception as e:
+        raise exceptions.ValidationError(e)
 
 
 def get_all_generics(user):
