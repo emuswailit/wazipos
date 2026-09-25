@@ -519,7 +519,12 @@ def get_distributor_entities(user):
 
 
 def get_manufacturer_entities(user):
-    entities = Entities.objects.filter(entity_type="MANUFACTURING", is_verified="true")
+    entities = Entities.objects.filter(
+        entity_type__in=[
+            "GeneralManufacturer",
+            "PharmaceuticalManufacturer",
+        ]
+    )
     return entities
 
 
