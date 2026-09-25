@@ -68,123 +68,126 @@ def validate_generic_data(data):
         return
 
 
+def _to_id_list(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [x for x in v if x]
+    if isinstance(v, str):
+        return [v] if v.strip() else []
+    return []
+
+
 def create_generic(data, user):
-    # Optional drug sub category ID
-    drug_class = None
-    drug_class_obj = None
-    drug_sub_class = None
-    drug_sub_class_obj = None
-    if (
-        "drug_sub_class" in data["generic_details"]
-        and not data["generic_details"]["drug_sub_class"] == ""
-    ):
-        drug_sub_class = data["generic_details"]["drug_sub_class"]
-        if DrugSubClass.objects.filter(id=drug_sub_class).exists():
-            drug_sub_class_obj = DrugSubClass.objects.filter(id=drug_sub_class).first()
-        else:
-            raise exceptions.ValidationError(
-                "Drug sub class with provided ID does not exist"
+    details = data["generic_details"]
+
+    drug_classes_ids = _to_id_list(details.get("drug_classes"))
+    drug_sub_classes_ids = _to_id_list(details.get("drug_sub_classes"))
+
+    # Validate drug classes exist
+    class_qs = DrugClass.objects.filter(id__in=drug_classes_ids)
+    if class_qs.count() != len(set(drug_classes_ids)):
+        raise exceptions.ValidationError(
+            "One or more drug classes with provided IDs do not exist"
+        )
+
+    # Validate drug sub classes exist
+    sub_class_qs = DrugSubClass.objects.filter(id__in=drug_sub_classes_ids)
+    if sub_class_qs.count() != len(set(drug_sub_classes_ids)):
+        raise exceptions.ValidationError(
+            "One or more drug sub classes with provided IDs do not exist"
+        )
+
+    # Invariant: every subclass's parent class must also be selected
+    selected_class_ids = set(class_qs.values_list("id", flat=True))
+    subclass_parent_ids = set(
+        sub_class_qs.values_list("drug_class_id", flat=True)
+    )
+    missing = subclass_parent_ids - selected_class_ids
+    if missing:
+        missing_titles = list(
+            DrugClass.objects.filter(id__in=missing).values_list(
+                "title", flat=True
             )
-    if (
-        "drug_class" in data["generic_details"]
-        and not data["generic_details"]["drug_class"] == ""
-    ):
-        drug_class = data["generic_details"]["drug_class"]
-        if DrugClass.objects.filter(id=drug_class).exists():
-            drug_class_obj = DrugClass.objects.filter(id=drug_class).first()
-        else:
-            raise exceptions.ValidationError(
-                "Drug sub class with provided ID does not exist"
+        )
+        raise exceptions.ValidationError({
+            "drug_classes": (
+                "Every subclass's parent class must also be selected. "
+                f"Missing: {missing_titles}"
             )
+        })
 
     try:
         created = Generics.objects.create(
-            title=data["generic_details"]["title"],
-            description=data["generic_details"]["description"],
-            drug_class=drug_class_obj,
-            drug_sub_class=drug_sub_class_obj,
+            title=details["title"],
+            description=details.get("description", ""),
             owner=user,
             entity=user.entity,
         )
-        if created:
-            return created
-        else:
-            return None
     except Exception as e:
-        raise exceptions.ValidationError(e)
+        raise exceptions.ValidationError(str(e))
 
+    created.drug_class.set(class_qs)
+    created.drug_sub_class.set(sub_class_qs)
 
-def get_all_generics(user):
-    
-    return Generics.objects.all()
+    return created
 
 
 def update_generic(data, user):
-    pass
-    # generic = None
-    # try:
-    #     generic_id = data["generic_details"]["id"]
-    #     if data["generic_details"]["id"] == "":
-    #         raise exceptions.ValidationError("Drug class ID must be valid UUID")
-    #     if Generics.objects.filter(id=generic_id).exists():
-    #         generic = Generics.objects.get(id=generic_id)
-    #         if user.is_staff:
-    #             pass
-    #         elif user == generic.owner:
-    #             pass
-    #         else:
-    #             raise exceptions.ValidationError("Not authorized")
-    #     else:
-    #         raise exceptions.ValidationError("Generic with supplied ID does not exist")
+    details = data["generic_details"]
+    generic_id = details.get("id")
+    generic = Generics.objects.filter(id=generic_id).first()
+    if not generic:
+        raise exceptions.ValidationError("Generic not found")
 
-    # except KeyError:
-    #     raise exceptions.ValidationError("Body system ID is required")
-    # try:
-    #     generic_details = data["generic_details"]
-    #     if data["generic_details"] == {}:
-    #         raise exceptions.ValidationError("No body system details were supplied")
-    # except KeyError:
-    #     raise exceptions.ValidationError("Product details to update are required")
+    # Scalar fields
+    if "title" in details:
+        generic.title = details["title"]
+    if "description" in details:
+        generic.description = details["description"]
+    generic.save()
 
-    # title = None
-    # description = None
-    # drug_class = None
-    # drug_sub_class = None
+    # M2M fields
+    if "drug_classes" in details:
+        class_ids = _to_id_list(details["drug_classes"])
+        class_qs = DrugClass.objects.filter(id__in=class_ids)
+        if class_qs.count() != len(set(class_ids)):
+            raise exceptions.ValidationError(
+                "One or more drug classes with provided IDs do not exist"
+            )
+        generic.drug_class.set(class_qs)
+    else:
+        class_qs = generic.drug_class.all()
 
-    # if "title" in data["generic_details"]:
-    #     if data["generic_details"]["title"]:
-    #         title = data["generic_details"]["title"]
-    # if "description" in data["generic_details"]:
-    #     if data["generic_details"]["description"]:
-    #         description = data["generic_details"]["description"]
-    # if "drug_class" in data["generic_details"]:
-    #     if data["generic_details"]["drug_class"]:
-    #         drug_class = data["generic_details"]["drug_class"]
-    # if "drug_sub_class" in data["generic_details"]:
-    #     if data["generic_details"]["drug_sub_class"]:
-    #         drug_sub_class = data["generic_details"]["drug_sub_class"]
-    #         if not DrugSubClass.objects.filter(id=drug_sub_class).exists():
-    #             raise exceptions.ValidationError(
-    #                 "Drug sub class with provided ID does not exist"
-    #             )
-    # try:
-    #     if title:
-    #         generic.title = title
-    #         generic.save()
-    #     if description:
-    #         generic.description = description
-    #         generic.save()
-    #     if drug_class:
-    #         generic.drug_class_id = drug_class
-    #         generic.save()
-    #     if drug_sub_class:
-    #         generic.drug_sub_class_id = drug_sub_class
-    #         generic.save()
+    if "drug_sub_classes" in details:
+        sub_class_ids = _to_id_list(details["drug_sub_classes"])
+        sub_class_qs = DrugSubClass.objects.filter(id__in=sub_class_ids)
+        if sub_class_qs.count() != len(set(sub_class_ids)):
+            raise exceptions.ValidationError(
+                "One or more drug sub classes with provided IDs do not exist"
+            )
+        generic.drug_sub_class.set(sub_class_qs)
+    else:
+        sub_class_qs = generic.drug_sub_class.all()
 
-    #     return generic
-    # except Exception as e:
-    #     raise exceptions.ValidationError(e)
-    
+    # Invariant
+    selected_class_ids = set(class_qs.values_list("id", flat=True))
+    subclass_parent_ids = set(
+        sub_class_qs.values_list("drug_class_id", flat=True)
+    )
+    missing = subclass_parent_ids - selected_class_ids
+    if missing:
+        missing_titles = list(
+            DrugClass.objects.filter(id__in=missing).values_list(
+                "title", flat=True
+            )
+        )
+        raise exceptions.ValidationError({
+            "drug_classes": (
+                "Every subclass's parent class must also be selected. "
+                f"Missing: {missing_titles}"
+            )
+        })
 
-
+    return generic
 
