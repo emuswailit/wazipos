@@ -1136,11 +1136,10 @@ def handle_confirm_offers(user, data, request=None):
                         source="PRODUCT_REQUEST",
                         product_request=req,
                         product_request_offer=offer,
-                        product_id=line_product_id,
                         wholesale_receipt=offer.wholesaler_receipt,
                         required_quantity=offer.offered_quantity,
                         total_quantity=offer.offered_quantity,
-                        final_unit_selling_price=offer.offered_unit_price,
+                        final_supplier_unit_selling_price=offer.offered_unit_price,
                         supplier_unit_selling_price=(
                             offer.offered_unit_price
                         ),

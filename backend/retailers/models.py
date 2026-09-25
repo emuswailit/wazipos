@@ -704,6 +704,20 @@ class RetailerIndentItem(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    product_request = models.ForeignKey(
+        "RetailerProductRequest",
+        on_delete=models.CASCADE,
+        related_name="indent_item_source_product_request",
+        null=True,
+        blank=True,
+    )
+    product_request_offer = models.ForeignKey(
+        "RetailerProductRequestOffer",
+        on_delete=models.CASCADE,
+        related_name="indent_item_source_product_request_offer",
+        null=True,
+        blank=True,
+    )
     wholesale_receipt = models.ForeignKey(
         WholesalerReceipts,
         on_delete=models.CASCADE,
