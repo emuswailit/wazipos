@@ -280,8 +280,7 @@ def generics_api_view(request):
     elif request.data["action"] == "GetGenerics":
         """Retrieve generics"""
 
-        generics = generics_utils.get_all_generics(
-            request.user)
+        generics = models.Generics.objects.all()
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(generics, request)
         serializer = serializers.GenericsSerializer(
