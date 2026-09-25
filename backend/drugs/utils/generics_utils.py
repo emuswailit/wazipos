@@ -15,58 +15,116 @@ def search_generics(data, user):
 
 def validate_generic_data(data):
     errors = []
-    preparation = None
-    drug_sub_class = None
-    drug_class = None
+
+    # ---- 1. Envelope ----
     try:
         generic_details = data["generic_details"]
-
     except KeyError:
-        errors.append("Drug generic details are required")
+        raise exceptions.ValidationError(
+            ["Drug generic details are required"]
+        )
 
-    try:
-        drug_class = data["generic_details"]["drug_class"]
-        if data["generic_details"]["drug_class"] == "":
-            errors.append("Drug class ID cannot be empty")
-        if drug_class and DrugClass.objects.filter(id=drug_class).exists():
-            drug_sub_class = DrugClass.objects.filter(id=drug_class).first()
-        else:
-            errors.append("Drug class with given ID does not exist")
+    # ---- 2. Title ----
+    title = generic_details.get("title")
+    if not title or not str(title).strip():
+        errors.append("Title cannot be empty")
 
-    except KeyError:
-        errors.append("Drug class is required")
+    # ---- 3. Drug classes (array) ----
+    raw_classes = generic_details.get("drug_classes", [])
+    if not isinstance(raw_classes, list):
+        raw_classes = [raw_classes] if raw_classes else []
 
-    try:
-        title = data["generic_details"]["title"]
-        if data["generic_details"]["title"] == "":
-            errors.append("Title cannot be empty")
-        if (
-            title
-            and Generics.objects.filter(
-                title=title.upper(), drug_class=drug_class
-            ).exists()
-        ):
+    drug_classes_ids = [str(x) for x in raw_classes if x]
+
+    if len(drug_classes_ids) == 0:
+        errors.append("At least one drug class is required")
+
+    class_qs = DrugClass.objects.none()
+    if drug_classes_ids:
+        class_qs = DrugClass.objects.filter(
+            id__in=drug_classes_ids
+        )
+        found_class_ids = set(
+            str(x) for x in class_qs.values_list("id", flat=True)
+        )
+        missing_class_ids = set(drug_classes_ids) - found_class_ids
+        if missing_class_ids:
             errors.append(
-                f"Generic titled {title} already exists for the selected drug class"
+                "One or more drug classes with provided IDs "
+                f"do not exist: {list(missing_class_ids)}"
             )
 
-    except KeyError:
-        errors.append("Drug generic title is required")
+    # ---- 4. Drug sub classes (array, optional) ----
+    raw_sub_classes = generic_details.get("drug_sub_classes", [])
+    if not isinstance(raw_sub_classes, list):
+        raw_sub_classes = (
+            [raw_sub_classes] if raw_sub_classes else []
+        )
 
-    if "drug_sub_class" in data["generic_details"]:
-        if data["generic_details"]["drug_sub_class"] == "":
-            pass
-        else:
-            drug_sub_class= data["generic_details"]["drug_sub_class"]
-            if DrugSubClass.objects.filter(id=drug_sub_class).exists():
-                pass
-            else:
-                errors.append("Drug sub class with provided ID does not exist")
+    drug_sub_classes_ids = [
+        str(x) for x in raw_sub_classes if x
+    ]
 
-    if len(errors) > 0:
+    sub_class_qs = DrugSubClass.objects.none()
+    if drug_sub_classes_ids:
+        sub_class_qs = DrugSubClass.objects.filter(
+            id__in=drug_sub_classes_ids
+        )
+        found_sub_ids = set(
+            str(x)
+            for x in sub_class_qs.values_list("id", flat=True)
+        )
+        missing_sub_ids = (
+            set(drug_sub_classes_ids) - found_sub_ids
+        )
+        if missing_sub_ids:
+            errors.append(
+                "One or more drug sub classes with provided IDs "
+                f"do not exist: {list(missing_sub_ids)}"
+            )
+
+    # ---- 5. Invariant: every subclass's parent class must be selected ----
+    if class_qs.exists() and sub_class_qs.exists():
+        selected_class_ids = set(
+            str(x)
+            for x in class_qs.values_list("id", flat=True)
+        )
+        subclass_parent_ids = set(
+            str(x)
+            for x in sub_class_qs.values_list(
+                "drug_class_id", flat=True
+            )
+        )
+        missing_parents = subclass_parent_ids - selected_class_ids
+        if missing_parents:
+            missing_titles = list(
+                DrugClass.objects.filter(
+                    id__in=missing_parents
+                ).values_list("title", flat=True)
+            )
+            errors.append(
+                "Every subclass's parent class must also be "
+                f"selected. Missing: {missing_titles}"
+            )
+
+    # ---- 6. Duplicate title within the same set of classes ----
+    if title and class_qs.exists():
+        normalized_title = str(title).strip().upper()
+        for drug_class in class_qs:
+            if Generics.objects.filter(
+                title=normalized_title,
+                drug_class=drug_class,
+            ).exists():
+                errors.append(
+                    f"Generic titled {title} already exists for "
+                    f"drug class {drug_class.title}"
+                )
+
+    # ---- 7. Bail if any error collected ----
+    if errors:
         raise exceptions.ValidationError(errors)
-    else:
-        return
+
+    return
 
 
 def _to_id_list(v):
