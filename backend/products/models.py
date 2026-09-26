@@ -151,18 +151,31 @@ from core.models import EntityRelatedModel
 # =====================================================================
 # Products
 # =====================================================================
+# products/models.py (or wherever this model lives)
 
 class Products(EntityRelatedModel):
+    """
+    Model for all products in the system.
+
+    - If `preparation` is set, the product is a drug.
+    - Creation is admin-level to prevent duplication.
+
+    FK safety:
+    Every read of `self.preparation` / `self.manufacturer` in this
+    class goes through `_safe_fk`, which reads the raw `_id` column
+    and resolves it with `.filter(...).first()`. This means a
+    foreign key that points at a deleted row (possible if the row
+    was removed via raw SQL or a migration that bypassed CASCADE)
+    will not raise `DoesNotExist` from inside `__str__`,
+    `product_name`, `check_is_drug`, or `save`. Those methods are
+    called by DRF during serialization and by ORM during writes —
+    an unhandled `DoesNotExist` there 500s the whole request.
+    """
+
     IS_VATABLE_OPTIONS = (
         ("true", "true"),
         ("false", "false"),
     )
-    """
-    -Model for all products in the system
-    -If preparation parameter is provided then the product is a drug
-    -Creation of this instances must be controlled to to ensure no duplication
-    -Should be done at admin level though it may pose onboarding challenges
-    """
 
     preparation = models.ForeignKey(
         Preparation,
@@ -173,40 +186,69 @@ class Products(EntityRelatedModel):
     )
     title = models.CharField(max_length=100)
     packaging = models.CharField(max_length=100, default="")
-    bar_code = models.CharField(max_length=256, default="", null=True, blank=True)
+    bar_code = models.CharField(
+        max_length=256, default="", null=True, blank=True
+    )
     category = models.ForeignKey(
-        Categories, on_delete=models.CASCADE, null=True, blank=True,
+        Categories,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
     sub_category = models.ForeignKey(
-        SubCategories, on_delete=models.CASCADE, null=True, blank=True,
+        SubCategories,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
     description = models.TextField(null=True, blank=True)
     is_pom = models.BooleanField(default=True)
     is_vatable = models.CharField(
-        max_length=50, choices=IS_VATABLE_OPTIONS, default="false",
+        max_length=50,
+        choices=IS_VATABLE_OPTIONS,
+        default="false",
     )
     manufacturer = models.ForeignKey(
         Entities,
         related_name="product_manufacturer",
         on_delete=models.CASCADE,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     origin_country = models.ForeignKey(
         Countries,
         related_name="product_origin_country",
         on_delete=models.CASCADE,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
-    units_per_pack = models.BigIntegerField(null=True, blank=True, default=None)
-    images = models.ManyToManyField(ProductImages, related_name="images", blank=True)
+    units_per_pack = models.BigIntegerField(
+        null=True, blank=True, default=None
+    )
+
+    # NOTE: `related_name="images"` on this M2M creates a reverse
+    # accessor `ProductImages.images` that returns products —
+    # confusing and almost certainly a leftover. Left as-is to
+    # avoid a migration in this fix. Rename in a separate change if
+    # you want; nothing in the serializer depends on the reverse
+    # accessor's name.
+    images = models.ManyToManyField(
+        ProductImages,
+        related_name="images",
+        blank=True,
+    )
+
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     active = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     allowed_entities = ArrayField(
-        models.CharField(max_length=50, choices=EntityType.choices()),
+        models.CharField(
+            max_length=50, choices=EntityType.choices()
+        ),
         blank=True,
-        # Uses the classmethod callable to guarantee immutability across row generation
+        # Uses the classmethod callable to guarantee immutability
+        # across row generation.
         default=EntityType.default_entities,
     )
 
@@ -219,29 +261,91 @@ class Products(EntityRelatedModel):
             ),
         ]
 
+    # ---------------------------------------------------------
+    # FK helpers
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def _safe_fk(model, pk):
+        """
+        Resolve a foreign key by raw id without triggering the ORM
+        descriptor.
+
+        Using `self.preparation` (the descriptor) executes an
+        internal `Model.objects.get(pk=self.preparation_id)` the
+        first time the attribute is read on an instance. If the
+        referenced row is gone, that raises
+        `Model.DoesNotExist`, and any caller — including DRF
+        during serialization — 500s.
+
+        Reading `<fk>_id` (a plain column) and using
+        `.filter(...).first()` returns None instead of raising.
+
+        Returns:
+            The referenced instance, or None if the FK is empty
+            or dangling.
+        """
+        if not pk:
+            return None
+        try:
+            return model.objects.filter(pk=pk).first()
+        except Exception:
+            # Belt-and-braces: never let a lookup kill the caller.
+            return None
+
+    def _safe_preparation(self):
+        return self._safe_fk(
+            Preparation, self.preparation_id
+        )
+
+    def _safe_manufacturer(self):
+        return self._safe_fk(
+            Entities, self.manufacturer_id
+        )
+
+    # ---------------------------------------------------------
+    # Display helpers
+    # ---------------------------------------------------------
+
     def __str__(self):
-        if self.preparation:
-            return f"{self.preparation.title} - {self.title}"
-        else:
-            return self.title
+        prep = self._safe_preparation()
+        if prep is None:
+            return self.title or ""
+        return f"{prep.title} - {self.title}"
 
     def product_name(self):
-        if self.preparation:
-            return f"{self.preparation.title} - {self.title}"
-        else:
-            return f"{self.title}"
-
-    objects = ProductsManager()
+        prep = self._safe_preparation()
+        if prep is None:
+            return self.title or ""
+        return f"{prep.title} - {self.title}"
 
     @property
     def check_is_drug(self):
-        return self.preparation is not None
+        # Reads the raw FK column; no query, no descriptor, no
+        # DoesNotExist. It only asks "is there a preparation_id
+        # set on this row?".
+        return self.preparation_id is not None
+
+    # ---------------------------------------------------------
+    # Save override
+    # ---------------------------------------------------------
 
     def save(self, *args, **kwargs):
-        self.title = self.title.upper()
-        if self.manufacturer and self.manufacturer.country:
-            self.origin_country = self.manufacturer.country
-        super(Products, self).save(*args, **kwargs)
+        # Uppercase the title before persisting.
+        if self.title:
+            self.title = self.title.upper()
+
+        # Derive origin_country from the manufacturer's country.
+        # Read the FK defensively — a dangling manufacturer_id
+        # must not blow up the save.
+        manufacturer = self._safe_manufacturer()
+        if manufacturer is not None and manufacturer.country_id:
+            self.origin_country_id = manufacturer.country_id
+
+        super().save(*args, **kwargs)
+
+    objects = ProductsManager()
+
 # class EntityServices(EntityRelatedModel):
 #     title = models.CharField(max_length=256, null=True, blank=True)
 #     service_code = models.CharField(max_length=48, null=True, blank=True)
