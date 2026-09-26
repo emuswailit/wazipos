@@ -357,10 +357,10 @@ class ProductsSerializer(serializers.ModelSerializer):
 
     def _prep(self, obj):
         """Resolve obj.preparation without triggering the descriptor."""
-        if obj.preparation:
-            return obj.preparation
-        else:
-            return None
+        return self._safe_fk(
+            Preparation,
+            getattr(obj, "preparation_id", None),
+        )
 
     def _formulation(self, prep):
         """Resolve prep.formulation safely."""

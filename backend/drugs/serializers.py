@@ -523,8 +523,11 @@ class PreparationDisplaySerializer(serializers.ModelSerializer):
     #     return UserSerializer(owner, context=self.context).data
 
     def get_formulation_details(self, obj):
-        formulation = models.Formulations.objects.get(id=obj.formulation.id)
-        return FormulationsSerializer(formulation, context=self.context).data
+        if models.Formulations.objects.filter(id=obj.formulation.id).exists():
+            formulation = models.Formulations.objects.filter(id=obj.formulation.id).first()
+            return FormulationsSerializer(formulation, context=self.context).data
+        else:
+            return None
 
     def get_gen_array(self, obj):
         generics = obj.generics.all()
@@ -884,10 +887,13 @@ class GenericReferenceSerializer(serializers.ModelSerializer):
         ).data
 
     def get_drug_class_details(self, obj):
-        drug_class = models.DrugClass.objects.get(id=obj.drug_class.id)
-        return DrugClassSerializer(drug_class, context=self.context).data
+        if models.DrugClass.objects.filter(id=obj.drug_class.id).exists():
+            drug_class = models.DrugClass.objects.filter(id=obj.drug_class.id).first()
+            return DrugClassSerializer(drug_class, context=self.context).data
+        else:
+            return None
 
     def get_drug_sub_class_details(self, obj):
         if obj.drug_sub_class:
-            drug_sub_class = models.DrugSubClass.objects.get(id=obj.drug_sub_class.id)
+            drug_sub_class = models.DrugSubClass.objects.filter(id=obj.drug_sub_class.id).first()
             return DrugSubClassSerializer(drug_sub_class, context=self.context).data

@@ -82,7 +82,7 @@ def get_product_details(data, user):
     try:
         product_id = data["product"]
         if Products.objects.filter(id=product_id).exists():
-            product = Products.objects.get(id=product_id)
+            product = Products.objects.filter(id=product_id).first()
 
             return product
 
@@ -174,7 +174,7 @@ def update_product(data, user):
         if data["product"] == "":
             raise exceptions.ValidationError("Product ID must be valid UUID")
         if Products.objects.filter(id=product_id).exists():
-            product = Products.objects.get(id=product_id)
+            product = Products.objects.filter(id=product_id).first()
             if user.is_staff:
                 pass
             elif user == product.owner:
@@ -283,7 +283,7 @@ def update_product(data):
     if Products.objects.filter(id=data["id"]).exists():
 
         try:
-            product = Products.objects.get(id=data["id"])
+            product = Products.objects.filter(id=data["id"]).first()
             if data["preparation"]:
                 product.preparation_id = data["preparation"]
             else:
