@@ -346,16 +346,12 @@ class ProductsSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _safe_fk(model, pk):
-        """
-        Return the row referenced by `pk`, or None if the pk is
-        empty or the row no longer exists. Never raises.
-        """
         if not pk:
             return None
         try:
             return model.objects.filter(pk=pk).first()
-        except Exception:
-            # Belt-and-braces: never let a lookup kill the list.
+        except Exception as e:
+            print(f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
             return None
 
     def _prep(self, obj):
