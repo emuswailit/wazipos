@@ -271,7 +271,7 @@ class ProductsSerializer(serializers.ModelSerializer):
     All foreign-key lookups go through `_safe_fk`, which uses the
     raw `_id` column and `.filter(pk=...).first()` instead of
     traversing the ORM descriptor. This prevents a single dangling
-    FK (e.g. a `category_id` pointing at a deleted row) from
+    FK (e.g. a `preparation_id` pointing at a deleted row) from
     raising `DoesNotExist` and 500-ing the entire list endpoint.
 
     If the foreign key points at a missing row, the affected field
@@ -283,8 +283,11 @@ class ProductsSerializer(serializers.ModelSerializer):
     long_title = serializers.SerializerMethodField(read_only=True)
     category_details = serializers.SerializerMethodField(read_only=True)
     category_title = serializers.SerializerMethodField(read_only=True)
-    sub_category_details = serializers.SerializerMethodField(read_only=True)
+    preparation_title = serializers.SerializerMethodField(read_only=True)
+    preparation_details = serializers.SerializerMethodField(read_only=True)
+    long_preparation_title = serializers.SerializerMethodField(read_only=True)
     manufacturer_title = serializers.SerializerMethodField(read_only=True)
+    formulation_title = serializers.SerializerMethodField(read_only=True)
     country_of_origin = serializers.SerializerMethodField(read_only=True)
     images = ProductImageSerializer(many=True, read_only=True)
 
@@ -297,6 +300,8 @@ class ProductsSerializer(serializers.ModelSerializer):
             "title",
             "long_title",
             "product_name",
+            "preparation",
+            "preparation_details",
             "manufacturer",
             "packaging",
             "bar_code",
@@ -310,9 +315,11 @@ class ProductsSerializer(serializers.ModelSerializer):
             "units_per_pack",
             "manufacturer_title",
             "country_of_origin",
+            "preparation_title",
+            "long_preparation_title",
+            "formulation_title",
             "category_details",
             "category_title",
-            "sub_category_details",
             "origin_country",
             "active",
             "allowed_entities",
@@ -345,11 +352,24 @@ class ProductsSerializer(serializers.ModelSerializer):
         try:
             return model.objects.filter(pk=pk).first()
         except Exception as e:
-            create_log(
-                "error",
-                f"[_safe_fk] {model.__name__} pk={pk} failed: {e}",
-            )
+            create_log("error",f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
             return None
+
+    def _prep(self, obj):
+        """Resolve obj.preparation without triggering the descriptor."""
+        return self._safe_fk(
+            Preparation,
+            getattr(obj, "preparation_id", None),
+        )
+
+    def _formulation(self, prep):
+        """Resolve prep.formulation safely."""
+        if prep is None:
+            return None
+        return self._safe_fk(
+            models.Formulation,
+            getattr(prep, "formulation_id", None),
+        )
 
     # ---------------------------------------------------------
     # Validation (write path only)
@@ -358,10 +378,7 @@ class ProductsSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if "category" in attrs:
             category = attrs.get("category", None)
-            if (
-                category.title == "PHARMACY"
-                and "preparation" not in attrs
-            ):
+            if category.title == "PHARMACY" and "preparation" not in attrs:
                 raise exceptions.ValidationError(
                     "Preparation details is mandatory for this category"
                 )
@@ -378,7 +395,48 @@ class ProductsSerializer(serializers.ModelSerializer):
         return obj.id
 
     def get_long_title(self, obj):
-        return obj.title or ""
+        prep = self._prep(obj)
+        if prep is None:
+            return obj.title
+
+        form = self._formulation(prep)
+        if form is None:
+            return f"{obj.title} -({prep.title})"
+
+        return f"{obj.title} -({prep.title} - {form.title})"
+
+    # ---------------------------------------------------------
+    # Preparation
+    # ---------------------------------------------------------
+
+    def get_preparation_title(self, obj):
+        prep = self._prep(obj)
+        return prep.title if prep else ""
+
+    def get_preparation_details(self, obj):
+        prep = self._prep(obj)
+        if prep is None:
+            return None
+        return PreparationSerializer(prep, context=self.context).data
+
+    def get_long_preparation_title(self, obj):
+        prep = self._prep(obj)
+        if prep is None:
+            return ""
+
+        form = self._formulation(prep)
+        if form is None:
+            return prep.title
+
+        return f"{prep.title} - {form.title}"
+
+    def get_formulation_title(self, obj):
+        prep = self._prep(obj)
+        if prep is None:
+            return ""
+
+        form = self._formulation(prep)
+        return form.title if form else ""
 
     # ---------------------------------------------------------
     # Category / sub-category
@@ -398,20 +456,8 @@ class ProductsSerializer(serializers.ModelSerializer):
         )
         if cat is None:
             return None
-        return CategoriesSerializer(
-            cat, context=self.context
-        ).data
+        return CategoriesSerializer(cat, context=self.context).data
 
-    def get_sub_category_details(self, obj):
-        sub = self._safe_fk(
-            SubCategories,
-            getattr(obj, "sub_category_id", None),
-        )
-        if sub is None:
-            return None
-        return SubCategoriesSerializer(
-            sub, context=self.context
-        ).data
 
     # ---------------------------------------------------------
     # Manufacturer / origin
@@ -437,3 +483,59 @@ class ProductsSerializer(serializers.ModelSerializer):
             getattr(man, "country_id", None),
         )
         return country.title if country else ""
+
+    # def create(self, validated_data):
+    #     is_drug = False
+    #     preparation = validated_data.get("preparation", None)
+    #     manufacturer = validated_data.get("manufacturer", None)
+    #     category = validated_data.get("category", None)
+
+    #     if not manufacturer:
+    #         raise exceptions.ValidationError("Manufacurer is required")
+    #     if manufacturer.entity_type != "MANUFACTURING":
+    #         raise exceptions.ValidationError(
+    #             f"{manufacturer}  is not registered in the system as a manufacturer"
+    #         )
+
+    #         # if not manufacturer:
+    #         #     raise serializers.ValidationError(f"Manufacturer is required  ")
+    #         # else:
+    #         #     print("mANUFACYURER", manufacturer)
+    #         #     print("Category", category)
+    #         #     print("All", manufacturer.categories.all())
+
+    #         #     if manufacturer.categories.all().filter(id=category.id).exists():
+    #         #         raise exceptions.ValidationError("Category iko")
+    #         #     else:
+    #         #         raise exceptions.ValidationError("Category hakuna")
+
+    #         # if not category in manufacturer.categories.all():
+    #         #     raise exceptions.ValidationError(
+    #         #         f"Manufacturer category must match product category"
+    #         #     )
+
+    #     product = models.Products.objects.create(**validated_data)
+
+    #     return product
+# class EntityServicesSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         ordering = ['-checkin_time']
+#         model = models.EntityServices
+#         fields = ("id", "entity", "owner","department", "title","price","service_code",
+#                     "created",  'updated')
+
+#         read_only_fields = ("id", "entity", "created", "updated", )
+
+# class DrinkCategorySerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = models.DrinkCategory
+#         fields = (
+#             "id",
+#             "entity",
+#             "title",
+#             "description",
+#             "owner",
+#             "created",
+#             "updated",
+#         )
+#         read_only_fields = ("owner", "created", "updated", "entity", "id")
