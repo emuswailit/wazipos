@@ -1,5 +1,5 @@
 import uuid
-from authentication.models import Entities, Countries, Categories
+from authentication.models import Entities, Countries, Categories,SubCategories
 from drugs.models import Preparation
 from utils.logging import create_log
 
