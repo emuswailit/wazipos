@@ -263,6 +263,21 @@ class ProductsWolesalerReceiptsSerializer(serializers.ModelSerializer):
 
 
 class ProductsSerializer(serializers.ModelSerializer):
+    """
+    Read serializer for Products.
+
+    FK safety:
+    All foreign-key lookups go through `_safe_fk`, which uses the
+    raw `_id` column and `.filter(pk=...).first()` instead of
+    traversing the ORM descriptor. This prevents a single dangling
+    FK (e.g. a `preparation_id` pointing at a deleted row) from
+    raising `DoesNotExist` and 500-ing the entire list endpoint.
+
+    If the foreign key points at a missing row, the affected field
+    simply serializes to its empty form ("" / None). The row stays
+    visible in the response so the frontend isn't silently starved.
+    """
+
     key = serializers.SerializerMethodField(read_only=True)
     long_title = serializers.SerializerMethodField(read_only=True)
     category_details = serializers.SerializerMethodField(read_only=True)
@@ -327,6 +342,44 @@ class ProductsSerializer(serializers.ModelSerializer):
             }
         }
 
+    # ---------------------------------------------------------
+    # FK helpers
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def _safe_fk(model, pk):
+        """
+        Return the row referenced by `pk`, or None if the pk is
+        empty or the row no longer exists. Never raises.
+        """
+        if not pk:
+            return None
+        try:
+            return model.objects.filter(pk=pk).first()
+        except Exception:
+            # Belt-and-braces: never let a lookup kill the list.
+            return None
+
+    def _prep(self, obj):
+        """Resolve obj.preparation without triggering the descriptor."""
+        return self._safe_fk(
+            Preparation,
+            getattr(obj, "preparation_id", None),
+        )
+
+    def _formulation(self, prep):
+        """Resolve prep.formulation safely."""
+        if prep is None:
+            return None
+        return self._safe_fk(
+            models.Formulation,
+            getattr(prep, "formulation_id", None),
+        )
+
+    # ---------------------------------------------------------
+    # Validation (write path only)
+    # ---------------------------------------------------------
+
     def validate(self, attrs):
         if "category" in attrs:
             category = attrs.get("category", None)
@@ -339,99 +392,110 @@ class ProductsSerializer(serializers.ModelSerializer):
         else:
             raise exceptions.ValidationError("Category is required")
 
-    def get_preparation_details(self, obj):
-        if obj.preparation:
-            preparation = Preparation.objects.get(id=obj.preparation.id)
-            return PreparationSerializer(preparation, context=self.context).data
-        else:
-            return None
+    # ---------------------------------------------------------
+    # Simple fields
+    # ---------------------------------------------------------
 
     def get_key(self, obj):
         return obj.id
-    
-    def get_preparation_title(self, obj):
-        if obj.preparation:
-            return obj.preparation.title
-        else:
-            return ""
-
-    def get_formulation_title(self, obj):
-        if obj.preparation:
-            return obj.preparation.formulation.title
-        else:
-            return ""
 
     def get_long_title(self, obj):
-        if obj.preparation:
-            return f"{obj.title} -({obj.preparation.title } - {obj.preparation.formulation.title })"
-        else:
+        prep = self._prep(obj)
+        if prep is None:
             return obj.title
 
-    def get_category_title(self, obj):
-        if obj.category:
-            return obj.category.title
-        else:
-            return ""
+        form = self._formulation(prep)
+        if form is None:
+            return f"{obj.title} -({prep.title})"
 
-    def get_manufacturer_title(self, obj):
-        if obj.manufacturer:
-            return obj.manufacturer.title
-        else:
-            return ""
+        return f"{obj.title} -({prep.title} - {form.title})"
 
-    def get_country_of_origin(self, obj):
-        if obj.manufacturer and obj.manufacturer.country:
-            return obj.manufacturer.country.title
-        else:
-            return ""
+    # ---------------------------------------------------------
+    # Preparation
+    # ---------------------------------------------------------
 
-    def get_long_preparation_title(self, obj):
-        if obj.preparation:
-            return f"{obj.preparation.title} - {obj.preparation.formulation.title}"
-        else:
-            return ""
+    def get_preparation_title(self, obj):
+        prep = self._prep(obj)
+        return prep.title if prep else ""
 
     def get_preparation_details(self, obj):
-        if obj.preparation:
-            preparation = Preparation.objects.get(id=obj.preparation.id)
-            return PreparationSerializer(preparation, context=self.context).data
-        else:
+        prep = self._prep(obj)
+        if prep is None:
             return None
+        return PreparationSerializer(prep, context=self.context).data
 
-    # def get_manufacturer_details(self, obj):
-    #     if obj.manufacturer:
-    #         if models.Entities.objects.filter(id=obj.manufacturer.id).exists():
-    #             manufacturer = models.Entities.objects.get(
-    #                 id=obj.manufacturer.id)
-    #             return EntitySerializer(manufacturer, context=self.context).data
+    def get_long_preparation_title(self, obj):
+        prep = self._prep(obj)
+        if prep is None:
+            return ""
 
-    #     else:
-    #         return None
+        form = self._formulation(prep)
+        if form is None:
+            return prep.title
+
+        return f"{prep.title} - {form.title}"
+
+    def get_formulation_title(self, obj):
+        prep = self._prep(obj)
+        if prep is None:
+            return ""
+
+        form = self._formulation(prep)
+        return form.title if form else ""
+
+    # ---------------------------------------------------------
+    # Category / sub-category
+    # ---------------------------------------------------------
+
+    def get_category_title(self, obj):
+        cat = self._safe_fk(
+            models.Categories,
+            getattr(obj, "category_id", None),
+        )
+        return cat.title if cat else ""
 
     def get_category_details(self, obj):
-        if obj.category:
-            if models.Categories.objects.filter(id=obj.category.id).exists():
-                category = models.Categories.objects.get(id=obj.category.id)
-                return CategoriesSerializer(category, context=self.context).data
-
-        else:
+        cat = self._safe_fk(
+            models.Categories,
+            getattr(obj, "category_id", None),
+        )
+        if cat is None:
             return None
+        return CategoriesSerializer(cat, context=self.context).data
 
     def get_sub_category_details(self, obj):
-        if obj.sub_category:
-            if models.SubCategories.objects.filter(id=obj.sub_category.id).exists():
-                sub_category = models.SubCategories.objects.get(id=obj.sub_category.id)
-                return SubCategoriesSerializer(sub_category, context=self.context).data
-
-        else:
+        sub = self._safe_fk(
+            models.SubCategories,
+            getattr(obj, "sub_category_id", None),
+        )
+        if sub is None:
             return None
+        return SubCategoriesSerializer(sub, context=self.context).data
 
-    def get_images(self, obj):
-        images = []
-        if models.ProductImages.objects.filter(product=obj.product).exists():
-            images = models.ProductImages.objects.filter(
-                product=obj.product).all()
-        return ProductImageSerializer(images, context=self.context, many=True).data
+    # ---------------------------------------------------------
+    # Manufacturer / origin
+    # ---------------------------------------------------------
+
+    def get_manufacturer_title(self, obj):
+        man = self._safe_fk(
+            models.Entities,
+            getattr(obj, "manufacturer_id", None),
+        )
+        return man.title if man else ""
+
+    def get_country_of_origin(self, obj):
+        man = self._safe_fk(
+            models.Entities,
+            getattr(obj, "manufacturer_id", None),
+        )
+        if man is None:
+            return ""
+
+        country = self._safe_fk(
+            models.Country,
+            getattr(man, "country_id", None),
+        )
+        return country.title if country else ""
 
     # def create(self, validated_data):
     #     is_drug = False
