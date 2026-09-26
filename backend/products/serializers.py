@@ -1,5 +1,5 @@
 import uuid
-from authentication.models import Entities
+from authentication.models import Entities, Countries, Categories
 from drugs.models import Preparation
 
 # from wholesalers.models import WholesalerReceipts
@@ -449,28 +449,20 @@ class ProductsSerializer(serializers.ModelSerializer):
 
     def get_category_title(self, obj):
         cat = self._safe_fk(
-            models.Categories,
+            Categories,
             getattr(obj, "category_id", None),
         )
         return cat.title if cat else ""
 
     def get_category_details(self, obj):
         cat = self._safe_fk(
-            models.Categories,
+            Categories,
             getattr(obj, "category_id", None),
         )
         if cat is None:
             return None
         return CategoriesSerializer(cat, context=self.context).data
 
-    def get_sub_category_details(self, obj):
-        sub = self._safe_fk(
-            models.SubCategories,
-            getattr(obj, "sub_category_id", None),
-        )
-        if sub is None:
-            return None
-        return SubCategoriesSerializer(sub, context=self.context).data
 
     # ---------------------------------------------------------
     # Manufacturer / origin
@@ -478,21 +470,21 @@ class ProductsSerializer(serializers.ModelSerializer):
 
     def get_manufacturer_title(self, obj):
         man = self._safe_fk(
-            models.Entities,
+            Entities,
             getattr(obj, "manufacturer_id", None),
         )
         return man.title if man else ""
 
     def get_country_of_origin(self, obj):
         man = self._safe_fk(
-            models.Entities,
+            Entities,
             getattr(obj, "manufacturer_id", None),
         )
         if man is None:
             return ""
 
         country = self._safe_fk(
-            models.Country,
+            Countries,
             getattr(man, "country_id", None),
         )
         return country.title if country else ""
