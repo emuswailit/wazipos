@@ -10,11 +10,9 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { Platform } from 'react-native';
 
 import analyticsApi from '@/api/analyticsApi';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
-import { useRetailerProductRequestsSync } from '@/context/RetailerProductRequestsSyncContext';
 import { db } from '@/databases/db';
 import {
     RequestDraftItem,
@@ -28,15 +26,14 @@ import {
  * Constants
  * ======================================================= */
 
-const NATIVE_FORECAST_SYNCED_AT =
+const FORECAST_SYNCED_AT_KEY =
     'wazipos_async_retailer_forecasts_synced_at';
 const FORECAST_SCHEMA_KEY = 'wazipos_forecast_cache_schema';
 const FORECAST_SCHEMA_VERSION = 1;
+const DRAFTS_STORAGE_KEY = 'wazipos_retailer_request_drafts';
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000;
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-const isWeb = Platform.OS === 'web';
 
 /* =========================================================
  * Public types
@@ -70,7 +67,7 @@ interface ForecastContextValue {
         productId: string
     ) => RetailerForecastNormalized | undefined;
 
-    /* Draft basket — delegated to RetailerProductRequestsSyncContext */
+    /* Draft basket — owned by this context */
     drafts: RequestDraftItem[];
     draftCount: number;
     draftTotalQuantity: number;
@@ -161,6 +158,12 @@ function normalizeForecast(
     };
 }
 
+/**
+ * Deep-enough comparison to detect meaningful updates. We compare
+ * scalar fields plus the offer id/price/quantity/score so that a
+ * server-side price or quantity change is not swallowed by a stale
+ * reference held by React state.
+ */
 function areForecastsEqual(
     a: RetailerForecastNormalized[],
     b: RetailerForecastNormalized[]
@@ -173,22 +176,52 @@ function areForecastsEqual(
         const y = b[i];
         if (
             x.remote_id !== y.remote_id ||
+            x.product_title !== y.product_title ||
             x.total_forecast !== y.total_forecast ||
+            x.total_p10 !== y.total_p10 ||
+            x.total_p90 !== y.total_p90 ||
+            x.avg_daily_forecast !== y.avg_daily_forecast ||
+            x.days_covered !== y.days_covered ||
+            x.required_quantity !== y.required_quantity ||
             x.has_offers !== y.has_offers ||
             x.has_campaigns !== y.has_campaigns ||
+            x.best_offer_score !== y.best_offer_score ||
+            x.demand_pattern !== y.demand_pattern ||
+            x.demand_cv !== y.demand_cv ||
+            x.zero_demand_pct !== y.zero_demand_pct ||
+            x.trend_direction !== y.trend_direction ||
+            x.trend_pct !== y.trend_pct ||
             x.wholesaler_offers.length !==
             y.wholesaler_offers.length ||
             x.wholesaler_campaigns.length !==
-            y.wholesaler_campaigns.length
+            y.wholesaler_campaigns.length ||
+            x.daily.length !== y.daily.length
         ) {
             return false;
+        }
+
+        // Offer-level compare (arrays are small).
+        for (let j = 0; j < x.wholesaler_offers.length; j++) {
+            const o1: any = x.wholesaler_offers[j];
+            const o2: any = y.wholesaler_offers[j];
+            if (
+                o1?.id !== o2?.id ||
+                o1?.price !== o2?.price ||
+                o1?.unit_price !== o2?.unit_price ||
+                o1?.quantity !== o2?.quantity ||
+                o1?.available_quantity !==
+                o2?.available_quantity ||
+                o1?.score !== o2?.score
+            ) {
+                return false;
+            }
         }
     }
     return true;
 }
 
 /* =========================================================
- * Storage
+ * Forecast storage
  * ======================================================= */
 
 async function readForecastsFromStorage(): Promise<
@@ -210,61 +243,91 @@ async function writeForecastsToStorage(
 
     tasks.push(
         db.saveRetailerForecasts(data).catch((err) =>
-            warn('Forecast write failed:', err)
+            warn('Forecast DB write failed:', err)
         )
     );
 
-    if (!isWeb) {
-        tasks.push(
-            AsyncStorage.setItem(
-                NATIVE_FORECAST_SYNCED_AT,
-                new Date().toISOString()
-            ).catch(() => null)
-        );
-    }
+    // AsyncStorage works on web too (it's a localStorage shim), so we
+    // no longer need a separate web branch. This also fixes isStale on
+    // web, which previously always reported stale after a reload.
+    tasks.push(
+        AsyncStorage.setItem(
+            FORECAST_SYNCED_AT_KEY,
+            new Date().toISOString()
+        ).catch(() => null)
+    );
 
     await Promise.allSettled(tasks);
 }
 
 async function ensureForecastSchema(): Promise<void> {
     try {
-        if (isWeb) {
-            const stored =
-                typeof window !== 'undefined'
-                    ? window.localStorage.getItem(
-                        FORECAST_SCHEMA_KEY
-                    )
-                    : null;
-            if (
-                stored &&
-                Number(stored) === FORECAST_SCHEMA_VERSION
-            )
-                return;
-            if (typeof window !== 'undefined') {
-                window.localStorage.setItem(
-                    FORECAST_SCHEMA_KEY,
-                    String(FORECAST_SCHEMA_VERSION)
-                );
-            }
-        } else {
-            const stored = await AsyncStorage.getItem(
-                FORECAST_SCHEMA_KEY
-            );
-            if (
-                stored &&
-                Number(stored) === FORECAST_SCHEMA_VERSION
-            )
-                return;
-            await AsyncStorage.removeItem(
-                NATIVE_FORECAST_SYNCED_AT
-            );
-            await AsyncStorage.setItem(
-                FORECAST_SCHEMA_KEY,
-                String(FORECAST_SCHEMA_VERSION)
-            );
+        const stored = await AsyncStorage.getItem(
+            FORECAST_SCHEMA_KEY
+        );
+        if (
+            stored &&
+            Number(stored) === FORECAST_SCHEMA_VERSION
+        ) {
+            return;
         }
+        await AsyncStorage.removeItem(FORECAST_SYNCED_AT_KEY);
+        await AsyncStorage.setItem(
+            FORECAST_SCHEMA_KEY,
+            String(FORECAST_SCHEMA_VERSION)
+        );
     } catch (e) {
         warn('ensureForecastSchema', e);
+    }
+}
+
+/* =========================================================
+ * Draft storage helpers
+ * ======================================================= */
+
+function readDraftQuantity(d: RequestDraftItem): number {
+    const anyD: any = d;
+    const q = anyD.quantity ?? anyD.offered_quantity ?? anyD.qty;
+    return typeof q === 'number' && isFinite(q) ? q : 0;
+}
+
+function readDraftWholesalerId(
+    d: RequestDraftItem
+): string | null {
+    const anyD: any = d;
+    const w =
+        anyD.wholesaler_id ??
+        anyD.wholesalerId ??
+        anyD.wholesaler;
+    return w ? String(w) : null;
+}
+
+async function readDraftsFromStorage(): Promise<
+    RequestDraftItem[]
+> {
+    try {
+        const raw = await AsyncStorage.getItem(
+            DRAFTS_STORAGE_KEY
+        );
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        warn('readDraftsFromStorage', e);
+        return [];
+    }
+}
+
+async function writeDraftsToStorage(
+    drafts: RequestDraftItem[]
+): Promise<void> {
+    try {
+        await AsyncStorage.setItem(
+            DRAFTS_STORAGE_KEY,
+            JSON.stringify(drafts)
+        );
+    } catch (e) {
+        warn('writeDraftsToStorage', e);
     }
 }
 
@@ -278,20 +341,6 @@ export function ForecastProvider({
     children: React.ReactNode;
 }) {
     const { isOnline } = useNetworkStatus();
-
-    // Delegate the draft basket to the sync context.
-    const {
-        drafts: draftItems,
-        isDraftsHydrated: isDraftHydrated,
-        addDraftItem,
-        removeDraftItem,
-        updateDraftItem,
-        hasDraftItem,
-        clearDraft,
-        draftCount,
-        draftTotalQuantity,
-        draftUniqueWholesalerIds,
-    } = useRetailerProductRequestsSync();
 
     /* ---------------- Forecast state ---------------- */
 
@@ -311,15 +360,28 @@ export function ForecastProvider({
     const [dataSource, setDataSource] =
         useState<ForecastDataSource>('none');
 
+    /* ---------------- Draft state ---------------- */
+
+    const [drafts, setDraftsState] = useState<RequestDraftItem[]>(
+        []
+    );
+    const [isDraftsHydrated, setIsDraftsHydrated] = useState(false);
+
     /* ---------------- Refs ---------------- */
 
     const forecastsRef = useRef<RetailerForecastNormalized[]>([]);
     const filtersRef = useRef<ForecastFilters>(DEFAULT_FILTERS);
     const lastSyncedAtRef = useRef<string | null>(null);
+    const draftsRef = useRef<RequestDraftItem[]>([]);
+
     const isFetchingRef = useRef(false);
     const hasBootstrappedRef = useRef(false);
     const inflightFiltersKeyRef = useRef<string | null>(null);
-    const pendingRefetchRef = useRef(false);
+    const pendingRefetchRef = useRef<{
+        needed: boolean;
+        silent: boolean;
+    }>({ needed: false, silent: true });
+    const prevOnlineRef = useRef<boolean>(isOnline);
 
     useEffect(() => {
         forecastsRef.current = forecasts;
@@ -330,8 +392,14 @@ export function ForecastProvider({
     useEffect(() => {
         lastSyncedAtRef.current = lastSyncedAt;
     }, [lastSyncedAt]);
+    useEffect(() => {
+        draftsRef.current = drafts;
+    }, [drafts]);
 
-    /* ---------------- Filters key ---------------- */
+    /* ---------------- Filters key ----------------
+     * onlyWithOffers is filtered client-side, so it is intentionally
+     * NOT part of the request key — toggling it should not refetch.
+     */
 
     const filtersKey = useCallback((f: ForecastFilters) => {
         return [
@@ -345,13 +413,22 @@ export function ForecastProvider({
 
     const fetchForecasts = useCallback(
         async (opts?: { silent?: boolean }) => {
+            const silent = opts?.silent ?? false;
+
             if (isFetchingRef.current) {
-                pendingRefetchRef.current = true;
+                // Queue a follow-up. Non-silent callers win: if a
+                // silent poll is inflight and the user triggers a
+                // manual refresh, we must end with the spinner off.
+                pendingRefetchRef.current.needed = true;
+                if (!silent) {
+                    pendingRefetchRef.current.silent = false;
+                    setIsLoading(true);
+                }
                 return;
             }
-            isFetchingRef.current = true;
 
-            if (!opts?.silent) setIsLoading(true);
+            isFetchingRef.current = true;
+            if (!silent) setIsLoading(true);
             setErrorMessage(null);
 
             const f = filtersRef.current;
@@ -378,9 +455,10 @@ export function ForecastProvider({
                 }
 
                 const body = res.data?.bulk_forecast ?? {};
-                const items = (body.products ?? []).map(
-                    (p: any) =>
-                        normalizeForecast(p, body.run_date ?? '')
+                const items: RetailerForecastNormalized[] = (
+                    body.products ?? []
+                ).map((p: any) =>
+                    normalizeForecast(p, body.run_date ?? '')
                 );
 
                 const syncedAt = new Date().toISOString();
@@ -397,7 +475,7 @@ export function ForecastProvider({
                 await writeForecastsToStorage(items);
 
                 log(
-                    `Fetched ${items.length} forecasts (${opts?.silent ? 'silent' : 'active'
+                    `Fetched ${items.length} forecasts (${silent ? 'silent' : 'active'
                     })`
                 );
             } catch (e: any) {
@@ -408,20 +486,30 @@ export function ForecastProvider({
             } finally {
                 isFetchingRef.current = false;
                 inflightFiltersKeyRef.current = null;
-                if (!opts?.silent) setIsLoading(false);
+
+                const pending = pendingRefetchRef.current;
+                pendingRefetchRef.current = {
+                    needed: false,
+                    silent: true,
+                };
 
                 const currentKey = filtersKey(filtersRef.current);
-                const needsRefetch =
-                    pendingRefetchRef.current ||
+                const filtersChanged =
                     currentKey !== requestKey;
 
-                pendingRefetchRef.current = false;
-
-                if (needsRefetch && hasBootstrappedRef.current) {
-                    void fetchForecasts({
-                        silent: forecastsRef.current.length > 0,
-                    });
+                if (
+                    (pending.needed || filtersChanged) &&
+                    hasBootstrappedRef.current
+                ) {
+                    // A queued non-silent caller or a filter change
+                    // forces the follow-up to be non-silent.
+                    const nextSilent =
+                        pending.silent && !filtersChanged;
+                    void fetchForecasts({ silent: nextSilent });
+                    return;
                 }
+
+                if (!silent) setIsLoading(false);
             }
         },
         [filtersKey]
@@ -436,7 +524,8 @@ export function ForecastProvider({
             await ensureForecastSchema();
             if (cancelled) return;
 
-            const cachedForecasts = await readForecastsFromStorage();
+            const cachedForecasts =
+                await readForecastsFromStorage();
             if (cancelled) return;
             if (cachedForecasts.length > 0) {
                 forecastsRef.current = cachedForecasts;
@@ -444,15 +533,21 @@ export function ForecastProvider({
                 setDataSource('cache');
             }
 
-            if (!isWeb) {
-                const syncedAt = await AsyncStorage.getItem(
-                    NATIVE_FORECAST_SYNCED_AT
-                );
-                if (syncedAt && !cancelled) {
-                    setLastSyncedAt(syncedAt);
-                    lastSyncedAtRef.current = syncedAt;
-                }
+            const syncedAt = await AsyncStorage.getItem(
+                FORECAST_SYNCED_AT_KEY
+            );
+            if (syncedAt && !cancelled) {
+                setLastSyncedAt(syncedAt);
+                lastSyncedAtRef.current = syncedAt;
             }
+
+            const cachedDrafts = await readDraftsFromStorage();
+            if (cancelled) return;
+            if (cachedDrafts.length > 0) {
+                draftsRef.current = cachedDrafts;
+                setDraftsState(cachedDrafts);
+            }
+            setIsDraftsHydrated(true);
 
             if (cancelled) return;
 
@@ -510,10 +605,21 @@ export function ForecastProvider({
         filters.minAvgDailyDemand,
     ]);
 
-    /* ---------------- Network recovery ---------------- */
+    /* ---------------- Network recovery ----------------
+     * Only fire on a real offline→online transition. Firing on mount
+     * (when isOnline is already true) would duplicate the bootstrap
+     * fetch and the WS reconnect.
+     */
 
     useEffect(() => {
-        if (isOnline) {
+        const wasOnline = prevOnlineRef.current;
+        prevOnlineRef.current = isOnline;
+
+        if (
+            isOnline &&
+            !wasOnline &&
+            hasBootstrappedRef.current
+        ) {
             void fetchForecasts({
                 silent: forecastsRef.current.length > 0,
             });
@@ -521,28 +627,130 @@ export function ForecastProvider({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOnline]);
 
-    /* ---------------- Combined helpers ---------------- */
+    /* ---------------- Draft actions ---------------- */
+
+    const addDraftItem = useCallback(
+        (item: Omit<RequestDraftItem, 'added_at'>) => {
+            setDraftsState((prev) => {
+                const added_at = new Date().toISOString();
+                const next: RequestDraftItem[] = [
+                    ...prev.filter(
+                        (d) => d.product_id !== item.product_id
+                    ),
+                    { ...item, added_at } as RequestDraftItem,
+                ];
+                draftsRef.current = next;
+                void writeDraftsToStorage(next);
+                return next;
+            });
+        },
+        []
+    );
+
+    const removeDraftItem = useCallback((product_id: string) => {
+        setDraftsState((prev) => {
+            const next = prev.filter(
+                (d) => d.product_id !== product_id
+            );
+            draftsRef.current = next;
+            void writeDraftsToStorage(next);
+            return next;
+        });
+    }, []);
+
+    const updateDraftItem = useCallback(
+        (
+            product_id: string,
+            patch: Partial<RequestDraftItem>
+        ) => {
+            setDraftsState((prev) => {
+                let changed = false;
+                const next = prev.map((d) => {
+                    if (d.product_id !== product_id) return d;
+                    changed = true;
+                    return {
+                        ...d,
+                        ...patch,
+                    } as RequestDraftItem;
+                });
+                if (!changed) return prev;
+                draftsRef.current = next;
+                void writeDraftsToStorage(next);
+                return next;
+            });
+        },
+        []
+    );
+
+    const hasDraftItem = useCallback(
+        (product_id: string) =>
+            draftsRef.current.some(
+                (d) => d.product_id === product_id
+            ),
+        []
+    );
+
+    const clearDraft = useCallback(() => {
+        draftsRef.current = [];
+        setDraftsState([]);
+        void AsyncStorage.removeItem(
+            DRAFTS_STORAGE_KEY
+        ).catch(() => null);
+    }, []);
+
+    /* ---------------- Derived ---------------- */
 
     const forecastByProductId = useMemo(() => {
-        const map: Record<string, RetailerForecastNormalized> = {};
+        const map: Record<string, RetailerForecastNormalized> =
+            {};
         for (const f of forecasts) map[f.remote_id] = f;
         return map;
     }, [forecasts]);
 
+    // Client-side onlyWithOffers filter. Does not trigger a refetch,
+    // so toggling it is instant.
+    const visibleForecasts = useMemo(() => {
+        if (!filters.onlyWithOffers) return forecasts;
+        return forecasts.filter((f) => f.has_offers);
+    }, [forecasts, filters.onlyWithOffers]);
+
     const draftForecasts = useMemo(() => {
         const result: RetailerForecastNormalized[] = [];
-        for (const item of draftItems) {
+        for (const item of drafts) {
             const fc = forecastByProductId[item.product_id];
             if (fc) result.push(fc);
         }
         return result;
-    }, [draftItems, forecastByProductId]);
+    }, [drafts, forecastByProductId]);
 
-    const orphanedDraftItems = useMemo(() => {
-        return draftItems.filter(
-            (item) => !forecastByProductId[item.product_id]
-        );
-    }, [draftItems, forecastByProductId]);
+    const orphanedDraftItems = useMemo(
+        () =>
+            drafts.filter(
+                (item) =>
+                    !forecastByProductId[item.product_id]
+            ),
+        [drafts, forecastByProductId]
+    );
+
+    const draftCount = drafts.length;
+
+    const draftTotalQuantity = useMemo(
+        () =>
+            drafts.reduce(
+                (sum, d) => sum + readDraftQuantity(d),
+                0
+            ),
+        [drafts]
+    );
+
+    const draftUniqueWholesalerIds = useMemo(() => {
+        const set = new Set<string>();
+        for (const d of drafts) {
+            const wid = readDraftWholesalerId(d);
+            if (wid) set.add(wid);
+        }
+        return Array.from(set);
+    }, [drafts]);
 
     /* ---------------- Staleness ---------------- */
 
@@ -562,16 +770,15 @@ export function ForecastProvider({
 
     /* ---------------- Stable refresh ---------------- */
 
-    const refresh = useCallback(
-        () => fetchForecasts({ silent: false }),
-        [fetchForecasts]
-    );
+    const refresh = useCallback(async () => {
+        await fetchForecasts({ silent: false });
+    }, [fetchForecasts]);
 
     /* ---------------- Context value ---------------- */
 
     const value = useMemo<ForecastContextValue>(
         () => ({
-            forecasts,
+            forecasts: visibleForecasts,
             filters,
             setFilters,
             isLoading,
@@ -584,12 +791,11 @@ export function ForecastProvider({
             refresh,
             getByProductId,
 
-            // Draft basket — forwarded from the sync context
-            drafts: draftItems,
+            drafts,
             draftCount,
             draftTotalQuantity,
             draftUniqueWholesalerIds,
-            isDraftsHydrated: isDraftHydrated,
+            isDraftsHydrated,
             addDraftItem,
             removeDraftItem,
             updateDraftItem,
@@ -600,7 +806,7 @@ export function ForecastProvider({
             orphanedDraftItems,
         }),
         [
-            forecasts,
+            visibleForecasts,
             filters,
             setFilters,
             isLoading,
@@ -612,11 +818,11 @@ export function ForecastProvider({
             dataSource,
             refresh,
             getByProductId,
-            draftItems,
+            drafts,
             draftCount,
             draftTotalQuantity,
             draftUniqueWholesalerIds,
-            isDraftHydrated,
+            isDraftsHydrated,
             addDraftItem,
             removeDraftItem,
             updateDraftItem,

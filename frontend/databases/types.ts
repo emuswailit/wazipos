@@ -1211,34 +1211,88 @@ export interface ConfirmProductRequestOffersPayload {
  * are never sent to the API — they're here so the UI can render
  * "which wholesalers the user had in mind" before offers arrive.
  */
+/**
+ * One line item inside a ProductRequestSummary.
+ *
+ * Mirrors `RetailerProductRequestItem` on the server. Field names
+ * match the wire payload 1:1. Local-only display fields
+ * (`wholesalers`, `wholesaler_titles`) are never sent to the API —
+ * they're here so the UI can render "which wholesalers the user had
+ * in mind" before offers arrive.
+ * 
+ * 
+ */
+/**
+ * A wholesaler a request line was explicitly targeted at.
+ *
+ * Emitted on every line item's `target_wholesalers` array. Titles
+ * come from the server so the UI can render the target list without
+ * a separate entity lookup.
+ */
+export interface WholesalerProductRequestTargetWholesaler {
+    id: string;
+    title: string;
+}
+
 export interface ProductRequestSummaryLineItem {
-    // Server fields (from RetailerProductRequestItem)
+    // -------- Server fields (from RetailerProductRequestItem) --------
+    /** Server UUID for this line. Absent on local-only drafts. */
+    id?: string;
+    /** FK to the parent request's UUID. */
+    request?: string;
     product_id: string;
     product_title?: string;
     requested_quantity?: number;
+
     urgency?: 'low' | 'medium' | 'high';
+    /** Human-readable urgency label, e.g. "Medium". */
+    urgency_display?: string;
+
     note?: string;
     status?: string;
+    status_display?: string;
+
+    /** Denormalized rollups maintained by item.recalculate(). */
     offer_count?: number;
     total_offered_quantity?: number;
     confirmed_quantity?: number;
 
-    // Local-only display data (never sent)
     /**
-     * Full wholesaler objects as picked by the user. This is the
-     * source of truth for local display. Ids and titles are
-     * derived from this when building the wire payload.
+     * Full offer objects for this line. Populated by the list and
+     * detail serializers when offers exist.
+     */
+    offers?: ProductRequestOffer[];
+
+    created?: string;
+    updated?: string;
+
+    // -------- Target-wholesaler display data --------
+    /** Full wholesaler objects as resolved by the server. */
+    target_wholesalers?: WholesalerProductRequestTargetWholesaler[];
+    /** UUIDs of every wholesaler the line was targeted at. */
+    target_wholesaler_ids?: string[];
+
+    // -------- Local-only display data (never sent) --------
+    /**
+     * Full wholesaler objects as picked by the user. Source of truth
+     * for local display. Ids and titles are derived from this when
+     * building the wire payload.
      */
     wholesalers?: Array<{ id: string; title: string }>;
 
     /** @deprecated kept for backward compat; prefer `wholesalers`. */
     wholesaler_titles?: string[];
-    /** @deprecated kept for backward compat; prefer `wholesalers`. */
-    target_wholesaler_ids?: string[];
 }
 
 /**
  * Mirrors `RetailerProductRequest`.
+ */
+/**
+ * Mirrors `RetailerProductRequest`.
+ *
+ * Normalized cache shape used by the wholesaler-side sync context.
+ * Field names match the wire payload 1:1 — no renames. `items` is
+ * the same array the backend sends; the frontend just caches it.
  */
 export interface ProductRequestSummary {
     /**
@@ -1251,15 +1305,24 @@ export interface ProductRequestSummary {
     request_number: string;
     entity: string;
     entity_title: string;
+
     urgency: string;
     urgency_display: string;
+    note: string;
+
     status: string;
     status_display: string;
+
     total_line_count: number;
     fulfilled_line_count: number;
     pending_line_count: number;
+
     expires_at: string | null;
+    fulfilled_at: string | null;
+    cancelled_at: string | null;
+
     created: string;
+    updated?: string;
     cached_at: string;
 
     /**
@@ -1269,7 +1332,8 @@ export interface ProductRequestSummary {
     is_pending: boolean;
     draft_id?: string;
 
-    items_preview?: ProductRequestSummaryLineItem[];
+    /** Line items — same shape the backend emits. */
+    items?: ProductRequestSummaryLineItem[];
 }
 
 /**
@@ -1278,6 +1342,45 @@ export interface ProductRequestSummary {
  * `ProductRequestSummaryLineItem` when written into a pending
  * `ProductRequestSummary`.
  */
+
+
+/**
+ * Wholesaler-side: a queued offer submission.
+ *
+ * Created by `queueOfferSubmission` in RetailerProductRequestsSyncContext
+ * when a wholesaler responds while offline (or before the request
+ * completes). Persisted under the AsyncStorage key
+ * `wazipos_async_wholesaler_pending_offers`.
+ *
+ * On network recovery, `flushPendingOffers` iterates the queue and
+ * dispatches each entry as a `CreateOffer` action. Successfully sent
+ * entries are removed; failures stay queued for the next attempt.
+ */
+export interface PendingWholesalerOffer {
+    /** Internal queue id. Unique per attempt. Never sent on the wire. */
+    id: string;
+
+    /** Server UUID of the parent request. */
+    request_id: string;
+
+    /** Server UUID of the specific line being offered on. */
+    line_id: string;
+
+    /** Quantity the wholesaler is committing to supply. */
+    offered_quantity: number;
+
+    /** Unit price in KES. Sent as-is on the wire. */
+    offered_unit_price: number;
+
+    /** Optional note shown to the retailer alongside the offer. */
+    note?: string;
+
+    /** ISO timestamp of when the entry was queued locally. */
+    created_at: string;
+}
+
+
+
 export interface RequestDraftItem {
     product_id: string;
     product_title?: string;
@@ -1289,4 +1392,431 @@ export interface RequestDraftItem {
     wholesalers?: Array<{ id: string; title: string }>;
     added_at: string;
     best_forecast_quantity?: number;
+}
+
+
+// databases/types.ts
+
+export interface WholesalerReceiptImage {
+    id: string;
+    image: string;
+    thumbnail: string | null;
+    owner: string;
+    product: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+
+export interface WholesalerReceiptDiscountBanner {
+    id: string;
+    price_discount_banner?: string;
+    quantity_discount_banner?: string;
+    thumbnail: string | null;
+    owner: string;
+    wholesaler_price_discount?: string;
+    wholesaler_quantity_discount?: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+export interface WholesalerReceiptQuantityDiscount {
+    id: string;
+    entity: string;
+    entity_title: string;
+    wholesaler_receipt: string;
+    wholesaler_receipt_title: string;
+    quantity_discount_banners: WholesalerReceiptDiscountBanner[];
+    title: string;
+    limit_quantity: number;
+    awarded_quantity: number;
+    awarded_quantity_str: string;
+    limit_quantity_str: string;
+    bonus_ratio: {
+        buy: number;
+        free: number;
+        display: string;
+    };
+    start: string;
+    end: string;
+    is_active: string;
+    is_currently_active: boolean;
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+export interface WholesalerReceiptPriceDiscount {
+    id: string;
+    entity: string;
+    entity_title: string;
+    wholesaler_receipt: string;
+    wholesaler_receipt_title: string;
+    receipt_unit_selling_price: string;
+    receipt_final_unit_selling_price: string;
+    title: string;
+    percent: string;
+    normal_price: string;
+    offer_price: string;
+    start: string;
+    end: string;
+    is_active: string;
+    is_currently_active: boolean;
+    price_discount_banners: WholesalerReceiptDiscountBanner[];
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+
+interface WholesalerReceiptsSyncContextType {
+    isSyncing: boolean;
+    isManualRefreshing: boolean;
+    isLiveConnected: boolean;
+    isPushSyncing: boolean;
+    pendingCount: number;
+    syncStatus:
+    | 'idle'
+    | 'pushing'
+    | 'live'
+    | 'offline'
+    | 'error';
+    forceManualRefresh: () => Promise<void>;
+    pushPending: () => Promise<void>;
+    lastSyncedTime: string;
+    wholesalerReceipts: WholesalerReceipt[];
+}
+
+export interface WholesalerTaggedRequestItem {
+    id: string;
+    product: string;
+    product_title: string;
+    requested_quantity: number;
+    urgency: 'low' | 'medium' | 'high';
+    urgency_display: string;
+    note: string;
+    status: string;
+    my_offers: WholesalerOffer[];
+    created: string;
+}
+
+export interface WholesalerReceipt {
+    /* -------- Local persistence -------- */
+    id?: number;
+    cached_at: string;
+    synced: boolean;
+    sync_error: string | null;
+    thumbnail_url: string | null;
+    image_url: string | null;
+
+    /* -------- Wire (id → remote_id) -------- */
+    remote_id: string;
+    remote_key?: string;
+    draft_id: string | null;
+
+    title: string;
+    long_title: string;
+    product_title: string;
+    /** Wire: `product_id` — the remote product UUID. */
+    product_id: string;
+
+    entity: string;
+    entity_title: string;
+    preparation_title: string;
+    formulation_title: string;
+
+    received_from: string | null;
+    received_from_title: string;
+    manufacturer: string;
+    manufacturer_title: string;
+    origin_country: string;
+    origin_country_title: string;
+
+    unit_of_receipt: string;
+    retailer_order: string | null;
+    retailer_order_item: string | null;
+    wholesaler_order: string | null;
+    wholesaler_order_item: string | null;
+
+    batch: string | null;
+    bar_code: string;
+
+    manufacture_date: string | null;
+    expiry_date: string | null;
+    days_to_expiry: number | null;
+    expiry_status: string | null;
+
+    unit_buying_price: string | null;
+    unit_selling_price: string;
+    final_unit_selling_price: string;
+    discount_unit_selling_price: string;
+    recommended_retail_price: string | null;
+    unit_price_discount: string;
+
+    current_unit_quantity: number;
+    received_unit_quantity: number;
+    received_pack_quantity: number;
+
+    in_placement: boolean;
+    is_active: string;
+    is_pom: boolean;
+    supplier_invoice: string | null;
+
+    quantity_discounts: WholesalerReceiptQuantityDiscount[] | null;
+    price_discount: WholesalerReceiptPriceDiscount | null;
+    images: WholesalerReceiptImage[];
+
+    description: string;
+
+    created: string;
+    updated: string;
+    employee: string;
+    owner: string;
+}
+
+export interface WholesalerOffer {
+    id: string;
+    request_item: string;
+    offered_quantity: number;
+    offered_unit_price: string | null;
+    batch: string | null;
+    expiry_date: string | null;
+    manufacture_date: string | null;
+    is_placement: boolean;
+    status: string;
+    status_display: string;
+    response_note: string;
+    retailer_response_note: string;
+    created: string;
+    updated: string;
+}
+
+export interface WholesalerTaggedRequest {
+    id: string;
+    request_number: string;
+    entity: string;
+    entity_title: string;
+    urgency: 'low' | 'medium' | 'high';
+    urgency_display: string;
+    note: string;
+    status: string;
+    status_display: string;
+    line_count: number;
+    expires_at: string | null;
+    created: string;
+    items: WholesalerTaggedRequestItem[];
+}
+
+
+// # RETAILER ORDERS
+
+/* =========================================================
+ * Retailer Orders
+ * Wire shape from the RetailerOrders websocket frame.
+ * Server sends booleans as "true"/"false" strings and
+ * numbers as strings — we keep them verbatim so a
+ * round-trip through the API is lossless.
+ * ======================================================= */
+
+/* ---------------------------------------------------------
+ * Order item
+ * ------------------------------------------------------- */
+export interface RetailerOrderItemImage {
+    id: string;
+    image: string;
+    thumbnail: string;
+    owner: string;
+    product: string;
+    entity: string;
+    created: string;
+    updated: string;
+}
+
+export interface RetailerOrderItem {
+    id: string;
+    entity: string;
+    title: string;
+    units_per_pack: number;
+    retailer_order: string;
+    retailer_indent_item: string | null;
+    product_title: string;
+    preparation_title: string;
+
+    /** FK to WholesalerReceipt.remote_id */
+    wholesaler_receipt: string;
+    /** FK to Product.remote_id */
+    product: string;
+
+    purchased_quantity: number;
+    discount_quantity: number;
+    total_quantity: number;
+    unit_quantity: number;
+
+    item_price: string;
+    item_price_total: string;
+    item_net_price: string;
+    item_net_price_total: string | null;
+    item_price_discount: string;
+    item_price_discount_total: string | null;
+    item_tax: string | null;
+    item_tax_total: string | null;
+    item_counter_price_discount: string | null;
+    item_counter_price_discount_amount: string | null;
+    item_counter_price_discount_amount_total: string;
+    item_final_price: string | null;
+    item_final_price_total: string | null;
+    intended_retail_unit_price: string | null;
+    intended_retail_unit_price_source: string;
+    line_margin: string | null;
+    pricing_source_label: string;
+
+    stakeholders: any[];
+
+    is_received: string;
+    is_issued: string;
+
+    item_paid_amount: string;
+    item_pending_amount: string | null;
+
+    batch: string | null;
+    manufacture_date: string | null;
+    expiry_date: string | null;
+
+    wholesaler: string;
+    retailer: string;
+    facilitator: string;
+
+    images: RetailerOrderItemImage[];
+
+    created: string;
+    updated: string;
+    owner: string;
+}
+
+/* ---------------------------------------------------------
+ * Payment summary
+ * ------------------------------------------------------- */
+export interface RetailerOrderPaymentSummary {
+    paid_total: number;
+    balance_due: number;
+    is_paid: boolean;
+}
+
+/* ---------------------------------------------------------
+ * Retailer order
+ * ------------------------------------------------------- */
+export interface RetailerOrder {
+    /** Local Dexie/SQLite auto id — never sent to server. */
+    id?: number | string;
+    /** Server-assigned UUID. */
+    remote_id: string;
+    /** Offline-first idempotency key: <user_id>:<timestamp>. */
+    draft_id: string;
+
+    /** Wire identifiers. */
+    wholesaler: string | null;
+    wholesaler_title: string | null;
+    retailer: string;
+    retailer_title: string;
+    owner: string;
+    owner_title: string;
+    employee: string;
+
+    title: string;
+
+    /** Payment method reference + display. */
+    payment_method: string | null;
+    payment_method_title: string;
+
+    order_origin: string;
+    order_terms: string;
+    order_type?: string; // not always present
+
+    /** Human-readable reference numbers. */
+    document_number: string | null;
+    document_number_display: string;
+    reference_number: string;
+    provider_reference_number: string | null;
+    psp_reference_number: string;
+    telco: string;
+
+    status: string;
+
+    /** Money. All stringified decimals. */
+    shipping_amount: string;
+    order_discount_total: string;
+    order_gross_price_total: string;
+    order_tax_total: string;
+    final_price: string;
+    final_price_total: string;
+
+    /** Boolean flags as strings from the wire. */
+    is_paid: string;
+    is_delivered: string;
+    is_processed: string;
+    is_packed: string;
+    is_received: string;
+    is_approved: string;
+    is_dispatched: string;
+    is_committed: string;
+
+    /** Timestamps for each lifecycle stage (nullable). */
+    paid_at: string | null;
+    delivered_at: string | null;
+    delivered_by: string | null;
+    processed_at: string | null;
+    processed_by: string | null;
+    packed_at: string | null;
+    packed_by: string | null;
+    received_at: string | null;
+    received_by: string | null;
+    approved_at: string | null;
+    approved_by: string | null;
+    dispatched_at: string | null;
+    dispatched_by: string | null;
+    committed_at: string | null;
+    cancelled_at: string | null;
+
+    commit_type: string | null;
+    commit_type_display: string | null;
+    committed_by_entity: string | null;
+    committed_by_title: string | null;
+    committed_by_user: string | null;
+    commit_note: string;
+
+    delivery_method: string;
+    actual_lead_time_days: number | null;
+
+    payment_summary: RetailerOrderPaymentSummary;
+
+    description: string | null;
+
+    order_items: RetailerOrderItem[];
+
+    /* Optional retailer/wholesaler contact info — usually null. */
+    retailer_postal_town: string | null;
+    retailer_postal_code: string | null;
+    retailer_postal_address: string | null;
+    retailer_phone: string | null;
+    retailer_email: string | null;
+
+    wholesaler_postal_town: string | null;
+    wholesaler_postal_code: string | null;
+    wholesaler_postal_address: string | null;
+    wholesaler_phone: string | null;
+    wholesaler_email: string | null;
+
+    /* Audit. */
+    created: string;
+    updated: string;
+
+    /* -------- Local persistence metadata -------- */
+    /** When this row was cached locally. */
+    cached_at?: string;
+    /** Has it been pushed to the server? */
+    synced?: boolean;
+    /** Last push error, if any. */
+    sync_error?: string | null;
 }

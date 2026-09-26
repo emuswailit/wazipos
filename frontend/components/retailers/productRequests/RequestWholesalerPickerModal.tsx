@@ -1,16 +1,12 @@
 // components/retailers/productRequests/RequestWholesalerPickerModal.tsx
 
 import {
-    AutocompleteOption,
-    MultiSelectAutocomplete,
-} from '@/components/common/MultiSelectAutocomplete';
+    EntitiesMultiselectPicker,
+} from '@/components/common/EntitiesMultiselectPicker';
 import { useAuth } from '@/context/AuthContext';
-import { useEntitiesSync } from '@/context/EntitiesSyncContext';
-import { EntityItem } from '@/databases/types';
 import React, {
     useCallback,
     useEffect,
-    useMemo,
     useState,
 } from 'react';
 import {
@@ -46,8 +42,6 @@ interface Props {
         urgency: 'low' | 'medium' | 'high';
         note?: string;
         target_wholesaler_ids: string[];
-        target_wholesaler_titles?: string[];
-        wholesalers?: Array<{ id: string; title: string }>;
     }) => void | Promise<void>;
 }
 
@@ -59,6 +53,8 @@ const URGENCY_OPTIONS: Array<{
         { value: 'medium', label: 'Medium' },
         { value: 'high', label: 'High' },
     ];
+
+const LOG_TAG = '[RequestWholesalerPickerModal]';
 
 /* =========================================================
  * Component
@@ -78,7 +74,6 @@ export function RequestWholesalerPickerModal({
     onSubmit,
 }: Props) {
     const { theme, isDarkMode } = useAuth();
-    const { allWholesalers } = useEntitiesSync();
 
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
     const dividerColor = isDarkMode ? '#334155' : '#f1f5f9';
@@ -86,7 +81,8 @@ export function RequestWholesalerPickerModal({
 
     const [selectedWholesalerIds, setSelectedWholesalerIds] =
         useState<string[]>([]);
-    const [quantity, setQuantity] = useState(defaultQuantity);
+    const [quantity, setQuantity] =
+        useState(defaultQuantity);
     const [urgency, setUrgency] = useState<
         'low' | 'medium' | 'high'
     >('medium');
@@ -112,45 +108,6 @@ export function RequestWholesalerPickerModal({
         JSON.stringify(initialWholesalerIds ?? []),
     ]);
 
-    /* ---------------- Wholesaler lookup ----------------
-     * Entities come from the entities sync context. We only need
-     * a lookup by id; the picker UI receives the full mapped array. */
-
-    const wholesalersById = useMemo(() => {
-        const map = new Map<string, EntityItem>();
-        for (const w of allWholesalers) {
-            map.set(String(w.id), w);
-        }
-        return map;
-    }, [allWholesalers]);
-
-    const loadWholesalers = useCallback(
-        async (_query?: string): Promise<AutocompleteOption[]> => {
-            return allWholesalers.map((w) => ({
-                id: String(w.id),
-                label: String(w.title || 'Unknown'),
-                sublabel: [w.town, w.phone]
-                    .filter(Boolean)
-                    .join(' · '),
-                search: [w.entity_type, w.email, w.phone]
-                    .filter(Boolean)
-                    .join(' '),
-                meta: w,
-            }));
-        },
-        [allWholesalers]
-    );
-
-    /* Labels for the picker's chips, so they render titles even
-     * before the picker has been opened in this session. */
-    const knownLabels = useMemo(() => {
-        const map: Record<string, string> = {};
-        for (const w of allWholesalers) {
-            map[String(w.id)] = String(w.title || '');
-        }
-        return map;
-    }, [allWholesalers]);
-
     /* ---------------- Quantity stepper ---------------- */
 
     const decrement = useCallback(
@@ -170,20 +127,65 @@ export function RequestWholesalerPickerModal({
     /* ---------------- Submit ---------------- */
 
     const handleSubmit = useCallback(async () => {
-        if (!productId || isSubmitting) return;
-        if (selectedWholesalerIds.length === 0) return;
+        console.log(
+            '========================================'
+        );
+        console.log(
+            `${LOG_TAG} Add to basket clicked`
+        );
+        console.log(
+            '========================================'
+        );
+
+        /* ---- Snapshot of everything at click time ---- */
+        console.log(`${LOG_TAG} mode:`, mode);
+        console.log(`${LOG_TAG} productId:`, productId);
+        console.log(
+            `${LOG_TAG} productTitle:`,
+            productTitle
+        );
+        console.log(
+            `${LOG_TAG} defaultQuantity:`,
+            defaultQuantity
+        );
+        console.log(
+            `${LOG_TAG} selectedWholesalerIds:`,
+            selectedWholesalerIds
+        );
+        console.log(
+            `${LOG_TAG} selected count:`,
+            selectedWholesalerIds.length
+        );
+        console.log(`${LOG_TAG} quantity:`, quantity);
+        console.log(`${LOG_TAG} urgency:`, urgency);
+        console.log(`${LOG_TAG} note:`, note);
+        console.log(
+            `${LOG_TAG} isSubmitting:`,
+            isSubmitting
+        );
+
+        /* ---- Guards ---- */
+        if (!productId) {
+            console.warn(
+                `${LOG_TAG} abort — productId is null`
+            );
+            return;
+        }
+        if (isSubmitting) {
+            console.warn(
+                `${LOG_TAG} abort — already submitting`
+            );
+            return;
+        }
+        if (selectedWholesalerIds.length === 0) {
+            console.warn(
+                `${LOG_TAG} abort — no wholesalers selected`
+            );
+            return;
+        }
 
         setIsSubmitting(true);
         try {
-            // Resolve full objects from the entities list.
-            const wholesalers = selectedWholesalerIds
-                .map((id) => wholesalersById.get(id))
-                .filter((w): w is EntityItem => !!w)
-                .map((w) => ({
-                    id: String(w.id),
-                    title: String(w.title || 'Unknown'),
-                }));
-
             const payload = {
                 product_id: productId,
                 requested_quantity: Math.max(
@@ -192,45 +194,74 @@ export function RequestWholesalerPickerModal({
                 ),
                 urgency,
                 note: note.trim() || undefined,
-                target_wholesaler_ids: wholesalers.map(
-                    (w) => w.id
-                ),
-                target_wholesaler_titles: wholesalers.map(
-                    (w) => w.title
-                ),
-                wholesalers,
+                target_wholesaler_ids:
+                    selectedWholesalerIds,
             };
 
-            if (__DEV__) {
-                console.log(
-                    '[RequestWholesalerPickerModal] submit',
-                    mode,
-                    payload
-                );
-            }
             console.log(
-                '[Picker] emitting',
-                JSON.stringify(
-                    {
-                        ids: payload.target_wholesaler_ids,
-                        titles: payload.target_wholesaler_titles,
-                        wholesalers: payload.wholesalers,
-                    },
-                    null,
-                    2
-                )
+                `${LOG_TAG} payload →`,
+                payload
             );
+            console.log(
+                `${LOG_TAG} target_wholesaler_ids:`,
+                payload.target_wholesaler_ids
+            );
+            console.log(
+                `${LOG_TAG} requested_quantity:`,
+                payload.requested_quantity
+            );
+            console.log(
+                `${LOG_TAG} urgency:`,
+                payload.urgency
+            );
+            console.log(
+                `${LOG_TAG} note:`,
+                payload.note
+            );
+
+            const started = Date.now();
+
             await onSubmit(payload);
+
+            const elapsed = Date.now() - started;
+            console.log(
+                `${LOG_TAG} onSubmit resolved in ${elapsed}ms`
+            );
+            console.log(
+                '========================================'
+            );
+        } catch (err) {
+            console.error(
+                `${LOG_TAG} onSubmit threw`,
+                err
+            );
+            console.error(
+                `${LOG_TAG} error name:`,
+                (err as any)?.name
+            );
+            console.error(
+                `${LOG_TAG} error message:`,
+                (err as any)?.message
+            );
+            console.error(
+                `${LOG_TAG} error stack:`,
+                (err as any)?.stack
+            );
+            console.error(
+                '========================================'
+            );
+            throw err;
         } finally {
             setIsSubmitting(false);
         }
     }, [
         productId,
+        productTitle,
+        defaultQuantity,
         quantity,
         urgency,
         note,
         selectedWholesalerIds,
-        wholesalersById,
         onSubmit,
         isSubmitting,
         mode,
@@ -256,18 +287,22 @@ export function RequestWholesalerPickerModal({
                         borderColor,
                     }}
                 >
-                    {/* Header */}
+                    {/* ---------------- Header ---------------- */}
                     <View
                         className="p-4 border-b"
-                        style={{ borderBottomColor: dividerColor }}
+                        style={{
+                            borderBottomColor: dividerColor,
+                        }}
                     >
                         <View className="flex-row items-center justify-between">
                             <View className="flex-1">
                                 <Text
                                     style={{
                                         color: theme.text,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: theme.fontSize.lg,
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize:
+                                            theme.fontSize.lg,
                                     }}
                                     numberOfLines={1}
                                 >
@@ -295,7 +330,8 @@ export function RequestWholesalerPickerModal({
                                 <Text
                                     style={{
                                         color: theme.textDark,
-                                        fontFamily: theme.font.bold,
+                                        fontFamily:
+                                            theme.font.bold,
                                         fontSize:
                                             theme.fontSize.base,
                                     }}
@@ -306,18 +342,20 @@ export function RequestWholesalerPickerModal({
                         </View>
                     </View>
 
-                    {/* Body */}
+                    {/* ---------------- Body ---------------- */}
                     <ScrollView
                         contentContainerStyle={{ padding: 16 }}
                     >
                         {/* Quantity + Urgency */}
                         <View className="flex-row gap-3 mb-4">
+                            {/* Quantity */}
                             <View className="flex-1">
                                 <Text
                                     className="uppercase tracking-widest mb-2"
                                     style={{
                                         color: theme.textDark,
-                                        fontFamily: theme.font.bold,
+                                        fontFamily:
+                                            theme.font.bold,
                                         fontSize: 10,
                                     }}
                                 >
@@ -333,7 +371,8 @@ export function RequestWholesalerPickerModal({
                                             style={{
                                                 color: theme.text,
                                                 fontFamily:
-                                                    theme.font.bold,
+                                                    theme.font
+                                                        .bold,
                                                 fontSize: 16,
                                             }}
                                         >
@@ -353,8 +392,10 @@ export function RequestWholesalerPickerModal({
                                             fontFamily:
                                                 theme.font.bold,
                                             fontSize:
-                                                theme.fontSize.base,
-                                            backgroundColor: subBg,
+                                                theme.fontSize
+                                                    .base,
+                                            backgroundColor:
+                                                subBg,
                                         }}
                                     />
                                     <Pressable
@@ -366,7 +407,8 @@ export function RequestWholesalerPickerModal({
                                             style={{
                                                 color: theme.text,
                                                 fontFamily:
-                                                    theme.font.bold,
+                                                    theme.font
+                                                        .bold,
                                                 fontSize: 16,
                                             }}
                                         >
@@ -376,12 +418,14 @@ export function RequestWholesalerPickerModal({
                                 </View>
                             </View>
 
+                            {/* Urgency */}
                             <View className="flex-1">
                                 <Text
                                     className="uppercase tracking-widest mb-2"
                                     style={{
                                         color: theme.textDark,
-                                        fontFamily: theme.font.bold,
+                                        fontFamily:
+                                            theme.font.bold,
                                         fontSize: 10,
                                     }}
                                 >
@@ -392,7 +436,9 @@ export function RequestWholesalerPickerModal({
                                         <Pressable
                                             key={u.value}
                                             onPress={() =>
-                                                setUrgency(u.value)
+                                                setUrgency(
+                                                    u.value
+                                                )
                                             }
                                             className="flex-1 py-2 rounded-lg border items-center"
                                             style={{
@@ -430,18 +476,16 @@ export function RequestWholesalerPickerModal({
                             </View>
                         </View>
 
-                        {/* Wholesaler picker */}
-                        <MultiSelectAutocomplete
+                        {/* ---------- Wholesaler picker ---------- */}
+                        <EntitiesMultiselectPicker
                             label="Send to wholesalers"
                             value={selectedWholesalerIds}
                             onChange={setSelectedWholesalerIds}
-                            loadOptions={loadWholesalers}
-                            knownLabels={knownLabels}
-                            placeholder="Search wholesalers by name, town, or phone..."
-                            clientFilter
-                            emptyText="No wholesalers match your search."
-                            loadingText="Loading wholesalers..."
-                            errorText="Could not load wholesalers."
+                            placeholder="Select wholesalers…"
+                            searchPlaceholder="Search wholesalers by name, town, or phone…"
+                            required
+                            emptyText="No wholesalers available"
+                            noMatchesText="No wholesalers match your search"
                         />
 
                         {/* Note */}
@@ -473,10 +517,12 @@ export function RequestWholesalerPickerModal({
                         />
                     </ScrollView>
 
-                    {/* Footer */}
+                    {/* ---------------- Footer ---------------- */}
                     <View
                         className="flex-row justify-end gap-2 p-4 border-t"
-                        style={{ borderTopColor: dividerColor }}
+                        style={{
+                            borderTopColor: dividerColor,
+                        }}
                     >
                         <Pressable
                             onPress={onClose}
@@ -487,7 +533,8 @@ export function RequestWholesalerPickerModal({
                                 className="uppercase tracking-wide"
                                 style={{
                                     color: theme.textDark,
-                                    fontFamily: theme.font.bold,
+                                    fontFamily:
+                                        theme.font.bold,
                                     fontSize: 12,
                                 }}
                             >
@@ -499,7 +546,8 @@ export function RequestWholesalerPickerModal({
                             disabled={!canSubmit}
                             className="px-4 py-2.5 rounded-xl"
                             style={{
-                                backgroundColor: theme.primary,
+                                backgroundColor:
+                                    theme.primary,
                                 opacity: canSubmit ? 1 : 0.5,
                             }}
                         >

@@ -16,8 +16,11 @@ import { OrdersSyncProvider } from '@/context/OrdersSyncContext';
 import { PaymentMethodsSyncProvider } from '@/context/PaymentMethodsSyncContext';
 import { ProductsSyncProvider } from '@/context/ProductsSyncContext';
 import { RetailerIndentsSyncProvider } from '@/context/RetailerIndentsSyncContext';
+import { RetailerOrdersSyncProvider } from '@/context/RetailerOrdersSyncContext';
 import { RetailerOutOfStocksSyncProvider } from '@/context/RetailerOutOfStocksSyncContext';
+
 import { RetailerProductRequestsSyncProvider } from '@/context/RetailerProductRequestsSyncContext';
+import { WholesalerReceiptsSyncProvider } from '@/context/WholesalerReceiptsSyncContext';
 import SidebarNavigationList from '@/utils/SidebarNavigationList';
 import WebTopNavbar from '@/utils/WebTopNavbar';
 import { useFonts } from 'expo-font';
@@ -144,9 +147,7 @@ function GlobalAppShellLayout() {
             <WebTopNavbar
               isDarkMode={isDarkMode}
               dropdownOpen={profileDropdownOpen}
-              setDropdownOpen={
-                setProfileDropdownOpen
-              }
+              setDropdownOpen={setProfileDropdownOpen}
               sidebarOpen={sidebarOpen}
               setSidebarOpen={setSidebarOpen}
               userFullName={userFullName}
@@ -160,25 +161,19 @@ function GlobalAppShellLayout() {
             <View
               style={{
                 backgroundColor: theme.panel,
-                borderBottomColor:
-                  theme.background,
+                borderBottomColor: theme.background,
               }}
               className="h-14 w-full border-b px-4 flex-row justify-between items-center shadow-xs"
             >
               <TouchableOpacity
-                onPress={() =>
-                  setSidebarOpen(!sidebarOpen)
-                }
+                onPress={() => setSidebarOpen(!sidebarOpen)}
                 style={{
-                  backgroundColor:
-                    theme.background,
+                  backgroundColor: theme.background,
                 }}
                 className="p-2 rounded-xl"
               >
                 <Text
-                  style={{
-                    color: customTextColor,
-                  }}
+                  style={{ color: customTextColor }}
                   className="font-extrabold text-xs"
                 >
                   ☰ Menu
@@ -191,20 +186,14 @@ function GlobalAppShellLayout() {
                 wazipos hub
               </Text>
               <View
-                style={{
-                  backgroundColor:
-                    theme.background,
-                }}
+                style={{ backgroundColor: theme.background }}
                 className="w-8 h-8 rounded-full items-center justify-center"
               >
                 <Text
-                  style={{
-                    color: theme.primary,
-                  }}
+                  style={{ color: theme.primary }}
                   className="font-bold text-xs uppercase"
                 >
-                  {user?.name?.charAt(0) ||
-                    'W'}
+                  {user?.name?.charAt(0) || 'W'}
                 </Text>
               </View>
             </View>
@@ -232,17 +221,14 @@ function GlobalAppShellLayout() {
                     style={{
                       width: 22,
                       height: 22,
-                      tintColor:
-                        theme.primary,
+                      tintColor: theme.primary,
                     }}
                   />
                   <View className="flex-1 items-start justify-center">
                     <Text
                       style={{
                         color: customTextColor,
-                        fontFamily:
-                          theme.font
-                            .bold,
+                        fontFamily: theme.font.bold,
                       }}
                       className="text-base tracking-tight leading-none"
                     >
@@ -253,9 +239,7 @@ function GlobalAppShellLayout() {
                         color: isDarkMode
                           ? '#ffffff'
                           : theme.textDark,
-                        fontFamily:
-                          theme.font
-                            .medium,
+                        fontFamily: theme.font.medium,
                       }}
                       className="text-[9px] tracking-widest uppercase mt-1"
                     >
@@ -274,28 +258,22 @@ function GlobalAppShellLayout() {
               </View>
 
               <View
-                style={{
-                  borderTopColor:
-                    customBorderColor,
-                }}
+                style={{ borderTopColor: customBorderColor }}
                 className="pt-4 border-t w-full"
               >
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={toggleTheme}
                   style={{
-                    backgroundColor:
-                      theme.background,
-                    borderColor:
-                      customBorderColor,
+                    backgroundColor: theme.background,
+                    borderColor: customBorderColor,
                   }}
                   className="w-full py-2.5 px-4 rounded-xl items-center justify-center border web:hover:opacity-80 transition-all"
                 >
                   <Text
                     style={{
                       color: customTextColor,
-                      fontFamily:
-                        theme.font.bold,
+                      fontFamily: theme.font.bold,
                     }}
                     className="text-xs text-center"
                   >
@@ -309,17 +287,14 @@ function GlobalAppShellLayout() {
           )}
 
           <View
-            style={{
-              backgroundColor: theme.background,
-            }}
+            style={{ backgroundColor: theme.background }}
             className="flex-1 h-full overflow-y-auto"
           >
             <Stack
               screenOptions={{
                 headerShown: false,
                 contentStyle: {
-                  backgroundColor:
-                    'transparent',
+                  backgroundColor: 'transparent',
                 },
               }}
             >
@@ -334,22 +309,18 @@ function GlobalAppShellLayout() {
             style={{
               backgroundColor: '#f43f5e',
               paddingBottom:
-                insets.bottom > 0
-                  ? insets.bottom
-                  : 8,
+                insets.bottom > 0 ? insets.bottom : 8,
             }}
             className="w-full py-2 items-center justify-center z-50 shadow-lg"
           >
             <Text
               style={{
-                fontFamily:
-                  theme.font.bold,
+                fontFamily: theme.font.bold,
                 fontSize: theme.fontSize.xs,
               }}
               className="text-white tracking-wider uppercase text-center"
             >
-              ⚠️ Connection Interrupted. Operating
-              in Offline Mode.
+              ⚠️ Connection Interrupted. Operating in Offline Mode.
             </Text>
           </View>
         )}
@@ -364,15 +335,12 @@ function GlobalAppShellLayout() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    /* Inter — full family */
     'Inter-Light': require('@/assets/fonts/Inter-Light.ttf'),
     'Inter-Regular': require('@/assets/fonts/Inter-Regular.ttf'),
     'Inter-Medium': require('@/assets/fonts/Inter-Medium.ttf'),
     'Inter-SemiBold': require('@/assets/fonts/Inter-SemiBold.ttf'),
     'Inter-Bold': require('@/assets/fonts/Inter-Bold.ttf'),
     'Inter-Italic': require('@/assets/fonts/Inter-Italic.ttf'),
-
-    /* Monospace */
     'JetBrainsMono': require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
     'SpaceMono': require('@/assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -392,11 +360,6 @@ export default function RootLayout() {
     }
   }, [fontError]);
 
-  /*
-   * On web, expo-font injects @font-face rules and we can
-   * render immediately. On native, block until fonts are
-   * ready (or failed) to avoid a flash of system font.
-   */
   if (
     Platform.OS !== 'web' &&
     !fontsLoaded &&
@@ -411,27 +374,31 @@ export default function RootLayout() {
         <NetworkMonitorProvider>
           <RetailerIndentsSyncProvider>
             <EntitiesSyncProvider>
-              <InventorySyncProvider>
-                <PaymentMethodsSyncProvider>
-                  <ProductsSyncProvider>
-                    <OrdersSyncProvider>
-                      <RetailerOutOfStocksSyncProvider>
-                        <RetailerProductRequestsSyncProvider>
-                          <ForecastProvider>
-                            <SafeAreaProvider>
-                              <GlobalAppShellLayout />
-                            </SafeAreaProvider>
-                          </ForecastProvider>
-                        </RetailerProductRequestsSyncProvider>
-                      </RetailerOutOfStocksSyncProvider>
-                    </OrdersSyncProvider>
-                  </ProductsSyncProvider>
-                </PaymentMethodsSyncProvider>
-              </InventorySyncProvider>
+              <WholesalerReceiptsSyncProvider>
+                <InventorySyncProvider>
+                  <PaymentMethodsSyncProvider>
+                    <ProductsSyncProvider>
+                      <OrdersSyncProvider>
+                        <RetailerOutOfStocksSyncProvider>
+                          <RetailerProductRequestsSyncProvider>
+                            <RetailerOrdersSyncProvider>
+                              <ForecastProvider>
+                                <SafeAreaProvider>
+                                  <GlobalAppShellLayout />
+                                </SafeAreaProvider>
+                              </ForecastProvider>
+                            </RetailerOrdersSyncProvider>
+                          </RetailerProductRequestsSyncProvider>
+                        </RetailerOutOfStocksSyncProvider>
+                      </OrdersSyncProvider>
+                    </ProductsSyncProvider>
+                  </PaymentMethodsSyncProvider>
+                </InventorySyncProvider>
+              </WholesalerReceiptsSyncProvider>
             </EntitiesSyncProvider>
           </RetailerIndentsSyncProvider>
         </NetworkMonitorProvider>
       </AuthProvider>
-    </GestureHandlerRootView >
+    </GestureHandlerRootView>
   );
 }

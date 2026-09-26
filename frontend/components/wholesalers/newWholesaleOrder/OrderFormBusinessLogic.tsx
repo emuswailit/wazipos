@@ -1,166 +1,253 @@
-import wholesalersApi from '@/api/wholesalersApi';
-import { useApi } from '@/hooks/useApi';
+// components/wholesalers/newWholesaleOrder/OrderFormBusinessLogic.tsx
+
+import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useWholesaleOrderForm } from './useWholesaleOrderForm';
 
 interface OrderFormBusinessLogicProps {
     user: any;
-    productsCatalog: any[];
-    onSubmitFinished?: (retailerId: string, notes: string, items: any[]) => void;
+    productsCatalog?: any[];
+    onSubmitFinished?: (
+        retailerId: string,
+        notes: string,
+        items: any[]
+    ) => void;
     onRowsCountChange?: (count: number) => void;
     children: (props: any) => React.ReactNode;
 }
 
 export default function OrderFormBusinessLogic({
     user,
-    productsCatalog,
     onSubmitFinished,
     onRowsCountChange,
-    children
+    children,
 }: OrderFormBusinessLogicProps) {
-    const createOrderApi = useApi(wholesalersApi.wholesaleRetailerOrdersStaffAction);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<any>(null);
-    const [mpesaNumber, setMpesaNumber] = useState('');
-    const [submitToast, setSubmitToast] = useState<string | null>(null);
+    const { isOnline } = useNetworkStatus();
+
     const {
-        selectedRetailer,
-        setSelectedRetailer,
-        notes,
-        setNotes,
         formRows,
         addFormRow,
         removeFormRow,
         updateRowState,
-        populateProductIntoRow,
-        grandTotalCost,
+        clearActiveDraftSession,
+
         retailers,
-        paymentMethods,
+        selectedRetailer,
+        setSelectedRetailer,
+
+        notes,
+        setNotes,
+
+        selectedPaymentMethod,
+        setSelectedPaymentMethod,
+        mpesaNumber,
+        setMpesaNumber,
+
+        isSubmitting,
+        setIsSubmitting,
         isSyncLoading,
         syncStatus,
         setSyncStatus,
-        clearActiveDraftSession
-    } = useWholesaleOrderForm();
+        submitToast,
+        setSubmitToast,
 
-    useEffect(() => {
-        if (paymentMethods && paymentMethods.length > 0 && !selectedPaymentMethod) {
-            setSelectedPaymentMethod(paymentMethods);
-        }
-    }, [paymentMethods]);
+        grandTotalCost,
+        commitOrder,
+    } = useWholesaleOrderForm({
+        onSubmitFinished,
+        onRowsCountChange,
+    });
 
-    useEffect(() => {
-        if (onRowsCountChange && formRows) onRowsCountChange(formRows.length);
-    }, [formRows?.length, onRowsCountChange]);
-
+    /* -------- Toast helper -------- */
     const triggerNotificationToast = (msg: string) => {
         setSubmitToast(msg);
         setTimeout(() => setSubmitToast(null), 5000);
     };
 
+    /* -------- Save draft (local only) -------- */
     const handleSaveDraftManual = async () => {
         if (!selectedRetailer) {
-            const msg = '⚠️ Assign a client customer to declare a draft.';
+            const msg =
+                '⚠️ Assign a client customer to declare a draft.';
             alert(msg);
             triggerNotificationToast(msg);
             return;
         }
         await clearActiveDraftSession();
         setMpesaNumber('');
-        triggerNotificationToast('💾 Draft session securely saved to local storage.');
+        triggerNotificationToast(
+            '💾 Draft session saved locally.'
+        );
     };
 
+    /* -------- Submit -------- */
     const handleSubmit = async () => {
-        if (!selectedRetailer || !selectedPaymentMethod) {
-            const msg = '⚠️ Complete retailer and payment configurations.';
+        /* ---- Retailer guard ---- */
+        if (!selectedRetailer) {
+            const msg =
+                '⚠️ Please select a retailer before submitting.';
             alert(msg);
             triggerNotificationToast(msg);
             return;
         }
-        if (formRows.some(row => !row.wholesaler_receipt || !row.purchased_quantity)) {
-            const msg = '⚠️ Fill or remove unfinished product lines.';
-            alert(msg);
-            triggerNotificationToast(msg);
-            return;
-        }
-        const formattedOrderItems = formRows.map(row => {
-            const realProduct = productsCatalog.find(p => p.title === row.wholesaler_receipt);
-            const purchasedQtyNum = parseFloat(row.purchased_quantity) || 0;
-            const discountAmountNum = parseFloat(row.item_price_discount) || 0;
-            const unitPriceNum = realProduct ? realProduct.item_price : (row.item_price || 0);
-            const computedNetPrice = parseFloat(Math.max(0, unitPriceNum - (purchasedQtyNum > 0 ? (discountAmountNum / purchasedQtyNum) : 0)).toFixed(2));
-            return {
-                wholesaler_receipt: realProduct ? realProduct.id : row.id,
-                purchased_quantity: String(purchasedQtyNum),
-                discount_quantity: "0",
-                total_quantity: purchasedQtyNum,
-                unit_of_issue: "LoosePackUnits",
-                loose_pack_unit: "Piece",
-                item_price: unitPriceNum,
-                item_net_price: computedNetPrice,
-                item_price_discount: discountAmountNum,
-                item_price_total: row.item_price_total
-            };
-        });
-        const currentIntegerTimestamp = Math.floor(Date.now() / 1000);
-        const generatedDraftId = `${user?.id || 'unknown'}:${currentIntegerTimestamp}`;
-        const structuredPayload = {
-            action: "CreateStaffRetailerOrder",
-            retailer_order_details: {
-                retailer_id: selectedRetailer.key,
-                draft_id: generatedDraftId,
-                order_terms: "CASH",
-                order_type: "NORMAL",
-                payment_method_id: selectedPaymentMethod.id,
-                mobile_money_phone: selectedPaymentMethod?.title === "MOBILE MONEY" ? mpesaNumber : null,
-                final_price_total: grandTotalCost,
-                order_items: formattedOrderItems
-            }
-        };
-        console.log('====================================');
-        console.log('🚀 [ORDER SUBMIT PAYLOAD LOG] OUTGOING REQUEST DATA:');
-        console.log(JSON.stringify(structuredPayload, null, 2));
-        console.log('====================================');
-        const result = await createOrderApi.request(structuredPayload);
-        console.log('====================================');
-        console.log('🔍 [ORDER SUBMIT RESPONSE LOG] createOrderApi OUTCOME:');
-        console.log('Status Code:', result.status);
-        console.log('Network OK:', result.ok);
-        console.log('Payload Data:', JSON.stringify(result.data, null, 2));
-        console.log('====================================');
-        const responseData = result.data as any;
-        const responseCodeString = String(responseData?.response_code || '');
 
-        if (result.ok && responseCodeString === '0') {
-            setSyncStatus('SYNCED');
-            const successMsg = responseData?.response_message || 'Wholesale order registered and verified on server successfully.';
-            alert(`🎉 Order Created Successfully!\n\n${successMsg}`);
-            const fallbackRetailerKey = selectedRetailer.key;
-            await clearActiveDraftSession();
+        /* ---- Payment guard ---- */
+        if (!selectedPaymentMethod) {
+            const msg =
+                '⚠️ Please select a payment method before submitting.';
+            alert(msg);
+            triggerNotificationToast(msg);
+            return;
+        }
+
+        /* ---- Mobile Money offline guard ---- */
+        const isMobileMoney = String(
+            selectedPaymentMethod?.title ?? ''
+        )
+            .toUpperCase()
+            .includes('MOBILE');
+
+        if (isMobileMoney && !isOnline) {
+            const msg =
+                '⚠️ Mobile Money requires an internet connection. Connect or switch to CASH / CREDIT.';
+            alert(msg);
+            triggerNotificationToast(msg);
+            return;
+        }
+
+        /* ---- Row validity guard ---- */
+        if (
+            formRows.some(
+                (row) =>
+                    !row.selectedReceipt ||
+                    !row.purchased_quantity
+            )
+        ) {
+            const msg =
+                '⚠️ Fill or remove unfinished product lines.';
+            alert(msg);
+            triggerNotificationToast(msg);
+            return;
+        }
+
+        /* ---- Receipt-id guard ---- */
+        const rowsMissingReceiptId = formRows.filter(
+            (row) => {
+                if (!row.selectedReceipt) return false;
+                const rid =
+                    row.wholesaler_receipt_id ||
+                    (row.selectedReceipt as any)
+                        .remote_id ||
+                    (row.selectedReceipt as any)
+                        .remote_key ||
+                    '';
+                return !String(rid).trim();
+            }
+        );
+
+        if (rowsMissingReceiptId.length > 0) {
+            const msg =
+                '⚠️ Some items are missing a receipt ID. Remove them or refresh inventory and pick again.';
+            alert(msg);
+            triggerNotificationToast(msg);
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+
+            /* ---- Persist locally ---- */
+            const order = await commitOrder({
+                retailerId: (selectedRetailer as any)
+                    .remote_id,
+                retailerTitle: selectedRetailer.title,
+                paymentMethodId:
+                    selectedPaymentMethod.id,
+                paymentMethodTitle:
+                    selectedPaymentMethod.title,
+                mpesaNumber,
+                notes,
+                userId: String(user?.id ?? ''),
+            });
+
+            setSyncStatus('syncing');
+
+            /* ---- Notify parent ---- */
             if (onSubmitFinished) {
-                onSubmitFinished(fallbackRetailerKey, notes, formRows);
+                onSubmitFinished(
+                    (selectedRetailer as any).remote_id,
+                    notes,
+                    order.order_items
+                );
             }
-            router.replace('/(wholesalers)/newWholesaleOrder');
-        } else {
-            let combinedErrorMessage = responseData?.response_message || createOrderApi.errorMessage || 'Transaction validation exception occurred.';
-            if (responseData?.errors) {
-                const errorsPayload = responseData.errors;
-                let detailedErrorStrings: string[] = [];
-                if (Array.isArray(errorsPayload)) {
-                    detailedErrorStrings = errorsPayload.map((err: any) => typeof err === 'string' ? err : JSON.stringify(err));
-                } else if (typeof errorsPayload === 'object') {
-                    Object.entries(errorsPayload).forEach(([fieldKey, errorValue]) => {
-                        const formattedValue = Array.isArray(errorValue) ? errorValue.join(', ') : String(errorValue);
-                        detailedErrorStrings.push(`${fieldKey}: ${formattedValue}`);
-                    });
-                }
-                if (detailedErrorStrings.length > 0) {
-                    combinedErrorMessage = `${combinedErrorMessage} -> ${detailedErrorStrings.join(' | ')}`;
-                }
-            }
-            alert(`Wholesale Submission Error\n\n${combinedErrorMessage}`);
-            triggerNotificationToast(`❌ Failed: ${combinedErrorMessage}`);
+
+            triggerNotificationToast(
+                '✅ Order saved — syncing in background'
+            );
+
+            /* ---- Reset and navigate ---- */
+            await clearActiveDraftSession();
+            router.replace(
+                '/(wholesalers)/newWholesaleOrder'
+            );
+        } catch (e: any) {
+            console.error(
+                '[OrderFormBusinessLogic] submit failed',
+                e
+            );
+            setSyncStatus('error');
+            const msg =
+                e?.message ??
+                'Failed to save order locally.';
+            alert(`Wholesale Submission Error\n\n${msg}`);
+            triggerNotificationToast(`❌ Failed: ${msg}`);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    return <>{children({ selectedRetailer, setSelectedRetailer, notes, setNotes, formRows, addFormRow, removeFormRow, updateRowState, populateProductIntoRow, grandTotalCost, retailers, paymentMethods, isSyncLoading, syncStatus, selectedPaymentMethod, setSelectedPaymentMethod, mpesaNumber, setMpesaNumber, handleSaveDraftManual, handleSubmit, clearActiveDraftSession, submitToast, isSubmitting: createOrderApi.loading })}</>;
+    /* -------- Expose to render prop -------- */
+    return (
+        <>
+            {children({
+                /* Rows */
+                formRows,
+                addFormRow,
+                removeFormRow,
+                updateRowState,
+                clearActiveDraftSession,
+
+                /* Retailer */
+                retailers,
+                selectedRetailer,
+                setSelectedRetailer,
+
+                /* Notes */
+                notes,
+                setNotes,
+
+                /* Payment */
+                selectedPaymentMethod,
+                setSelectedPaymentMethod,
+                mpesaNumber,
+                setMpesaNumber,
+
+                /* Totals */
+                grandTotalCost,
+
+                /* Status */
+                isSyncLoading,
+                syncStatus,
+                isSubmitting,
+
+                /* Actions */
+                handleSaveDraftManual,
+                handleSubmit,
+
+                /* Toast */
+                submitToast,
+            })}
+        </>
+    );
 }

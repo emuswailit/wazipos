@@ -1,4 +1,10 @@
 // components/retailers/productRequests/RetailerProductRequestsMobileView.tsx
+//
+// Mobile card view for the retailer's product requests list.
+//
+// Filter strip uses the shared StatusFilterPill from
+// statusPrimitives so the mobile strip and the web table header
+// render the same set of status pills with the same counts.
 
 import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
@@ -17,18 +23,18 @@ import type {
     ProductRequestSummary,
 } from './RetailerProductRequestsList';
 import { StatusPill } from './RetailerProductRequestsWebView';
-
-interface StatusFilter {
-    value: string;
-    label: string;
-}
+import {
+    StatusFilterPill,
+    type RequestStatusOption,
+} from './statusPrimitives';
 
 interface Props {
     query: string;
     setQuery: (v: string) => void;
     statusFilter: string | null;
     setStatusFilter: (v: string | null) => void;
-    statusFilters: readonly StatusFilter[];
+    statusOptions: RequestStatusOption[];
+    statusCounts: Record<string, number>;
     onRefresh: () => void;
     refreshing: boolean;
     sourceLabel: string;
@@ -63,7 +69,8 @@ export function RetailerProductRequestsMobileView({
     setQuery,
     statusFilter,
     setStatusFilter,
-    statusFilters,
+    statusOptions,
+    statusCounts,
     onRefresh,
     refreshing,
     sourceLabel,
@@ -213,44 +220,29 @@ export function RetailerProductRequestsMobileView({
                     </View>
                 </View>
 
+                {/* Filter strip — shared StatusFilterPill */}
                 <View className="flex-row flex-wrap gap-1.5 mb-2">
-                    {statusFilters.map((f) => (
-                        <Pressable
-                            key={f.value}
-                            onPress={() =>
-                                setStatusFilter(
-                                    statusFilter === f.value
-                                        ? null
-                                        : f.value
-                                )
-                            }
-                            className="px-2.5 py-1 rounded-full border"
-                            style={{
-                                borderColor:
-                                    statusFilter === f.value
-                                        ? theme.primary
-                                        : borderColor,
-                                backgroundColor:
-                                    statusFilter === f.value
-                                        ? `${theme.primary}15`
-                                        : 'transparent',
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color:
-                                        statusFilter === f.value
-                                            ? theme.primary
-                                            : theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 10,
-                                }}
-                            >
-                                {f.label}
-                            </Text>
-                        </Pressable>
-                    ))}
+                    {statusOptions.map((s) => {
+                        const isActive =
+                            s.value === 'ALL'
+                                ? statusFilter === null
+                                : statusFilter === s.value;
+                        return (
+                            <StatusFilterPill
+                                key={s.value}
+                                option={s}
+                                active={isActive}
+                                count={statusCounts[s.value] ?? 0}
+                                onPress={() =>
+                                    setStatusFilter(
+                                        s.value === 'ALL'
+                                            ? null
+                                            : s.value
+                                    )
+                                }
+                            />
+                        );
+                    })}
                 </View>
 
                 <TextInput
@@ -338,7 +330,7 @@ function referenceLabel(item: ProductRequestSummary): string {
 }
 
 function productsLabel(item: ProductRequestSummary): string {
-    const preview = item.items_preview ?? [];
+    const preview = item.items ?? [];
     if (preview.length === 0) return 'No products yet';
 
     const first = preview[0];
@@ -350,10 +342,12 @@ function productsLabel(item: ProductRequestSummary): string {
 function wholesalersLabel(
     item: ProductRequestSummary
 ): string | null {
-    const preview = item.items_preview ?? [];
+    const preview = item.items ?? [];
     const all: string[] = [];
     for (const p of preview) {
-        for (const t of p.wholesaler_titles ?? []) {
+        const targets = p.target_wholesalers ?? [];
+        for (const w of targets) {
+            const t = w?.title;
             if (t && !all.includes(t)) all.push(t);
         }
     }

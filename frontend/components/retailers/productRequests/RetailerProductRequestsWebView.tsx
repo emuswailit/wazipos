@@ -1,4 +1,14 @@
-// components/retailers/productRequests/RetailerProductRequestsWebView.tsx
+// app/(admin)/body-systems/AdminBodySystemsWebView.tsx
+//
+// Web table view for the admin body systems list.
+//
+// Visually mirrors the retailer product-requests web view so the
+// admin and retailer tables share one layout language: same header
+// block, same source pill, same New / Refresh buttons, same search
+// input, same bordered column header row, same row shell.
+//
+// Also exports the local `StatusPill` used by both this view and
+// the mobile view.
 
 import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
@@ -12,69 +22,52 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import type { PageSize } from './RetailerProductRequestsList';
-import { ProductRequestSummary } from './RetailerProductRequestsList';
+import type { BodySystemItem } from './AdminBodySystemsList';
 
 const TABLE_MAX_WIDTH = 1600;
 
 const COLUMNS: { label: string; flex: number }[] = [
-    { label: 'Request', flex: 2.4 },
-    { label: 'Status', flex: 1.0 },
-    { label: 'Urgency', flex: 0.9 },
-    { label: 'Lines', flex: 0.7 },
-    { label: 'Fulfilled', flex: 0.9 },
-    { label: 'Expires', flex: 1.0 },
+    { label: 'System', flex: 2.4 },
+    { label: 'State', flex: 1.0 },
+    { label: 'Description', flex: 2.5 },
     { label: 'Created', flex: 1.0 },
+    { label: 'Updated', flex: 1.0 },
     { label: 'Actions', flex: 1.0 },
 ];
-
-interface StatusFilter {
-    value: string;
-    label: string;
-}
 
 interface Props {
     query: string;
     setQuery: (v: string) => void;
-    statusFilter: string | null;
-    setStatusFilter: (v: string | null) => void;
-    statusFilters: readonly StatusFilter[];
     onRefresh: () => void;
     refreshing: boolean;
     sourceLabel: string;
     sourceTone: 'server' | 'cache' | 'none';
     lastSyncedTime: string;
-    items: ProductRequestSummary[];
+    items: BodySystemItem[];
     emptyComponent?: React.ReactNode;
     onOpenCreate: () => void;
-    onPressRequest: (item: ProductRequestSummary) => void;
+    onPressItem: (item: BodySystemItem) => void;
+    onEditItem: (item: BodySystemItem) => void;
+    formatDateHandler: (dateString: string) => string;
     page: number;
-    pageSize: PageSize;
+    pageSize: number;
     totalItems: number;
     totalPages: number;
     pageStart: number;
     pageEnd: number;
     onPrev: () => void;
     onNext: () => void;
-    onPageSizeChange: (size: PageSize) => void;
+    onPageSizeChange: (size: any) => void;
 }
 
 /* Stable key regardless of sync state. */
-function rowKey(item: ProductRequestSummary): string {
-    return (
-        item.remote_id ??
-        item.draft_id ??
-        item.request_number ??
-        String(Math.random())
-    );
+function rowKey(item: BodySystemItem): string {
+    return item.id || String(Math.random());
 }
 
-export function RetailerProductRequestsWebView({
+export function AdminBodySystemsWebView({
     query,
     setQuery,
-    statusFilter,
-    setStatusFilter,
-    statusFilters,
     onRefresh,
     refreshing,
     sourceLabel,
@@ -83,7 +76,9 @@ export function RetailerProductRequestsWebView({
     items,
     emptyComponent,
     onOpenCreate,
-    onPressRequest,
+    onPressItem,
+    onEditItem,
+    formatDateHandler,
     page,
     pageSize,
     totalItems,
@@ -137,7 +132,7 @@ export function RetailerProductRequestsWebView({
                                     fontSize: theme.fontSize.lg,
                                 }}
                             >
-                                Product Requests
+                                Body Systems
                             </Text>
                             <View className="flex-row items-center gap-2 mt-1">
                                 <View
@@ -159,10 +154,8 @@ export function RetailerProductRequestsWebView({
                                     <Text
                                         style={{
                                             color: theme.textDark,
-                                            fontFamily:
-                                                theme.font.medium,
-                                            fontSize:
-                                                theme.fontSize.xs,
+                                            fontFamily: theme.font.medium,
+                                            fontSize: theme.fontSize.xs,
                                         }}
                                     >
                                         Synced {lastSyncedTime}
@@ -197,7 +190,7 @@ export function RetailerProductRequestsWebView({
                                         fontSize: theme.fontSize.xs,
                                     }}
                                 >
-                                    New request
+                                    New system
                                 </Text>
                             </Pressable>
 
@@ -219,10 +212,8 @@ export function RetailerProductRequestsWebView({
                                     <Text
                                         className="uppercase tracking-widest text-white"
                                         style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.xs,
+                                            fontFamily: theme.font.bold,
+                                            fontSize: theme.fontSize.xs,
                                         }}
                                     >
                                         Refresh
@@ -232,51 +223,10 @@ export function RetailerProductRequestsWebView({
                         </View>
                     </View>
 
-                    {/* Filters */}
-                    <View className="flex-row flex-wrap gap-2 mb-2">
-                        {statusFilters.map((f) => (
-                            <Pressable
-                                key={f.value}
-                                onPress={() =>
-                                    setStatusFilter(
-                                        statusFilter === f.value
-                                            ? null
-                                            : f.value
-                                    )
-                                }
-                                className="px-3 py-1.5 rounded-full border"
-                                style={{
-                                    borderColor:
-                                        statusFilter === f.value
-                                            ? theme.primary
-                                            : borderColor,
-                                    backgroundColor:
-                                        statusFilter === f.value
-                                            ? `${theme.primary}15`
-                                            : 'transparent',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-widest"
-                                    style={{
-                                        color:
-                                            statusFilter === f.value
-                                                ? theme.primary
-                                                : theme.textDark,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: theme.fontSize.xs,
-                                    }}
-                                >
-                                    {f.label}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </View>
-
                     <TextInput
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Search by product, reference, or wholesaler..."
+                        placeholder="Search body systems..."
                         placeholderTextColor="#94a3b8"
                         autoCorrect={false}
                         autoCapitalize="none"
@@ -346,7 +296,7 @@ export function RetailerProductRequestsWebView({
                                         fontSize: theme.fontSize.sm,
                                     }}
                                 >
-                                    No requests match the filters.
+                                    No body systems match the filters.
                                 </Text>
                             </View>
                         )
@@ -355,7 +305,9 @@ export function RetailerProductRequestsWebView({
                             <TableRow
                                 key={rowKey(item)}
                                 item={item}
-                                onPress={() => onPressRequest(item)}
+                                onPress={() => onPressItem(item)}
+                                onEdit={() => onEditItem(item)}
+                                formatDateHandler={formatDateHandler}
                             />
                         ))
                     )}
@@ -378,61 +330,24 @@ export function RetailerProductRequestsWebView({
 }
 
 /* =========================================================
- * Row label helpers
- * ======================================================= */
-
-/**
- * Reference line. Always the request number so it's clear this
- * row represents a whole request, not a single item.
- */
-function referenceLabel(item: ProductRequestSummary): string {
-    return item.request_number || '—';
-}
-
-/**
- * Product summary line: first product title + "N more" if there
- * are additional lines on the request.
- */
-function productsLabel(item: ProductRequestSummary): string {
-    const preview = item.items_preview ?? [];
-    if (preview.length === 0) return 'No products yet';
-
-    const first = preview[0];
-    const title = first.product_title?.trim() || first.product_id;
-    const extra = preview.length - 1;
-    return extra > 0 ? `${title} +${extra} more` : title;
-}
-
-function wholesalersLabel(item: ProductRequestSummary): string | null {
-    const preview = item.items_preview ?? [];
-    const all: string[] = [];
-    for (const p of preview) {
-        for (const t of p.wholesaler_titles ?? []) {
-            if (t && !all.includes(t)) all.push(t);
-        }
-    }
-    if (all.length === 0) return null;
-    const shown = all.slice(0, 2).join(', ');
-    const rest = all.length - 2;
-    return rest > 0 ? `${shown} +${rest}` : shown;
-}
-
-/* =========================================================
  * Table row
  * ======================================================= */
 function TableRow({
     item,
     onPress,
+    onEdit,
+    formatDateHandler,
 }: {
-    item: ProductRequestSummary;
+    item: BodySystemItem;
     onPress: () => void;
+    onEdit: () => void;
+    formatDateHandler: (dateString: string) => string;
 }) {
     const { theme, isDarkMode } = useAuth();
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
 
-    const reference = referenceLabel(item);
-    const products = productsLabel(item);
-    const wholesalers = wholesalersLabel(item);
+    const isModified =
+        !!item.updated && item.updated !== item.created;
 
     return (
         <Pressable
@@ -440,7 +355,7 @@ function TableRow({
             className="flex-row items-center rounded-xl border px-3 py-3 mt-2"
             style={{ backgroundColor: theme.panel, borderColor }}
         >
-            {/* Reference — request number + products + wholesalers */}
+            {/* System — title + short id (mirrors Request column) */}
             <View style={{ flex: 2.4, paddingRight: 8 }}>
                 <Text
                     className="text-[13px]"
@@ -450,71 +365,43 @@ function TableRow({
                     }}
                     numberOfLines={1}
                 >
-                    {reference}
+                    {item.title || '—'}
                 </Text>
                 <Text
-                    className="text-[12px] mt-0.5"
+                    className="text-[11px] mt-0.5"
                     style={{
-                        color: theme.text,
-                        fontFamily: theme.font.medium,
+                        color: theme.primary,
+                        fontFamily: theme.font.semibold,
                     }}
                     numberOfLines={1}
                 >
-                    {products}
+                    ID {item.id.slice(0, 8) || '—'}
                 </Text>
-                {wholesalers ? (
-                    <Text
-                        className="text-[11px] mt-0.5"
-                        style={{
-                            color: theme.primary,
-                            fontFamily: theme.font.semibold,
-                        }}
-                        numberOfLines={1}
-                    >
-                        Sent to: {wholesalers}
-                    </Text>
-                ) : null}
             </View>
 
+            {/* State pill */}
             <View style={{ flex: 1.0 }}>
                 <StatusPill
-                    label={item.status_display}
-                    tone={statusTone(item.status)}
+                    label={isModified ? 'Modified' : 'New'}
+                    tone={isModified ? 'special' : 'open'}
                 />
             </View>
 
-            <View style={{ flex: 0.9 }}>
-                <StatusPill
-                    label={item.urgency_display}
-                    tone={urgencyTone(item.urgency)}
-                />
-            </View>
-
+            {/* Description */}
             <Text
-                className="text-[13px]"
+                className="text-[12px]"
                 style={{
-                    flex: 0.7,
+                    flex: 2.5,
                     color: theme.text,
                     fontFamily: theme.font.medium,
+                    paddingRight: 8,
                 }}
+                numberOfLines={2}
             >
-                {item.total_line_count}
+                {item.description || '—'}
             </Text>
 
-            <Text
-                className="text-[13px]"
-                style={{
-                    flex: 0.9,
-                    color:
-                        item.fulfilled_line_count > 0
-                            ? '#10b981'
-                            : theme.text,
-                    fontFamily: theme.font.bold,
-                }}
-            >
-                {item.fulfilled_line_count} / {item.total_line_count}
-            </Text>
-
+            {/* Created */}
             <Text
                 className="text-[12px]"
                 style={{
@@ -524,9 +411,10 @@ function TableRow({
                 }}
                 numberOfLines={1}
             >
-                {item.expires_at ? formatDate(item.expires_at) : '—'}
+                {formatDateHandler(item.created)}
             </Text>
 
+            {/* Updated */}
             <Text
                 className="text-[12px]"
                 style={{
@@ -536,9 +424,10 @@ function TableRow({
                 }}
                 numberOfLines={1}
             >
-                {formatDate(item.created)}
+                {formatDateHandler(item.updated)}
             </Text>
 
+            {/* Actions */}
             <View style={{ flex: 1.0 }}>
                 <Pressable
                     onPress={onPress}
@@ -560,6 +449,9 @@ function TableRow({
     );
 }
 
+/* =========================================================
+ * Status pill — shared with the mobile view
+ * ======================================================= */
 export function StatusPill({
     label,
     tone,
@@ -606,35 +498,4 @@ export function StatusPill({
             </Text>
         </View>
     );
-}
-
-function statusTone(
-    status: string
-): 'open' | 'closed' | 'special' | 'success' | 'warning' {
-    if (status === 'FULFILLED') return 'success';
-    if (status === 'PARTIALLY_FULFILLED') return 'warning';
-    if (status === 'CANCELLED' || status === 'EXPIRED')
-        return 'closed';
-    if (status === 'PUBLISHED') return 'open';
-    if (status === 'ACKNOWLEDGED') return 'open';
-    return 'special';
-}
-
-function urgencyTone(
-    urgency: string
-): 'open' | 'closed' | 'special' | 'success' | 'warning' {
-    if (urgency === 'high') return 'warning';
-    if (urgency === 'medium') return 'special';
-    return 'closed';
-}
-
-function formatDate(raw: string): string {
-    if (!raw) return '—';
-    const d = new Date(raw.replace(' ', 'T'));
-    if (isNaN(d.getTime())) return raw;
-    return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-    });
 }

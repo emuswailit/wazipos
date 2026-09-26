@@ -181,6 +181,45 @@ export interface OptInResult {
 }
 
 /* =========================================================
+ * Product request types — wholesaler side
+ *
+ * Mirrors the retailer-side shapes so both files stay in sync.
+ * Wire payload is defined in @/databases/types (WholesalerProductRequest).
+ * ======================================================= */
+
+export type ProductRequestUrgency =
+    | "low"
+    | "medium"
+    | "high";
+
+/**
+ * Canonical request statuses on the server.
+ * Source: WS payloads — `status` field on WholesalerProductRequest.
+ */
+export type ProductRequestStatus =
+    | "DRAFT"
+    | "PUBLISHED"
+    | "PARTIALLY_FULFILLED"
+    | "FULFILLED"
+    | "CANCELLED"
+    | "EXPIRED";
+
+/**
+ * A single line on an accepted response. Send exactly one of
+ * `receipt_id` (existing server receipt) or `receipt` (inline
+ * payload). The backend rejects when both or neither are present.
+ */
+export interface RespondAcceptedLine {
+    item_id: string;
+    receipt_id?: string;
+    receipt?: Record<string, any>;
+}
+
+export interface RespondRejectedLine {
+    item_id: string;
+}
+
+/* =========================================================
  * API contract
  * ======================================================= */
 
@@ -216,11 +255,19 @@ export interface WholesalersApiContract {
     removeCampaignAudienceAction: (data: RemoveCampaignAudiencePayload) => Promise<ApiResponse<{ success: boolean }>>;
     getCampaignAudienceAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaignAudience[]>>;
 
-    // retailer-facing
+    // retailer-facing campaigns
     getMyCampaignsAction: (data?: { status?: CampaignStatus }) => Promise<ApiResponse<WholesalerCampaign[]>>;
     projectCampaignAction: (data: ProjectCampaignPayload) => Promise<ApiResponse<CampaignProjectionRow[]>>;
     optInCampaignAction: (data: OptInCampaignPayload) => Promise<ApiResponse<OptInResult>>;
     optOutCampaignAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaignAudience>>;
+
+    // product requests
+    wholesalerProductRequestsAction: (data: { action: string;[key: string]: any }) => Promise<ApiResponse<any>>;
+    getWholesalerTaggedRequestsAction: (data?: { status?: ProductRequestStatus; urgency?: ProductRequestUrgency; page?: number; page_size?: number }) => Promise<ApiResponse<any>>;
+    getWholesalerRequestDetailsAction: (data: { request_id: string }) => Promise<ApiResponse<any>>;
+    createWholesalerOfferAction: (data: { request_id: string; line_id: string; offered_quantity: number; offered_unit_price: number; note?: string }) => Promise<ApiResponse<any>>;
+    withdrawWholesalerOfferAction: (data: { offer_id: string }) => Promise<ApiResponse<any>>;
+    respondToProductRequestAction: (data: { request_id: string; accepted_lines: RespondAcceptedLine[]; rejected_lines: RespondRejectedLine[]; note?: string }) => Promise<ApiResponse<any>>;
 }
 
 /* =========================================================
@@ -350,7 +397,7 @@ const getCampaignAudienceAction = (
 ): Promise<ApiResponse<any>> =>
     campaignsAction({ action: "GetCampaignAudience", ...data });
 
-/* ---- Retailer-facing ---- */
+/* ---- Retailer-facing campaigns ---- */
 
 const getMyCampaignsAction = (
     data?: { status?: CampaignStatus }
@@ -371,6 +418,174 @@ const optOutCampaignAction = (
     data: CampaignActionPayload
 ): Promise<ApiResponse<any>> =>
     campaignsAction({ action: "OptOutCampaign", ...data });
+
+/* =========================================================
+ * Product request actions — wholesaler side
+ *
+ * All actions POST to the same endpoint and dispatch by `action`.
+ * Handler map (matches retailers/services/product_requests.py):
+ *
+ *   GetWholesalerTaggedRequests — wholesaler fetches requests
+ *                                 targeting their entity
+ *   GetRequestDetails           — either side fetches one request
+ *   CreateOffer                 — wholesaler submits an offer
+ *   WithdrawOffer               — wholesaler retracts a submitted offer
+ *   Respond                     — wholesaler accepts / rejects lines
+ *
+ * Retailer-only actions (CreateRequest, GetMyRequests, ConfirmOffers,
+ * CancelRequest, CancelRequestItem) live in retailersApi.ts.
+ * ======================================================= */
+
+/**
+ * Raw dispatcher call. Every helper below funnels through this, so
+ * the endpoint URL is defined once.
+ */
+const wholesalerProductRequestsAction = (
+    data: { action: string;[key: string]: any }
+): Promise<ApiResponse<any>> => {
+    return client.post(
+        "/retailers/product-requests",
+        data
+    );
+};
+
+/* -------------------- GetWholesalerTaggedRequests -------------------- */
+
+export interface GetWholesalerTaggedRequestsPayload {
+    status?: ProductRequestStatus;
+    urgency?: ProductRequestUrgency;
+    page?: number;
+    page_size?: number;
+}
+
+/**
+ * POST { action: "GetWholesalerTaggedRequests", ...filters }
+ *
+ * Success envelope (payload_key = "requests"):
+ *   { response_code: 0, message, requests: [ ...WholesalerProductRequest... ] }
+ *
+ * The sync context also consumes a WS push on the same shape, wrapped
+ * in `{ wholesaler_product_requests: [...] }`.
+ */
+const getWholesalerTaggedRequestsAction = (
+    data?: GetWholesalerTaggedRequestsPayload
+): Promise<ApiResponse<any>> =>
+    wholesalerProductRequestsAction({
+        action: "GetWholesalerTaggedRequests",
+        ...(data ?? {}),
+    });
+
+/* -------------------- GetRequestDetails -------------------- */
+
+export interface GetWholesalerRequestDetailsPayload {
+    request_id: string;
+}
+
+/**
+ * POST { action: "GetRequestDetails", request_id }
+ *
+ * Success envelope (payload_key = "request"):
+ *   { response_code: 0, message, request: { ...full request... } }
+ */
+const getWholesalerRequestDetailsAction = (
+    data: GetWholesalerRequestDetailsPayload
+): Promise<ApiResponse<any>> =>
+    wholesalerProductRequestsAction({
+        action: "GetRequestDetails",
+        ...data,
+    });
+
+/* -------------------- CreateOffer -------------------- */
+
+export interface CreateWholesalerOfferPayload {
+    request_id: string;
+    line_id: string;
+    offered_quantity: number;
+    offered_unit_price: number;
+    note?: string;
+}
+
+/**
+ * POST { action: "CreateOffer", ...payload }
+ *
+ * Success envelope (payload_key = "offer"):
+ *   { response_code: 0, message, offer: { offer_id, status } }
+ */
+const createWholesalerOfferAction = (
+    data: CreateWholesalerOfferPayload
+): Promise<ApiResponse<any>> =>
+    wholesalerProductRequestsAction({
+        action: "CreateOffer",
+        ...data,
+    });
+
+/* -------------------- WithdrawOffer -------------------- */
+
+export interface WithdrawWholesalerOfferPayload {
+    offer_id: string;
+}
+
+/**
+ * POST { action: "WithdrawOffer", offer_id }
+ *
+ * Success envelope (payload_key = "offer"):
+ *   { response_code: 0, message, offer: { offer_id, status: "WITHDRAWN" } }
+ */
+const withdrawWholesalerOfferAction = (
+    data: WithdrawWholesalerOfferPayload
+): Promise<ApiResponse<any>> =>
+    wholesalerProductRequestsAction({
+        action: "WithdrawOffer",
+        ...data,
+    });
+
+/* -------------------- Respond -------------------- */
+
+export interface RespondToProductRequestPayload {
+    request_id: string;
+    /**
+     * Accepted lines. Each entry requires exactly one of `receipt_id`
+     * or `receipt` (never both — the backend rejects that).
+     */
+    accepted_lines: RespondAcceptedLine[];
+    rejected_lines: RespondRejectedLine[];
+    note?: string;
+}
+
+/**
+ * POST { action: "Respond", ...payload }
+ *
+ * Business rules enforced by the backend:
+ *   - at least one line must be accepted or rejected
+ *   - each accepted line: exactly one of receipt_id / receipt
+ *   - every item_id must belong to this request
+ *   - no line in both accepted_lines and rejected_lines
+ *
+ * Success envelope (payload_key = "response"):
+ *   {
+ *     response_code: 0,
+ *     message: "Response recorded",
+ *     response: {
+ *       response_id: "…",
+ *       offered_line_count: 1,
+ *       rejected_line_count: 0
+ *     }
+ *   }
+ *
+ * Error envelope:
+ *   {
+ *     response_code: 1,
+ *     message: "Invalid accepted line",
+ *     errors: { accepted_lines: "Each line requires item_id." }
+ *   }
+ */
+const respondToProductRequestAction = (
+    data: RespondToProductRequestPayload
+): Promise<ApiResponse<any>> =>
+    wholesalerProductRequestsAction({
+        action: "Respond",
+        ...data,
+    });
 
 /* =========================================================
  * Default export
@@ -408,11 +623,19 @@ const apiExportInstance: WholesalersApiContract = {
     removeCampaignAudienceAction,
     getCampaignAudienceAction,
 
-    // retailer-facing
+    // retailer-facing campaigns
     getMyCampaignsAction,
     projectCampaignAction,
     optInCampaignAction,
     optOutCampaignAction,
+
+    // product requests
+    wholesalerProductRequestsAction,
+    getWholesalerTaggedRequestsAction,
+    getWholesalerRequestDetailsAction,
+    createWholesalerOfferAction,
+    withdrawWholesalerOfferAction,
+    respondToProductRequestAction,
 };
 
 export default apiExportInstance;

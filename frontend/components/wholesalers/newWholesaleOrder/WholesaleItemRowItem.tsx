@@ -1,97 +1,451 @@
+// components/wholesalers/newWholesaleOrder/WholesaleItemRowItem.tsx
+
+import {
+    useFocusClear,
+    WholesaleInventoryPicker,
+} from '@/components/common';
 import { useAuth } from '@/context/AuthContext';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ProductCatalogItem, WholesaleItemRow } from './types';
+import type { WholesalerReceipt } from '@/databases/types';
+import React from 'react';
+import {
+    Platform,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import type { WholesaleItemRow } from './useWholesaleOrderForm';
 
 interface WholesaleItemRowItemProps {
     row: WholesaleItemRow;
     index: number;
-    productsCatalog: ProductCatalogItem[];
-    onUpdateRow: (id: string, updatedFields: Partial<WholesaleItemRow>) => void;
-    onPopulateRow: (id: string, product: ProductCatalogItem, overrideQty?: string) => void;
+    onUpdateRow: (
+        id: string,
+        updatedFields: Partial<WholesaleItemRow>
+    ) => void;
     onRemoveRow: (id: string) => void;
     onScanTrigger: () => void;
 }
 
-export default function WholesaleItemRowItem({ row, index, productsCatalog, onUpdateRow, onPopulateRow, onRemoveRow, onScanTrigger }: WholesaleItemRowItemProps) {
+export default function WholesaleItemRowItem({
+    row,
+    index,
+    onUpdateRow,
+    onRemoveRow,
+    onScanTrigger,
+}: WholesaleItemRowItemProps) {
     const { theme } = useAuth();
-    const query = row.productSearchQuery || '';
-    const rowFilteredProducts = query.trim() === ''
-        ? productsCatalog
-        : productsCatalog.filter(p => p.title.toLowerCase().includes(query.toLowerCase()));
+    const isDark = (theme as any).isDarkMode;
 
-    const adjustQuantityByDelta = (delta: number) => {
-        const currentQty = parseFloat(row.purchased_quantity) || 0;
-        const fallbackQty = Math.max(0, currentQty + delta);
-        onUpdateRow(row.id, { purchased_quantity: fallbackQty.toString() });
+    const borderColor = isDark ? '#334155' : '#e2e8f0';
+    const inputBg = isDark ? '#0f172a' : '#f1f5f9';
+    const subBg = isDark ? '#0f172a' : '#f8fafc';
+
+    /* -------- Derived -------- */
+    const qty = Number(row.purchased_quantity) || 0;
+    const price = Number(row.item_price) || 0;
+    const disc = Number(row.item_price_discount) || 0;
+    const total = Number(row.item_price_total) || 0;
+    const stock = Number(row.available);
+
+    /* -------- Focus-clear -------- */
+    const qtyFocus = useFocusClear({
+        value: String(row.purchased_quantity ?? ''),
+        setValue: (next) =>
+            onUpdateRow(row.id, {
+                purchased_quantity: next,
+            }),
+    });
+
+    const discFocus = useFocusClear({
+        value: String(row.item_price_discount ?? ''),
+        setValue: (next) =>
+            onUpdateRow(row.id, {
+                item_price_discount: next,
+            }),
+    });
+
+    /* -------- Stepper -------- */
+    const bump = (delta: number) => {
+        const next = Math.max(0, qty + delta);
+        onUpdateRow(row.id, {
+            purchased_quantity: String(next),
+        });
     };
 
-    const handleDiscountChange = (text: string) => {
-        onUpdateRow(row.id, { item_price_discount: text });
+    /* -------- Picker -------- */
+    const handleSelect = (r: WholesalerReceipt) => {
+        const resolvedId = String(
+            (r as any).remote_id ||
+            (r as any).remote_key ||
+            (r as any).id ||
+            ''
+        );
+
+        if (!resolvedId) {
+            console.warn(
+                '[WholesaleItemRowItem] picked receipt has no id',
+                r
+            );
+        }
+
+        onUpdateRow(row.id, {
+            selectedReceipt: r,
+            wholesaler_receipt_id: resolvedId,
+            item_price: Number(
+                r.final_unit_selling_price ??
+                r.unit_selling_price ??
+                0
+            ),
+            available: Number(
+                r.current_unit_quantity ?? 0
+            ),
+        });
     };
 
-    const handleDiscountBlur = () => {
-        const val = parseFloat(row.item_price_discount) || 0;
-        onUpdateRow(row.id, { item_price_discount: val.toFixed(2) });
+    const handleClear = () => {
+        onUpdateRow(row.id, {
+            selectedReceipt: null,
+            wholesaler_receipt_id: undefined,
+            item_price: 0,
+            available: undefined,
+        });
     };
 
     return (
-        <View className="p-3 mb-2 rounded-xl border-2 flex-col relative z-10" style={{ borderColor: theme.isDarkMode ? '#475569' : '#a1a1aa', backgroundColor: theme.background + '25' }}>
-            <View className="flex-row justify-between items-center mb-2 pb-1.5 border-b border-gray-300/60">
-                <Text className="text-xs font-bold" style={{ color: theme.textDark }}>Item Group #{index + 1}</Text>
-                <TouchableOpacity onPress={() => onRemoveRow(row.id)} className="w-7 h-7 bg-red-50 rounded-md items-center justify-center border border-red-300" activeOpacity={0.6}>
-                    <Text className="text-red-600 font-bold text-xs">🗑️</Text>
+        <View
+            className="rounded-xl border mb-2"
+            style={{ borderColor, backgroundColor: theme.panel }}
+        >
+            {/* =============================================
+             * Row 1: index + picker + scan + remove
+             * ============================================= */}
+            <View className="flex-row items-start px-3 pt-2.5 pb-2 gap-2">
+                <Text
+                    className="text-[10px] font-bold uppercase tracking-widest mt-3"
+                    style={{
+                        color: theme.textDark,
+                        fontFamily: theme.font.bold,
+                    }}
+                >
+                    #{index + 1}
+                </Text>
+
+                <View className="flex-1">
+                    <WholesaleInventoryPicker
+                        value={row.selectedReceipt}
+                        onSelect={handleSelect}
+                        onClear={handleClear}
+                        inStockOnly
+                        filter={(r) => !!r.remote_id}
+                        placeholder="Click to browse or type to filter…"
+                    />
+                </View>
+
+                <TouchableOpacity
+                    onPress={onScanTrigger}
+                    activeOpacity={0.6}
+                    className="mt-0.5 rounded-lg items-center justify-center"
+                    style={{
+                        width: 34,
+                        height: 34,
+                        backgroundColor: `${theme.primary}15`,
+                        borderWidth: 1,
+                        borderColor: `${theme.primary}40`,
+                    }}
+                >
+                    <Text
+                        style={{
+                            color: theme.primary,
+                            fontSize: 14,
+                        }}
+                    >
+                        📷
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => onRemoveRow(row.id)}
+                    activeOpacity={0.6}
+                    className="mt-0.5 px-1.5 py-1 rounded-md"
+                >
+                    <Text
+                        style={{ color: '#ef4444', fontSize: 14 }}
+                    >
+                        🗑
+                    </Text>
                 </TouchableOpacity>
             </View>
-            <View className="flex-row flex-wrap -mx-2">
-                <View className="w-full md:w-1/2 px-2 mb-2 relative z-20">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Wholesaler Receipt (Product lookup) *</Text>
-                    <TextInput className="border rounded-md p-2 text-sm bg-white text-[#1c1c1e]" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }} placeholder="Click to browse or type to filter..." value={row.productSearchQuery || row.wholesaler_receipt} onChangeText={(txt) => onUpdateRow(row.id, { productSearchQuery: txt, showProductSuggestions: true, wholesaler_receipt: '' })} onFocus={() => onUpdateRow(row.id, { showProductSuggestions: true })} />
-                    {row.showProductSuggestions && (
-                        <View className="absolute left-2 right-2 top-14 rounded-md shadow-lg border-2 max-h-36 overflow-hidden z-30" style={{ backgroundColor: theme.panel, borderColor: theme.isDarkMode ? '#475569' : '#a1a1aa' }}>
-                            {rowFilteredProducts.length === 0 ? (
-                                <View className="p-2"><Text style={{ color: theme.textDark }} className="text-xs italic">No product matches found</Text></View>
-                            ) : (
-                                <ScrollView nestedScrollEnabled={false} keyboardShouldPersistTaps="handled">
-                                    {rowFilteredProducts.map((prod) => (
-                                        <TouchableOpacity key={prod.id} className="p-2 border-b border-gray-200" onPress={() => onPopulateRow(row.id, prod)}>
-                                            <Text style={{ color: theme.text }} className="text-sm font-medium">{prod.title} (KES {prod.item_price.toFixed(2)})</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            )}
+
+            {/* =============================================
+             * Row 2a: qty | price | disc
+             * ============================================= */}
+            <View
+                className="px-3 pb-2 flex-col gap-2"
+            >
+                <View
+                    className="flex-row items-stretch gap-2"
+                    style={{ width: '100%' }}
+                >
+                    {/* Quantity stepper */}
+                    <View
+                        className="flex-row items-center rounded-lg border overflow-hidden h-[34px]"
+                        style={{
+                            borderColor,
+                            flexGrow: 1,
+                            flexShrink: 0,
+                            flexBasis: 0,
+                            minWidth: 96,
+                        }}
+                    >
+                        <TouchableOpacity
+                            onPress={() => bump(-1)}
+                            hitSlop={4}
+                            className="items-center justify-center"
+                            style={{
+                                width: 30,
+                                height: '100%',
+                                backgroundColor: subBg,
+                                flexShrink: 0,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: theme.text,
+                                    fontSize: 15,
+                                }}
+                            >
+                                −
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TextInput
+                            value={qtyFocus.displayValue}
+                            onChangeText={qtyFocus.onChange}
+                            onFocus={qtyFocus.onFocus}
+                            onBlur={qtyFocus.onBlur}
+                            keyboardType="numeric"
+                            placeholder="0"
+                            placeholderTextColor="#94a3b8"
+                            className="flex-1 h-full"
+                            style={{
+                                color: theme.text,
+                                fontFamily:
+                                    theme.font.bold,
+                                fontSize: 13,
+                                backgroundColor: inputBg,
+                                textAlign: 'center',
+                                paddingVertical: 0,
+                                paddingHorizontal: 0,
+                                minWidth: 32,
+                                ...(Platform.OS === 'web'
+                                    ? ({
+                                        outlineStyle:
+                                            'none',
+                                        textAlign: 'center',
+                                        lineHeight: 32,
+                                    } as any)
+                                    : {
+                                        textAlignVertical:
+                                            'center',
+                                    }),
+                            }}
+                        />
+
+                        <TouchableOpacity
+                            onPress={() => bump(1)}
+                            hitSlop={4}
+                            className="items-center justify-center"
+                            style={{
+                                width: 30,
+                                height: '100%',
+                                backgroundColor: subBg,
+                                flexShrink: 0,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: theme.text,
+                                    fontSize: 15,
+                                }}
+                            >
+                                +
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Unit price */}
+                    <View
+                        className="flex-row items-center justify-center rounded-lg border px-2 h-[34px]"
+                        style={{
+                            borderColor,
+                            backgroundColor: inputBg,
+                            flexGrow: 1,
+                            flexShrink: 0,
+                            flexBasis: 0,
+                            minWidth: 88,
+                        }}
+                    >
+                        <Text
+                            className="text-[10px] mr-1"
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.bold,
+                            }}
+                        >
+                            KES
+                        </Text>
+                        <Text
+                            numberOfLines={1}
+                            style={{
+                                color: theme.text,
+                                fontFamily: theme.font.bold,
+                                fontSize: 12,
+                            }}
+                        >
+                            {price.toFixed(2)}
+                        </Text>
+                    </View>
+
+                    {/* Discount */}
+                    <View
+                        className="flex-row items-center justify-center rounded-lg border px-2 h-[34px]"
+                        style={{
+                            borderColor,
+                            backgroundColor: inputBg,
+                            flexGrow: 1,
+                            flexShrink: 0,
+                            flexBasis: 0,
+                            minWidth: 88,
+                        }}
+                    >
+                        <Text
+                            className="text-[10px] mr-1"
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.bold,
+                            }}
+                        >
+                            Disc
+                        </Text>
+                        <TextInput
+                            value={discFocus.displayValue}
+                            onChangeText={discFocus.onChange}
+                            onFocus={discFocus.onFocus}
+                            onBlur={() => {
+                                discFocus.onBlur();
+                                const v =
+                                    parseFloat(
+                                        row.item_price_discount
+                                    ) || 0;
+                                onUpdateRow(row.id, {
+                                    item_price_discount:
+                                        v.toFixed(2),
+                                });
+                            }}
+                            keyboardType="numeric"
+                            placeholder="0.00"
+                            placeholderTextColor="#94a3b8"
+                            className="flex-1"
+                            style={{
+                                color: theme.text,
+                                fontFamily:
+                                    theme.font.bold,
+                                fontSize: 12,
+                                minWidth: 36,
+                                textAlign: 'right',
+                                paddingVertical: 0,
+                                ...(Platform.OS === 'web'
+                                    ? ({
+                                        outlineStyle:
+                                            'none',
+                                    } as any)
+                                    : null),
+                            }}
+                        />
+                    </View>
+                </View>
+
+                {/* =============================================
+                 * Row 2b: stock + total
+                 * ============================================= */}
+                <View className="flex-row items-center justify-between gap-2">
+                    {Number.isFinite(stock) ? (
+                        <View
+                            className="flex-row items-center rounded-lg px-2 h-[34px]"
+                            style={{
+                                backgroundColor:
+                                    stock <= 0
+                                        ? 'rgba(239,68,68,0.12)'
+                                        : stock <= 5
+                                            ? 'rgba(251,191,36,0.15)'
+                                            : 'rgba(16,185,129,0.12)',
+                            }}
+                        >
+                            <Text
+                                className="text-[10px] mr-1"
+                                style={{
+                                    color:
+                                        stock <= 0
+                                            ? '#ef4444'
+                                            : stock <= 5
+                                                ? '#f59e0b'
+                                                : '#10b981',
+                                    fontFamily:
+                                        theme.font.bold,
+                                }}
+                            >
+                                Stock
+                            </Text>
+                            <Text
+                                style={{
+                                    color:
+                                        stock <= 0
+                                            ? '#ef4444'
+                                            : stock <= 5
+                                                ? '#f59e0b'
+                                                : '#10b981',
+                                    fontFamily:
+                                        theme.font.bold,
+                                    fontSize: 12,
+                                }}
+                            >
+                                {stock}
+                            </Text>
                         </View>
+                    ) : (
+                        <View />
                     )}
-                </View>
-                <View className="w-full md:w-1/2 px-2 mb-2">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Barcode Key</Text>
-                    <View className="flex-row items-center border rounded-md bg-white" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }}>
-                        <TextInput className="flex-1 p-2 text-sm text-[#1c1c1e]" placeholder="Scan or key" value={row.bar_code} onChangeText={(txt) => onUpdateRow(row.id, { bar_code: txt })} />
-                        <TouchableOpacity className="px-3 py-2 bg-blue-500 rounded-r-md" onPress={onScanTrigger}><Text className="text-white text-xs font-bold">📷</Text></TouchableOpacity>
+
+                    <View
+                        className="flex-row items-center rounded-lg px-2.5 h-[34px]"
+                        style={{
+                            backgroundColor:
+                                'rgba(16,185,129,0.12)',
+                            borderWidth: 1,
+                            borderColor:
+                                'rgba(16,185,129,0.35)',
+                        }}
+                    >
+                        <Text
+                            className="text-[10px] mr-1"
+                            style={{
+                                color: '#10b981',
+                                fontFamily: theme.font.bold,
+                            }}
+                        >
+                            KES
+                        </Text>
+                        <Text
+                            style={{
+                                color: '#10b981',
+                                fontFamily: theme.font.bold,
+                                fontSize: 13,
+                            }}
+                        >
+                            {total.toFixed(2)}
+                        </Text>
                     </View>
-                </View>
-                <View className="w-full md:w-1/4 px-2 mb-2">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Purchased Qty *</Text>
-                    <View className="flex-row flex-nowrap items-center bg-white border rounded-md overflow-hidden h-10 w-full" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }}>
-                        <TouchableOpacity onPress={() => adjustQuantityByDelta(-1)} className="w-10 h-full bg-gray-100 active:bg-gray-200 border-r border-gray-200 justify-center items-center min-w-[40px]"><Text className="font-extrabold text-base text-zinc-700">-</Text></TouchableOpacity>
-                        <TextInput className="flex-1 h-full text-sm text-center font-bold bg-white p-0 m-0 text-[#1c1c1e] min-w-[40px]" keyboardType="numeric" placeholder="0" value={row.purchased_quantity} onChangeText={(txt) => onUpdateRow(row.id, { purchased_quantity: txt })} />
-                        <TouchableOpacity onPress={() => adjustQuantityByDelta(1)} className="w-10 h-full bg-gray-100 active:bg-gray-200 border-l border-gray-200 justify-center items-center min-w-[40px]"><Text className="font-extrabold text-base text-zinc-700">+</Text></TouchableOpacity>
-                    </View>
-                </View>
-                <View className="w-1/2 md:w-1/5 px-2 mb-2">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Discount (KES)</Text>
-                    <TextInput className="border rounded-md p-2 text-sm bg-white h-10 text-[#1c1c1e]" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }} keyboardType="numeric" placeholder="0.00" value={row.item_price_discount} onChangeText={handleDiscountChange} onBlur={handleDiscountBlur} />
-                </View>
-                <View className="w-1/2 md:w-1/5 px-2 mb-2">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Unit Price</Text>
-                    <View className="border rounded-md p-2 h-10 justify-center bg-gray-100" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }}><Text className="text-sm font-semibold text-zinc-800">KES {row.item_price.toFixed(2)}</Text></View>
-                </View>
-                <View className="w-1/2 md:w-1/5 px-2 mb-2">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Available Stock</Text>
-                    <View className="border rounded-md p-2 h-10 justify-center bg-gray-100" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }}><Text className="text-sm bg-gray-100 italic text-zinc-600">{row.available || 'N/A'}</Text></View>
-                </View>
-                <View className="w-1/2 md:w-1/5 px-2 mb-2">
-                    <Text className="text-xs font-medium mb-1" style={{ color: theme.textDark }}>Total Cost</Text>
-                    <View className="border rounded-md p-2 bg-green-50 h-10 justify-center items-end" style={{ borderColor: theme.isDarkMode ? '#475569' : '#d1d1d6' }}><Text className="text-sm font-bold text-green-700">KES {row.item_price_total.toFixed(2)}</Text></View>
                 </View>
             </View>
         </View>

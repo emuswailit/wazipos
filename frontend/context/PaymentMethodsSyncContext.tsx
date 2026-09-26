@@ -51,6 +51,8 @@ function resolvePaymentMethodsArray(raw: any): any[] {
                 return raw.data.results;
             if (Array.isArray(raw.data.data))
                 return raw.data.data;
+            if (Array.isArray(raw.data.payment_methods))
+                return raw.data.payment_methods;
         }
     }
 
@@ -60,18 +62,29 @@ function resolvePaymentMethodsArray(raw: any): any[] {
 /* ---------------------------------------------------------
  * Normalizer — wire payment method → PaymentMethodItem
  *
- * `PaymentMethodItem` keeps `id` as the server UUID. No
- * local auto-increment / remote_id split for this table.
+ * IMPORTANT: treat missing `active` as enabled. Only an
+ * explicit `false` / `0` / `"false"` marks a method disabled.
  * ------------------------------------------------------- */
 
 function normalizePaymentMethod(i: any): PaymentMethodItem {
+    const rawActive = i?.active;
+
+    const isActive =
+        rawActive === undefined ||
+        rawActive === null ||
+        rawActive === true ||
+        rawActive === 1 ||
+        rawActive === '1' ||
+        rawActive === 'true' ||
+        rawActive === 'TRUE';
+
     return {
         id: String(i.id ?? i.key ?? ''),
         title: String(i.title || ''),
         description: i.description
             ? String(i.description)
             : undefined,
-        active: !!i.active,
+        active: isActive,
         updatedAt: new Date().toISOString(),
     };
 }
@@ -137,6 +150,12 @@ export const PaymentMethodsSyncProvider: React.FC<{
 
         const normalized: PaymentMethodItem[] = list.map(
             normalizePaymentMethod
+        );
+
+        console.log(
+            '[Payment Context] normalized methods:',
+            normalized.length,
+            normalized
         );
 
         /* Only update state if content actually changed */
@@ -242,7 +261,9 @@ export const PaymentMethodsSyncProvider: React.FC<{
                     const rawData = await AsyncStorage.getItem(
                         NATIVE_PAYMENT_METHODS_KEY
                     );
-                    cached = rawData ? JSON.parse(rawData) : [];
+                    cached = rawData
+                        ? JSON.parse(rawData)
+                        : [];
                 }
 
                 if (!cancelled && cached?.length) {

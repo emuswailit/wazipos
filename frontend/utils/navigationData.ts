@@ -24,8 +24,8 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         subRoutes: [
             {
                 id: 1,
-                title: "Body Systems",
-                route: "/bodySystems?tab=bodySystems", // Points directly to app/(admin)/
+                title: "Drug Categories",
+                route: "/drugCategories?tab=drugCategories", // Points directly to app/(admin)/
                 allowedRoles: ["Admin"],
                 showInSidebar: true
             },
@@ -104,15 +104,15 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             },
             {
                 id: 2,
-                title: "Orders",
-                route: "/wholesaleOrders?tab=wholesaleOrders", // Points directly to app/(admin)/
+                title: "Retailer Orders",
+                route: "/retailerOrders?tab=retailerOrders", // Points directly to app/(admin)/
                 allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
             {
                 id: 3,
                 title: "Inventory",
-                route: "/wholesaleInventory?tab=wholesaleInventory", // Points directly to app/(admin)/
+                route: "/inventory?tab=inventory", // Points directly to app/(admin)/
                 allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true
             },
@@ -125,11 +125,12 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             },
             {
                 id: 5,
-                title: "Retailer Requests",
-                route: "/retailerRequests?tab=retailerRequests", // Points directly to app/(admin)/
+                title: "Products Requets",
+                route: "/productsRequests?tab=productsRequests",
                 allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true
+                showInSidebar: true,
             },
+
         ]
     }
 
@@ -253,27 +254,41 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             },
             {
                 id: 7,
+                title: "Request Drafts",
+                route: "/requestDrafts?tab=requestDrafts",
+                allowedRoles: ["GeneralRetailerSuperAdmin"],
+                showInSidebar: true,
+            },
+            {
+                id: 8,
+                title: "Product Requests",
+                route: "/productsRequests?tab=productsRequests",
+                allowedRoles: ["GeneralRetailerSuperAdmin"],
+                showInSidebar: true,
+            },
+            {
+                id: 9,
                 title: "Retailer Indents",
                 route: "/retailerIndents?tab=retailerIndents", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 8,
+                id: 10,
                 title: "Stock Outs",
                 route: "/stockOuts?tab=stockOuts", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 9,
+                id: 11,
                 title: "Wholesale Marketplace",
                 route: "/wholesaleMarketplace?tab=wholesaleMarketplace", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 10,
+                id: 12,
                 title: "Products Requests",
                 route: "/productRequests?tab=productRequests", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],

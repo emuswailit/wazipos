@@ -92,43 +92,199 @@ const outOfStocksAction = (data: {
     return client.post("/retailers/orders/staff", data);
 };
 
-// api/retailersApi.ts — append
+/* =====================================================================
+ * Product requests — retailer side
+ *
+ * All actions POST to the same endpoint and dispatch by `action`.
+ * Handler map (matches retailers/services/product_requests.py):
+ *
+ *   CreateRequest       — retailer creates a new request
+ *   GetMyRequests       — retailer fetches their own requests
+ *   GetRequestDetails   — either side fetches one request
+ *   ConfirmOffers       — retailer confirms / declines incoming offers
+ *   CancelRequest       — retailer cancels an entire request
+ *   CancelRequestItem   — retailer cancels a single line
+ *
+ * Wholesaler-only actions (CreateOffer, WithdrawOffer, Respond,
+ * GetWholesalerTaggedRequests) live in wholesalersApi.ts.
+ * =================================================================== */
 
-const productRequestsAction = (data: {
+/**
+ * Canonical request statuses on the server.
+ * Source: WS payloads — `status` field on WholesalerProductRequest.
+ */
+export type ProductRequestStatus =
+    | "DRAFT"
+    | "PUBLISHED"
+    | "PARTIALLY_FULFILLED"
+    | "FULFILLED"
+    | "CANCELLED"
+    | "EXPIRED";
+
+export type ProductRequestUrgency =
+    | "low"
+    | "medium"
+    | "high";
+
+export interface ProductRequestActionEnvelope {
     action: string;
     [key: string]: any;
-}) => client.post("/retailers/product-requests", data);
+}
 
-const createProductRequestAction = (data: {
-    items: Array<{
-        product_id: string;
-        requested_quantity: number;
-        urgency?: "low" | "medium" | "high";
-        note?: string;
-    }>;
-    urgency?: "low" | "medium" | "high";
+/**
+ * Raw dispatcher call. Every helper below funnels through this, so
+ * the endpoint URL is defined once. Matches the view
+ * `productRequestsAPIView` in retailers/views.py.
+ */
+const productRequestsAction = (
+    data: ProductRequestActionEnvelope
+) => client.post("/retailers/product-requests", data);
+
+/* -------------------- CreateRequest -------------------- */
+
+export interface CreateProductRequestItemPayload {
+    product_id: string;
+    requested_quantity: number;
+    urgency?: ProductRequestUrgency;
     note?: string;
-}) => productRequestsAction({ action: "CreateRequest", ...data });
+    /**
+     * Wholesalers this line is targeted at. At least one is
+     * required by the client; empty arrays are rejected.
+     */
+    target_wholesaler_ids?: string[];
+}
 
-const getMyProductRequestsAction = (data?: {
-    status?: "OPEN" | "ACKNOWLEDGED" | "PARTIALLY_FULFILLED" | "FULFILLED" | "CANCELLED" | "EXPIRED";
-}) => productRequestsAction({ action: "GetMyRequests", ...(data ?? {}) });
+export interface CreateProductRequestPayload {
+    /**
+     * Offline-first idempotency key. Required by the backend —
+     * the server rejects requests without one and enforces
+     * uniqueness on the column.
+     *
+     * Format used across the app:
+     *   `<user_id>:<entity_id>:<ms_timestamp>`
+     */
+    draft_id: string;
 
-const getProductRequestDetailsAction = (data: { request_id: string }) =>
-    productRequestsAction({ action: "GetRequestDetails", ...data });
+    items: CreateProductRequestItemPayload[];
 
-const confirmProductRequestOffersAction = (data: {
+    /** Request-level urgency. Defaults from the highest line. */
+    urgency?: ProductRequestUrgency;
+
+    /** Optional request-level note shown to every targeted
+     *  wholesaler. */
+    note?: string;
+}
+
+/**
+ * POST { action: "CreateRequest", ...payload }
+ *
+ * Success envelope (payload_key = "request"):
+ *   { response_code: 0, message, request: { request_id, request_number } }
+ *
+ * Note: the `action` field is injected by this helper. Callers pass
+ * only the payload — do NOT include `action` in `data`.
+ */
+const createProductRequestAction = (
+    data: CreateProductRequestPayload
+) => productRequestsAction({ action: "CreateRequest", ...data });
+
+/* -------------------- GetMyRequests -------------------- */
+
+export interface GetMyProductRequestsPayload {
+    status?: ProductRequestStatus;
+    page?: number;
+    page_size?: number;
+}
+
+/**
+ * POST { action: "GetMyRequests", ...filters }
+ *
+ * Success envelope (payload_key = "requests"):
+ *   { response_code: 0, message, requests: [ ... ] }
+ */
+const getMyProductRequestsAction = (
+    data?: GetMyProductRequestsPayload
+) => productRequestsAction({ action: "GetMyRequests", ...(data ?? {}) });
+
+/* -------------------- GetRequestDetails -------------------- */
+
+export interface GetProductRequestDetailsPayload {
     request_id: string;
-    confirmations: Array<{ offer_id: string; response_note?: string }>;
-    declinations: Array<{ offer_id: string; reason?: string }>;
+}
+
+/**
+ * POST { action: "GetRequestDetails", request_id }
+ *
+ * Success envelope (payload_key = "request"):
+ *   { response_code: 0, message, request: { ...full request... } }
+ */
+const getProductRequestDetailsAction = (
+    data: GetProductRequestDetailsPayload
+) => productRequestsAction({ action: "GetRequestDetails", ...data });
+
+/* -------------------- ConfirmOffers -------------------- */
+
+export interface ConfirmProductRequestOffersPayload {
+    request_id: string;
+    confirmations: Array<{
+        offer_id: string;
+        response_note?: string;
+    }>;
+    declinations: Array<{
+        offer_id: string;
+        reason?: string;
+    }>;
     note?: string;
-}) => productRequestsAction({ action: "ConfirmOffers", ...data });
+}
 
-const cancelProductRequestAction = (data: { request_id: string }) =>
-    productRequestsAction({ action: "CancelRequest", ...data });
+/**
+ * POST { action: "ConfirmOffers", ...payload }
+ *
+ * Success envelope (payload_key = "request"):
+ *   { response_code: 0, message,
+ *     request: { request_id, confirmed_offer_count,
+ *                declined_offer_count, indent_id,
+ *                created_new_indent, items_added } }
+ */
+const confirmProductRequestOffersAction = (
+    data: ConfirmProductRequestOffersPayload
+) => productRequestsAction({ action: "ConfirmOffers", ...data });
 
-const cancelProductRequestItemAction = (data: { item_id: string }) =>
-    productRequestsAction({ action: "CancelRequestItem", ...data });
+/* -------------------- CancelRequest -------------------- */
+
+export interface CancelProductRequestPayload {
+    request_id: string;
+    reason?: string;
+}
+
+/**
+ * POST { action: "CancelRequest", request_id, reason? }
+ *
+ * Success envelope (payload_key = "request"):
+ *   { response_code: 0, message, request: { request_id, status: "CANCELLED" } }
+ */
+const cancelProductRequestAction = (
+    data: CancelProductRequestPayload
+) => productRequestsAction({ action: "CancelRequest", ...data });
+
+/* -------------------- CancelRequestItem -------------------- */
+
+export interface CancelProductRequestItemPayload {
+    request_id: string;
+    item_id: string;
+    reason?: string;
+}
+
+/**
+ * POST { action: "CancelRequestItem", request_id, item_id, reason? }
+ *
+ * Success envelope (payload_key = "request"):
+ *   { response_code: 0, message,
+ *     request: { request_id, cancelled_item_id } }
+ */
+const cancelProductRequestItemAction = (
+    data: CancelProductRequestItemPayload
+) => productRequestsAction({ action: "CancelRequestItem", ...data });
 
 export default {
     retailCientAction,
@@ -146,6 +302,7 @@ export default {
     retailerIndentParamsUpdateAction,
     retailerIndentItemParamsUpdateAction,
     outOfStockAction: outOfStocksAction,
+    productRequestsAction,
     createProductRequestAction,
     getMyProductRequestsAction,
     getProductRequestDetailsAction,

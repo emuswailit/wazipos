@@ -1,8 +1,11 @@
 // components/retailers/productRequests/RequestWholesalerPickerModal.tsx
 
-import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useState,
+} from 'react';
 import {
     Modal,
     Pressable,
@@ -11,10 +14,6 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import {
-    AutocompleteOption,
-    MultiSelectAutocomplete,
-} from './MultiSelectAutocomplete';
 
 /* =========================================================
  * Props
@@ -54,9 +53,6 @@ const URGENCY_OPTIONS: Array<{
         { value: 'medium', label: 'Medium' },
         { value: 'high', label: 'High' },
     ];
-
-/* In-memory cache: product → wholesaler options */
-const wholesalerCache: Record<string, AutocompleteOption[]> = {};
 
 /* =========================================================
  * Component
@@ -108,40 +104,6 @@ export function RequestWholesalerPickerModal({
         JSON.stringify(initialWholesalerIds ?? []),
     ]);
 
-    /* Loader for MultiSelectAutocomplete */
-    const loadWholesalers = useCallback(
-        async (_query?: string): Promise<AutocompleteOption[]> => {
-            if (!productId) return [];
-            const cached = wholesalerCache[productId];
-            if (cached) return cached;
-
-            const res: any =
-                await retailersApi.getEligibleWholesalersAction({
-                    product_id: productId,
-                });
-
-            const results = res?.data?.wholesalers?.results ?? [];
-
-            const mapped: AutocompleteOption[] = results.map(
-                (w: any) => ({
-                    id: String(w.id),
-                    label: String(w.title ?? 'Unknown'),
-                    sublabel: [w.town, w.phone]
-                        .filter(Boolean)
-                        .join(' · '),
-                    search: [w.entity_type, w.email, w.phone]
-                        .filter(Boolean)
-                        .join(' '),
-                    meta: w,
-                })
-            );
-
-            wholesalerCache[productId] = mapped;
-            return mapped;
-        },
-        [productId]
-    );
-
     /* Quantity stepper handlers */
     const decrement = useCallback(
         () => setQuantity((q) => Math.max(1, q - 1)),
@@ -164,16 +126,6 @@ export function RequestWholesalerPickerModal({
 
         setIsSubmitting(true);
         try {
-            // Resolve titles from the loaded wholesaler cache so the
-            // draft / request can render them without an extra lookup.
-            const cached = wholesalerCache[productId] ?? [];
-            const titleById = new Map(
-                cached.map((o) => [o.id, o.label])
-            );
-            const titles = selectedWholesalerIds
-                .map((id) => titleById.get(id) ?? '')
-                .filter((t) => t.length > 0);
-
             const payload = {
                 product_id: productId,
                 requested_quantity: Math.max(
@@ -183,7 +135,6 @@ export function RequestWholesalerPickerModal({
                 urgency,
                 note: note.trim() || undefined,
                 target_wholesaler_ids: selectedWholesalerIds,
-                target_wholesaler_titles: titles,
             };
 
             if (__DEV__) {
@@ -405,26 +356,16 @@ export function RequestWholesalerPickerModal({
                             </View>
                         </View>
 
-                        {/* Wholesaler picker */}
-                        <MultiSelectAutocomplete
-                            label="Send to wholesalers"
-                            value={selectedWholesalerIds}
-                            onChange={setSelectedWholesalerIds}
-                            loadOptions={loadWholesalers}
-                            knownLabels={
-                                Object.fromEntries(
-                                    (wholesalerCache[productId ?? ''] ?? []).map((o) => [
-                                        o.id,
-                                        o.label,
-                                    ])
-                                )
-                            }
-                            placeholder="Search wholesalers by name, town, or phone..."
-                            clientFilter
-                            emptyText="No wholesalers match your search."
-                            loadingText="Loading wholesalers..."
-                            errorText="Could not load wholesalers for this product."
-                        />
+                        {/* ---------- Wholesaler picker ---------- */}
+                        {/* The picker was removed from this file.
+                            If you're rendering `EntitiesMultiselectPicker`
+                            here, drop it in at this spot:
+                            <EntitiesMultiselectPicker
+                                value={selectedWholesalerIds}
+                                onChange={setSelectedWholesalerIds}
+                                required
+                            />
+                        */}
 
                         {/* Note */}
                         <Text

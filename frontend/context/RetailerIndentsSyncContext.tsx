@@ -58,7 +58,6 @@ interface RetailerIndentsSyncContextType {
         raw: IndentItemParamsResponse
     ) => Promise<void>;
 
-    /* ---------------- NEW ---------------- */
     addOfferToIndent: (input: {
         indentId: string;
         wholesaleReceiptId: string;
@@ -527,16 +526,21 @@ export const RetailerIndentsSyncProvider: React.FC<{
         'server' | 'cache' | 'none'
     >('none');
 
-    const getIndentsApi = useApi(
-        retailersApi.retailerIndentsAction
-    );
+    /* ---------------------------------------------------------
+     * API hooks
+     *
+     * All indent operations share the same /retailers/orders/staff
+     * endpoint. The `action` field in each payload routes to the
+     * correct backend handler. `retailStaffAction` is a raw
+     * dispatcher — it does not inject an action of its own.
+     * ------------------------------------------------------- */
+    const getIndentsApi = useApi(retailersApi.retailStaffAction);
 
-    /* ---------------- NEW: mutation APIs ---------------- */
     const addOfferApi = useApi<any>(async (payload: any) =>
-        await (retailersApi as any).addIndentItemAction(payload)
+        await retailersApi.retailStaffAction(payload)
     );
     const removeOfferApi = useApi<any>(async (payload: any) =>
-        await (retailersApi as any).removeIndentItemAction(payload)
+        await retailersApi.retailStaffAction(payload)
     );
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -562,32 +566,6 @@ export const RetailerIndentsSyncProvider: React.FC<{
         () => (openIndents.length > 0 ? openIndents[0] : null),
         [openIndents]
     );
-
-    /* ---------------------------------------------------------
-     * NEW: logging
-     * ------------------------------------------------------- */
-    useEffect(() => {
-        if (!__DEV__) return;
-        const items =
-            currentOpenIndent?.retailer_indent_items ?? [];
-        console.log('[Indents] currentOpenIndent', {
-            id: currentOpenIndent?.remote_id ?? null,
-            number: currentOpenIndent?.indent_number ?? null,
-            itemCount: items.length,
-            activeItems: items.filter(
-                (it) => Number(it.total_quantity ?? 0) > 0
-            ).length,
-            receipts: items.map((it) => it.wholesale_receipt),
-        });
-    }, [currentOpenIndent]);
-
-    useEffect(() => {
-        if (!__DEV__) return;
-        console.log('[Indents] all indents', {
-            total: retailerIndents.length,
-            open: openIndents.length,
-        });
-    }, [retailerIndents, openIndents]);
 
     /* ---------------------------------------------------------
      * Local patches
@@ -1038,7 +1016,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
     );
 
     /* ---------------------------------------------------------
-     * NEW: mutation actions
+     * Mutation actions
      * ------------------------------------------------------- */
 
     const addOfferToIndent = useCallback(
@@ -1115,7 +1093,6 @@ export const RetailerIndentsSyncProvider: React.FC<{
                     return null;
                 }
 
-                // Optimistically zero the quantity, then refetch.
                 patchIndentItemLocally(
                     input.indentId,
                     input.itemId,

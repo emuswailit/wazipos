@@ -575,7 +575,7 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
     const getOutOfStocksApi = useApi<any>(
         async () =>
             await retailersApi.retailStaffAction({
-                action: 'RetrieveRetailerOutOfStocks',
+                action: 'RetrieveOutOfStockItems',
             })
     );
     const updateOutOfStockApi = useApi<any>(

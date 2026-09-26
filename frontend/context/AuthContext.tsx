@@ -1,5 +1,6 @@
 // context/AuthContext.tsx
 
+import { wipeLocalData } from '@/databases/db';
 import { jwtDecode } from 'jwt-decode';
 import React, {
     createContext,
@@ -22,6 +23,7 @@ export interface UserRole {
     owner: string;
     entity: string;
     entity_title: string;
+    entity_type?: string;
     level: string;
     title: string;
     value: string;
@@ -32,11 +34,17 @@ export interface UserProfile {
     email: string;
     name: string;
     roles: UserRole[];
+    /** Some JWT shapes carry these at the top level. */
+    entity?: string;
+    entity_id?: string;
+    entity_type?: string;
 }
 
-interface ThemeShape {
+export interface ThemeShape {
     background: string;
     panel: string;
+    surface: string;
+    border: string;
     primary: string;
     text: string;
     textDark: string;
@@ -78,13 +86,6 @@ const TOKEN_KEY = 'wazipos_auth_token';
 
 /* =========================================================
  * Fonts
- *
- * Web  → CSS font stacks (fallback chain).
- * Native → exactly the family names registered via
- *          useFonts() in app/_layout.tsx.
- *
- * The native names must match the useFonts keys
- * character-for-character.
  * ========================================================= */
 
 const FONTS = {
@@ -134,9 +135,6 @@ export function AuthProvider({
 }) {
     const [user, setUser] =
         useState<UserProfile | null>(null);
-    useEffect(() => {
-        console.log("xyz", user)
-    }, [user])
     const [token, setToken] = useState('');
     const [isDarkMode, setIsDarkMode] =
         useState<boolean>(false);
@@ -149,6 +147,8 @@ export function AuthProvider({
                 ? '#0f172a'
                 : '#f8fafc',
             panel: isDarkMode ? '#1e293b' : '#ffffff',
+            surface: isDarkMode ? '#1e293b' : '#ffffff',
+            border: isDarkMode ? '#334155' : '#e2e8f0',
             text: isDarkMode ? '#f8fafc' : '#0f172a',
             textDark: isDarkMode
                 ? '#94a3b8'
@@ -160,6 +160,7 @@ export function AuthProvider({
         [isDarkMode]
     );
 
+    /* -------- Bootstrap from stored token -------- */
     useEffect(() => {
         async function bootstrapAsync() {
             try {
@@ -195,6 +196,9 @@ export function AuthProvider({
         bootstrapAsync();
     }, []);
 
+    /* ---------------------------------------------------------
+     * Login
+     * ------------------------------------------------------- */
     const login = useCallback(
         async (rawToken: string) => {
             try {
@@ -226,6 +230,13 @@ export function AuthProvider({
                     'Authentication profile session initialized successfully for:',
                     decodedUser.name
                 );
+
+                if (
+                    Platform.OS === 'web' &&
+                    typeof window !== 'undefined'
+                ) {
+                    window.location.reload();
+                }
             } catch (error) {
                 console.error(
                     'Login Engine Decode Processing Failure:',
@@ -237,6 +248,9 @@ export function AuthProvider({
         []
     );
 
+    /* ---------------------------------------------------------
+     * Logout
+     * ------------------------------------------------------- */
     const logout = useCallback(async () => {
         try {
             if (Platform.OS === 'web') {
@@ -246,6 +260,8 @@ export function AuthProvider({
                     TOKEN_KEY
                 );
             }
+
+            await wipeLocalData();
         } catch (e) {
             console.error(
                 'Storage clean up execution error details:',
@@ -254,6 +270,13 @@ export function AuthProvider({
         } finally {
             setUser(null);
             setToken('');
+
+            if (
+                Platform.OS === 'web' &&
+                typeof window !== 'undefined'
+            ) {
+                window.location.reload();
+            }
         }
     }, []);
 
@@ -293,12 +316,10 @@ export function AuthProvider({
 
 export function useAuth() {
     const context = useContext(AuthContext);
-
     if (context === undefined) {
         throw new Error(
             'useAuth must be wrapped explicitly inside an <AuthProvider />.'
         );
     }
-
     return context;
 }

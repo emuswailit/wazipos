@@ -1,18 +1,45 @@
 // context/RetailerProductRequestsSyncContext.tsx
+//
+// Sync context for retailer product requests.
+//
+// The same context serves both audiences — the WebSocket endpoint
+// is chosen from the caller's `entity_type`:
+//
+//   Wholesaler side (GeneralWholesaler | PharmaceuticalWholesaler):
+//     wss://api.wazipos.co.ke/ws/wholesalers/products/requests/
+//
+//   Retailer side (GeneralRetailer | PharmaceuticalRetailer):
+//     wss://api.wazipos.co.ke/ws/retailers/products/requests/
+//
+// Data sources:
+//   - WebSocket push (only) — see URLs above
+//     Frame shape:  { wholesaler_product_requests: [...] }  (wholesaler)
+//                   { retailer_product_requests:   [...] }  (retailer)
+//     Single patch: { id | remote_id | request_id, ... }
+//   - Local cache:  AsyncStorage + Dexie
+//
+// HTTP snapshot fetching has been removed. The server is expected to
+// push an initial snapshot immediately after the WS handshake.
+//
+// Field names in the internal cache match the wire payload 1:1.
+// `request.items` is the same array the backend sends — no renames.
+//
+// Pending offline offers are queued in AsyncStorage and flushed on
+// connectivity recovery. After a successful flush, the server's own
+// push is the only path that refreshes the list.
 
-import retailersApi from '@/api/retailersApi';
+import wholesalersApi from '@/api/wholesalersApi';
 import { useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { db } from '@/databases/db';
 import {
-    PendingOfferAction,
-    PendingRequestCreate,
+    PendingWholesalerOffer,
+    ProductRequestOffer,
     ProductRequestSummary,
     ProductRequestSummaryLineItem,
-    RequestDraftItem,
+    WholesalerProductRequestTargetWholesaler,
 } from '@/databases/types';
 import { useApi } from '@/hooks/useApi';
-import { buildDraftId } from '@/utils/draftId';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
     createContext,
@@ -23,7 +50,6 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { Platform } from 'react-native';
 
 /* =========================================================
  * Types
@@ -33,71 +59,36 @@ interface RetailerProductRequestsSyncContextType {
     requests: ProductRequestSummary[];
     requestsById: Record<string, ProductRequestSummary>;
 
-    drafts: RequestDraftItem[];
-    draftCount: number;
-    draftTotalQuantity: number;
-    draftUniqueWholesalerIds: string[];
-    isDraftsHydrated: boolean;
-
     isSyncing: boolean;
     isManualRefreshing: boolean;
     isLiveConnected: boolean;
     lastSyncedTime: string;
     dataSource: 'server' | 'cache' | 'none';
 
-    pendingRequests: PendingRequestCreate[];
-    pendingOffers: PendingOfferAction[];
-    pendingRequestCount: number;
+    pendingOffers: PendingWholesalerOffer[];
     pendingOfferCount: number;
     queueRevision: number;
-
-    addDraftItem: (item: Omit<RequestDraftItem, 'added_at'>) => void;
-    removeDraftItem: (productId: string) => void;
-    updateDraftItem: (
-        productId: string,
-        patch: Partial<RequestDraftItem>
-    ) => void;
-    hasDraftItem: (productId: string) => boolean;
-    clearDraft: () => void;
-
-    /**
-     * Send the current basket to the server. Creates the request
-     * server-side in PUBLISHED and notifies wholesalers. Idempotent
-     * via draft_id.
-     */
-    submitDrafts: () => Promise<{
-        requestIds: string[];
-        draftCount: number;
-    }>;
-
-    /**
-     * Direct-create path. Bypasses the local basket and creates a
-     * standalone request in one shot.
-     */
-    createRequest: (
-        payload: PendingRequestCreate['payload']
-    ) => Promise<string>;
-
-    queueOfferAction: (
-        requestId: string,
-        offerId: string,
-        action: 'confirm' | 'decline',
-        note?: string
-    ) => Promise<void>;
 
     setRequests: (data: ProductRequestSummary[]) => Promise<void>;
     patchRequestLocally: (
         remoteId: string,
         partial: Partial<ProductRequestSummary>
     ) => void;
-    flushPendingCreates: () => Promise<void>;
-    flushPendingOfferActions: () => Promise<void>;
+
+    queueOfferSubmission: (input: {
+        requestId: string;
+        lineId: string;
+        offeredQuantity: number;
+        offeredUnitPrice: number;
+        note?: string;
+    }) => Promise<void>;
+
+    flushPendingOffers: () => Promise<void>;
     flushAll: () => Promise<void>;
     reconnectLiveSync: () => Promise<void>;
 
     debugReadLocal: () => Promise<{
         requests: ProductRequestSummary[];
-        drafts: RequestDraftItem[];
     }>;
 }
 
@@ -109,118 +100,251 @@ const RetailerProductRequestsSyncContext = createContext<
  * Constants
  * ======================================================= */
 
-const NATIVE_REQUESTS_SYNCED_AT =
-    'wazipos_async_retailer_product_requests_synced_at';
+const REQUESTS_SYNCED_AT_KEY =
+    'wazipos_async_wholesaler_product_requests_synced_at';
+const REQUESTS_SCHEMA_KEY =
+    'wazipos_wholesaler_product_requests_cache_schema';
+const PENDING_OFFERS_KEY =
+    'wazipos_async_wholesaler_pending_offers';
 
-const WS_REQUESTS_URL =
-    'wss://api.wazipos.co.ke/ws/analytics/retailer/product-requests/';
+/* -------- WebSocket endpoints --------
+ *
+ * The request stream is split by the caller's entity type. Both
+ * audiences receive a structurally identical payload; only the
+ * envelope key differs.
+ */
 
-const CACHE_SCHEMA_VERSION = 4;
-const NATIVE_SCHEMA_KEY = 'wazipos_product_requests_cache_schema';
+const WS_URL_WHOLESALER =
+    'wss://api.wazipos.co.ke/ws/wholesalers/products/requests/';
+const WS_URL_RETAILER =
+    'wss://api.wazipos.co.ke/ws/retailers/products/requests/';
+
+const WHOLESALER_ENTITY_TYPES = [
+    'GeneralWholesaler',
+    'PharmaceuticalWholesaler',
+] as const;
+
+const RETAILER_ENTITY_TYPES = [
+    'GeneralRetailer',
+    'PharmaceuticalRetailer',
+] as const;
+
+const CACHE_SCHEMA_VERSION = 2;
 
 const PENDING_FLUSH_INTERVAL_MS = 5 * 60 * 1000;
 const WS_RECONNECT_BASE_MS = 3000;
 const WS_RECONNECT_MAX_MS = 60000;
-
-const isWeb = Platform.OS === 'web';
 
 /* =========================================================
  * Logging
  * ======================================================= */
 
 const log = (...args: any[]) => {
-    if (__DEV__) console.log('[ProductRequestsSync]', ...args);
+    if (__DEV__)
+        console.log('[RetailerProductRequests]', ...args);
 };
 const warn = (...args: any[]) => {
-    if (__DEV__) console.warn('[ProductRequestsSync]', ...args);
+    if (__DEV__)
+        console.warn('[RetailerProductRequests]', ...args);
 };
 
 /* =========================================================
- * Helpers
+ * WS URL resolver
+ *
+ * `entity_type` may live at the top level of the profile OR inside
+ * one of the roles — the JWT shape varies. Accept either. Matching
+ * is exact (case-insensitive) against the canonical values so a
+ * typo doesn't silently route a wholesaler to the retailer stream.
+ *
+ * Returns null when no recognised type is present, so callers can
+ * skip the connection rather than hit the wrong endpoint.
  * ======================================================= */
 
-/**
- * Resolve a line's wholesalers from whichever shape is present.
- * Prefers the full `wholesalers` array; falls back to zipping the
- * legacy parallel arrays.
- */
-function resolveLineWholesalers(
-    line: ProductRequestSummaryLineItem
-): Array<{ id: string; title: string }> {
-    const raw = (line as any).wholesalers;
-    if (Array.isArray(raw) && raw.length > 0) {
-        return raw
-            .filter((w: any) => w && typeof w.id === 'string')
-            .map((w: any) => ({
-                id: String(w.id),
-                title: String(w.title ?? w.id),
-            }));
+const WHOLESALER_TYPES_LOWER = new Set<string>(
+    WHOLESALER_ENTITY_TYPES.map((t) => t.toLowerCase())
+);
+const RETAILER_TYPES_LOWER = new Set<string>(
+    RETAILER_ENTITY_TYPES.map((t) => t.toLowerCase())
+);
+
+function resolveWsUrl(
+    topLevelType: string | undefined,
+    roles: { entity_type?: string }[] | undefined
+): string | null {
+    const candidates = [
+        topLevelType,
+        ...(roles ?? []).map((r) => r?.entity_type),
+    ]
+        .filter((v): v is string => !!v && String(v).trim() !== '')
+        .map((v) => String(v).trim());
+
+    for (const raw of candidates) {
+        const key = raw.toLowerCase();
+        if (WHOLESALER_TYPES_LOWER.has(key))
+            return WS_URL_WHOLESALER;
+        if (RETAILER_TYPES_LOWER.has(key))
+            return WS_URL_RETAILER;
     }
 
-    const ids = line.target_wholesaler_ids;
-    const titles = line.wholesaler_titles;
-
-    if (!Array.isArray(ids) || ids.length === 0) return [];
-
-    return ids.map((id, i) => ({
-        id: String(id),
-        title: String(
-            (Array.isArray(titles) ? titles[i] : '') || id
-        ),
-    }));
+    return null;
 }
 
-/**
- * Map a `ProductRequestSummaryLineItem` back into the
- * `RequestDraftItem` shape the forecast UI consumes.
- */
-function lineItemToDraft(
-    line: ProductRequestSummaryLineItem,
-    row: ProductRequestSummary
-): RequestDraftItem {
-    const wholesalers = resolveLineWholesalers(line);
+/* =========================================================
+ * Envelope extraction
+ * ======================================================= */
 
-    return {
-        product_id: line.product_id,
-        product_title: line.product_title,
-        quantity: line.requested_quantity ?? 0,
-        urgency:
-            (line.urgency as 'low' | 'medium' | 'high') ??
-            (row.urgency as 'low' | 'medium' | 'high') ??
-            'medium',
-        note: line.note ?? '',
-        target_wholesaler_ids: wholesalers.map((w) => w.id),
-        target_wholesaler_titles: wholesalers.map(
-            (w) => w.title
-        ),
-        wholesalers,
-        added_at: row.created,
-        best_forecast_quantity:
-            line.requested_quantity ?? row.total_line_count,
-    };
+function extractRequestsArray(payload: any): any[] | null {
+    if (!payload) return null;
+
+    const p = payload?.data ?? payload;
+
+    if (Array.isArray(p)) return p;
+
+    if (Array.isArray(p?.results)) return p.results;
+
+    // Wholesaler-side envelope
+    if (Array.isArray(p?.wholesaler_product_requests))
+        return p.wholesaler_product_requests;
+
+    // Retailer-side envelope
+    if (Array.isArray(p?.retailer_product_requests))
+        return p.retailer_product_requests;
+
+    // Generic fallbacks
+    if (Array.isArray(p?.requests)) return p.requests;
+    if (Array.isArray(p?.product_requests))
+        return p.product_requests;
+
+    if (Array.isArray(p?.data?.results)) return p.data.results;
+    if (Array.isArray(p?.data?.wholesaler_product_requests))
+        return p.data.wholesaler_product_requests;
+    if (Array.isArray(p?.data?.retailer_product_requests))
+        return p.data.retailer_product_requests;
+    if (Array.isArray(p?.data?.requests)) return p.data.requests;
+    if (Array.isArray(p?.data?.product_requests))
+        return p.data.product_requests;
+
+    return null;
 }
 
-/**
- * Summary → drafts. One draft item per line on each pending row.
- */
-function summaryToDrafts(
-    row: ProductRequestSummary
-): RequestDraftItem[] {
-    if (row.is_pending !== true) return [];
-    return (row.items_preview ?? []).map((line) =>
-        lineItemToDraft(line, row)
-    );
+/* =========================================================
+ * Comparators
+ * ======================================================= */
+
+function areOffersEqual(
+    a?: ProductRequestOffer[],
+    b?: ProductRequestOffer[]
+): boolean {
+    const A = a ?? [];
+    const B = b ?? [];
+    if (A.length !== B.length) return false;
+    for (let i = 0; i < A.length; i++) {
+        const x = A[i];
+        const y = B[i];
+        if (
+            x.id !== y.id ||
+            x.wholesaler !== y.wholesaler ||
+            x.offered_quantity !== y.offered_quantity ||
+            x.offered_unit_price !== y.offered_unit_price ||
+            x.status !== y.status ||
+            x.retailer_confirmed_at !==
+            y.retailer_confirmed_at ||
+            x.responded_at !== y.responded_at ||
+            x.resulting_order_item !==
+            y.resulting_order_item
+        ) {
+            return false;
+        }
+    }
+    return true;
 }
 
-/**
- * Normalize the server's `RetailerProductRequest` payload into our
- * local `ProductRequestSummary`.
- *
- * Preserves local-only display data (`wholesalers`,
- * `wholesaler_titles`, `target_wholesaler_ids`) that the server
- * doesn't know about, by matching on `product_id` against the
- * previous version of the row.
- */
+function areLineItemsEqual(
+    a?: ProductRequestSummaryLineItem[],
+    b?: ProductRequestSummaryLineItem[]
+): boolean {
+    const A = a ?? [];
+    const B = b ?? [];
+    if (A.length !== B.length) return false;
+
+    for (let i = 0; i < A.length; i++) {
+        const x = A[i];
+        const y = B[i];
+
+        if (
+            x.id !== y.id ||
+            x.request !== y.request ||
+            x.product_id !== y.product_id ||
+            x.product_title !== y.product_title ||
+            x.requested_quantity !== y.requested_quantity ||
+            x.urgency !== y.urgency ||
+            x.urgency_display !== y.urgency_display ||
+            x.note !== y.note ||
+            x.status !== y.status ||
+            x.status_display !== y.status_display ||
+            x.offer_count !== y.offer_count ||
+            x.total_offered_quantity !==
+            y.total_offered_quantity ||
+            x.confirmed_quantity !== y.confirmed_quantity ||
+            x.created !== y.created ||
+            x.updated !== y.updated
+        ) {
+            return false;
+        }
+
+        const xTargets = x.target_wholesaler_ids ?? [];
+        const yTargets = y.target_wholesaler_ids ?? [];
+        if (xTargets.length !== yTargets.length) return false;
+        for (let j = 0; j < xTargets.length; j++) {
+            if (xTargets[j] !== yTargets[j]) return false;
+        }
+
+        if (!areOffersEqual(x.offers, y.offers)) return false;
+    }
+    return true;
+}
+
+function areRequestsEqual(
+    a: ProductRequestSummary[],
+    b: ProductRequestSummary[]
+): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+
+    for (let i = 0; i < a.length; i++) {
+        const x = a[i];
+        const y = b[i];
+        if (
+            x.remote_id !== y.remote_id ||
+            x.draft_id !== y.draft_id ||
+            x.request_number !== y.request_number ||
+            x.entity !== y.entity ||
+            x.entity_title !== y.entity_title ||
+            x.urgency !== y.urgency ||
+            x.urgency_display !== y.urgency_display ||
+            x.note !== y.note ||
+            x.status !== y.status ||
+            x.status_display !== y.status_display ||
+            x.total_line_count !== y.total_line_count ||
+            x.fulfilled_line_count !== y.fulfilled_line_count ||
+            x.pending_line_count !== y.pending_line_count ||
+            x.expires_at !== y.expires_at ||
+            x.fulfilled_at !== y.fulfilled_at ||
+            x.cancelled_at !== y.cancelled_at ||
+            x.created !== y.created ||
+            x.updated !== y.updated ||
+            !areLineItemsEqual(x.items, y.items)
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* =========================================================
+ * Normalization
+ * ======================================================= */
+
 function normalizeRequestSummary(
     raw: any,
     ts: string,
@@ -233,40 +357,170 @@ function normalizeRequestSummary(
         raw?.product_request_items ??
         [];
 
+    const priorById = new Map<
+        string,
+        ProductRequestSummaryLineItem
+    >();
     const priorByProductId = new Map<
         string,
         ProductRequestSummaryLineItem
     >();
-    for (const p of previous?.items_preview ?? []) {
-        priorByProductId.set(p.product_id, p);
+    for (const p of previous?.items ?? []) {
+        if (p.id) priorById.set(p.id, p);
+        if (p.product_id)
+            priorByProductId.set(p.product_id, p);
     }
 
-    const itemsPreview: ProductRequestSummaryLineItem[] =
+    const items: ProductRequestSummaryLineItem[] =
         Array.isArray(rawItems)
             ? rawItems.map((it: any) => {
+                const lineId = it?.id
+                    ? String(it.id)
+                    : undefined;
                 const productId = String(
                     it?.product_id ??
                     it?.product ??
                     it?.product?.id ??
                     ''
                 );
-                const prior = priorByProductId.get(productId);
+                const prior =
+                    (lineId && priorById.get(lineId)) ||
+                    priorByProductId.get(productId);
+
+                const rawTargets: any[] = Array.isArray(
+                    it?.target_wholesalers
+                )
+                    ? it.target_wholesalers
+                    : [];
+
+                const rawTargetIds: string[] | undefined =
+                    Array.isArray(it?.target_wholesaler_ids)
+                        ? it.target_wholesaler_ids
+                            .map((x: any) =>
+                                x ? String(x) : null
+                            )
+                            .filter(
+                                (x: any): x is string => !!x
+                            )
+                        : rawTargets.length > 0
+                            ? rawTargets
+                                .map((w: any) =>
+                                    w?.id ? String(w.id) : null
+                                )
+                                .filter(
+                                    (x: any): x is string => !!x
+                                )
+                            : undefined;
+
+                const normalizedTargets:
+                    | WholesalerProductRequestTargetWholesaler[]
+                    | undefined =
+                    rawTargets.length > 0
+                        ? rawTargets
+                            .filter((w: any) => w && w.id)
+                            .map((w: any) => ({
+                                id: String(w.id),
+                                title: String(
+                                    w.title ?? ''
+                                ),
+                            }))
+                        : undefined;
+
+                const rawOffers: any[] = Array.isArray(
+                    it?.offers
+                )
+                    ? it.offers
+                    : [];
+
+                const offers: ProductRequestOffer[] =
+                    rawOffers.map((o: any) => ({
+                        id: String(o?.id ?? ''),
+                        request_item: String(
+                            o?.request_item ?? ''
+                        ),
+                        wholesaler: String(
+                            o?.wholesaler ?? ''
+                        ),
+                        wholesaler_title: String(
+                            o?.wholesaler_title ?? ''
+                        ),
+                        wholesaler_receipt:
+                            o?.wholesaler_receipt ?? null,
+                        wholesaler_receipt_title: String(
+                            o?.wholesaler_receipt_title ?? ''
+                        ),
+                        offered_quantity: Number(
+                            o?.offered_quantity ?? 0
+                        ),
+                        offered_unit_price:
+                            o?.offered_unit_price ?? null,
+                        batch: o?.batch ?? null,
+                        expiry_date:
+                            o?.expiry_date ?? null,
+                        manufacture_date:
+                            o?.manufacture_date ?? null,
+                        is_placement: !!o?.is_placement,
+                        status: String(o?.status ?? ''),
+                        status_display: String(
+                            o?.status_display ?? ''
+                        ),
+                        retailer_confirmed_at:
+                            o?.retailer_confirmed_at ?? null,
+                        retailer_response_note: String(
+                            o?.retailer_response_note ?? ''
+                        ),
+                        responded_by_user:
+                            o?.responded_by_user ?? null,
+                        responded_by_user_name:
+                            o?.responded_by_user_name ?? null,
+                        responded_at:
+                            o?.responded_at ?? null,
+                        response_note: String(
+                            o?.response_note ?? ''
+                        ),
+                        resulting_order_item:
+                            o?.resulting_order_item ?? null,
+                        created: String(o?.created ?? ts),
+                        updated: String(o?.updated ?? ts),
+                    }));
 
                 return {
+                    id: lineId,
+                    request: it?.request
+                        ? String(it.request)
+                        : prior?.request,
+
                     product_id: productId,
                     product_title:
                         it?.product_title ??
                         it?.product?.title ??
                         prior?.product_title,
+
                     requested_quantity:
                         Number(
                             it?.requested_quantity ??
                             it?.quantity ??
                             0
                         ) || undefined,
-                    urgency: it?.urgency ?? prior?.urgency,
+
+                    urgency:
+                        it?.urgency ?? prior?.urgency,
+                    urgency_display:
+                        it?.urgency_display ??
+                        prior?.urgency_display ??
+                        (it?.urgency
+                            ? String(it.urgency)
+                                .charAt(0)
+                                .toUpperCase() +
+                            String(it.urgency).slice(1)
+                            : undefined),
                     note: it?.note ?? prior?.note,
-                    status: it?.status ?? prior?.status,
+                    status:
+                        it?.status ?? prior?.status,
+                    status_display:
+                        it?.status_display ??
+                        prior?.status_display,
+
                     offer_count:
                         Number(it?.offer_count ?? 0) || 0,
                     total_offered_quantity:
@@ -278,15 +532,26 @@ function normalizeRequestSummary(
                             it?.confirmed_quantity ?? 0
                         ) || 0,
 
-                    // Local-only — carry forward verbatim.
+                    offers: Array.isArray(it?.offers)
+                        ? offers
+                        : prior?.offers,
+
+                    target_wholesaler_ids:
+                        rawTargetIds ??
+                        prior?.target_wholesaler_ids,
+                    target_wholesalers:
+                        normalizedTargets ??
+                        prior?.target_wholesalers,
+
                     wholesalers: prior?.wholesalers,
                     wholesaler_titles:
                         prior?.wholesaler_titles,
-                    target_wholesaler_ids:
-                        prior?.target_wholesaler_ids,
+
+                    created: String(it?.created ?? ts),
+                    updated: String(it?.updated ?? ts),
                 };
             })
-            : previous?.items_preview ?? [];
+            : previous?.items ?? [];
 
     const domainId = raw?.remote_id ?? raw?.id ?? null;
     const serverStatus = String(
@@ -298,78 +563,48 @@ function normalizeRequestSummary(
         request_number: String(raw?.request_number ?? ''),
         entity: String(raw?.entity ?? ''),
         entity_title: String(raw?.entity_title ?? ''),
+
         urgency: String(raw?.urgency ?? 'medium'),
         urgency_display: String(
             raw?.urgency_display ??
             (raw?.urgency
-                ? raw.urgency
-                    .charAt(0)
-                    .toUpperCase() +
+                ? raw.urgency.charAt(0).toUpperCase() +
                 raw.urgency.slice(1)
                 : 'Medium')
         ),
+        note: String(raw?.note ?? ''),
+
         status: serverStatus,
         status_display: String(
             raw?.status_display ?? serverStatus
         ),
-        total_line_count: Number(raw?.total_line_count ?? 0),
+
+        total_line_count: Number(
+            raw?.total_line_count ?? 0
+        ),
         fulfilled_line_count: Number(
             raw?.fulfilled_line_count ?? 0
         ),
         pending_line_count: Number(
             raw?.pending_line_count ?? 0
         ),
+
         expires_at: raw?.expires_at ?? null,
+        fulfilled_at: raw?.fulfilled_at ?? null,
+        cancelled_at: raw?.cancelled_at ?? null,
+
         created: String(raw?.created ?? ts),
+        updated: raw?.updated
+            ? String(raw.updated)
+            : undefined,
         cached_at: String(raw?.cached_at ?? ts),
+
         is_pending: false,
         draft_id:
             raw?.draft_id ?? previous?.draft_id ?? undefined,
-        items_preview: itemsPreview,
+
+        items,
     };
-}
-
-function extractRequestsArray(payload: any): any[] | null {
-    const p = payload?.data ?? payload;
-    if (Array.isArray(p)) return p;
-    if (Array.isArray(p?.results)) return p.results;
-    if (Array.isArray(p?.requests)) return p.requests;
-    if (Array.isArray(p?.product_requests))
-        return p.product_requests;
-    if (Array.isArray(p?.my_requests)) return p.my_requests;
-    if (Array.isArray(p?.data?.results)) return p.data.results;
-    if (Array.isArray(p?.data?.requests)) return p.data.requests;
-    if (Array.isArray(p?.data?.product_requests))
-        return p.data.product_requests;
-    if (Array.isArray(p?.data?.my_requests))
-        return p.data.my_requests;
-    return null;
-}
-
-function areRequestsEqual(
-    a: ProductRequestSummary[],
-    b: ProductRequestSummary[]
-): boolean {
-    if (a === b) return true;
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-        const x = a[i];
-        const y = b[i];
-        if (
-            x.remote_id !== y.remote_id ||
-            x.draft_id !== y.draft_id ||
-            x.status !== y.status ||
-            x.fulfilled_line_count !==
-            y.fulfilled_line_count ||
-            x.pending_line_count !== y.pending_line_count ||
-            x.is_pending !== y.is_pending ||
-            (x.items_preview?.length ?? 0) !==
-            (y.items_preview?.length ?? 0)
-        ) {
-            return false;
-        }
-    }
-    return true;
 }
 
 /* =========================================================
@@ -387,14 +622,12 @@ async function writeRequestsToStorage(
         )
     );
 
-    if (!isWeb) {
-        tasks.push(
-            AsyncStorage.setItem(
-                NATIVE_REQUESTS_SYNCED_AT,
-                new Date().toISOString()
-            ).catch(() => null)
-        );
-    }
+    tasks.push(
+        AsyncStorage.setItem(
+            REQUESTS_SYNCED_AT_KEY,
+            new Date().toISOString()
+        ).catch(() => null)
+    );
 
     await Promise.allSettled(tasks);
 }
@@ -404,45 +637,28 @@ async function readRequestsFromStorage(): Promise<
 > {
     try {
         const viaDb = await db.getProductRequests();
-        return Array.isArray(viaDb) ? viaDb : [];
+        const rows = Array.isArray(viaDb) ? viaDb : [];
+
+        return rows.map((r: any) =>
+            r?.items === undefined &&
+                r?.items_preview !== undefined
+                ? { ...r, items: r.items_preview }
+                : r
+        );
     } catch (err) {
         warn('readRequestsFromStorage', err);
         return [];
     }
 }
 
-async function readPendingCreatesFromStorage(): Promise<
-    PendingRequestCreate[]
-> {
-    try {
-        const viaDb =
-            await db.getRetailerProductRequestPendingCreates();
-        return Array.isArray(viaDb) ? viaDb : [];
-    } catch (err) {
-        warn('readPendingCreatesFromStorage', err);
-        return [];
-    }
-}
-
-async function writePendingCreatesToStorage(
-    creates: PendingRequestCreate[]
-): Promise<void> {
-    try {
-        await db.saveRetailerProductRequestPendingCreates(
-            creates
-        );
-    } catch (err) {
-        warn('writePendingCreatesToStorage', err);
-    }
-}
-
 async function readPendingOffersFromStorage(): Promise<
-    PendingOfferAction[]
+    PendingWholesalerOffer[]
 > {
     try {
-        const viaDb =
-            await db.getRetailerProductRequestPendingOffers();
-        return Array.isArray(viaDb) ? viaDb : [];
+        const raw = await AsyncStorage.getItem(
+            PENDING_OFFERS_KEY
+        );
+        return raw ? JSON.parse(raw) : [];
     } catch (err) {
         warn('readPendingOffersFromStorage', err);
         return [];
@@ -450,10 +666,13 @@ async function readPendingOffersFromStorage(): Promise<
 }
 
 async function writePendingOffersToStorage(
-    offers: PendingOfferAction[]
+    offers: PendingWholesalerOffer[]
 ): Promise<void> {
     try {
-        await db.saveRetailerProductRequestPendingOffers(offers);
+        await AsyncStorage.setItem(
+            PENDING_OFFERS_KEY,
+            JSON.stringify(offers)
+        );
     } catch (err) {
         warn('writePendingOffersToStorage', err);
     }
@@ -461,41 +680,20 @@ async function writePendingOffersToStorage(
 
 async function ensureSchema(): Promise<void> {
     try {
-        if (isWeb) {
-            const stored =
-                typeof window !== 'undefined'
-                    ? window.localStorage.getItem(
-                        NATIVE_SCHEMA_KEY
-                    )
-                    : null;
-            if (
-                stored &&
-                Number(stored) === CACHE_SCHEMA_VERSION
-            )
-                return;
-            if (typeof window !== 'undefined') {
-                window.localStorage.setItem(
-                    NATIVE_SCHEMA_KEY,
-                    String(CACHE_SCHEMA_VERSION)
-                );
-            }
-        } else {
-            const stored = await AsyncStorage.getItem(
-                NATIVE_SCHEMA_KEY
-            );
-            if (
-                stored &&
-                Number(stored) === CACHE_SCHEMA_VERSION
-            )
-                return;
-            await AsyncStorage.removeItem(
-                NATIVE_REQUESTS_SYNCED_AT
-            );
-            await AsyncStorage.setItem(
-                NATIVE_SCHEMA_KEY,
-                String(CACHE_SCHEMA_VERSION)
-            );
+        const stored = await AsyncStorage.getItem(
+            REQUESTS_SCHEMA_KEY
+        );
+        if (
+            stored &&
+            Number(stored) === CACHE_SCHEMA_VERSION
+        ) {
+            return;
         }
+        await AsyncStorage.removeItem(REQUESTS_SYNCED_AT_KEY);
+        await AsyncStorage.setItem(
+            REQUESTS_SCHEMA_KEY,
+            String(CACHE_SCHEMA_VERSION)
+        );
     } catch (e) {
         warn('ensureSchema', e);
     }
@@ -511,8 +709,35 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
     const { token, user } = useAuth();
     const { isOnline } = useNetworkStatus();
 
-    /* ---------------- State ---------------- */
+    /* ---------------------------------------------------------
+     * Resolve the WebSocket endpoint from the user's entity type.
+     * ------------------------------------------------------- */
+    const wsUrl = useMemo(
+        () => resolveWsUrl(user?.entity_type, user?.roles),
+        [user?.entity_type, user?.roles]
+    );
 
+    /* -------- Dev warning when entity_type is unusable -------- */
+    useEffect(() => {
+        if (!__DEV__) return;
+        if (!user) return;
+        if (wsUrl) return;
+        warn(
+            'user has no recognised entity_type — WS disabled. ' +
+            'Expected one of: ' +
+            [
+                ...WHOLESALER_ENTITY_TYPES,
+                ...RETAILER_ENTITY_TYPES,
+            ].join(', ') +
+            '. Saw:',
+            {
+                topLevel: user.entity_type,
+                roles: user.roles?.map((r) => r.entity_type),
+            }
+        );
+    }, [user, wsUrl]);
+
+    /* -------- State -------- */
     const [requests, setRequestsState] = useState<
         ProductRequestSummary[]
     >([]);
@@ -523,40 +748,43 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
     const [dataSource, setDataSource] = useState<
         'server' | 'cache' | 'none'
     >('none');
-    const [pendingRequestCount, setPendingRequestCount] =
-        useState(0);
-    const [pendingOfferCount, setPendingOfferCount] = useState(0);
     const [queueRevision, setQueueRevision] = useState(0);
-    const [isDraftsHydrated, setIsDraftsHydrated] = useState(false);
 
-    /* ---------------- APIs ---------------- */
+    const [pendingOffers, setPendingOffersState] = useState<
+        PendingWholesalerOffer[]
+    >([]);
+    const pendingOffersRef = useRef<PendingWholesalerOffer[]>([]);
 
-    const getRequestsApi = useApi<any>(async () =>
-        await retailersApi.getMyProductRequestsAction({})
+    const submitOfferApi = useApi<any>(async (payload: any) =>
+        await wholesalersApi.createWholesalerOfferAction(
+            payload
+        )
     );
-    const createRequestsApi = useApi<any>(async (payload: any) =>
-        await retailersApi.createProductRequestAction(payload)
-    );
-    const confirmOffersApi = useApi<any>(async (payload: any) =>
-        await retailersApi.confirmProductRequestOffersAction(payload)
-    );
-
-    /* ---------------- Refs ---------------- */
 
     const wsRef = useRef<WebSocket | null>(null);
     const requestsStateRef = useRef<ProductRequestSummary[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(
+        null
+    );
     const wsGenerationRef = useRef(0);
     const wsReconnectAttemptRef = useRef(0);
     const pendingFlushIntervalRef = useRef<NodeJS.Timeout | null>(
         null
     );
-    const createsFlushLockRef = useRef(false);
     const offersFlushLockRef = useRef(false);
     const isHydratedRef = useRef(false);
 
-    const pendingCreatesRef = useRef<PendingRequestCreate[]>([]);
-    const pendingOffersRef = useRef<PendingOfferAction[]>([]);
+    const tokenRef = useRef<string | null>(token);
+    useEffect(() => {
+        tokenRef.current = token ?? null;
+    }, [token]);
+
+    /* Keep the resolved URL in a ref so the WS callbacks can read
+     * it without re-creating the socket on every render. */
+    const wsUrlRef = useRef<string | null>(wsUrl);
+    useEffect(() => {
+        wsUrlRef.current = wsUrl;
+    }, [wsUrl]);
 
     useEffect(() => {
         requestsStateRef.current = requests;
@@ -567,12 +795,19 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
         isOnlineRef.current = isOnline;
     }, [isOnline]);
 
-    /* ---------------- Derived ---------------- */
+    const prevOnlineRef = useRef(isOnline);
 
-    const drafts = useMemo<RequestDraftItem[]>(
-        () => requests.flatMap((r) => summaryToDrafts(r)),
-        [requests]
+    /* -------- Pending offers setter -------- */
+
+    const setPendingOffers = useCallback(
+        (next: PendingWholesalerOffer[]) => {
+            pendingOffersRef.current = next;
+            setPendingOffersState(next);
+        },
+        []
     );
+
+    /* -------- Derived -------- */
 
     const requestsById = useMemo(() => {
         const map: Record<string, ProductRequestSummary> = {};
@@ -583,96 +818,32 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
         return map;
     }, [requests]);
 
-    const draftCount = drafts.length;
-
-    const draftTotalQuantity = useMemo(
-        () =>
-            drafts.reduce(
-                (sum, i) => sum + (i.quantity || 0),
-                0
-            ),
-        [drafts]
-    );
-
-    const draftUniqueWholesalerIds = useMemo(() => {
-        const set = new Set<string>();
-        for (const item of drafts) {
-            for (const wid of item.target_wholesaler_ids)
-                set.add(wid);
-        }
-        return Array.from(set);
-    }, [drafts]);
-
-    /* ---------------- Logging ---------------- */
-
-    useEffect(() => {
-        if (!__DEV__) return;
-        console.log('[ProductRequests] requests', {
-            count: requests.length,
-            pending: requests.filter((r) => r.is_pending).length,
-            remote_ids: requests.map((r) => r.remote_id),
-            draft_ids: requests.map((r) => r.draft_id),
-        });
-    }, [requests]);
-
-    useEffect(() => {
-        if (!__DEV__) return;
-        console.log('[ProductRequests] drafts', {
-            count: drafts.length,
-            items: drafts.map((d) => ({
-                product_id: d.product_id,
-                product_title: d.product_title,
-                quantity: d.quantity,
-                urgency: d.urgency,
-                wholesalers: d.wholesalers?.map((w) => w.title),
-            })),
-        });
-    }, [drafts]);
-
-    useEffect(() => {
-        if (!__DEV__) return;
-        console.log('[ProductRequests] pending queues', {
-            creates: pendingRequestCount,
-            offers: pendingOfferCount,
-            revision: queueRevision,
-        });
-    }, [pendingRequestCount, pendingOfferCount, queueRevision]);
-
-    /* ---------------------------------------------------------
-     * Persist-on-change
-     * ------------------------------------------------------- */
-
-    useEffect(() => {
-        if (!isHydratedRef.current) return;
-        void writeRequestsToStorage(requests).catch((err) =>
-            warn('persist-on-change failed:', err)
-        );
-    }, [requests]);
-
-    /* ---------------- Local patch ---------------- */
+    /* -------- Local patch -------- */
 
     const patchRequestLocally = useCallback(
         (
             remoteId: string,
             partial: Partial<ProductRequestSummary>
         ) => {
+            if (!remoteId) return;
+
             setRequestsState((prev) => {
                 let changed = false;
                 const next = prev.map((r) => {
-                    const matches =
-                        (remoteId && r.remote_id === remoteId) ||
-                        (!remoteId && !r.remote_id);
-                    if (!matches) return r;
+                    if (r.remote_id !== remoteId) return r;
                     changed = true;
                     return { ...r, ...partial };
                 });
-                return changed ? next : prev;
+                if (!changed) return prev;
+                requestsStateRef.current = next;
+                void writeRequestsToStorage(next);
+                return next;
             });
         },
         []
     );
 
-    /* ---------------- Snapshot commit ---------------- */
+    /* -------- Snapshot commit -------- */
 
     const commitSnapshot = useCallback(
         async (raw: any[], source: 'server' | 'cache') => {
@@ -693,36 +864,6 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                     prevByDraftId.set(r.draft_id, r);
             }
 
-            const serverRemoteIds = new Set(
-                raw
-                    .map((r) =>
-                        String(r?.remote_id ?? r?.id ?? '')
-                    )
-                    .filter(Boolean)
-            );
-            const serverDraftIds = new Set(
-                raw
-                    .map((r) => String(r?.draft_id ?? ''))
-                    .filter(Boolean)
-            );
-
-            // Preserve local drafts the server hasn't acknowledged.
-            const localDrafts =
-                requestsStateRef.current.filter((r) => {
-                    if (r.is_pending !== true) return false;
-                    if (
-                        r.remote_id &&
-                        serverRemoteIds.has(r.remote_id)
-                    )
-                        return false;
-                    if (
-                        r.draft_id &&
-                        serverDraftIds.has(r.draft_id)
-                    )
-                        return false;
-                    return true;
-                });
-
             const normalized = raw.map((r) => {
                 const remoteId = String(
                     r?.remote_id ?? r?.id ?? ''
@@ -742,17 +883,13 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                 );
             });
 
-            const merged = [...localDrafts, ...normalized];
+            await writeRequestsToStorage(normalized);
 
-            log(
-                `commitSnapshot — writing ${merged.length} rows from ${source} (${localDrafts.length} local drafts preserved)`
-            );
-
-            await writeRequestsToStorage(merged);
-
-            requestsStateRef.current = merged;
+            requestsStateRef.current = normalized;
             setRequestsState((prev) =>
-                areRequestsEqual(prev, merged) ? prev : merged
+                areRequestsEqual(prev, normalized)
+                    ? prev
+                    : normalized
             );
             setDataSource(source);
             setQueueRevision((r) => r + 1);
@@ -766,854 +903,161 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
         []
     );
 
-    /* ---------------- Single patch ---------------- */
+    const commitSinglePatch = useCallback(
+        async (patch: any) => {
+            const remoteId = patch?.remote_id
+                ? String(patch.remote_id)
+                : null;
+            const draftId = patch?.draft_id
+                ? String(patch.draft_id)
+                : null;
+            if (!remoteId && !draftId) return;
 
-    const commitSinglePatch = useCallback(async (patch: any) => {
-        const remoteId = patch?.remote_id
-            ? String(patch.remote_id)
-            : null;
-        const draftId = patch?.draft_id
-            ? String(patch.draft_id)
-            : null;
-        const reqId =
-            remoteId ?? draftId ?? patch?.request_id ?? patch?.id;
-        if (!reqId) return;
-
-        const nowStr = new Date().toISOString();
-        const current = requestsStateRef.current;
-        const idx = current.findIndex(
-            (r) =>
-                (remoteId && r.remote_id === remoteId) ||
-                (draftId && r.draft_id === draftId)
-        );
-
-        let next: ProductRequestSummary[];
-        if (idx >= 0) {
-            const merged: ProductRequestSummary = {
-                ...current[idx],
-                ...patch,
-                remote_id: remoteId ?? current[idx].remote_id,
-                draft_id: draftId ?? current[idx].draft_id,
-                items_preview:
-                    patch.items_preview ??
-                    current[idx].items_preview,
-            };
-            next = current.map((r, i) =>
-                i === idx ? merged : r
+            const nowStr = new Date().toISOString();
+            const current = requestsStateRef.current;
+            const idx = current.findIndex(
+                (r) =>
+                    (remoteId && r.remote_id === remoteId) ||
+                    (draftId && r.draft_id === draftId)
             );
-        } else {
-            next = [
-                normalizeRequestSummary(patch, nowStr),
-                ...current,
-            ];
-        }
 
-        await writeRequestsToStorage(next);
-        requestsStateRef.current = next;
-        setRequestsState(next);
-        setDataSource('server');
-        setQueueRevision((r) => r + 1);
-        setLastSyncedTime(
-            new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-            })
-        );
-    }, []);
-
-    /* ---------------- Remote sync ---------------- */
-
-    const runRemoteRequestsSynchronizer = useCallback(async () => {
-        if (!token) {
-            log('Sync skipped — no token');
-            return;
-        }
-        if (!isOnlineRef.current) {
-            log('Sync skipped — offline');
-            return;
-        }
-
-        try {
-            await getRequestsApi.request();
-        } catch (e) {
-            warn('HTTP request threw:', e);
-            return;
-        }
-
-        const payload = getRequestsApi.data;
-
-        if (!payload) {
-            warn('HTTP returned no payload');
-            return;
-        }
-
-        const data = extractRequestsArray(payload);
-
-        if (!Array.isArray(data)) {
-            warn('Unexpected HTTP shape', payload);
-            return;
-        }
-
-        await commitSnapshot(data, 'server');
-    }, [token, getRequestsApi, commitSnapshot]);
-
-    /* ---------------------------------------------------------
-     * Flushers — declared before submitDrafts, which references
-     * flushPendingCreates in its dependency array.
-     * ------------------------------------------------------- */
-
-    const flushPendingCreates = useCallback(async () => {
-        if (createsFlushLockRef.current) return;
-        if (!token || !isOnlineRef.current) return;
-        const queue = pendingCreatesRef.current;
-        if (queue.length === 0) return;
-
-        createsFlushLockRef.current = true;
-        const succeeded = new Set<string>();
-
-        try {
-            for (const create of queue) {
-                try {
-                    const res = await createRequestsApi.request({
-                        action: 'CreateRequest',
-                        draft_id: create.draft_id,
-                        urgency:
-                            create.payload.urgency ?? 'medium',
-                        items: create.payload.items.map(
-                            (i) => ({
-                                product_id: i.product_id,
-                                requested_quantity:
-                                    i.requested_quantity,
-                                urgency: i.urgency,
-                                note: i.note,
-                                target_wholesaler_ids:
-                                    i.target_wholesaler_ids ??
-                                    [],
-                            })
-                        ),
-                        note: create.payload.note ?? '',
-                    });
-
-                    if (__DEV__) {
-                        console.log(
-                            '[ProductRequestsSync] CreateRequest → response',
-                            JSON.stringify(res, null, 2)
-                        );
-                    }
-
-                    const data = res?.data ?? res;
-                    const isOk =
-                        res?.ok === true ||
-                        data?.response_code === 0 ||
-                        data?.request;
-
-                    if (isOk) {
-                        succeeded.add(create.id);
-
-                        const echoed = data?.request ?? null;
-                        if (echoed) {
-                            // Replace the optimistic row with the
-                            // server's PUBLISHED version, keeping
-                            // local-only display data.
-                            const localRow =
-                                requestsStateRef.current.find(
-                                    (r) =>
-                                        r.remote_id ===
-                                        create.local_row_id ||
-                                        r.draft_id ===
-                                        create.draft_id
-                                );
-                            const merged = normalizeRequestSummary(
-                                echoed,
-                                new Date().toISOString(),
-                                localRow
-                            );
-                            merged.is_pending = false;
-
-                            const without =
-                                requestsStateRef.current.filter(
-                                    (r) =>
-                                        r.remote_id !==
-                                        create.local_row_id &&
-                                        r.draft_id !==
-                                        create.draft_id
-                                );
-                            const next = [
-                                merged,
-                                ...without,
-                            ];
-                            requestsStateRef.current = next;
-                            setRequestsState(next);
-                            await writeRequestsToStorage(
-                                next
-                            );
-                        } else {
-                            // Server didn't echo — flip local row.
-                            const next =
-                                requestsStateRef.current.map(
-                                    (r) =>
-                                        (r.remote_id ===
-                                            create.local_row_id ||
-                                            r.draft_id ===
-                                            create.draft_id)
-                                            ? {
-                                                ...r,
-                                                is_pending:
-                                                    false,
-                                                status:
-                                                    'PUBLISHED',
-                                                status_display:
-                                                    'Published',
-                                            }
-                                            : r
-                                );
-                            requestsStateRef.current = next;
-                            setRequestsState(next);
-                            await writeRequestsToStorage(
-                                next
-                            );
-                            void runRemoteRequestsSynchronizer();
+            let next: ProductRequestSummary[];
+            if (idx >= 0) {
+                next = current.map((r, i) =>
+                    i === idx
+                        ? {
+                            ...r,
+                            ...patch,
+                            remote_id:
+                                remoteId ?? r.remote_id,
+                            draft_id:
+                                draftId ?? r.draft_id,
+                            items:
+                                patch.items ?? r.items,
                         }
-                    } else {
-                        warn(
-                            'flushPendingCreates — rejected',
-                            create.id,
-                            data
-                        );
-                    }
-                } catch (e) {
-                    warn(
-                        'flushPendingCreates — threw',
-                        create.id,
-                        e
-                    );
-                }
+                        : r
+                );
+            } else {
+                next = [
+                    normalizeRequestSummary(patch, nowStr),
+                    ...current,
+                ];
             }
 
-            if (succeeded.size > 0) {
-                pendingCreatesRef.current =
-                    pendingCreatesRef.current.filter(
-                        (c) => !succeeded.has(c.id)
-                    );
-                setPendingRequestCount(
-                    pendingCreatesRef.current.length
-                );
-                setQueueRevision((r) => r + 1);
-                await writePendingCreatesToStorage(
-                    pendingCreatesRef.current
-                );
-            }
-        } finally {
-            createsFlushLockRef.current = false;
-        }
-    }, [
-        token,
-        createRequestsApi,
-        runRemoteRequestsSynchronizer,
-    ]);
+            await writeRequestsToStorage(next);
+            requestsStateRef.current = next;
+            setRequestsState(next);
+            setDataSource('server');
+            setQueueRevision((r) => r + 1);
+        },
+        []
+    );
 
-    const flushPendingOfferActions = useCallback(async () => {
+    /* -------- Flusher: pending offers -------- */
+
+    const flushPendingOffers = useCallback(async () => {
         if (offersFlushLockRef.current) return;
         if (!token || !isOnlineRef.current) return;
         const queue = pendingOffersRef.current;
         if (queue.length === 0) return;
 
-        const byRequest: Record<string, PendingOfferAction[]> =
-            {};
-        for (const a of queue) {
-            byRequest[a.request_id] =
-                byRequest[a.request_id] ?? [];
-            byRequest[a.request_id].push(a);
-        }
-
         offersFlushLockRef.current = true;
         const succeeded = new Set<string>();
 
         try {
-            for (const [requestId, actions] of Object.entries(
-                byRequest
-            )) {
-                const payload = {
-                    action: 'ConfirmOffers',
-                    request_id: requestId,
-                    confirmations: actions
-                        .filter((a) => a.action === 'confirm')
-                        .map((a) => ({
-                            offer_id: a.offer_id,
-                            response_note: a.note ?? '',
-                        })),
-                    declinations: actions
-                        .filter((a) => a.action === 'decline')
-                        .map((a) => ({
-                            offer_id: a.offer_id,
-                            reason: a.note ?? '',
-                        })),
-                };
-
+            for (const entry of queue) {
                 try {
                     const res =
-                        await confirmOffersApi.request(payload);
+                        await submitOfferApi.request({
+                            request_id: entry.request_id,
+                            line_id: entry.line_id,
+                            offered_quantity:
+                                entry.offered_quantity,
+                            offered_unit_price:
+                                entry.offered_unit_price,
+                            note: entry.note ?? '',
+                        });
+
                     const data = res?.data ?? res;
                     const isOk =
                         res?.ok === true ||
                         data?.response_code === 0;
 
                     if (isOk) {
-                        for (const a of actions)
-                            succeeded.add(a.id);
+                        succeeded.add(entry.id);
                     } else {
                         warn(
-                            'flushPendingOfferActions — rejected',
-                            requestId,
+                            'flushPendingOffers — rejected',
+                            entry.id,
                             data
                         );
                     }
                 } catch (e) {
                     warn(
-                        'flushPendingOfferActions — threw',
-                        requestId,
+                        'flushPendingOffers — threw',
+                        entry.id,
                         e
                     );
                 }
             }
 
             if (succeeded.size > 0) {
-                pendingOffersRef.current =
+                const next =
                     pendingOffersRef.current.filter(
-                        (a) => !succeeded.has(a.id)
+                        (o) => !succeeded.has(o.id)
                     );
-                setPendingOfferCount(
-                    pendingOffersRef.current.length
-                );
+                setPendingOffers(next);
                 setQueueRevision((r) => r + 1);
-                await writePendingOffersToStorage(
-                    pendingOffersRef.current
-                );
-                await runRemoteRequestsSynchronizer();
+                await writePendingOffersToStorage(next);
             }
         } finally {
             offersFlushLockRef.current = false;
         }
     }, [
         token,
-        confirmOffersApi,
-        runRemoteRequestsSynchronizer,
+        submitOfferApi,
+        setPendingOffers,
     ]);
 
-    /* ---------------------------------------------------------
-     * submitDrafts — send the basket once; server publishes
-     * ------------------------------------------------------- */
+    /* -------- Queue offer submission -------- */
 
-    const submitDrafts = useCallback(async () => {
-        const pending = requestsStateRef.current.find(
-            (r) => r.is_pending === true
-        );
-        if (!pending) {
-            return { requestIds: [], draftCount: 0 };
-        }
-
-        const preview = pending.items_preview ?? [];
-        if (preview.length === 0) {
-            return { requestIds: [], draftCount: 0 };
-        }
-
-        const draftId =
-            pending.draft_id ??
-            buildDraftId(
-                user?.id ?? '',
-                preview[0]?.product_id ?? '',
-                Date.now()
-            );
-
-        const entry: PendingRequestCreate = {
-            id: `req-create-${draftId}`,
-            draft_id: draftId,
-            local_row_id: pending.remote_id ?? draftId,
-            payload: {
-                items: preview.map((p) => ({
-                    product_id: p.product_id,
-                    requested_quantity:
-                        p.requested_quantity ?? 1,
-                    urgency:
-                        (p.urgency as
-                            | 'low'
-                            | 'medium'
-                            | 'high') ?? 'medium',
-                    note: p.note ?? '',
-                    target_wholesaler_ids:
-                        resolveLineWholesalers(p).map(
-                            (w) => w.id
-                        ),
-                })) as any,
-                note: '',
-            },
-            created_at: new Date().toISOString(),
-        };
-
-        pendingCreatesRef.current = [
-            ...pendingCreatesRef.current,
-            entry,
-        ];
-        setPendingRequestCount(pendingCreatesRef.current.length);
-        setQueueRevision((r) => r + 1);
-        await writePendingCreatesToStorage(
-            pendingCreatesRef.current
-        );
-
-        // Optimistically flip the local row.
-        const next = requestsStateRef.current.map((r) =>
-            r.is_pending === true
-                ? {
-                    ...r,
-                    is_pending: false,
-                    status: 'PUBLISHED',
-                    status_display: 'Published',
-                }
-                : r
-        );
-        requestsStateRef.current = next;
-        setRequestsState(next);
-        await writeRequestsToStorage(next);
-
-        if (isOnlineRef.current && token) {
-            void flushPendingCreates();
-        }
-
-        return {
-            requestIds: [draftId],
-            draftCount: preview.length,
-        };
-    }, [token, user?.id, flushPendingCreates]);
-
-    /* ---------------------------------------------------------
-     * createRequest — direct-create path, one-shot
-     * ------------------------------------------------------- */
-
-    const createRequest = useCallback(
-        async (payload: PendingRequestCreate['payload']) => {
+    const queueOfferSubmission = useCallback(
+        async (input: {
+            requestId: string;
+            lineId: string;
+            offeredQuantity: number;
+            offeredUnitPrice: number;
+            note?: string;
+        }) => {
             const nowStr = new Date().toISOString();
-            const draftId = buildDraftId(
-                user?.id ?? '',
-                payload.items[0]?.product_id ?? '',
-                Date.now()
-            );
-
-            const entry: PendingRequestCreate = {
-                id: `req-create-${draftId}`,
-                draft_id: draftId,
-                local_row_id: draftId,
-                payload,
+            const entry: PendingWholesalerOffer = {
+                id: `offer-${input.lineId}-${Date.now()}`,
+                request_id: input.requestId,
+                line_id: input.lineId,
+                offered_quantity: input.offeredQuantity,
+                offered_unit_price: input.offeredUnitPrice,
+                note: input.note,
                 created_at: nowStr,
-            };
-
-            const firstUrgency =
-                payload.items[0]?.urgency ?? 'medium';
-            const urgencyLabel =
-                firstUrgency.charAt(0).toUpperCase() +
-                firstUrgency.slice(1);
-
-            const itemsPreview: ProductRequestSummaryLineItem[] =
-                payload.items.map((i) => {
-                    const raw = i as any;
-                    const ids: string[] =
-                        raw.target_wholesaler_ids ?? [];
-                    const titles: string[] =
-                        raw.target_wholesaler_titles ?? [];
-                    const objects = raw.wholesalers;
-
-                    const wholesalers =
-                        Array.isArray(objects) &&
-                            objects.length > 0
-                            ? objects
-                            : ids.map((id, idx) => ({
-                                id,
-                                title: titles[idx] ?? '',
-                            }));
-
-                    return {
-                        product_id: i.product_id,
-                        product_title: raw.product_title,
-                        requested_quantity:
-                            i.requested_quantity,
-                        urgency: i.urgency,
-                        note: i.note,
-                        wholesalers,
-                        wholesaler_titles: wholesalers.map(
-                            (w) => w.title
-                        ),
-                        target_wholesaler_ids: wholesalers.map(
-                            (w) => w.id
-                        ),
-                    };
-                });
-
-            const optimistic: ProductRequestSummary = {
-                remote_id: null,
-                request_number: `PENDING-${draftId
-                    .slice(-6)
-                    .toUpperCase()}`,
-                entity: '',
-                entity_title: '',
-                urgency: firstUrgency,
-                urgency_display: urgencyLabel,
-                status: 'PUBLISHED',
-                status_display: 'Submitting...',
-                total_line_count: payload.items.length,
-                fulfilled_line_count: 0,
-                pending_line_count: payload.items.length,
-                expires_at: null,
-                created: nowStr,
-                cached_at: nowStr,
-                is_pending: true,
-                draft_id: draftId,
-                items_preview: itemsPreview,
             };
 
             const next = [
-                optimistic,
-                ...requestsStateRef.current,
-            ];
-            requestsStateRef.current = next;
-            setRequestsState(next);
-            await writeRequestsToStorage(next);
-
-            pendingCreatesRef.current = [
-                ...pendingCreatesRef.current,
-                entry,
-            ];
-            setPendingRequestCount(
-                pendingCreatesRef.current.length
-            );
-            setQueueRevision((r) => r + 1);
-            await writePendingCreatesToStorage(
-                pendingCreatesRef.current
-            );
-
-            if (isOnlineRef.current && token) {
-                void flushPendingCreates();
-            }
-
-            return draftId;
-        },
-        [token, user?.id, flushPendingCreates]
-    );
-
-    /* ---------------------------------------------------------
-     * Draft actions — local-only
-     * ------------------------------------------------------- */
-
-    const addDraftItem = useCallback(
-        (item: Omit<RequestDraftItem, 'added_at'>) => {
-            const prev = requestsStateRef.current;
-            const nowStr = new Date().toISOString();
-
-            const pendingIdx = prev.findIndex(
-                (r) => r.is_pending === true
-            );
-
-            // Normalize wholesalers from whichever shape the caller
-            // provided.
-            const wholesalers =
-                Array.isArray(item.wholesalers) &&
-                    item.wholesalers.length > 0
-                    ? item.wholesalers
-                    : (item.target_wholesaler_ids ?? []).map(
-                        (id, i) => ({
-                            id,
-                            title:
-                                item
-                                    .target_wholesaler_titles?.[
-                                i
-                                ] ?? '',
-                        })
-                    );
-
-            const lineItem: ProductRequestSummaryLineItem = {
-                product_id: item.product_id,
-                product_title: item.product_title,
-                requested_quantity: item.quantity,
-                urgency: item.urgency,
-                note: item.note,
-                wholesalers,
-                wholesaler_titles: wholesalers.map(
-                    (w) => w.title
-                ),
-                target_wholesaler_ids: wholesalers.map(
-                    (w) => w.id
-                ),
-            };
-
-            let next: ProductRequestSummary[];
-
-            if (pendingIdx >= 0) {
-                const row = prev[pendingIdx];
-                const existing = row.items_preview ?? [];
-                const dupIdx = existing.findIndex(
-                    (p) => p.product_id === item.product_id
-                );
-
-                const mergedItems =
-                    dupIdx >= 0
-                        ? existing.map((p, i) =>
-                            i === dupIdx ? lineItem : p
-                        )
-                        : [...existing, lineItem];
-
-                const updated: ProductRequestSummary = {
-                    ...row,
-                    total_line_count: mergedItems.length,
-                    pending_line_count: mergedItems.length,
-                    items_preview: mergedItems,
-                };
-
-                next = prev.slice();
-                next[pendingIdx] = updated;
-            } else {
-                const createdMs = Date.now();
-                const userId = user?.id ?? '';
-                const draftId = buildDraftId(
-                    userId,
-                    item.product_id,
-                    createdMs
-                );
-
-                const draft: ProductRequestSummary = {
-                    remote_id: null,
-                    request_number: `DRAFT-${createdMs
-                        .toString(36)
-                        .slice(-6)
-                        .toUpperCase()}`,
-                    entity: user?.entity ?? '',
-                    entity_title: user?.entity_title ?? '',
-                    urgency: item.urgency,
-                    urgency_display:
-                        item.urgency
-                            .charAt(0)
-                            .toUpperCase() +
-                        item.urgency.slice(1),
-                    status: 'DRAFT',
-                    status_display: 'Draft',
-                    total_line_count: 1,
-                    fulfilled_line_count: 0,
-                    pending_line_count: 1,
-                    expires_at: null,
-                    created: nowStr,
-                    cached_at: nowStr,
-                    is_pending: true,
-                    draft_id: draftId,
-                    items_preview: [lineItem],
-                };
-
-                next = [draft, ...prev];
-            }
-
-            requestsStateRef.current = next;
-            setRequestsState(next);
-
-            void writeRequestsToStorage(next).catch((err) =>
-                warn('addDraftItem write failed:', err)
-            );
-        },
-        [user?.id, user?.entity, user?.entity_title]
-    );
-
-    const removeDraftItem = useCallback((productId: string) => {
-        const prev = requestsStateRef.current;
-        const pendingIdx = prev.findIndex(
-            (r) => r.is_pending === true
-        );
-        if (pendingIdx < 0) return;
-
-        const row = prev[pendingIdx];
-        const remaining = (row.items_preview ?? []).filter(
-            (p) => p.product_id !== productId
-        );
-
-        let next: ProductRequestSummary[];
-
-        if (remaining.length === 0) {
-            next = prev.filter((_, i) => i !== pendingIdx);
-        } else {
-            const updated: ProductRequestSummary = {
-                ...row,
-                total_line_count: remaining.length,
-                pending_line_count: remaining.length,
-                items_preview: remaining,
-            };
-            next = prev.slice();
-            next[pendingIdx] = updated;
-        }
-
-        requestsStateRef.current = next;
-        setRequestsState(next);
-
-        void writeRequestsToStorage(next).catch((err) =>
-            warn('removeDraftItem write failed:', err)
-        );
-    }, []);
-
-    const updateDraftItem = useCallback(
-        (productId: string, patch: Partial<RequestDraftItem>) => {
-            const prev = requestsStateRef.current;
-            const pendingIdx = prev.findIndex(
-                (r) => r.is_pending === true
-            );
-            if (pendingIdx < 0) return;
-
-            const row = prev[pendingIdx];
-            const items = row.items_preview ?? [];
-            const idx = items.findIndex(
-                (p) => p.product_id === productId
-            );
-            if (idx < 0) return;
-
-            const first = items[idx];
-
-            // Determine the merged wholesalers array.
-            let mergedWholesalers =
-                first.wholesalers ??
-                (first.target_wholesaler_ids ?? []).map(
-                    (id, i) => ({
-                        id,
-                        title:
-                            first.wholesaler_titles?.[i] ?? '',
-                    })
-                );
-
-            if (
-                Array.isArray(patch.wholesalers) &&
-                patch.wholesalers.length > 0
-            ) {
-                mergedWholesalers = patch.wholesalers;
-            } else if (
-                patch.target_wholesaler_ids !== undefined
-            ) {
-                const ids = patch.target_wholesaler_ids;
-                const titles =
-                    patch.target_wholesaler_titles ?? [];
-                mergedWholesalers = ids.map((id, i) => ({
-                    id,
-                    title: titles[i] ?? '',
-                }));
-            }
-
-            const updatedLine: ProductRequestSummaryLineItem =
-            {
-                ...first,
-                ...(patch.product_title !== undefined
-                    ? {
-                        product_title:
-                            patch.product_title,
-                    }
-                    : {}),
-                ...(patch.quantity !== undefined
-                    ? {
-                        requested_quantity:
-                            patch.quantity,
-                    }
-                    : {}),
-                ...(patch.urgency !== undefined
-                    ? { urgency: patch.urgency }
-                    : {}),
-                ...(patch.note !== undefined
-                    ? { note: patch.note }
-                    : {}),
-                wholesalers: mergedWholesalers,
-                wholesaler_titles:
-                    mergedWholesalers.map(
-                        (w) => w.title
-                    ),
-                target_wholesaler_ids:
-                    mergedWholesalers.map((w) => w.id),
-            };
-
-            const mergedItems = items.map((p, i) =>
-                i === idx ? updatedLine : p
-            );
-
-            const updatedRow: ProductRequestSummary = {
-                ...row,
-                items_preview: mergedItems,
-            };
-
-            const next = prev.slice();
-            next[pendingIdx] = updatedRow;
-
-            requestsStateRef.current = next;
-            setRequestsState(next);
-
-            void writeRequestsToStorage(next).catch((err) =>
-                warn('updateDraftItem write failed:', err)
-            );
-        },
-        []
-    );
-
-    const hasDraftItem = useCallback(
-        (productId: string) =>
-            drafts.some((d) => d.product_id === productId),
-        [drafts]
-    );
-
-    const clearDraft = useCallback(() => {
-        const prev = requestsStateRef.current;
-        const next = prev.filter(
-            (r) => r.is_pending !== true
-        );
-
-        requestsStateRef.current = next;
-        setRequestsState(next);
-
-        void writeRequestsToStorage(next).catch((err) =>
-            warn('clearDraft write failed:', err)
-        );
-    }, []);
-
-    /* ---------------------------------------------------------
-     * queueOfferAction
-     * ------------------------------------------------------- */
-
-    const queueOfferAction = useCallback(
-        async (
-            requestId: string,
-            offerId: string,
-            action: 'confirm' | 'decline',
-            note?: string
-        ) => {
-            const nowStr = new Date().toISOString();
-            const entry: PendingOfferAction = {
-                id: `offer-${offerId}-${Date.now()}`,
-                request_id: requestId,
-                offer_id: offerId,
-                action,
-                note,
-                created_at: nowStr,
-            };
-
-            pendingOffersRef.current = [
                 ...pendingOffersRef.current.filter(
-                    (a) => a.offer_id !== offerId
+                    (o) => o.line_id !== input.lineId
                 ),
                 entry,
             ];
-            setPendingOfferCount(
-                pendingOffersRef.current.length
-            );
+            setPendingOffers(next);
             setQueueRevision((r) => r + 1);
-            await writePendingOffersToStorage(
-                pendingOffersRef.current
-            );
+            await writePendingOffersToStorage(next);
 
             if (isOnlineRef.current && token) {
-                void flushPendingOfferActions();
+                void flushPendingOffers();
             }
         },
-        [token, flushPendingOfferActions]
+        [token, flushPendingOffers, setPendingOffers]
     );
 
-    /* ---------------------------------------------------------
-     * Public setter
-     * ------------------------------------------------------- */
+    /* -------- Public setter -------- */
 
     const setRequests = useCallback(
         async (data: ProductRequestSummary[]) => {
@@ -1622,15 +1066,11 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
         [commitSnapshot]
     );
 
-    /* ---------------------------------------------------------
-     * Hydrate
-     * ------------------------------------------------------- */
+    /* -------- Hydrate -------- */
 
     const hydrateFromLocalDB = useCallback(async () => {
         try {
             const cached = await readRequestsFromStorage();
-
-            log('Hydrate — cached rows:', cached.length);
 
             if (cached.length > 0) {
                 requestsStateRef.current = cached;
@@ -1645,47 +1085,33 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                 setDataSource('none');
             }
 
-            setIsDraftsHydrated(true);
             isHydratedRef.current = true;
-
-            const creates =
-                await readPendingCreatesFromStorage();
-            pendingCreatesRef.current = creates;
-            setPendingRequestCount(creates.length);
 
             const offers =
                 await readPendingOffersFromStorage();
-            pendingOffersRef.current = offers;
-            setPendingOfferCount(offers.length);
+            setPendingOffers(offers);
 
-            if (!isWeb) {
-                const syncedAt = await AsyncStorage.getItem(
-                    NATIVE_REQUESTS_SYNCED_AT
+            const syncedAt = await AsyncStorage.getItem(
+                REQUESTS_SYNCED_AT_KEY
+            );
+            if (syncedAt) {
+                setLastSyncedTime(
+                    new Date(syncedAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                    })
                 );
-                if (syncedAt) {
-                    setLastSyncedTime(
-                        new Date(
-                            syncedAt
-                        ).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                        })
-                    );
-                }
             }
 
             return cached;
         } catch (e) {
             warn('hydrateFromLocalDB', e);
-            setIsDraftsHydrated(true);
             isHydratedRef.current = true;
             return [];
         }
-    }, []);
+    }, [setPendingOffers]);
 
-    /* ---------------------------------------------------------
-     * WebSocket
-     * ------------------------------------------------------- */
+    /* -------- WebSocket -------- */
 
     const establishLiveWebSocketSync = useCallback(
         (currentToken: string) => {
@@ -1704,7 +1130,9 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                 wsRef.current = null;
             }
 
-            if (!currentToken) {
+            const url = wsUrlRef.current;
+
+            if (!currentToken || !url) {
                 setIsLiveConnected(false);
                 return;
             }
@@ -1713,9 +1141,11 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
 
             try {
                 const ws = new WebSocket(
-                    `${WS_REQUESTS_URL}?token=${currentToken}`
+                    `${url}?token=${currentToken}`
                 );
                 wsRef.current = ws;
+
+                log('WebSocket — connecting to', url);
 
                 ws.onopen = () => {
                     if (
@@ -1742,6 +1172,8 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
 
                         const list =
                             extractRequestsArray(parsed);
+
+                        console.log("Retailer view..", list)
                         if (Array.isArray(list)) {
                             await commitSnapshot(
                                 list,
@@ -1771,7 +1203,9 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                     setIsLiveConnected(false);
                     wsRef.current = null;
 
-                    if (currentToken) {
+                    const liveToken = tokenRef.current;
+                    const liveUrl = wsUrlRef.current;
+                    if (liveToken && liveUrl) {
                         const attempt =
                             wsReconnectAttemptRef.current++;
                         const exp = Math.min(
@@ -1784,15 +1218,11 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                         );
                         const delay = exp + jitter;
 
-                        log(
-                            `WebSocket — reconnecting in ${delay}ms (attempt ${attempt + 1})`
-                        );
-
                         reconnectTimeoutRef.current =
                             setTimeout(
                                 () =>
                                     establishLiveWebSocketSync(
-                                        currentToken
+                                        liveToken
                                     ),
                                 delay
                             );
@@ -1807,17 +1237,16 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
         [commitSnapshot, commitSinglePatch]
     );
 
-    /* ---------------------------------------------------------
-     * Manual reconnect
-     * ------------------------------------------------------- */
+    /* -------- Manual reconnect -------- */
 
     const reconnectLiveSync = useCallback(async () => {
         setIsManualRefreshing(true);
         try {
-            if (token) {
+            const t = tokenRef.current;
+            if (t && wsUrlRef.current) {
                 wsReconnectAttemptRef.current = 0;
-                await runRemoteRequestsSynchronizer();
-                establishLiveWebSocketSync(token);
+                await flushPendingOffers();
+                establishLiveWebSocketSync(t);
             }
         } catch (e) {
             warn('reconnectLiveSync threw:', e);
@@ -1825,67 +1254,46 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
             setIsManualRefreshing(false);
         }
     }, [
-        token,
-        runRemoteRequestsSynchronizer,
+        flushPendingOffers,
         establishLiveWebSocketSync,
     ]);
 
-    /* ---------------------------------------------------------
-     * Composite flusher
-     * ------------------------------------------------------- */
-
     const flushAll = useCallback(async () => {
-        await Promise.all([
-            flushPendingCreates(),
-            flushPendingOfferActions(),
-        ]);
-    }, [flushPendingCreates, flushPendingOfferActions]);
+        await flushPendingOffers();
+    }, [flushPendingOffers]);
 
-    /* ---------------------------------------------------------
-     * Debug helper
-     * ------------------------------------------------------- */
+    /* -------- Debug -------- */
 
     const debugReadLocal = useCallback(async () => {
         const localRequests = await readRequestsFromStorage();
-
         if (__DEV__) {
-            console.log(
-                '[ProductRequestsSync] DEBUG — rows in storage:',
-                localRequests.length
-            );
             console.table(localRequests);
         }
-
-        return {
-            requests: localRequests,
-            drafts: localRequests.flatMap((r) =>
-                summaryToDrafts(r)
-            ),
-        };
+        return { requests: localRequests };
     }, []);
 
-    /* ---------------------------------------------------------
-     * Stable refs for bootstrap
-     * ------------------------------------------------------- */
+    /* -------- Stable refs -------- */
 
     const actionsRef = useRef({
         hydrateFromLocalDB,
-        runRemoteRequestsSynchronizer,
         establishLiveWebSocketSync,
     });
 
     useEffect(() => {
         actionsRef.current = {
             hydrateFromLocalDB,
-            runRemoteRequestsSynchronizer,
             establishLiveWebSocketSync,
         };
     });
 
     /* ---------------------------------------------------------
-     * Bootstrap
+     * Bootstrap.
+     *
+     * Re-runs when `token` OR `wsUrl` changes. On boot, `user`
+     * populates asynchronously after decoding the stored token —
+     * `wsUrl` is null on the first pass, gets resolved, and this
+     * effect re-runs to open the socket.
      * ------------------------------------------------------- */
-
     useEffect(() => {
         let cancelled = false;
 
@@ -1896,10 +1304,7 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
             await actionsRef.current.hydrateFromLocalDB();
             if (cancelled) return;
 
-            if (token) {
-                await actionsRef.current.runRemoteRequestsSynchronizer();
-                if (cancelled) return;
-
+            if (token && wsUrl) {
                 actionsRef.current.establishLiveWebSocketSync(
                     token
                 );
@@ -1912,8 +1317,7 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                 }
                 pendingFlushIntervalRef.current =
                     setInterval(() => {
-                        void flushPendingCreates();
-                        void flushPendingOfferActions();
+                        void flushPendingOffers();
                     }, PENDING_FLUSH_INTERVAL_MS);
             } else {
                 requestsStateRef.current = [];
@@ -1958,27 +1362,24 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token]);
+    }, [token, wsUrl]);
 
-    /* ---------------------------------------------------------
-     * Network recovery
-     * ------------------------------------------------------- */
+    /* -------- Network recovery -------- */
 
     useEffect(() => {
+        const wasOnline = prevOnlineRef.current;
+        prevOnlineRef.current = isOnline;
+
         if (!token) return;
-        if (isOnline) {
-            log('Back online — flushing and refetching');
-            void flushPendingCreates();
-            void flushPendingOfferActions();
-            void runRemoteRequestsSynchronizer();
+        if (!wsUrl) return;
+        if (isOnline && !wasOnline) {
+            void flushPendingOffers();
             establishLiveWebSocketSync(token);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOnline, token]);
+    }, [isOnline, wsUrl]);
 
-    /* ---------------------------------------------------------
-     * Context value
-     * ------------------------------------------------------- */
+    /* -------- Context value -------- */
 
     const value =
         useMemo<RetailerProductRequestsSyncContextType>(
@@ -1986,39 +1387,22 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                 requests,
                 requestsById,
 
-                drafts,
-                draftCount,
-                draftTotalQuantity,
-                draftUniqueWholesalerIds,
-                isDraftsHydrated,
-
-                isSyncing: getRequestsApi.loading,
+                isSyncing:
+                    !isLiveConnected &&
+                    requests.length === 0,
                 isManualRefreshing,
                 isLiveConnected,
                 lastSyncedTime,
                 dataSource,
 
-                pendingRequests: pendingCreatesRef.current,
-                pendingOffers: pendingOffersRef.current,
-                pendingRequestCount,
-                pendingOfferCount,
+                pendingOffers,
+                pendingOfferCount: pendingOffers.length,
                 queueRevision,
-
-                addDraftItem,
-                removeDraftItem,
-                updateDraftItem,
-                hasDraftItem,
-                clearDraft,
-
-                submitDrafts,
-                createRequest,
-
-                queueOfferAction,
 
                 setRequests,
                 patchRequestLocally,
-                flushPendingCreates,
-                flushPendingOfferActions,
+                queueOfferSubmission,
+                flushPendingOffers,
                 flushAll,
                 reconnectLiveSync,
 
@@ -2027,31 +1411,16 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
             [
                 requests,
                 requestsById,
-                drafts,
-                draftCount,
-                draftTotalQuantity,
-                draftUniqueWholesalerIds,
-                isDraftsHydrated,
-                getRequestsApi.loading,
-                isManualRefreshing,
                 isLiveConnected,
+                isManualRefreshing,
                 lastSyncedTime,
                 dataSource,
-                pendingRequestCount,
-                pendingOfferCount,
+                pendingOffers,
                 queueRevision,
-                addDraftItem,
-                removeDraftItem,
-                updateDraftItem,
-                hasDraftItem,
-                clearDraft,
-                submitDrafts,
-                createRequest,
-                queueOfferAction,
                 setRequests,
                 patchRequestLocally,
-                flushPendingCreates,
-                flushPendingOfferActions,
+                queueOfferSubmission,
+                flushPendingOffers,
                 flushAll,
                 reconnectLiveSync,
                 debugReadLocal,
@@ -2059,7 +1428,9 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
         );
 
     return (
-        <RetailerProductRequestsSyncContext.Provider value={value}>
+        <RetailerProductRequestsSyncContext.Provider
+            value={value}
+        >
             {children}
         </RetailerProductRequestsSyncContext.Provider>
     );
@@ -2070,7 +1441,9 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
  * ======================================================= */
 
 export const useRetailerProductRequestsSync = () => {
-    const ctx = useContext(RetailerProductRequestsSyncContext);
+    const ctx = useContext(
+        RetailerProductRequestsSyncContext
+    );
     if (!ctx) {
         throw new Error(
             'useRetailerProductRequestsSync must be used within a RetailerProductRequestsSyncProvider'

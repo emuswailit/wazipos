@@ -1,11 +1,30 @@
 // components/retailers/productRequests/OfferReviewModal.tsx
+//
+// Review and respond to wholesaler offers on a product request.
+//
+// - One accept per line, structurally. Accepting A on a line
+//   auto-declines its siblings at submit time.
+// - Lines are grouped in order; lines with no actionable offers
+//   are shown as informational only and don't block submit.
+// - DRAFT requests show a publish state instead of the offer
+//   review — publishing is what puts the request on the wire.
+// - Submit is disabled until every actionable line has a
+//   decision (accept or full decline) and at least one decision
+//   exists.
+//
+// Payload:
+//   {
+//     request_id,
+//     confirmations: [{ offer_id, response_note? }],
+//     declinations:  [{ offer_id, reason? }],
+//     note?,
+//   }
+//
+// Export shape: named export `OfferReviewModal`, matching the
+// folder convention used by CreateRequestModal and the two
+// view files. A default export is also provided for callers
+// that import it the other way.
 
-import { useAuth } from '@/context/AuthContext';
-import {
-    ProductRequest,
-    ProductRequestItem,
-    ProductRequestOffer,
-} from '@/databases/types';
 import React, {
     useCallback,
     useEffect,
@@ -22,10 +41,20 @@ import {
     View,
 } from 'react-native';
 
+import { useAuth } from '@/context/AuthContext';
+import type {
+    ProductRequest,
+    ProductRequestItem,
+    ProductRequestOffer,
+} from '@/databases/types';
+
+/* =========================================================
+ * Types
+ * ======================================================= */
+
 interface Props {
     visible: boolean;
     request: ProductRequest | null;
-    isLoading: boolean;
     onClose: () => void;
     onConfirm: (payload: {
         request_id: string;
@@ -38,141 +67,264 @@ interface Props {
             reason?: string;
         }>;
         note?: string;
-    }) => Promise<boolean | void>;
-
-    /**
-     * Called when the request is still a local DRAFT and the user
-     * taps Submit. Sends the basket to the server, which creates the
-     * request in PUBLISHED.
-     *
-     * The parent (RetailerProductRequestsList) supplies this from
-     * `useRetailerProductRequestsSync().submitDrafts`.
-     */
-    onPublishDraft?: () => Promise<{
-        requestIds: string[];
-        draftCount: number;
-    }>;
+    }) => Promise<boolean> | boolean;
+    onPublishDraft?: () => Promise<void> | void;
+    isLoading?: boolean;
 }
 
-type Decision = 'confirm' | 'decline' | null;
-
-interface LineState {
-    decisions: Record<string, Decision>;
-    notes: Record<string, string>;
-}
-
-interface WholesalerChip {
-    id: string;
-    title: string;
+interface LineDecision {
+    acceptedOfferId: string | null;
+    explicitDeclineIds: Set<string>;
+    responseNote: string;
 }
 
 /* =========================================================
- * Main modal
+ * Helpers
  * ======================================================= */
 
-export function OfferReviewModal({
+function isActionableOffer(o: ProductRequestOffer): boolean {
+    return (
+        String(o.status ?? '').trim().toUpperCase() === 'OFFERED'
+    );
+}
+
+function isDraftStatus(status?: string | null): boolean {
+    return (
+        String(status ?? '').trim().toUpperCase() === 'DRAFT'
+    );
+}
+
+function formatMoney(v: string | number | null | undefined): string {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '—';
+    return `KES ${n.toFixed(2)}`;
+}
+
+function offerTotal(o: ProductRequestOffer): number {
+    const price = Number(o.offered_unit_price ?? 0);
+    const qty = Number(o.offered_quantity ?? 0);
+    if (!Number.isFinite(price) || !Number.isFinite(qty)) {
+        return 0;
+    }
+    return price * qty;
+}
+
+function formatDate(value?: string | null): string {
+    if (!value) return '—';
+    const d = new Date(String(value).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+    });
+}
+
+/* =========================================================
+ * Component
+ * ======================================================= */
+
+export const OfferReviewModal: React.FC<Props> = ({
     visible,
     request,
-    isLoading,
     onClose,
     onConfirm,
     onPublishDraft,
-}: Props) {
+    isLoading = false,
+}) => {
     const { theme, isDarkMode } = useAuth();
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const dividerColor = isDarkMode ? '#334155' : '#f1f5f9';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
 
-    const [state, setState] = useState<Record<string, LineState>>(
-        {}
-    );
-    const [overallNote, setOverallNote] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [decisions, setDecisions] = useState<
+        Map<string, LineDecision>
+    >(new Map());
+    const [note, setNote] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [publishing, setPublishing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    /* ---- Reset when the modal opens for a new request ---- */
+    useEffect(() => {
+        if (!visible || !request) return;
+        setDecisions(new Map());
+        setNote('');
+        setError(null);
+        setSubmitting(false);
+        setPublishing(false);
+    }, [visible, request?.id]);
 
     useEffect(() => {
-        if (!request) return;
-        const next: Record<string, LineState> = {};
-        for (const line of request.items) {
-            next[line.id] = { decisions: {}, notes: {} };
-        }
-        setState(next);
-        setOverallNote('');
-        setIsSubmitting(false);
+        console.log("request...", request)
+    }, [request])
+
+    /* ---- Group lines with their actionable offers ---- */
+    const linesWithOffers = useMemo(() => {
+        const items = request?.items ?? [];
+        return items.map((it) => ({
+            item: it,
+            actionable: (it.offers ?? []).filter(
+                isActionableOffer
+            ),
+        }));
     }, [request]);
 
-    const setDecision = useCallback(
-        (
-            lineId: string,
-            offerId: string,
-            decision: Decision
-        ) => {
-            setState((prev) => ({
-                ...prev,
-                [lineId]: {
-                    ...prev[lineId],
-                    decisions: {
-                        ...prev[lineId]?.decisions,
-                        [offerId]: decision,
-                    },
-                },
-            }));
-        },
-        []
+    const actionableLineCount = useMemo(
+        () =>
+            linesWithOffers.filter(
+                (l) => l.actionable.length > 0
+            ).length,
+        [linesWithOffers]
     );
 
-    const setNote = useCallback(
-        (lineId: string, offerId: string, note: string) => {
-            setState((prev) => ({
-                ...prev,
-                [lineId]: {
-                    ...prev[lineId],
-                    notes: {
-                        ...prev[lineId]?.notes,
-                        [offerId]: note,
-                    },
-                },
-            }));
-        },
-        []
+    const totalOffers = useMemo(
+        () =>
+            linesWithOffers.reduce(
+                (s, l) => s + l.actionable.length,
+                0
+            ),
+        [linesWithOffers]
     );
 
-    const summary = useMemo(() => {
-        if (!request)
-            return {
-                confirmations: 0,
-                declinations: 0,
-                totalValue: 0,
-            };
-        let confirmations = 0;
-        let declinations = 0;
-        let totalValue = 0;
-        for (const line of request.items) {
-            const ls = state[line.id];
-            if (!ls) continue;
-            for (const offer of line.offers) {
-                const d = ls.decisions[offer.id];
-                if (d === 'confirm') {
-                    confirmations += 1;
-                    const price = Number(
-                        offer.offered_unit_price || 0
-                    );
-                    totalValue +=
-                        price * offer.offered_quantity;
-                } else if (d === 'decline') {
-                    declinations += 1;
-                }
+    const isDraft = isDraftStatus(request?.status);
+
+    /* ---------------------------------------------------------
+     * Decision accessors
+     * ------------------------------------------------------- */
+    const getDecision = useCallback(
+        (lineId: string): LineDecision =>
+            decisions.get(lineId) ?? {
+                acceptedOfferId: null,
+                explicitDeclineIds: new Set(),
+                responseNote: '',
+            },
+        [decisions]
+    );
+
+    const acceptOffer = useCallback(
+        (lineId: string, offerId: string) => {
+            setDecisions((prev) => {
+                const next = new Map(prev);
+                const current = getDecision(lineId);
+                next.set(lineId, {
+                    ...current,
+                    acceptedOfferId: offerId,
+                    explicitDeclineIds: new Set(),
+                });
+                return next;
+            });
+            setError(null);
+        },
+        [getDecision]
+    );
+
+    const declineOffer = useCallback(
+        (lineId: string, offerId: string) => {
+            setDecisions((prev) => {
+                const next = new Map(prev);
+                const current = getDecision(lineId);
+                const newDeclines = new Set(
+                    current.explicitDeclineIds
+                );
+                newDeclines.add(offerId);
+                next.set(lineId, {
+                    ...current,
+                    acceptedOfferId:
+                        current.acceptedOfferId === offerId
+                            ? null
+                            : current.acceptedOfferId,
+                    explicitDeclineIds: newDeclines,
+                });
+                return next;
+            });
+            setError(null);
+        },
+        [getDecision]
+    );
+
+    const undoDecline = useCallback(
+        (lineId: string, offerId: string) => {
+            setDecisions((prev) => {
+                const next = new Map(prev);
+                const current = getDecision(lineId);
+                const newDeclines = new Set(
+                    current.explicitDeclineIds
+                );
+                newDeclines.delete(offerId);
+                next.set(lineId, {
+                    ...current,
+                    explicitDeclineIds: newDeclines,
+                });
+                return next;
+            });
+        },
+        [getDecision]
+    );
+
+    /* ---------------------------------------------------------
+     * Validity
+     * ------------------------------------------------------- */
+    const undecidedLineIds = useMemo(() => {
+        const ids: string[] = [];
+        for (const { item, actionable } of linesWithOffers) {
+            if (actionable.length === 0) continue;
+            const d = decisions.get(item.id);
+            const hasAccept = !!d?.acceptedOfferId;
+            const declinedCount = actionable.filter((o) =>
+                d?.explicitDeclineIds.has(o.id)
+            ).length;
+            if (
+                !hasAccept &&
+                declinedCount < actionable.length
+            ) {
+                ids.push(item.id);
             }
         }
-        return { confirmations, declinations, totalValue };
-    }, [request, state]);
+        return ids;
+    }, [linesWithOffers, decisions]);
 
-    /** True when the request is still a local, unsent draft. */
-    const isDraft =
-        request?.status === 'DRAFT' ||
-        (request as any)?.is_pending === true;
+    const confirmCount = useMemo(() => {
+        let n = 0;
+        for (const d of decisions.values()) {
+            if (d.acceptedOfferId) n += 1;
+        }
+        return n;
+    }, [decisions]);
 
-    const handleConfirmOffers = useCallback(async () => {
-        if (!request || isSubmitting) return;
+    const declineCount = useMemo(() => {
+        let n = 0;
+        for (const { item, actionable } of linesWithOffers) {
+            const d = decisions.get(item.id);
+            if (!d) continue;
+            if (d.acceptedOfferId) {
+                n += actionable.length - 1;
+            } else {
+                n += d.explicitDeclineIds.size;
+            }
+        }
+        return n;
+    }, [decisions, linesWithOffers]);
+
+    const decisionCount = confirmCount + declineCount;
+
+    const canSubmit =
+        !submitting &&
+        !isLoading &&
+        !publishing &&
+        undecidedLineIds.length === 0 &&
+        decisionCount > 0;
+
+    const canPublish =
+        isDraft &&
+        !publishing &&
+        !isLoading &&
+        !!onPublishDraft;
+
+    /* ---------------------------------------------------------
+     * Submit
+     * ------------------------------------------------------- */
+    const handleSubmit = useCallback(async () => {
+        if (!request || !canSubmit) return;
+
         const confirmations: Array<{
             offer_id: string;
             response_note?: string;
@@ -182,847 +334,899 @@ export function OfferReviewModal({
             reason?: string;
         }> = [];
 
-        for (const line of request.items) {
-            const ls = state[line.id];
-            if (!ls) continue;
-            for (const offer of line.offers) {
-                const d = ls.decisions[offer.id];
-                if (d === 'confirm') {
-                    confirmations.push({
-                        offer_id: offer.id,
-                        response_note:
-                            ls.notes[offer.id] || undefined,
-                    });
-                } else if (d === 'decline') {
+        for (const { item, actionable } of linesWithOffers) {
+            if (actionable.length === 0) continue;
+            const d = decisions.get(item.id);
+            if (!d) continue;
+
+            if (d.acceptedOfferId) {
+                confirmations.push({
+                    offer_id: d.acceptedOfferId,
+                    response_note:
+                        d.responseNote?.trim() || undefined,
+                });
+                for (const o of actionable) {
+                    if (o.id === d.acceptedOfferId) continue;
+                    declinations.push({ offer_id: o.id });
+                }
+            } else {
+                for (const id of d.explicitDeclineIds) {
                     declinations.push({
-                        offer_id: offer.id,
-                        reason: ls.notes[offer.id] || undefined,
+                        offer_id: id,
+                        reason:
+                            d.responseNote?.trim() || undefined,
                     });
                 }
             }
         }
 
-        if (!confirmations.length && !declinations.length)
-            return;
+        setSubmitting(true);
+        setError(null);
 
-        setIsSubmitting(true);
         try {
-            await onConfirm({
+            const ok = await onConfirm({
                 request_id: request.id,
                 confirmations,
                 declinations,
-                note: overallNote || undefined,
+                note: note.trim() || undefined,
             });
+
+            if (!ok) {
+                setError('Server rejected the response.');
+                return;
+            }
+
+            onClose();
+        } catch (e: any) {
+            setError(
+                e?.message ??
+                'Could not submit the response.'
+            );
         } finally {
-            setIsSubmitting(false);
+            setSubmitting(false);
         }
     }, [
         request,
-        state,
-        overallNote,
+        canSubmit,
+        linesWithOffers,
+        decisions,
+        note,
         onConfirm,
-        isSubmitting,
+        onClose,
     ]);
 
-    const handlePublishDraft = useCallback(async () => {
-        if (!onPublishDraft || isSubmitting) return;
-        setIsSubmitting(true);
+    /* ---------------------------------------------------------
+     * Publish (draft only)
+     * ------------------------------------------------------- */
+    const handlePublish = useCallback(async () => {
+        if (!canPublish || !onPublishDraft) return;
+        setPublishing(true);
+        setError(null);
         try {
             await onPublishDraft();
             onClose();
+        } catch (e: any) {
+            setError(
+                e?.message ?? 'Could not publish the request.'
+            );
         } finally {
-            setIsSubmitting(false);
+            setPublishing(false);
         }
-    }, [onPublishDraft, isSubmitting, onClose]);
+    }, [canPublish, onPublishDraft, onClose]);
 
-    if (!visible) return null;
+    if (!request) return null;
 
-    const canSubmit = isDraft
-        ? !!onPublishDraft && !isSubmitting
-        : (summary.confirmations > 0 ||
-            summary.declinations > 0) &&
-        !isSubmitting;
+    const busy = submitting || publishing || isLoading;
 
-    const primaryLabel = isSubmitting
-        ? isDraft
-            ? 'Submitting...'
-            : 'Submitting...'
-        : isDraft
-            ? 'Submit draft'
-            : 'Submit';
-
+    /* =========================================================
+     * Render
+     * ======================================================= */
     return (
         <Modal
             visible={visible}
-            animationType="fade"
             transparent
-            onRequestClose={onClose}
+            animationType="fade"
+            onRequestClose={busy ? () => { } : onClose}
         >
-            <View className="flex-1 bg-black/55 items-center justify-center p-4">
+            <View className="flex-1 bg-black/40 items-center justify-center p-3">
                 <View
-                    className="w-full max-w-[900px] max-h-[92%] rounded-2xl border overflow-hidden"
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderColor,
-                    }}
+                    className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
+                    style={{ backgroundColor: theme.panel }}
                 >
-                    {/* Header */}
+                    {/* ---------- header ---------- */}
                     <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{ borderBottomColor: dividerColor }}
+                        className="px-5 pt-4 pb-3 border-b"
+                        style={{
+                            borderBottomColor:
+                                theme.textDark + '22',
+                        }}
                     >
-                        <View className="flex-1">
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.lg,
-                                }}
-                                numberOfLines={1}
-                            >
-                                {request?.request_number ??
-                                    'Request details'}
-                            </Text>
-                            {request ? (
+                        <View className="flex-row items-start">
+                            <View className="flex-1 min-w-0">
+                                <Text
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.semibold,
+                                        fontSize:
+                                            theme.fontSize.xs,
+                                        letterSpacing: 0.5,
+                                    }}
+                                >
+                                    {request.request_number || '—'}
+                                </Text>
+                                <Text
+                                    className="mt-0.5"
+                                    style={{
+                                        color: theme.text,
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize:
+                                            theme.fontSize.lg,
+                                    }}
+                                >
+                                    {isDraft
+                                        ? 'Review Draft'
+                                        : 'Review Offers'}
+                                </Text>
                                 <Text
                                     className="mt-0.5"
                                     style={{
                                         color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.regular,
+                                        fontSize:
+                                            theme.fontSize.sm,
+                                    }}
+                                >
+                                    {isDraft
+                                        ? `${request.total_line_count} line${request.total_line_count ===
+                                            1
+                                            ? ''
+                                            : 's'
+                                        } · not yet published`
+                                        : `${actionableLineCount} line${actionableLineCount === 1
+                                            ? ''
+                                            : 's'
+                                        } with offers · ${totalOffers} offer${totalOffers === 1
+                                            ? ''
+                                            : 's'
+                                        }`}
+                                </Text>
+                            </View>
+                            <Pressable
+                                onPress={
+                                    busy ? undefined : onClose
+                                }
+                                hitSlop={12}
+                                disabled={busy}
+                                className="w-8 h-8 items-center justify-center rounded-full"
+                                style={{
+                                    backgroundColor:
+                                        theme.background,
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        color: theme.textDark,
+                                        fontSize:
+                                            theme.fontSize.lg,
+                                    }}
+                                >
+                                    ✕
+                                </Text>
+                            </Pressable>
+                        </View>
+                    </View>
+
+                    {/* ---------- body ---------- */}
+                    <ScrollView
+                        className="flex-1"
+                        contentContainerStyle={{ padding: 16 }}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {linesWithOffers.length === 0 ? (
+                            <View className="items-center py-8">
+                                <Text
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.regular,
+                                        fontSize:
+                                            theme.fontSize.sm,
+                                    }}
+                                >
+                                    No line items on this request.
+                                </Text>
+                            </View>
+                        ) : (
+                            linesWithOffers.map(
+                                ({ item, actionable }, idx) => (
+                                    <LineCard
+                                        key={item.id}
+                                        item={item}
+                                        index={idx}
+                                        actionableOffers={
+                                            actionable
+                                        }
+                                        decision={getDecision(
+                                            item.id
+                                        )}
+                                        onAccept={(offerId) =>
+                                            acceptOffer(
+                                                item.id,
+                                                offerId
+                                            )
+                                        }
+                                        onDecline={(offerId) =>
+                                            declineOffer(
+                                                item.id,
+                                                offerId
+                                            )
+                                        }
+                                        onUndoDecline={(offerId) =>
+                                            undoDecline(
+                                                item.id,
+                                                offerId
+                                            )
+                                        }
+                                    />
+                                )
+                            )
+                        )}
+
+                        {!isDraft ? (
+                            <View className="mt-5">
+                                <Text
+                                    className="mb-1.5"
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.semibold,
+                                        fontSize:
+                                            theme.fontSize.xs,
+                                        letterSpacing: 0.5,
+                                    }}
+                                >
+                                    OVERALL NOTE (OPTIONAL)
+                                </Text>
+                                <TextInput
+                                    value={note}
+                                    onChangeText={setNote}
+                                    placeholder="Message to wholesalers"
+                                    placeholderTextColor={
+                                        theme.textDark
+                                    }
+                                    multiline
+                                    numberOfLines={3}
+                                    textAlignVertical="top"
+                                    className="px-3 py-2 rounded-lg min-h-[72px]"
+                                    style={{
+                                        backgroundColor:
+                                            theme.background,
+                                        color: theme.text,
+                                        fontFamily:
+                                            theme.font.regular,
+                                        fontSize:
+                                            theme.fontSize.sm,
+                                    }}
+                                />
+                            </View>
+                        ) : null}
+
+                        {error ? (
+                            <View
+                                className="rounded-lg px-3 py-2 mt-4"
+                                style={{
+                                    backgroundColor:
+                                        'rgba(239,68,68,0.12)',
+                                    borderWidth: 1,
+                                    borderColor:
+                                        'rgba(239,68,68,0.35)',
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        color: '#b91c1c',
                                         fontFamily:
                                             theme.font.medium,
                                         fontSize:
                                             theme.fontSize.xs,
                                     }}
                                 >
-                                    {request.total_line_count} lines
-                                    ·{' '}
-                                    {request.fulfilled_line_count}{' '}
-                                    fulfilled ·{' '}
-                                    {request.status_display}
+                                    {error}
                                 </Text>
-                            ) : null}
-                        </View>
-                        <Pressable
-                            onPress={onClose}
-                            hitSlop={10}
-                            className="p-1.5"
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize:
-                                        theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
+                            </View>
+                        ) : null}
+                    </ScrollView>
 
-                    {/* Body */}
-                    {isLoading || !request ? (
-                        <View className="p-10 items-center">
-                            <ActivityIndicator
-                                size="large"
-                                color={theme.primary}
-                            />
-                            <Text
-                                className="mt-3"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.sm,
-                                }}
-                            >
-                                Loading request...
-                            </Text>
-                        </View>
-                    ) : (
-                        <ScrollView
-                            contentContainerStyle={{
-                                padding: 16,
-                            }}
-                        >
-                            {request.items.map((line) => (
-                                <LineBlock
-                                    key={line.id}
-                                    line={line}
-                                    lineState={state[line.id]}
-                                    onSetDecision={setDecision}
-                                    onSetNote={setNote}
-                                />
-                            ))}
-
-                            <Text
-                                className="uppercase tracking-widest mb-2 mt-3"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 10,
-                                }}
-                            >
-                                Overall note (optional)
-                            </Text>
-                            <TextInput
-                                value={overallNote}
-                                onChangeText={setOverallNote}
-                                placeholder="Message to wholesalers"
-                                placeholderTextColor="#94a3b8"
-                                multiline
-                                numberOfLines={2}
-                                className="rounded-xl border px-3 py-2 min-h-[60px]"
-                                style={{
-                                    borderColor,
-                                    backgroundColor: subBg,
-                                    color: theme.text,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.sm,
-                                }}
-                            />
-                        </ScrollView>
-                    )}
-
-                    {/* Footer */}
+                    {/* ---------- footer ---------- */}
                     <View
-                        className="flex-row items-center justify-between gap-2 p-4 border-t flex-wrap"
-                        style={{ borderTopColor: dividerColor }}
+                        className="px-5 py-3 border-t"
+                        style={{
+                            borderTopColor:
+                                theme.textDark + '22',
+                        }}
                     >
-                        <View className="flex-1 min-w-[200px]">
+                        <View className="flex-row items-center">
                             <Text
+                                className="flex-1"
                                 style={{
                                     color: theme.textDark,
                                     fontFamily:
-                                        theme.font.medium,
+                                        theme.font.regular,
                                     fontSize:
                                         theme.fontSize.xs,
                                 }}
                             >
                                 {isDraft
-                                    ? 'Ready to send to wholesalers'
-                                    : `${summary.confirmations} to confirm · ${summary.declinations} to decline${summary.totalValue > 0
-                                        ? ` · KES ${summary.totalValue.toLocaleString(
-                                            undefined,
-                                            {
-                                                maximumFractionDigits: 2,
-                                            }
-                                        )}`
+                                    ? 'Not yet published'
+                                    : `${confirmCount} to confirm · ${declineCount} to decline${undecidedLineIds.length >
+                                        0
+                                        ? ` · ${undecidedLineIds.length} undecided`
                                         : ''
                                     }`}
                             </Text>
-                        </View>
 
-                        <View className="flex-row gap-2">
                             <Pressable
                                 onPress={onClose}
-                                className="px-4 py-2.5 rounded-xl border"
-                                style={{ borderColor }}
+                                disabled={busy}
+                                className="px-4 py-2 rounded-lg mr-2"
                             >
                                 <Text
-                                    className="uppercase tracking-wide"
                                     style={{
-                                        color: theme.textDark,
+                                        color: theme.text,
                                         fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
+                                            theme.font.semibold,
+                                        fontSize:
+                                            theme.fontSize.sm,
                                     }}
                                 >
                                     Close
                                 </Text>
                             </Pressable>
-                            <Pressable
-                                onPress={
-                                    isDraft
-                                        ? handlePublishDraft
-                                        : handleConfirmOffers
-                                }
-                                disabled={!canSubmit}
-                                className="px-4 py-2.5 rounded-xl"
-                                style={{
-                                    backgroundColor:
-                                        theme.primary,
-                                    opacity: canSubmit
-                                        ? 1
-                                        : 0.5,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide text-white"
+
+                            {isDraft ? (
+                                <Pressable
+                                    onPress={handlePublish}
+                                    disabled={!canPublish}
+                                    className="px-5 py-2 rounded-lg flex-row items-center"
                                     style={{
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
+                                        backgroundColor:
+                                            canPublish
+                                                ? theme.primary
+                                                : theme.primary +
+                                                '66',
                                     }}
                                 >
-                                    {primaryLabel}
-                                </Text>
-                            </Pressable>
+                                    {publishing ? (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color="#FFFFFF"
+                                        />
+                                    ) : (
+                                        <Text
+                                            style={{
+                                                color: '#FFFFFF',
+                                                fontFamily:
+                                                    theme.font
+                                                        .semibold,
+                                                fontSize:
+                                                    theme.fontSize
+                                                        .sm,
+                                            }}
+                                        >
+                                            Publish Request
+                                        </Text>
+                                    )}
+                                </Pressable>
+                            ) : (
+                                <Pressable
+                                    onPress={handleSubmit}
+                                    disabled={!canSubmit}
+                                    className="px-5 py-2 rounded-lg flex-row items-center"
+                                    style={{
+                                        backgroundColor:
+                                            canSubmit
+                                                ? theme.primary
+                                                : theme.primary +
+                                                '66',
+                                    }}
+                                >
+                                    {submitting ? (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color="#FFFFFF"
+                                        />
+                                    ) : (
+                                        <Text
+                                            style={{
+                                                color: '#FFFFFF',
+                                                fontFamily:
+                                                    theme.font
+                                                        .semibold,
+                                                fontSize:
+                                                    theme.fontSize
+                                                        .sm,
+                                            }}
+                                        >
+                                            Submit
+                                        </Text>
+                                    )}
+                                </Pressable>
+                            )}
                         </View>
                     </View>
                 </View>
             </View>
         </Modal>
     );
-}
+};
+
+export default OfferReviewModal;
 
 /* =========================================================
- * Helpers
+ * Line card
  * ======================================================= */
 
-function resolveWholesalers(
-    line: ProductRequestItem
-): WholesalerChip[] {
-    const anyLine = line as any;
+const LineCard: React.FC<{
+    item: ProductRequestItem;
+    index: number;
+    actionableOffers: ProductRequestOffer[];
+    decision: LineDecision;
+    onAccept: (offerId: string) => void;
+    onDecline: (offerId: string) => void;
+    onUndoDecline: (offerId: string) => void;
+}> = ({
+    item,
+    index,
+    actionableOffers,
+    decision,
+    onAccept,
+    onDecline,
+    onUndoDecline,
+}) => {
+        const { theme, isDarkMode } = useAuth();
+        const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
 
-    const objects = anyLine.wholesalers;
-    if (Array.isArray(objects) && objects.length > 0) {
-        const seen = new Set<string>();
-        const out: WholesalerChip[] = [];
-        for (const w of objects) {
-            if (!w || typeof w.id !== 'string') continue;
-            const id = String(w.id);
-            if (seen.has(id)) continue;
-            seen.add(id);
-            out.push({
-                id,
-                title: String(w.title ?? '') || id,
-            });
-        }
-        return out;
-    }
+        const hasOffers = actionableOffers.length > 0;
+        const acceptedId = decision.acceptedOfferId;
+        const declinedIds = decision.explicitDeclineIds;
 
-    const ids = anyLine.target_wholesaler_ids;
-    const titles = anyLine.wholesaler_titles;
+        const lineDecided = hasOffers
+            ? !!acceptedId ||
+            actionableOffers.every((o) =>
+                declinedIds.has(o.id)
+            )
+            : true;
 
-    if (Array.isArray(ids) && ids.length > 0) {
-        const seen = new Set<string>();
-        const out: WholesalerChip[] = [];
-        for (let i = 0; i < ids.length; i++) {
-            const id = String(ids[i]);
-            if (seen.has(id)) continue;
-            seen.add(id);
-            const title = String(
-                (Array.isArray(titles) ? titles[i] : '') || id
-            );
-            out.push({ id, title });
-        }
-        return out;
-    }
+        return (
+            <View
+                className="mb-3 rounded-xl border overflow-hidden"
+                style={{
+                    borderColor: lineDecided
+                        ? 'rgba(16,185,129,0.4)'
+                        : borderColor,
+                    borderWidth: lineDecided ? 1.5 : 1,
+                }}
+            >
+                {/* header */}
+                <View
+                    className="p-3"
+                    style={{ backgroundColor: theme.panel }}
+                >
+                    <View className="flex-row items-center">
+                        <Text
+                            className="mr-2"
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.bold,
+                                fontSize: 11,
+                            }}
+                        >
+                            #{index + 1}
+                        </Text>
+                        <Text
+                            className="flex-1"
+                            style={{
+                                color: theme.text,
+                                fontFamily:
+                                    theme.font.semibold,
+                                fontSize: theme.fontSize.sm,
+                            }}
+                            numberOfLines={2}
+                        >
+                            {item.product_title ||
+                                'Untitled product'}
+                        </Text>
+                        {hasOffers ? (
+                            <View
+                                className="px-2 py-0.5 rounded-md ml-2"
+                                style={{
+                                    backgroundColor:
+                                        'rgba(99,102,241,0.15)',
+                                }}
+                            >
+                                <Text
+                                    className="uppercase tracking-wide"
+                                    style={{
+                                        color: '#6366f1',
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 9,
+                                    }}
+                                >
+                                    {actionableOffers.length}{' '}
+                                    {actionableOffers.length === 1
+                                        ? 'offer'
+                                        : 'offers'}
+                                </Text>
+                            </View>
+                        ) : (
+                            <View
+                                className="px-2 py-0.5 rounded-md ml-2"
+                                style={{
+                                    backgroundColor:
+                                        'rgba(148,163,184,0.15)',
+                                }}
+                            >
+                                <Text
+                                    className="uppercase tracking-wide"
+                                    style={{
+                                        color: '#94a3b8',
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 9,
+                                    }}
+                                >
+                                    Awaiting
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                    <Text
+                        className="mt-1"
+                        style={{
+                            color: theme.textDark,
+                            fontFamily: theme.font.regular,
+                            fontSize: theme.fontSize.xs,
+                        }}
+                    >
+                        {item.requested_quantity} requested
+                    </Text>
+                </View>
 
-    if (Array.isArray(titles) && titles.length > 0) {
-        const seen = new Set<string>();
-        const out: WholesalerChip[] = [];
-        for (const t of titles) {
-            const title = String(t ?? '');
-            if (!title) continue;
-            if (seen.has(title)) continue;
-            seen.add(title);
-            out.push({ id: title, title });
-        }
-        return out;
-    }
+                {/* offers or awaiting note */}
+                <View
+                    className="p-3 border-t"
+                    style={{
+                        borderTopColor: theme.textDark + '22',
+                        backgroundColor: theme.background,
+                    }}
+                >
+                    {!hasOffers ? (
+                        <Text
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.regular,
+                                fontSize: 11,
+                                opacity: 0.8,
+                            }}
+                        >
+                            No active offers on this line.
+                        </Text>
+                    ) : (
+                        actionableOffers.map((o) => {
+                            const accepted = acceptedId === o.id;
+                            const declined = declinedIds.has(o.id);
+                            const autoDeclined =
+                                !!acceptedId && !accepted;
 
-    return [];
-}
+                            return (
+                                <OfferCard
+                                    key={o.id}
+                                    offer={o}
+                                    accepted={accepted}
+                                    declined={declined}
+                                    autoDeclined={autoDeclined}
+                                    onAccept={() => onAccept(o.id)}
+                                    onDecline={() => onDecline(o.id)}
+                                    onUndoDecline={() =>
+                                        onUndoDecline(o.id)
+                                    }
+                                />
+                            );
+                        })
+                    )}
+                </View>
+            </View>
+        );
+    };
 
 /* =========================================================
- * Line block
+ * Offer card
  * ======================================================= */
 
-function LineBlock({
-    line,
-    lineState,
-    onSetDecision,
-    onSetNote,
-}: {
-    line: ProductRequestItem;
-    lineState: LineState | undefined;
-    onSetDecision: (
-        lineId: string,
-        offerId: string,
-        decision: Decision
-    ) => void;
-    onSetNote: (
-        lineId: string,
-        offerId: string,
-        note: string
-    ) => void;
-}) {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
+const OfferCard: React.FC<{
+    offer: ProductRequestOffer;
+    accepted: boolean;
+    declined: boolean;
+    autoDeclined: boolean;
+    onAccept: () => void;
+    onDecline: () => void;
+    onUndoDecline: () => void;
+}> = ({
+    offer,
+    accepted,
+    declined,
+    autoDeclined,
+    onAccept,
+    onDecline,
+    onUndoDecline,
+}) => {
+        const { theme, isDarkMode } = useAuth();
+        const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
 
-    const hasOffers = line.offers.length > 0;
-    const wholesalers = resolveWholesalers(line);
+        const unitPrice = Number(offer.offered_unit_price ?? 0);
+        const total = offerTotal(offer);
 
-    return (
-        <View
-            className="rounded-2xl border p-3.5 mb-4"
-            style={{ backgroundColor: subBg, borderColor }}
-        >
-            <View className="flex-row items-start justify-between mb-3">
-                <View className="flex-1 min-w-0">
+        const cardBorder = accepted
+            ? '#16A34A'
+            : declined
+                ? 'rgba(239,68,68,0.4)'
+                : borderColor;
+
+        const cardBg = accepted
+            ? 'rgba(22,163,74,0.06)'
+            : declined
+                ? 'rgba(148,163,184,0.06)'
+                : 'transparent';
+
+        return (
+            <View
+                className="rounded-lg border px-3 py-2 mb-2"
+                style={{
+                    borderColor: cardBorder,
+                    borderWidth: accepted ? 1.5 : 1,
+                    backgroundColor: cardBg,
+                    opacity: autoDeclined ? 0.5 : 1,
+                }}
+            >
+                <View className="flex-row items-center">
+                    <Text
+                        className="flex-1"
+                        style={{
+                            color: theme.text,
+                            fontFamily: theme.font.semibold,
+                            fontSize: theme.fontSize.sm,
+                        }}
+                        numberOfLines={1}
+                    >
+                        {offer.wholesaler_title || 'Wholesaler'}
+                    </Text>
+                    <View
+                        className="px-2 py-0.5 rounded-md ml-2"
+                        style={{
+                            backgroundColor:
+                                'rgba(251,191,36,0.15)',
+                        }}
+                    >
+                        <Text
+                            className="uppercase tracking-wide"
+                            style={{
+                                color: '#f59e0b',
+                                fontFamily: theme.font.bold,
+                                fontSize: 9,
+                            }}
+                        >
+                            {offer.status_display || offer.status}
+                        </Text>
+                    </View>
+                </View>
+
+                <View className="flex-row items-center flex-wrap gap-x-4 gap-y-1 mt-1.5">
                     <Text
                         style={{
                             color: theme.text,
-                            fontFamily: theme.font.bold,
-                            fontSize: 15,
-                        }}
-                        numberOfLines={2}
-                    >
-                        {line.product_title}
-                    </Text>
-                    <Text
-                        className="mt-0.5"
-                        style={{
-                            color: theme.textDark,
                             fontFamily: theme.font.medium,
                             fontSize: 12,
                         }}
                     >
-                        Requested: {line.requested_quantity} ·{' '}
-                        {line.urgency_display}
-                        {line.confirmed_quantity > 0
-                            ? ` · Confirmed: ${line.confirmed_quantity}`
-                            : ''}
+                        {offer.offered_quantity} unit
+                        {offer.offered_quantity === 1 ? '' : 's'}
                     </Text>
-
-                    {wholesalers.length > 0 ? (
-                        <View className="flex-row flex-wrap gap-1 mt-2 items-center">
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 9,
-                                    marginRight: 4,
-                                }}
-                            >
-                                Sent to
-                            </Text>
-                            {wholesalers.map((w) => (
-                                <View
-                                    key={w.id}
-                                    className="px-2 py-0.5 rounded-md border"
-                                    style={{
-                                        borderColor:
-                                            theme.primary + '40',
-                                        backgroundColor:
-                                            theme.primary + '12',
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            color: theme.primary,
-                                            fontFamily:
-                                                theme.font.semibold,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {w.title}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-                    ) : null}
-                </View>
-                {line.status === 'FULFILLED' ? (
-                    <View
-                        className="px-2 py-0.5 rounded-full"
-                        style={{
-                            backgroundColor:
-                                'rgba(16,185,129,0.15)',
-                        }}
-                    >
+                    {unitPrice > 0 ? (
                         <Text
-                            className="uppercase tracking-widest"
                             style={{
-                                color: '#10b981',
+                                color: theme.primary,
                                 fontFamily: theme.font.bold,
-                                fontSize: 10,
+                                fontSize: 12,
                             }}
                         >
-                            Fulfilled
+                            {formatMoney(unitPrice)} / unit
                         </Text>
-                    </View>
-                ) : null}
-            </View>
-
-            {!hasOffers ? (
-                <View
-                    className="rounded-xl px-3 py-3 items-center"
-                    style={{
-                        backgroundColor: isDarkMode
-                            ? '#1e293b'
-                            : '#e2e8f0',
-                    }}
-                >
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: theme.fontSize.sm,
-                        }}
-                    >
-                        No offers received yet
-                    </Text>
+                    ) : null}
+                    {total > 0 ? (
+                        <Text
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.medium,
+                                fontSize: 11,
+                            }}
+                        >
+                            Total {formatMoney(total)}
+                        </Text>
+                    ) : null}
+                    {offer.batch ? (
+                        <Text
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.medium,
+                                fontSize: 11,
+                            }}
+                        >
+                            Batch {offer.batch}
+                        </Text>
+                    ) : null}
+                    {offer.expiry_date ? (
+                        <Text
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.medium,
+                                fontSize: 11,
+                            }}
+                        >
+                            Exp {formatDate(offer.expiry_date)}
+                        </Text>
+                    ) : null}
                 </View>
-            ) : (
-                line.offers.map((offer) => (
-                    <OfferBlock
-                        key={offer.id}
-                        offer={offer}
-                        decision={
-                            lineState?.decisions[offer.id] ??
-                            null
-                        }
-                        note={lineState?.notes[offer.id] ?? ''}
-                        onSetDecision={(d) =>
-                            onSetDecision(
-                                line.id,
-                                offer.id,
-                                d
-                            )
-                        }
-                        onSetNote={(n) =>
-                            onSetNote(line.id, offer.id, n)
-                        }
-                    />
-                ))
-            )}
-        </View>
-    );
-}
 
-/* =========================================================
- * Offer block
- * ======================================================= */
-
-function OfferBlock({
-    offer,
-    decision,
-    note,
-    onSetDecision,
-    onSetNote,
-}: {
-    offer: ProductRequestOffer;
-    decision: Decision;
-    note: string;
-    onSetDecision: (d: Decision) => void;
-    onSetNote: (n: string) => void;
-}) {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-
-    const isConfirmed = decision === 'confirm';
-    const isDeclined = decision === 'decline';
-    const isPending = decision === null;
-    const isWithdrawn = offer.status === 'WITHDRAWN';
-    const isFulfilled = offer.status === 'FULFILLED';
-    const isAlreadyDecided =
-        isFulfilled ||
-        offer.status === 'DECLINED_BY_RETAILER';
-
-    const cardBorder = isConfirmed
-        ? theme.primary
-        : isDeclined
-            ? '#ef4444'
-            : borderColor;
-
-    const cardBg = isDarkMode ? '#0f172a' : '#f8fafc';
-
-    return (
-        <View
-            className="rounded-xl border p-3 mb-2"
-            style={{
-                backgroundColor: cardBg,
-                borderColor: cardBorder,
-                borderWidth:
-                    isConfirmed || isDeclined ? 1.5 : 1,
-                opacity:
-                    isWithdrawn || isAlreadyDecided ? 0.6 : 1,
-            }}
-        >
-            <View className="flex-row items-center justify-between mb-2">
-                <View className="flex-1 min-w-0">
+                {offer.response_note?.trim() ? (
                     <Text
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                            fontSize: 14,
-                        }}
-                        numberOfLines={1}
-                    >
-                        {offer.wholesaler_title ||
-                            'Unknown wholesaler'}
-                    </Text>
-                    <Text
-                        className="mt-0.5"
+                        className="mt-1"
                         style={{
                             color: theme.textDark,
                             fontFamily: theme.font.medium,
                             fontSize: 11,
                         }}
-                        numberOfLines={1}
                     >
-                        {offer.wholesaler_receipt_title || ''}
+                        {offer.response_note}
                     </Text>
-                </View>
+                ) : null}
 
-                {isFulfilled ? (
-                    <View
-                        className="px-1.5 py-0.5 rounded"
-                        style={{
-                            backgroundColor:
-                                'rgba(16,185,129,0.15)',
-                        }}
-                    >
+                {/* actions */}
+                <View className="flex-row items-center gap-2 mt-2">
+                    {autoDeclined ? (
                         <Text
-                            className="uppercase tracking-wide"
-                            style={{
-                                color: '#10b981',
-                                fontFamily: theme.font.bold,
-                                fontSize: 9,
-                            }}
-                        >
-                            Fulfilled
-                        </Text>
-                    </View>
-                ) : isWithdrawn ? (
-                    <View
-                        className="px-1.5 py-0.5 rounded"
-                        style={{
-                            backgroundColor:
-                                'rgba(239,68,68,0.15)',
-                        }}
-                    >
-                        <Text
-                            className="uppercase tracking-wide"
-                            style={{
-                                color: '#ef4444',
-                                fontFamily: theme.font.bold,
-                                fontSize: 9,
-                            }}
-                        >
-                            Withdrawn
-                        </Text>
-                    </View>
-                ) : offer.status ===
-                    'DECLINED_BY_RETAILER' ? (
-                    <View
-                        className="px-1.5 py-0.5 rounded"
-                        style={{
-                            backgroundColor:
-                                'rgba(148,163,184,0.15)',
-                        }}
-                    >
-                        <Text
-                            className="uppercase tracking-wide"
                             style={{
                                 color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                                fontSize: 9,
-                            }}
-                        >
-                            Declined
-                        </Text>
-                    </View>
-                ) : null}
-            </View>
-
-            <View className="flex-row flex-wrap gap-1.5 mb-2">
-                <MiniBadge
-                    label={`${offer.offered_quantity} units`}
-                    tone="default"
-                />
-                {offer.offered_unit_price ? (
-                    <MiniBadge
-                        label={`KES ${Number(
-                            offer.offered_unit_price
-                        ).toLocaleString(undefined, {
-                            maximumFractionDigits: 2,
-                        })}`}
-                        tone="success"
-                    />
-                ) : null}
-                {offer.batch ? (
-                    <MiniBadge label={`Batch ${offer.batch}`} />
-                ) : null}
-                {offer.expiry_date ? (
-                    <MiniBadge
-                        label={`Exp ${offer.expiry_date}`}
-                    />
-                ) : null}
-                {offer.is_placement ? (
-                    <MiniBadge
-                        label="Consignment"
-                        tone="warning"
-                    />
-                ) : null}
-            </View>
-
-            {offer.response_note ? (
-                <Text
-                    className="text-[11px] mt-1 mb-2"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.medium,
-                    }}
-                >
-                    {offer.response_note}
-                </Text>
-            ) : null}
-
-            {!isAlreadyDecided && !isWithdrawn ? (
-                <>
-                    <View className="flex-row gap-2 mt-2">
-                        <Pressable
-                            onPress={() =>
-                                onSetDecision(
-                                    isConfirmed
-                                        ? null
-                                        : 'confirm'
-                                )
-                            }
-                            className="flex-1 py-2 rounded-lg items-center"
-                            style={{
-                                backgroundColor: isConfirmed
-                                    ? theme.primary
-                                    : 'transparent',
-                                borderWidth: 1,
-                                borderColor: theme.primary,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide text-[11px]"
-                                style={{
-                                    color: isConfirmed
-                                        ? '#ffffff'
-                                        : theme.primary,
-                                    fontFamily: theme.font.bold,
-                                }}
-                            >
-                                {isConfirmed
-                                    ? 'Confirmed'
-                                    : 'Confirm'}
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            onPress={() =>
-                                onSetDecision(
-                                    isDeclined
-                                        ? null
-                                        : 'decline'
-                                )
-                            }
-                            className="flex-1 py-2 rounded-lg items-center"
-                            style={{
-                                backgroundColor: isDeclined
-                                    ? '#ef4444'
-                                    : 'transparent',
-                                borderWidth: 1,
-                                borderColor: '#ef4444',
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide text-[11px]"
-                                style={{
-                                    color: isDeclined
-                                        ? '#ffffff'
-                                        : '#ef4444',
-                                    fontFamily: theme.font.bold,
-                                }}
-                            >
-                                {isDeclined
-                                    ? 'Declined'
-                                    : 'Decline'}
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {!isPending ? (
-                        <TextInput
-                            value={note}
-                            onChangeText={onSetNote}
-                            placeholder={
-                                isConfirmed
-                                    ? 'Confirm note (optional)'
-                                    : 'Reason for declining (optional)'
-                            }
-                            placeholderTextColor="#94a3b8"
-                            className="h-9 rounded-lg border px-3 mt-2"
-                            style={{
-                                borderColor,
-                                color: theme.text,
                                 fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.xs,
+                                fontSize: 10,
+                                fontStyle: 'italic',
                             }}
-                        />
-                    ) : null}
-                </>
-            ) : null}
-        </View>
-    );
-}
-
-/* =========================================================
- * Mini badge
- * ======================================================= */
-
-function MiniBadge({
-    label,
-    tone = 'default',
-}: {
-    label: string;
-    tone?: 'default' | 'success' | 'warning';
-}) {
-    const { theme, isDarkMode } = useAuth();
-
-    const bg =
-        tone === 'success'
-            ? 'rgba(16,185,129,0.15)'
-            : tone === 'warning'
-                ? 'rgba(251,191,36,0.15)'
-                : isDarkMode
-                    ? '#0f172a'
-                    : '#f1f5f9';
-
-    const border =
-        tone === 'success'
-            ? 'rgba(16,185,129,0.3)'
-            : tone === 'warning'
-                ? 'rgba(251,191,36,0.3)'
-                : isDarkMode
-                    ? '#334155'
-                    : '#e2e8f0';
-
-    const color =
-        tone === 'success'
-            ? '#10b981'
-            : tone === 'warning'
-                ? '#f59e0b'
-                : theme.textDark;
-
-    return (
-        <View
-            className="px-2 py-0.5 rounded-md border"
-            style={{ backgroundColor: bg, borderColor: border }}
-        >
-            <Text
-                className="uppercase tracking-wide"
-                style={{
-                    color,
-                    fontFamily: theme.font.bold,
-                    fontSize: 10,
-                }}
-            >
-                {label}
-            </Text>
-        </View>
-    );
-}
+                        >
+                            Will be declined automatically
+                        </Text>
+                    ) : accepted ? (
+                        <>
+                            <View
+                                className="px-2 py-1 rounded-md"
+                                style={{
+                                    backgroundColor:
+                                        'rgba(22,163,74,0.15)',
+                                }}
+                            >
+                                <Text
+                                    className="uppercase tracking-wide"
+                                    style={{
+                                        color: '#16A34A',
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    Accepted
+                                </Text>
+                            </View>
+                            <Pressable
+                                onPress={onDecline}
+                                className="px-2.5 py-1 rounded-md border"
+                                style={{ borderColor }}
+                            >
+                                <Text
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    Undo
+                                </Text>
+                            </Pressable>
+                        </>
+                    ) : declined ? (
+                        <>
+                            <View
+                                className="px-2 py-1 rounded-md"
+                                style={{
+                                    backgroundColor:
+                                        'rgba(239,68,68,0.12)',
+                                }}
+                            >
+                                <Text
+                                    className="uppercase tracking-wide"
+                                    style={{
+                                        color: '#DC2626',
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    Declined
+                                </Text>
+                            </View>
+                            <Pressable
+                                onPress={onUndoDecline}
+                                className="px-2.5 py-1 rounded-md border"
+                                style={{ borderColor }}
+                            >
+                                <Text
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    Undo
+                                </Text>
+                            </Pressable>
+                        </>
+                    ) : (
+                        <>
+                            <Pressable
+                                onPress={onAccept}
+                                className="px-3 py-1.5 rounded-lg flex-1 items-center"
+                                style={{
+                                    backgroundColor: '#16A34A',
+                                }}
+                            >
+                                <Text
+                                    className="uppercase tracking-wide"
+                                    style={{
+                                        color: '#FFFFFF',
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 11,
+                                    }}
+                                >
+                                    Accept
+                                </Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={onDecline}
+                                className="px-3 py-1.5 rounded-lg flex-1 items-center border"
+                                style={{
+                                    borderColor:
+                                        'rgba(220,38,38,0.5)',
+                                }}
+                            >
+                                <Text
+                                    className="uppercase tracking-wide"
+                                    style={{
+                                        color: '#DC2626',
+                                        fontFamily:
+                                            theme.font.bold,
+                                        fontSize: 11,
+                                    }}
+                                >
+                                    Decline
+                                </Text>
+                            </Pressable>
+                        </>
+                    )}
+                </View>
+            </View>
+        );
+    };

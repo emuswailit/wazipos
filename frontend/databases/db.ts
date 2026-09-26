@@ -15,8 +15,10 @@ import {
     ProductRequestSummary,
     RetailerForecastNormalized,
     RetailerIndent,
+    RetailerOrder,
     RetailerOutOfStockNormalized,
     RetailerReceipt,
+    WholesalerReceipt,
 } from './types';
 
 const isWeb = Platform.OS === 'web';
@@ -54,6 +56,9 @@ class WaziposLocalIndexedDB extends Dexie {
 
     retailerForecasts!: Table<RetailerForecastNormalized, number>;
     retailerProductRequests!: Table<ProductRequestSummary, number>;
+
+    wholesalerReceipts!: Table<WholesalerReceipt, number>;
+    retailerOrders!: Table<RetailerOrder, number>;
 
     constructor() {
         super('WaziposInventoryDB');
@@ -166,10 +171,61 @@ class WaziposLocalIndexedDB extends Dexie {
                     '++id, remote_id, title, entity_type, phone, town, updated',
             })
             .upgrade(async (tx) => {
-                // v17 stored the domain id under `id` and the PK under
-                // `_dexie_id`. Nothing to migrate — clear and refill.
                 await tx.table('retailerProductRequests').clear();
             });
+
+        // v19: adds wholesalerReceipts. `++id` is the Dexie PK;
+        // `remote_id` is the server UUID, indexed for lookups.
+        this.version(19).stores({
+            customerOrders:
+                '++id, remote_id, remote_key, draft_id, synced, status, order_number, payment_status, created, updated',
+            lineItems: '++id, selectedProduct',
+            retailerReceipts:
+                '++id, remote_id, remote_key, entity, product, bar_code, is_active, expiry_date, updated',
+            retailerIndents:
+                '++id, remote_id, indent_number, entity, is_open, created, updated',
+            retailerOutOfStocks:
+                '++id, remote_id, entity, product, is_ordered, is_special_order, created, updated',
+            retailerForecasts:
+                '++id, remote_id, product_title, has_offers, has_campaigns, created, run_date',
+            retailerProductRequests:
+                '++id, remote_id, request_number, status, urgency, is_pending, draft_id, created, updated',
+            wholesalerReceipts:
+                '++id, remote_id, remote_key, product, entity, bar_code, batch, is_active, expiry_date, updated',
+            paymentMethods: 'id, title',
+            products:
+                '++id, remote_id, remote_key, bar_code, category, manufacturer, active, updated',
+            entities:
+                '++id, remote_id, title, entity_type, phone, town, updated',
+        });
+
+        // v20: adds retailerOrders.
+        // `++id` is the Dexie PK; `remote_id` is the server UUID;
+        // `draft_id` is the offline-first idempotency key.
+        this.version(20).stores({
+            customerOrders:
+                '++id, remote_id, remote_key, draft_id, synced, status, order_number, payment_status, created, updated',
+            lineItems: '++id, selectedProduct',
+            retailerReceipts:
+                '++id, remote_id, remote_key, entity, product, bar_code, is_active, expiry_date, updated',
+            retailerIndents:
+                '++id, remote_id, indent_number, entity, is_open, created, updated',
+            retailerOutOfStocks:
+                '++id, remote_id, entity, product, is_ordered, is_special_order, created, updated',
+            retailerForecasts:
+                '++id, remote_id, product_title, has_offers, has_campaigns, created, run_date',
+            retailerProductRequests:
+                '++id, remote_id, request_number, status, urgency, is_pending, draft_id, created, updated',
+            wholesalerReceipts:
+                '++id, remote_id, remote_key, product, entity, bar_code, batch, is_active, expiry_date, updated',
+            retailerOrders:
+                '++id, remote_id, draft_id, retailer, wholesaler, status, payment_method, order_origin, reference_number, synced, created, updated',
+            paymentMethods: 'id, title',
+            products:
+                '++id, remote_id, remote_key, bar_code, category, manufacturer, active, updated',
+            entities:
+                '++id, remote_id, title, entity_type, phone, town, updated',
+        });
     }
 }
 
@@ -206,6 +262,9 @@ class NoopDB {
 
     retailerForecasts = makeNoopTable();
     retailerProductRequests = makeNoopTable();
+
+    wholesalerReceipts = makeNoopTable();
+    retailerOrders = makeNoopTable();
 
     paymentMethods = makeNoopTable();
     products = makeNoopTable();
@@ -280,9 +339,14 @@ const ASYNC_STORAGE_OUT_OF_STOCKS_KEY =
 const ASYNC_STORAGE_FORECASTS_KEY =
     '@wazipos:retailer_forecasts_list';
 
-// Unified: drafts + submitted requests live under one key.
 const ASYNC_STORAGE_PRODUCT_REQUESTS_KEY =
     '@wazipos:retailer_product_requests_list';
+
+const ASYNC_STORAGE_WHOLESALER_RECEIPTS_KEY =
+    '@wazipos:wholesaler_receipts_list';
+
+const ASYNC_STORAGE_RETAILER_ORDERS_KEY =
+    '@wazipos:retailer_orders_list';
 
 // Pending queues (not mirrored to Dexie — write-only outbound).
 const ASYNC_STORAGE_PENDING_CREATES_KEY =
@@ -333,7 +397,11 @@ async function readJson<T>(
 }
 
 async function mirrorToDexie<T>(
-    tableName: 'retailerForecasts' | 'retailerProductRequests',
+    tableName:
+        | 'retailerForecasts'
+        | 'retailerProductRequests'
+        | 'wholesalerReceipts'
+        | 'retailerOrders',
     rows: T[]
 ): Promise<void> {
     if (!dbInstance?.[tableName]) return;
@@ -345,7 +413,23 @@ async function mirrorToDexie<T>(
             async () => {
                 await dbInstance[tableName].clear();
                 if (rows.length > 0) {
-                    await dbInstance[tableName].bulkPut(rows);
+                    // Strip undefined `id` so Dexie assigns ++id.
+                    // Keep set ids so rows update in place.
+                    const sanitized = (rows as any[]).map(
+                        (row) => {
+                            if (
+                                row.id === undefined ||
+                                row.id === null
+                            ) {
+                                const { id, ...rest } = row;
+                                return rest;
+                            }
+                            return row;
+                        }
+                    );
+                    await dbInstance[tableName].bulkPut(
+                        sanitized
+                    );
                 }
             }
         );
@@ -461,11 +545,6 @@ export const db = {
 
     /* ---------------- Product requests (unified) ---------------- */
 
-    /**
-     * Single write path for BOTH drafts (is_pending: true) and
-     * submitted requests (is_pending: false). Writes to AsyncStorage
-     * and mirrors to the Dexie retailerProductRequests table.
-     */
     saveProductRequests: async (
         requests: ProductRequestSummary[]
     ): Promise<void> => {
@@ -484,6 +563,50 @@ export const db = {
         return readJson<ProductRequestSummary>(
             ASYNC_STORAGE_PRODUCT_REQUESTS_KEY,
             'product requests'
+        );
+    },
+
+    /* ---------------- Wholesaler receipts ---------------- */
+
+    saveWholesalerReceipts: async (
+        receipts: WholesalerReceipt[]
+    ): Promise<void> => {
+        await writeJson(
+            ASYNC_STORAGE_WHOLESALER_RECEIPTS_KEY,
+            receipts,
+            'wholesaler receipts'
+        );
+
+        await mirrorToDexie('wholesalerReceipts', receipts);
+    },
+
+    getWholesalerReceipts: async (): Promise<
+        WholesalerReceipt[]
+    > => {
+        return readJson<WholesalerReceipt>(
+            ASYNC_STORAGE_WHOLESALER_RECEIPTS_KEY,
+            'wholesaler receipts'
+        );
+    },
+
+    /* ---------------- Retailer orders ---------------- */
+
+    saveRetailerOrders: async (
+        orders: RetailerOrder[]
+    ): Promise<void> => {
+        await writeJson(
+            ASYNC_STORAGE_RETAILER_ORDERS_KEY,
+            orders,
+            'retailer orders'
+        );
+
+        await mirrorToDexie('retailerOrders', orders);
+    },
+
+    getRetailerOrders: async (): Promise<RetailerOrder[]> => {
+        return readJson<RetailerOrder>(
+            ASYNC_STORAGE_RETAILER_ORDERS_KEY,
+            'retailer orders'
         );
     },
 
@@ -529,3 +652,67 @@ export const db = {
         );
     },
 };
+
+/* =========================================================
+ * Full local wipe — used on logout
+ *
+ * Clears:
+ *   - AsyncStorage (all keys)
+ *   - localStorage (web)
+ *   - Dexie database (web) — the entire store is dropped
+ *     and will be recreated on next open
+ *
+ * Note: SecureStore items (native) are NOT cleared here —
+ * AuthContext removes the token explicitly before calling
+ * this function.
+ * ======================================================= */
+
+export async function wipeLocalData(): Promise<void> {
+    const tasks: Promise<any>[] = [];
+
+    /* -------- AsyncStorage (native + web shim) -------- */
+    tasks.push(
+        AsyncStorage.clear().catch((err) =>
+            console.warn(
+                '[wipeLocalData] AsyncStorage.clear failed:',
+                err
+            )
+        )
+    );
+
+    /* -------- localStorage (web only) -------- */
+    if (isWeb && typeof window !== 'undefined') {
+        try {
+            window.localStorage.clear();
+        } catch (err) {
+            console.warn(
+                '[wipeLocalData] localStorage.clear failed:',
+                err
+            );
+        }
+    }
+
+    /* -------- Dexie (web only) -------- */
+    if (
+        IDB_AVAILABLE &&
+        dbInstance &&
+        typeof dbInstance.delete === 'function'
+    ) {
+        tasks.push(
+            dbInstance.delete().catch((err: any) => {
+                console.warn(
+                    '[wipeLocalData] Dexie delete failed:',
+                    err
+                );
+            })
+        );
+    }
+
+    await Promise.allSettled(tasks);
+
+    if (__DEV__) {
+        console.log(
+            '[wipeLocalData] local stores cleared'
+        );
+    }
+}

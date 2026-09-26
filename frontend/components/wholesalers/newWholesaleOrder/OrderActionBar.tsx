@@ -1,4 +1,11 @@
-import { Text, TouchableOpacity, View } from 'react-native';
+// components/wholesalers/newWholesaleOrder/OrderActionBar.tsx
+
+import { useAuth } from '@/context/AuthContext';
+import {
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface OrderActionBarProps {
     theme: any;
@@ -9,15 +16,49 @@ interface OrderActionBarProps {
 export default function OrderActionBar({
     theme,
     onScanTrigger,
-    onAddRowTrigger
+    onAddRowTrigger,
 }: OrderActionBarProps) {
+    const { isDarkMode } = useAuth();
+
+    const borderColor = isDarkMode ? '#334155' : '#cbd5e1';
+    const cardBg = isDarkMode ? '#0f172a' : '#ffffff';
+
     return (
-        <View className="flex-row items-center justify-start gap-3 mt-1 mb-6 w-full max-w-md">
-            <TouchableOpacity className="flex-1 py-3 px-4 rounded-xl flex-row items-center justify-center border shadow-sm bg-white" style={{ borderColor: theme.primary }} onPress={onScanTrigger}>
-                <Text style={{ color: theme.primary }} className="text-sm font-bold">📷 Scan Item</Text>
+        <View className="w-full my-3 flex-row items-stretch gap-3">
+            {/* -------- Scan Item -------- */}
+            <TouchableOpacity
+                onPress={onScanTrigger}
+                activeOpacity={0.8}
+                className="flex-1 flex-row items-center justify-center gap-x-2 rounded-xl border h-12"
+                style={{
+                    borderColor: theme.primary,
+                    backgroundColor: cardBg,
+                }}
+            >
+                <Text
+                    className="text-sm font-bold"
+                    style={{
+                        color: theme.primary,
+                        fontFamily: theme.font?.bold,
+                    }}
+                >
+                    📷 Scan Item
+                </Text>
             </TouchableOpacity>
-            <TouchableOpacity className="flex-1 py-3 px-4 rounded-xl flex-row items-center justify-center shadow-sm" style={{ backgroundColor: theme.primary }} onPress={onAddRowTrigger}>
-                <Text className="text-white text-sm font-bold">+ Add Item Row</Text>
+
+            {/* -------- Add Item Row -------- */}
+            <TouchableOpacity
+                onPress={onAddRowTrigger}
+                activeOpacity={0.8}
+                className="flex-1 flex-row items-center justify-center rounded-xl h-12"
+                style={{ backgroundColor: theme.primary }}
+            >
+                <Text
+                    className="text-sm font-bold text-white"
+                    style={{ fontFamily: theme.font?.bold }}
+                >
+                    + Add Item Row
+                </Text>
             </TouchableOpacity>
         </View>
     );
