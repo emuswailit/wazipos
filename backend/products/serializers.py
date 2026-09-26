@@ -283,6 +283,7 @@ class ProductsSerializer(serializers.ModelSerializer):
     long_title = serializers.SerializerMethodField(read_only=True)
     category_details = serializers.SerializerMethodField(read_only=True)
     category_title = serializers.SerializerMethodField(read_only=True)
+    sub_category_details = serializers.SerializerMethodField(read_only=True)
     preparation_title = serializers.SerializerMethodField(read_only=True)
     preparation_details = serializers.SerializerMethodField(read_only=True)
     long_preparation_title = serializers.SerializerMethodField(read_only=True)
@@ -320,6 +321,7 @@ class ProductsSerializer(serializers.ModelSerializer):
             "formulation_title",
             "category_details",
             "category_title",
+            "sub_category_details",
             "origin_country",
             "active",
             "allowed_entities",
@@ -352,7 +354,10 @@ class ProductsSerializer(serializers.ModelSerializer):
         try:
             return model.objects.filter(pk=pk).first()
         except Exception as e:
-            create_log("error",f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
+            create_log(
+                "error",
+                f"[_safe_fk] {model.__name__} pk={pk} failed: {e}",
+            )
             return None
 
     def _prep(self, obj):
@@ -458,6 +463,14 @@ class ProductsSerializer(serializers.ModelSerializer):
             return None
         return CategoriesSerializer(cat, context=self.context).data
 
+    def get_sub_category_details(self, obj):
+        sub = self._safe_fk(
+            SubCategories,
+            getattr(obj, "sub_category_id", None),
+        )
+        if sub is None:
+            return None
+        return SubCategoriesSerializer(sub, context=self.context).data
 
     # ---------------------------------------------------------
     # Manufacturer / origin

@@ -430,7 +430,6 @@ class PreparationSerializer(serializers.ModelSerializer):
     long_title = serializers.SerializerMethodField(read_only=True)
     key = serializers.SerializerMethodField(read_only=True)
 
-    # Optional: make generics non-required on write
     generics = serializers.PrimaryKeyRelatedField(
         queryset=models.Generics.objects.all(),
         many=True,
@@ -451,7 +450,7 @@ class PreparationSerializer(serializers.ModelSerializer):
             "key",
             "gen_array",
             "created",
-            "updated"
+            "updated",
         )
         read_only_fields = ("owner", "gen_array")
         validators = [
@@ -460,6 +459,29 @@ class PreparationSerializer(serializers.ModelSerializer):
                 fields=["title"],
             )
         ]
+
+    # ---------------------------------------------------------
+    # FK helpers
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def _safe_formulation(obj):
+        """
+        Resolve obj.formulation without triggering the FK
+        descriptor. Returns None if the FK is empty or points at
+        a deleted row.
+        """
+        fid = getattr(obj, "formulation_id", None)
+        if not fid:
+            return None
+        try:
+            return models.Formulation.objects.filter(pk=fid).first()
+        except Exception:
+            return None
+
+    # ---------------------------------------------------------
+    # Fields
+    # ---------------------------------------------------------
 
     def get_gen_array(self, obj):
         """Full nested generics objects for read-heavy consumers."""
@@ -478,12 +500,14 @@ class PreparationSerializer(serializers.ModelSerializer):
         return ", ".join(g.title for g in generics if g.title)
 
     def get_formulation_title(self, obj):
-        return f"{obj.formulation.title}" if obj.formulation else ""
+        f = self._safe_formulation(obj)
+        return f.title if f else ""
 
     def get_long_title(self, obj):
-        if not obj.formulation:
+        f = self._safe_formulation(obj)
+        if f is None:
             return obj.title or ""
-        return f"{obj.title}-{obj.formulation.title}"
+        return f"{obj.title}-{f.title}"
 
     def get_key(self, obj):
         return obj.id
