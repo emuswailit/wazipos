@@ -607,6 +607,29 @@ def customerOrdersStaffAPIView(request):
 
         if len(errors)>0:
             return custom_errors_response(1,"Indent item not created",errors)
+    elif request.data["action"] == "UpdateRetailerIndentItem":
+        errors, retailer_indent_item = retailer_utils.update_retailer_indent_item(
+            request.data, request.user
+        )
+        if retailer_indent_item:
+            serializer = serializers.RetailerIndentItemsSerializer(
+                retailer_indent_item,
+                many=False,
+                context={"request": request},
+            )
+            return custom_success_message(
+                0,
+                "Retailer indent item updated successfully",
+                serializer.data,
+                "retailer_indent_item",
+            )
+
+        if len(errors) > 0:
+            return custom_errors_response(
+                1,
+                "Indent item not updated",
+                errors,
+            )
     elif request.data["action"] == "RemoveRetailerIndentItem":
         errors, retailer_indent_items = retailer_utils.remove_retailer_indent_item(
             request.data, request.user

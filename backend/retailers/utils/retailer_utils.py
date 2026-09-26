@@ -1945,6 +1945,150 @@ def update_out_of_stock_item(data, user):
     return [], out_of_stock_item
 
 
+
+def update_retailer_indent_item(data, user):
+    """
+    Update a single RetailerIndentItem's editable fields.
+
+    `data` shape (mirrors the create payload):
+        {
+            "indent_id": "<retailer indent id>",
+            "item_id":   "<retailer indent item id>",
+            "params": {
+                "required_quantity":        20,
+                "recommended_retail_price": "150.00" | null,
+                "markup_percentage_used":   "30.00"  | null,
+            }
+        }
+
+    Returns (errors, instance). On success `errors` is an empty
+    list and `instance` is the saved RetailerIndentItem; on
+    failure `errors` holds human-readable strings and
+    `instance` is None.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    errors = []
+
+    indent_id = data.get("indent_id")
+    item_id = data.get("item_id")
+    params = data.get("params", {}) or {}
+
+    if not indent_id:
+        errors.append("indent_id is required")
+    if not item_id:
+        errors.append("item_id is required")
+    if errors:
+        return errors, None
+
+    entity = getattr(user, "entity", None)
+    if not entity:
+        errors.append("User has no entity")
+        return errors, None
+
+    item = (
+        RetailerIndentItem.objects
+        .filter(
+            id=item_id,
+            retailer_indent_id=indent_id,
+            entity=entity,
+        )
+        .select_related(
+            "retailer_indent",
+            "wholesale_receipt",
+            "wholesaler_price_discount",
+            "wholesaler_quantity_discount",
+        )
+        .first()
+    )
+    if item is None:
+        errors.append("Indent item not found")
+        return errors, None
+
+    indent = item.retailer_indent
+    if indent is None:
+        errors.append("Indent item has no parent indent")
+        return errors, None
+
+    if indent.is_open != "true":
+        errors.append(
+            "Cannot edit items on a closed indent"
+        )
+        return errors, None
+
+    # ---- required_quantity ----
+    if "required_quantity" in params:
+        try:
+            qty = int(params["required_quantity"] or 0)
+        except (TypeError, ValueError):
+            errors.append(
+                "required_quantity must be an integer"
+            )
+            qty = None
+
+        if qty is not None:
+            if qty < 0:
+                errors.append(
+                    "required_quantity must be >= 0"
+                )
+            else:
+                item.required_quantity = qty
+
+    # ---- recommended_retail_price ----
+    if "recommended_retail_price" in params:
+        raw = params["recommended_retail_price"]
+        if raw in (None, "", "0.00", "0", 0):
+            item.recommended_retail_price = None
+        else:
+            try:
+                item.recommended_retail_price = Decimal(
+                    str(raw)
+                )
+            except (
+                TypeError,
+                ValueError,
+                InvalidOperation,
+            ):
+                errors.append(
+                    "recommended_retail_price must be a number"
+                )
+
+    # ---- markup_percentage_used ----
+    # This field is produced by item.recalculate(); writing it
+    # directly gets overwritten by the auto-recalc inside
+    # item.save(). Pass it via markup_override instead.
+    markup_override = None
+    if "markup_percentage_used" in params:
+        raw = params["markup_percentage_used"]
+        if raw not in (None, "", "0.00", "0", 0):
+            try:
+                markup_override = Decimal(str(raw))
+            except (
+                TypeError,
+                ValueError,
+                InvalidOperation,
+            ):
+                errors.append(
+                    "markup_percentage_used must be a number"
+                )
+
+    if errors:
+        return errors, None
+
+    # ---- persist ----
+    try:
+        if markup_override is not None:
+            item.recalculate(markup_override=markup_override)
+            item.save(recalculate=False)
+        else:
+            item.save()
+    except Exception as e:
+        errors.append(f"Save failed: {e}")
+        return errors, None
+
+    return [], item
+
+
 def update_wholesaler_stock(retailer_order):
     retailer_order_items = RetailerOrderItems.objects.filter(
         retailer_order=retailer_order,
