@@ -62,6 +62,23 @@ logger = logging.getLogger(__name__)
 
 GROUP_NAME = "retailer-indents"
 
+import threading
+from contextlib import contextmanager
+
+_silenced = threading.local()
+
+def _is_silenced() -> bool:
+    return getattr(_silenced, "on", False)
+
+@contextmanager
+def silence_indent_signals():
+    previous = getattr(_silenced, "on", False)
+    _silenced.on = True
+    try:
+        yield
+    finally:
+        _silenced.on = previous
+
 
 def _do_broadcast_indents_changed():
     """Send the group event. Runs after COMMIT."""
@@ -100,6 +117,8 @@ def _broadcast_indents_changed():
     outside an atomic block: inside, it defers until COMMIT;
     outside, it runs immediately.
     """
+    if _is_silenced():
+        return
     transaction.on_commit(_do_broadcast_indents_changed)
 
 
