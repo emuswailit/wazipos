@@ -282,7 +282,6 @@ class ProductsSerializer(serializers.ModelSerializer):
     long_title = serializers.SerializerMethodField(read_only=True)
     category_details = serializers.SerializerMethodField(read_only=True)
     category_title = serializers.SerializerMethodField(read_only=True)
-    sub_category_details = serializers.SerializerMethodField(read_only=True)
     preparation_title = serializers.SerializerMethodField(read_only=True)
     preparation_details = serializers.SerializerMethodField(read_only=True)
     long_preparation_title = serializers.SerializerMethodField(read_only=True)
@@ -320,7 +319,6 @@ class ProductsSerializer(serializers.ModelSerializer):
             "formulation_title",
             "category_details",
             "category_title",
-            "sub_category_details",
             "origin_country",
             "active",
             "allowed_entities",
