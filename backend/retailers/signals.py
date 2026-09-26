@@ -46,26 +46,61 @@ def on_retailer_receipt_deleted(sender, instance, **kwargs):
 
 # apps/retailers/signals.py
 
+# retailers/signals.py
+
+import logging
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.db import transaction
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
 
 from .models import RetailerIndent, RetailerIndentItem
+
+logger = logging.getLogger(__name__)
 
 GROUP_NAME = "retailer-indents"
 
 
-def _broadcast_indents_changed():
+def _do_broadcast_indents_changed():
+    """Send the group event. Runs after COMMIT."""
     layer = get_channel_layer()
     if layer is None:
+        logger.warning(
+            "indent broadcast skipped — no channel layer configured"
+        )
         return
-    async_to_sync(layer.group_send)(
-        GROUP_NAME,
-        {
-            "type": "send.retailer.indents",
-        },
-    )
+
+    try:
+        async_to_sync(layer.group_send)(
+            GROUP_NAME,
+            {
+                "type": "send.retailer.indents",
+            },
+        )
+    except Exception:
+        # A failing WS push must never fail the request that
+        # triggered it.
+        logger.exception("indent broadcast failed")
+
+
+def _broadcast_indents_changed():
+    """
+    Queue the broadcast to run once the current transaction
+    commits.
+
+    Without this deferral, `group_send` fires while the write is
+    still inside an open transaction. If the write later rolls
+    back — or if the consumer's `push_snapshot()` queries before
+    COMMIT — the client gets a push describing data that either
+    doesn't exist yet or shouldn't exist at all.
+
+    `transaction.on_commit` behaves correctly both inside and
+    outside an atomic block: inside, it defers until COMMIT;
+    outside, it runs immediately.
+    """
+    transaction.on_commit(_do_broadcast_indents_changed)
 
 
 @receiver(post_save, sender=RetailerIndent)
