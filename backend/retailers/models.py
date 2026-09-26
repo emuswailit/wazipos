@@ -525,15 +525,23 @@ class IndentItemSource(models.TextChoices):
 
 # retailers/models.py — RetailerIndent
 
+# retailers/models.py
+#
+# Only the RetailerIndent class is shown. The rest of the models
+# file (EntityRelatedModel, Users, etc.) is unchanged.
+
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import Q
-           
+
 
 def _q(value):
-    """Quantize a Decimal to 2 places. Assumed already defined in this module."""
+    """
+    Quantize a Decimal to 2 places. Assumed already defined in
+    this module — leave the existing definition in place if so.
+    """
     return Decimal(str(value)).quantize(Decimal("0.01"))
 
 
@@ -556,6 +564,12 @@ class RetailerIndent(EntityRelatedModel):
         DB-level guarantee. Should never fire given the save()
         behaviour, but kept as a safety net against concurrent
         transactions that bypass the application logic.
+
+    Aggregate fields (total_cost, total_revenue, total_profit,
+    included_item_count, over_budget) are maintained by
+    recalculate(), which is triggered automatically on any
+    RetailerIndentItem save/delete by the receivers in
+    retailers/signals.py.
     """
 
     class Meta:
@@ -625,7 +639,7 @@ class RetailerIndent(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.indent_number or '(unsaved)'} · {self.entity.title}"
+        return f"{self.indent_number or '(unsaved)'} · {self.entity_title}"
 
     # ------------------------------------------------------------------
     # Validation
@@ -636,9 +650,9 @@ class RetailerIndent(EntityRelatedModel):
         No-op beyond the base class.
 
         The open-indent invariant is enforced by save() via
-        auto-close, not by raising. Forms and DRF serializers that
-        call full_clean() therefore won't block a save that would
-        legitimately replace an existing open indent.
+        auto-close, not by raising, so full_clean() callers
+        (admin, DRF) don't block a save that legitimately
+        replaces an existing open indent.
         """
         super().clean()
 
@@ -650,26 +664,21 @@ class RetailerIndent(EntityRelatedModel):
         if not self.indent_number:
             self.indent_number = self._generate_indent_number()
 
-        # Invariant: at most one open indent per entity.
+        # Invariant: at most one open indent per entity. When
+        # writing a row that will be open, close every other open
+        # indent for the same entity before writing self.
         #
-        # When writing a row that will be open, close every other
-        # open indent for the same entity *before* super().save().
-        # The partial unique constraint in Meta would otherwise
-        # fire the moment a second open row tried to land.
-        #
-        # The sibling UPDATE and the write of self run in the same
-        # transaction, so external observers see either "the old
-        # indent is open" or "the new indent is open", never both
-        # and never neither.
-        #
-        # `.exclude(pk=self.pk)` is a no-op when pk is None (a fresh
-        # insert), which is exactly what we want: every existing
-        # open sibling gets closed.
+        # `.exclude(pk=self.pk)` is a no-op when pk is None (a
+        # fresh insert), which is exactly what we want: every
+        # existing open sibling gets closed.
         if self.is_open == "true" and self.entity_id:
             with transaction.atomic():
                 (
                     RetailerIndent.objects
-                    .filter(entity_id=self.entity_id, is_open="true")
+                    .filter(
+                        entity_id=self.entity_id,
+                        is_open="true",
+                    )
                     .exclude(pk=self.pk)
                     .update(is_open="false")
                 )
@@ -709,12 +718,25 @@ class RetailerIndent(EntityRelatedModel):
 
     def recalculate(self, save=True):
         """
-        Roll up item-level profit_estimate into header aggregates.
-        Only counts items with a profit_estimate (i.e. priced).
+        Roll up item-level profit into header aggregates.
 
-        Calls super().save() directly — this method never touches
-        is_open, so the close-siblings logic in save() is irrelevant
-        and the extra transactional wrapper would be wasted work.
+        Preference order per item:
+          1. `profit_estimate` dict, if populated (the pricing
+             pipeline's output).
+          2. Top-level item pricing fields:
+                cost    = final_unit_price  or cost_per_unit
+                revenue = sell_per_unit     or final_unit_price
+             multiplied by required_quantity.
+          3. Item is skipped if neither source yields a cost.
+
+        The fallback in (2) covers items added manually (or before
+        the pricing pipeline ran) that would otherwise contribute
+        nothing to the header totals.
+
+        Saves via super().save(update_fields=[...]) so the
+        open-indent check in save() isn't triggered and no extra
+        broadcast is scheduled — the caller already has one in
+        flight.
         """
         items = self.indent_for_item.all()
 
@@ -725,16 +747,47 @@ class RetailerIndent(EntityRelatedModel):
 
         for it in items:
             est = it.profit_estimate or {}
-            cost = est.get("total_cost")
-            revenue = est.get("total_revenue")
-            profit = est.get("total_profit")
 
+            # ---- cost ----
+            cost = est.get("total_cost")
             if cost is None:
-                continue
+                unit = (
+                    getattr(it, "final_unit_price", None)
+                    or getattr(it, "cost_per_unit", None)
+                    or 0
+                )
+                try:
+                    unit_f = float(unit)
+                except (TypeError, ValueError):
+                    unit_f = 0.0
+
+                qty = int(it.required_quantity or 0)
+                if unit_f <= 0 or qty <= 0:
+                    continue
+                cost = unit_f * qty
+
+            # ---- revenue ----
+            revenue = est.get("total_revenue")
+            if revenue is None:
+                sell = (
+                    getattr(it, "sell_per_unit", None)
+                    or getattr(it, "final_unit_price", None)
+                    or cost
+                )
+                try:
+                    sell_f = float(sell)
+                except (TypeError, ValueError):
+                    sell_f = float(cost)
+                revenue = sell_f * int(it.required_quantity or 0)
+
+            # ---- profit ----
+            profit = est.get("total_profit")
+            if profit is None:
+                profit = float(revenue) - float(cost)
 
             total_cost += Decimal(str(cost))
-            total_revenue += Decimal(str(revenue or 0))
-            total_profit += Decimal(str(profit or 0))
+            total_revenue += Decimal(str(revenue))
+            total_profit += Decimal(str(profit))
             included_count += 1
 
         self.total_cost = _q(total_cost)
@@ -745,7 +798,9 @@ class RetailerIndent(EntityRelatedModel):
 
         budget = self.budget_amount
         if budget is not None:
-            self.over_budget = self.total_cost > Decimal(str(budget))
+            self.over_budget = (
+                self.total_cost > Decimal(str(budget))
+            )
         else:
             self.over_budget = False
 
@@ -760,6 +815,9 @@ class RetailerIndent(EntityRelatedModel):
                 "updated",
             ])
 
+
+
+            
 class RetailerIndentItem(EntityRelatedModel):
     """
     One line on a retailer indent.
