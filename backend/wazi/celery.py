@@ -63,7 +63,7 @@ app.conf.beat_schedule = {
     },
     "load_retailer_indents": {
         "task": "retailers.tasks.load_retailer_indents",
-        "schedule": 120.0,
+        "schedule": 60.0,
         "args": None,
     },
     "load_out_of_stocks": {
