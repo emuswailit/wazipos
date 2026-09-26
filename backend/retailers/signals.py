@@ -40,9 +40,7 @@ def _broadcast_inventory_change(entity_id):
 
     async_to_sync(channel_layer.group_send)(
         f"retail-inventory-{entity_id}",
-        {
-            "type": "send_retailer_receipts",
-        },
+        {"type": "send_retailer_receipts"},
     )
 
 
@@ -71,10 +69,6 @@ GROUP_NAME = "retailer-indents"
 
 # ---------------------------------------------------------------------
 # Silence mechanism
-#
-# Used by the recalc receivers so an internal
-# `indent.recalculate()` save doesn't schedule a second broadcast —
-# the item's own post_save already did.
 # ---------------------------------------------------------------------
 
 _silenced = threading.local()
@@ -86,15 +80,6 @@ def _is_silenced() -> bool:
 
 @contextmanager
 def silence_indent_signals():
-    """
-    Suppress indent broadcasts within a `with` block.
-
-    Nests safely: an inner block restores the outer state on exit
-    instead of unconditionally clearing the flag.
-
-        with silence_indent_signals():
-            indent.recalculate()   # no broadcast fired
-    """
     previous = getattr(_silenced, "on", False)
     _silenced.on = True
     try:
@@ -109,8 +94,11 @@ def silence_indent_signals():
 
 def _do_broadcast_indents_changed():
     """Send the group event. Runs after COMMIT."""
+    print(f"[SIGNAL] _do_broadcast_indents_changed firing → group={GROUP_NAME}")
+
     layer = get_channel_layer()
     if layer is None:
+        print("[SIGNAL] no channel layer configured — SKIPPING")
         logger.warning(
             "indent broadcast skipped — no channel layer configured"
         )
@@ -119,32 +107,20 @@ def _do_broadcast_indents_changed():
     try:
         async_to_sync(layer.group_send)(
             GROUP_NAME,
-            {
-                "type": "send.retailer.indents",
-            },
+            {"type": "send.retailer.indents"},
         )
-    except Exception:
-        # A failing WS push must never fail the request that
-        # triggered it.
+        print(f"[SIGNAL] group_send OK → {GROUP_NAME}")
+    except Exception as e:
+        print(f"[SIGNAL] group_send FAILED: {e}")
         logger.exception("indent broadcast failed")
 
 
 def _broadcast_indents_changed():
-    """
-    Queue the broadcast to run once the current transaction
-    commits.
-
-    Without this deferral, `group_send` fires while the write is
-    still inside an open transaction. If the write later rolls
-    back — or if the consumer's `push_snapshot()` queries before
-    COMMIT — the client gets a push describing data that either
-    doesn't exist yet or shouldn't exist at all.
-
-    No-op inside `silence_indent_signals()`.
-    """
     if _is_silenced():
+        print("[SIGNAL] _broadcast_indents_changed — silenced, skipping")
         return
 
+    print("[SIGNAL] scheduling broadcast via transaction.on_commit")
     transaction.on_commit(_do_broadcast_indents_changed)
 
 
@@ -154,34 +130,24 @@ def _broadcast_indents_changed():
 
 @receiver(post_save, sender=RetailerIndent)
 def retailer_indent_saved(sender, instance, created, **kwargs):
+    print(f"[SIGNAL] RetailerIndent post_save — id={instance.id} created={created}")
     _broadcast_indents_changed()
 
 
 @receiver(post_delete, sender=RetailerIndent)
 def retailer_indent_deleted(sender, instance, **kwargs):
+    print(f"[SIGNAL] RetailerIndent post_delete — id={instance.id}")
     _broadcast_indents_changed()
 
 
 # ---------------------------------------------------------------------
 # RetailerIndentItem — broadcast + recalculate
-#
-# Two receivers per event:
-#   1. broadcast   → tells every client to re-fetch
-#   2. recalculate → updates the parent's totals
-#
-# The recalc save is wrapped in silence_indent_signals() so it
-# doesn't schedule a redundant broadcast.
 # ---------------------------------------------------------------------
 
 def _resolve_parent_indent(instance):
-    """
-    Return the parent RetailerIndent, or None if it can't be
-    resolved (e.g. cascade delete where the parent is gone).
-    """
     indent = getattr(instance, "retailer_indent", None)
     if indent is not None:
         return indent
-
     try:
         return RetailerIndent.objects.get(
             pk=instance.retailer_indent_id
@@ -196,6 +162,7 @@ def _resolve_parent_indent(instance):
 def retailer_indent_item_saved_broadcast(
     sender, instance, created, **kwargs
 ):
+    print(f"[SIGNAL] RetailerIndentItem post_save — id={instance.id} created={created}")
     _broadcast_indents_changed()
 
 
@@ -203,17 +170,15 @@ def retailer_indent_item_saved_broadcast(
 def retailer_indent_item_saved_recalc(
     sender, instance, created, **kwargs
 ):
-    """
-    Recompute the parent indent's totals after an item save.
-
-    Silent — the receiver above already scheduled a broadcast.
-    """
+    print(f"[SIGNAL] RetailerIndentItem post_save recalc — id={instance.id}")
     indent = _resolve_parent_indent(instance)
     if indent is None:
+        print("[SIGNAL] recalc — no parent indent, skipping")
         return
 
     with silence_indent_signals():
         indent.recalculate()
+    print(f"[SIGNAL] recalc done — parent total_cost={indent.total_cost}")
 
 
 # ---- post_delete ----
@@ -222,6 +187,7 @@ def retailer_indent_item_saved_recalc(
 def retailer_indent_item_deleted_broadcast(
     sender, instance, **kwargs
 ):
+    print(f"[SIGNAL] RetailerIndentItem post_delete — id={instance.id}")
     _broadcast_indents_changed()
 
 
@@ -229,13 +195,6 @@ def retailer_indent_item_deleted_broadcast(
 def retailer_indent_item_deleted_recalc(
     sender, instance, **kwargs
 ):
-    """
-    Recompute the parent's totals after an item delete.
-
-    On cascade delete (parent gone), `_resolve_parent_indent`
-    returns None and we skip — the parent's own delete signal
-    handles the broadcast.
-    """
     indent = _resolve_parent_indent(instance)
     if indent is None:
         return

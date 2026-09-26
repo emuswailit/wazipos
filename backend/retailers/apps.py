@@ -9,4 +9,4 @@ class RetailersConfig(AppConfig):
 
     def ready(self):
         # Register signal handlers
-        from . import signals  # noqa: F401
+        import retailers.signals # noqa: F401
