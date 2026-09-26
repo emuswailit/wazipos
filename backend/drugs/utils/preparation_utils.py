@@ -121,7 +121,7 @@ def update_preparation(data, user):
             raise exceptions.ValidationError(
                 "Preparation ID must be valid UUID")
         if Preparation.objects.filter(id=preparation_id).exists():
-            preparation = Preparation.objects.get(id=preparation_id)
+            preparation = Preparation.objects.filter(id=preparation_id).first()
         else:
             raise exceptions.ValidationError(
                 'Preparation for supplied ID does not exist')
