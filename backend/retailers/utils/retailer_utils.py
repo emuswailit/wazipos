@@ -2414,41 +2414,58 @@ def make_customer_order_payment(data, user):
 def close_indent(data, user):
     """
     Close a retailer indent by committing every line item to its
-    wholesaler as a RetailerOrder.
+    wholesaler as a RetailerOrder + RetailerOrderItems.
 
-    Returns (errors, retailer_orders).
+    Contract:
+      - RetailerOrders and their RetailerOrderItems are created
+        first.
+      - The indent's is_open is flipped to "false" ONLY after both
+        counts are verified against what was expected.
+      - Any failure rolls the whole transaction back — no partial
+        orders, no flipped indent.
+      - Every failure branch returns a specific message in
+        `errors`.
+
+    Returns (errors, retailer_orders):
       - Success: errors == [], retailer_orders == [<orders>]
       - Failure: errors == [<messages>], retailer_orders == []
-
-    Every branch returns the same shape so the view can use a
-    single `if retailer_orders:` check.
     """
     from collections import defaultdict
+    from decimal import Decimal
+
+    def _q(value):
+        try:
+            return Decimal(str(value)).quantize(Decimal("0.01"))
+        except Exception:
+            return Decimal("0.00")
 
     errors = []
     retailer_orders = []
 
-    # ---- validate indent id ----
+    # ---------------------------------------------------------
+    # 1. Validate input
+    # ---------------------------------------------------------
     retailer_indent_id = data.get("retailer_indent")
     if not retailer_indent_id:
-        errors.append("Retailer Indent is required")
-        return errors, []
+        return ["Retailer Indent is required"], []
 
-    # ---- load indent ----
+    # ---------------------------------------------------------
+    # 2. Load indent
+    # ---------------------------------------------------------
     retailer_indent = (
         RetailerIndent.objects
         .filter(id=retailer_indent_id, owner=user)
         .first()
     )
     if retailer_indent is None:
-        errors.append("Indent not found")
-        return errors, []
+        return ["Indent not found"], []
 
     if retailer_indent.is_open == "false":
-        errors.append("Retailer indent is closed")
-        return errors, []
+        return ["Retailer indent is already closed"], []
 
-    # ---- gather items ----
+    # ---------------------------------------------------------
+    # 3. Load items
+    # ---------------------------------------------------------
     items = list(
         RetailerIndentItem.objects
         .filter(retailer_indent_id=retailer_indent_id)
@@ -2460,13 +2477,12 @@ def close_indent(data, user):
         )
     )
     if not items:
-        errors.append("No indent items")
-        return errors, []
+        return ["Indent has no items"], []
 
-    # ---- group by wholesaler ----
-    # Any item without a receipt or without a resolvable wholesaler
-    # is a hard error — otherwise the indent would close with those
-    # lines silently dropped from the resulting orders.
+    # ---------------------------------------------------------
+    # 4. Group by wholesaler — collect all failures up front so
+    #    we don't do any writes if the data is bad.
+    # ---------------------------------------------------------
     by_wholesaler = defaultdict(list)
     for item in items:
         if not item.wholesale_receipt:
@@ -2483,76 +2499,142 @@ def close_indent(data, user):
         by_wholesaler[wid].append(item)
 
     if errors:
+        # Nothing written yet — safe to return.
         return errors, []
 
-    # ---- create one order per wholesaler ----
-    for wholesaler_id, wholesaler_items in by_wholesaler.items():
-        reference_number = generate_reference_number(
-            user.entity, user
-        )
+    expected_order_count = len(by_wholesaler)
+    expected_item_count = sum(
+        len(v) for v in by_wholesaler.values()
+    )
 
-        retailer_order = RetailerOrders.objects.create(
-            wholesaler_id=wholesaler_id,
-            retailer=user.entity,
-            entity=user.entity,
-            owner=user,
-            reference_number=reference_number,
-            status="SUBMITTED",
-            order_origin="RETAILER",
-        )
-
-        for indent_item in wholesaler_items:
-            qty = int(indent_item.required_quantity or 0)
-
-            # ---- quantity discount ----
-            qd = indent_item.wholesaler_quantity_discount
-            if (
-                qd is not None
-                and (qd.limit_quantity or 0) > 0
-                and (qd.awarded_quantity or 0) > 0
-            ):
-                blocks = qty // int(qd.limit_quantity)
-                discount_qty = blocks * int(qd.awarded_quantity)
-            else:
-                discount_qty = 0
-
-            # ---- pricing (from the item's own profit_estimate) ----
-            est = indent_item.profit_estimate or {}
-            cost_unit = _q(est.get("cost_per_unit") or 0)
-            sell_unit = _q(est.get("sell_per_unit") or 0)
-            purchased_total = _q(cost_unit * qty)
-
-            RetailerOrderItems.objects.create(
-                retailer_order=retailer_order,
-                retailer_indent_item=indent_item,
-                wholesaler_receipt=indent_item.wholesale_receipt,
-                purchased_quantity=qty,
-                discount_quantity=discount_qty,
-                total_quantity=qty + discount_qty,
-                unit_of_issue=getattr(
-                    indent_item.wholesale_receipt,
-                    "unit_of_receipt",
-                    "Pack",
-                ),
-                item_price=cost_unit,
-                item_price_total=purchased_total,
-                item_final_price=cost_unit,
-                item_final_price_total=purchased_total,
-                item_net_price=cost_unit,
-                item_net_price_total=purchased_total,
-                intended_retail_unit_price=sell_unit,
-                intended_retail_unit_price_source=est.get(
-                    "pricing_source", "markup"
-                ),
-                entity=retailer_order.entity,
-                owner=user,
+    # ---------------------------------------------------------
+    # 5. Create orders + items.
+    #
+    # Any exception here triggers a rollback via set_rollback so
+    # the transaction never commits a partial write. We capture
+    # the message and return instead of letting it bubble as a
+    # 500.
+    # ---------------------------------------------------------
+    try:
+        for wholesaler_id, wholesaler_items in by_wholesaler.items():
+            reference_number = generate_reference_number(
+                user.entity, user
             )
 
-        retailer_orders.append(retailer_order)
+            retailer_order = RetailerOrders.objects.create(
+                wholesaler_id=wholesaler_id,
+                retailer=user.entity,
+                entity=user.entity,
+                owner=user,
+                reference_number=reference_number,
+                status="SUBMITTED",
+                order_origin="RETAILER",
+            )
 
-    # ---- flip status ----
-    retailer_indent.is_open = "false"
-    retailer_indent.save()
+            for indent_item in wholesaler_items:
+                qty = int(indent_item.required_quantity or 0)
+
+                # ---- quantity discount ----
+                qd = indent_item.wholesaler_quantity_discount
+                if (
+                    qd is not None
+                    and (qd.limit_quantity or 0) > 0
+                    and (qd.awarded_quantity or 0) > 0
+                ):
+                    blocks = qty // int(qd.limit_quantity)
+                    discount_qty = blocks * int(
+                        qd.awarded_quantity
+                    )
+                else:
+                    discount_qty = 0
+
+                # ---- pricing from the item's own profit_estimate ----
+                est = indent_item.profit_estimate or {}
+                cost_unit = _q(est.get("cost_per_unit") or 0)
+                sell_unit = _q(est.get("sell_per_unit") or 0)
+                purchased_total = _q(cost_unit * qty)
+
+                RetailerOrderItems.objects.create(
+                    retailer_order=retailer_order,
+                    retailer_indent_item=indent_item,
+                    wholesaler_receipt=indent_item.wholesale_receipt,
+                    purchased_quantity=qty,
+                    discount_quantity=discount_qty,
+                    total_quantity=qty + discount_qty,
+                    unit_of_issue=getattr(
+                        indent_item.wholesale_receipt,
+                        "unit_of_receipt",
+                        "Pack",
+                    ),
+                    item_price=cost_unit,
+                    item_price_total=purchased_total,
+                    item_final_price=cost_unit,
+                    item_final_price_total=purchased_total,
+                    item_net_price=cost_unit,
+                    item_net_price_total=purchased_total,
+                    intended_retail_unit_price=sell_unit,
+                    intended_retail_unit_price_source=est.get(
+                        "pricing_source", "markup"
+                    ),
+                    entity=retailer_order.entity,
+                    owner=user,
+                )
+
+            retailer_orders.append(retailer_order)
+    except Exception as e:
+        # Force the whole transaction to roll back so no partial
+        # order survives. Return immediately without touching the
+        # DB again — the connection may be in a broken state.
+        transaction.set_rollback(True)
+        return [
+            f"Failed to create orders: {e.__class__.__name__}: {e}"
+        ], []
+
+    # ---------------------------------------------------------
+    # 6. Verify — orders created == distinct wholesalers
+    # ---------------------------------------------------------
+    if len(retailer_orders) != expected_order_count:
+        transaction.set_rollback(True)
+        return [
+            f"Expected {expected_order_count} orders, created "
+            f"{len(retailer_orders)}. Indent not closed."
+        ], []
+
+    # ---------------------------------------------------------
+    # 7. Verify — order items created == total input items
+    # ---------------------------------------------------------
+    created_item_count = (
+        RetailerOrderItems.objects
+        .filter(retailer_order__in=retailer_orders)
+        .count()
+    )
+    if created_item_count != expected_item_count:
+        transaction.set_rollback(True)
+        return [
+            f"Expected {expected_item_count} order items, created "
+            f"{created_item_count}. Indent not closed."
+        ], []
+
+    # ---------------------------------------------------------
+    # 8. All verified. Flip status and save.
+    # ---------------------------------------------------------
+    try:
+        retailer_indent.is_open = "false"
+        retailer_indent.save()
+    except Exception as e:
+        transaction.set_rollback(True)
+        return [
+            f"Failed to close indent: {e.__class__.__name__}: {e}"
+        ], []
+
+    # Re-read from the DB as a final sanity check that the flip
+    # actually persisted within this transaction.
+    retailer_indent.refresh_from_db(fields=["is_open"])
+    if retailer_indent.is_open != "false":
+        transaction.set_rollback(True)
+        return [
+            "Indent status did not persist. Indent not closed."
+        ], []
 
     return [], retailer_orders
 
