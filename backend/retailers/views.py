@@ -1876,6 +1876,7 @@ class RetailerIndentParamsUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, indent_id, *args, **kwargs):
+        create_log("data at patch: ", f"{request.data}")
         entity = getattr(request.user, "entity", None)
         if not entity or not entity.is_active:
             return Response(
