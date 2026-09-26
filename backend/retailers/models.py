@@ -530,10 +530,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import Q
-
-from .base import EntityRelatedModel  # wherever that lives
-from .users import Users              # or wherever Users/EntityRelatedModel come from
-
+           
 
 def _q(value):
     """Quantize a Decimal to 2 places. Assumed already defined in this module."""
