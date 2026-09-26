@@ -1,6 +1,7 @@
 import uuid
 from authentication.models import Entities, Countries, Categories
 from drugs.models import Preparation
+from utils.logging import create_log
 
 # from wholesalers.models import WholesalerReceipts
 from . import models
@@ -351,7 +352,7 @@ class ProductsSerializer(serializers.ModelSerializer):
         try:
             return model.objects.filter(pk=pk).first()
         except Exception as e:
-            print(f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
+            create_log("error",f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
             return None
 
     def _prep(self, obj):
