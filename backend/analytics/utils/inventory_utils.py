@@ -7,22 +7,64 @@ Each function returns (errors, result) — result may be a queryset,
 a model instance, a list of dicts, or a dict.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db.models import Q
 from django.utils import timezone
 
 from analytics.models import (
+    DemandForecast,
     ExpiryRisk,
+    ForecastAccuracy,
     InventoryAlert,
     InventoryMetricSnapshot,
     InventorySnapshot,
+    ProductDemandProfile,
     ProductInventoryProfile,
 )
 from analytics.services.campaign_advisor import suggest_campaign_candidates
-from authentication.models import Entities
 from analytics.services.bulk_forecast import get_bulk_forecast
+from authentication.models import Entities
+from wholesalers.models import RetailerOrderItems
+
+
+# =====================================================================
+# Pending order exclusion
+# =====================================================================
+
+# Orders in these statuses are "in flight" — their line items should
+# suppress forecasts until the retailer receives them, otherwise the
+# user would be prompted to re-order something already on its way.
+PENDING_ORDER_STATUSES = (
+    "SUBMITTED",
+    "PROCESSING",
+    "DISPATCHED",
+)
+
+
+def _product_ids_on_pending_orders(user):
+    """
+    Return the set of product IDs (as strings) already on a retailer
+    order placed by this user's entity that hasn't been received yet.
+
+    Used to suppress forecasts for those products.
+    """
+    if not getattr(user, "entity_id", None):
+        return set()
+
+    ids = (
+        RetailerOrderItems.objects
+        .filter(
+            retailer_order__retailer_id=user.entity_id,
+            retailer_order__status__in=PENDING_ORDER_STATUSES,
+        )
+        .values_list(
+            "wholesaler_receipt__product_id",
+            flat=True,
+        )
+    )
+    return {str(pid) for pid in ids if pid is not None}
 
 
 # =====================================================================
@@ -40,7 +82,9 @@ def _scoped_alerts(user):
 
 
 def _scoped_expiry_risks(user):
-    qs = ExpiryRisk.objects.select_related("product", "entity", "wholesaler_receipt", "retailer_receipt")
+    qs = ExpiryRisk.objects.select_related(
+        "product", "entity", "wholesaler_receipt", "retailer_receipt",
+    )
     if user.is_staff:
         return qs
     entity_id = getattr(user, "entity_id", None)
@@ -50,7 +94,9 @@ def _scoped_expiry_risks(user):
 
 
 def _scoped_snapshots(user):
-    qs = InventorySnapshot.objects.select_related("product", "entity", "received_from_entity")
+    qs = InventorySnapshot.objects.select_related(
+        "product", "entity", "received_from_entity",
+    )
     if user.is_staff:
         return qs
     entity_id = getattr(user, "entity_id", None)
@@ -60,7 +106,9 @@ def _scoped_snapshots(user):
 
 
 def _scoped_profiles(user):
-    qs = ProductInventoryProfile.objects.select_related("product", "entity")
+    qs = ProductInventoryProfile.objects.select_related(
+        "product", "entity",
+    )
     if user.is_staff:
         return qs
     entity_id = getattr(user, "entity_id", None)
@@ -71,6 +119,38 @@ def _scoped_profiles(user):
 
 def _scoped_metrics(user):
     qs = InventoryMetricSnapshot.objects.select_related("entity")
+    if user.is_staff:
+        return qs
+    entity_id = getattr(user, "entity_id", None)
+    if not entity_id:
+        return qs.none()
+    return qs.filter(entity_id=entity_id)
+
+
+def _scoped_demand_profiles(user):
+    qs = ProductDemandProfile.objects.select_related(
+        "product", "entity",
+    )
+    if user.is_staff:
+        return qs
+    entity_id = getattr(user, "entity_id", None)
+    if not entity_id:
+        return qs.none()
+    return qs.filter(entity_id=entity_id)
+
+
+def _scoped_forecasts(user):
+    qs = DemandForecast.objects.select_related("product", "entity")
+    if user.is_staff:
+        return qs
+    entity_id = getattr(user, "entity_id", None)
+    if not entity_id:
+        return qs.none()
+    return qs.filter(entity_id=entity_id)
+
+
+def _scoped_accuracies(user):
+    qs = ForecastAccuracy.objects.select_related("product", "entity")
     if user.is_staff:
         return qs
     entity_id = getattr(user, "entity_id", None)
@@ -104,7 +184,6 @@ def get_inventory_overview(data, user):
 
     latest = list(qs)
 
-    # Last 30 days trend for sparklines
     since = as_of_date - timedelta(days=30)
     trend_qs = _scoped_metrics(user).filter(
         snapshot_date__gte=since,
@@ -118,7 +197,8 @@ def get_inventory_overview(data, user):
         .order_by("snapshot_date")
         .values(
             "snapshot_date", "tier",
-            "total_value_at_cost", "active_lot_count", "active_product_count",
+            "total_value_at_cost", "active_lot_count",
+            "active_product_count",
         )
     )
 
@@ -134,17 +214,6 @@ def get_inventory_overview(data, user):
 # =====================================================================
 
 def get_alerts(data, user):
-    """
-    Payload:
-    {
-        "action": "GetAlerts",
-        "status": "active" | "resolved" | "all",   # optional, default active
-        "severity": "critical",                    # optional
-        "alert_type": "expired",                   # optional
-        "tier": "RETAILER",                        # optional
-        "product_id": "<uuid>"                     # optional
-    }
-    """
     qs = _scoped_alerts(user)
 
     status = data.get("status", "active")
@@ -152,7 +221,6 @@ def get_alerts(data, user):
         qs = qs.filter(is_active=True)
     elif status == "resolved":
         qs = qs.filter(is_active=False)
-    # else: all
 
     if data.get("severity"):
         qs = qs.filter(severity=data["severity"])
@@ -167,13 +235,6 @@ def get_alerts(data, user):
 
 
 def get_alert_details(data, user):
-    """
-    Payload:
-    {
-        "action": "GetAlertDetails",
-        "alert_id": "<uuid>"
-    }
-    """
     alert_id = data.get("alert_id")
     if not alert_id:
         return {"alert_id": "This field is required."}, None
@@ -185,13 +246,6 @@ def get_alert_details(data, user):
 
 
 def acknowledge_alert(data, user):
-    """
-    Payload:
-    {
-        "action": "AcknowledgeAlert",
-        "alert_id": "<uuid>"
-    }
-    """
     alert_id = data.get("alert_id")
     if not alert_id:
         return {"alert_id": "This field is required."}, None
@@ -202,19 +256,15 @@ def acknowledge_alert(data, user):
 
     alert.acknowledged_at = timezone.now()
     alert.acknowledged_by = user
-    alert.save(update_fields=["acknowledged_at", "acknowledged_by", "updated_at"])
+    alert.save(
+        update_fields=[
+            "acknowledged_at", "acknowledged_by", "updated_at",
+        ]
+    )
     return {}, alert
 
 
 def resolve_alert(data, user):
-    """
-    Payload:
-    {
-        "action": "ResolveAlert",
-        "alert_id": "<uuid>",
-        "reason": "Handled"   # optional
-    }
-    """
     alert_id = data.get("alert_id")
     if not alert_id:
         return {"alert_id": "This field is required."}, None
@@ -229,7 +279,11 @@ def resolve_alert(data, user):
         ctx = alert.context or {}
         ctx["resolution_reason"] = data["reason"]
         alert.context = ctx
-    alert.save(update_fields=["is_active", "resolved_at", "context", "updated_at"])
+    alert.save(
+        update_fields=[
+            "is_active", "resolved_at", "context", "updated_at",
+        ]
+    )
     return {}, alert
 
 
@@ -238,17 +292,6 @@ def resolve_alert(data, user):
 # =====================================================================
 
 def get_expiry_risks(data, user):
-    """
-    Payload:
-    {
-        "action": "GetExpiryRisks",
-        "as_of_date": "2026-09-15",       # optional
-        "tier": "WHOLESALER",             # optional
-        "min_probability": 0.5,           # optional, default 0.3
-        "max_days_to_expiry": 90,         # optional
-        "recommended_action": "discount"  # optional
-    }
-    """
     as_of_date = _parse_date(data.get("as_of_date")) or date.today()
     min_probability = float(data.get("min_probability", 0.3))
 
@@ -259,11 +302,17 @@ def get_expiry_risks(data, user):
     if data.get("tier"):
         qs = qs.filter(tier=data["tier"])
     if data.get("max_days_to_expiry") is not None:
-        qs = qs.filter(days_to_expiry__lte=int(data["max_days_to_expiry"]))
+        qs = qs.filter(
+            days_to_expiry__lte=int(data["max_days_to_expiry"])
+        )
     if data.get("recommended_action"):
-        qs = qs.filter(recommended_action=data["recommended_action"])
+        qs = qs.filter(
+            recommended_action=data["recommended_action"]
+        )
 
-    return {}, qs.order_by("-expected_write_off_value", "days_to_expiry")
+    return {}, qs.order_by(
+        "-expected_write_off_value", "days_to_expiry"
+    )
 
 
 # =====================================================================
@@ -271,15 +320,6 @@ def get_expiry_risks(data, user):
 # =====================================================================
 
 def get_product_profile(data, user):
-    """
-    Payload:
-    {
-        "action": "GetProductProfile",
-        "product_id": "<uuid>",
-        "as_of_date": "2026-09-15",   # optional
-        "tier": "RETAILER"             # optional
-    }
-    """
     product_id = data.get("product_id")
     if not product_id:
         return {"product_id": "This field is required."}, None
@@ -295,9 +335,12 @@ def get_product_profile(data, user):
 
     profiles = list(qs)
     if not profiles:
-        return {"product_id": "No profile found for this product on this date."}, None
+        return {
+            "product_id": (
+                "No profile found for this product on this date."
+            )
+        }, None
 
-    # Also include the underlying active lots for drill-down
     receipts = _scoped_snapshots(user).filter(
         product_id=product_id,
         snapshot_date=as_of_date,
@@ -307,24 +350,17 @@ def get_product_profile(data, user):
 
     return {}, {
         "profiles": profiles,
-        "lots": list(receipts.order_by("expiry_date", "days_to_expiry")),
+        "lots": list(
+            receipts.order_by("expiry_date", "days_to_expiry")
+        ),
     }
 
 
 # =====================================================================
-# Lots with expiring stock (drill-down view)
+# Lots with expiring stock
 # =====================================================================
 
 def get_expiring_lots(data, user):
-    """
-    Payload:
-    {
-        "action": "GetExpiringLots",
-        "days": 30,                 # optional, default 30
-        "tier": "RETAILER",         # optional
-        "as_of_date": "2026-09-15"  # optional
-    }
-    """
     as_of_date = _parse_date(data.get("as_of_date")) or date.today()
     days = int(data.get("days", 30))
 
@@ -346,25 +382,16 @@ def get_expiring_lots(data, user):
 # =====================================================================
 
 def get_campaign_candidates(data, user):
-    """
-    Payload:
-    {
-        "action": "GetCampaignCandidates",
-        "as_of_date": "2026-09-15",     # optional
-        "wholesaler_id": "<uuid>"       # optional — platform staff only
-    }
-
-    Returns ranked campaign candidates for a wholesaler, derived from
-    the ExpiryRisk table. Only wholesalers have campaigns, so a
-    retailer calling this gets an error.
-    """
     as_of_date = _parse_date(data.get("as_of_date")) or date.today()
 
-    # Resolve target wholesaler
     wholesaler_id = data.get("wholesaler_id")
     if wholesaler_id:
         if not user.is_staff:
-            return {"wholesaler_id": "Only platform staff may specify a wholesaler."}, None
+            return {
+                "wholesaler_id": (
+                    "Only platform staff may specify a wholesaler."
+                )
+            }, None
         try:
             wholesaler = Entities.objects.get(pk=wholesaler_id)
         except Entities.DoesNotExist:
@@ -372,11 +399,19 @@ def get_campaign_candidates(data, user):
     else:
         wholesaler = user.entity
         if not user.is_staff and wholesaler.entity_type not in (
-            "GeneralWholesaler", "PharmaceuticalWholesaler",
+            "GeneralWholesaler",
+            "PharmaceuticalWholesaler",
         ):
-            return {"detail": "Campaign candidates are only available for wholesalers."}, None
+            return {
+                "detail": (
+                    "Campaign candidates are only available "
+                    "for wholesalers."
+                )
+            }, None
 
-    candidates = suggest_campaign_candidates(wholesaler, as_of_date=as_of_date)
+    candidates = suggest_campaign_candidates(
+        wholesaler, as_of_date=as_of_date
+    )
     return {}, {
         "wholesaler_id": str(wholesaler.id),
         "wholesaler_title": wholesaler.title,
@@ -386,54 +421,8 @@ def get_campaign_candidates(data, user):
 
 
 # =====================================================================
-# Helpers
+# Demand profiles & forecasts
 # =====================================================================
-
-def _parse_date(value):
-    if not value:
-        return None
-    if isinstance(value, date):
-        return value
-    from datetime import datetime
-    try:
-        return datetime.strptime(str(value), "%Y-%m-%d").date()
-    except (ValueError, TypeError):
-        return None
-
-# analytics/utils/inventory_utils.py — APPEND
-
-from analytics.models import DemandForecast, ProductDemandProfile, ForecastAccuracy
-
-
-def _scoped_demand_profiles(user):
-    qs = ProductDemandProfile.objects.select_related("product", "entity")
-    if user.is_staff:
-        return qs
-    entity_id = getattr(user, "entity_id", None)
-    if not entity_id:
-        return qs.none()
-    return qs.filter(entity_id=entity_id)
-
-
-def _scoped_forecasts(user):
-    qs = DemandForecast.objects.select_related("product", "entity")
-    if user.is_staff:
-        return qs
-    entity_id = getattr(user, "entity_id", None)
-    if not entity_id:
-        return qs.none()
-    return qs.filter(entity_id=entity_id)
-
-
-def _scoped_accuracies(user):
-    qs = ForecastAccuracy.objects.select_related("product", "entity")
-    if user.is_staff:
-        return qs
-    entity_id = getattr(user, "entity_id", None)
-    if not entity_id:
-        return qs.none()
-    return qs.filter(entity_id=entity_id)
-
 
 def get_demand_profile(data, user):
     """
@@ -455,7 +444,6 @@ def get_demand_profile(data, user):
     if data.get("product_id"):
         qs = qs.filter(product_id=data["product_id"])
 
-    # Latest as_of_date only
     latest = (
         qs.order_by("-as_of_date")
         .values_list("as_of_date", flat=True)
@@ -464,7 +452,9 @@ def get_demand_profile(data, user):
     if not latest:
         return {}, []
 
-    return {}, qs.filter(as_of_date=latest).order_by("-avg_daily_demand")
+    return {}, qs.filter(as_of_date=latest).order_by(
+        "-avg_daily_demand"
+    )
 
 
 def get_forecast(data, user):
@@ -477,17 +467,30 @@ def get_forecast(data, user):
         "horizon_days": 7,              # optional, max 28
         "run_date": "2026-09-15"        # optional, defaults to latest
     }
+
+    Products already on an unreceived order are suppressed.
     """
     product_id = data.get("product_id")
     if not product_id:
         return {"product_id": "This field is required."}, None
+
+    # Suppress forecasts for products already on an in-flight order.
+    if str(product_id) in _product_ids_on_pending_orders(user):
+        return (
+            {
+                "product_id": (
+                    "This product is already on an order that "
+                    "has not yet been received."
+                )
+            },
+            None,
+        )
 
     qs = _scoped_forecasts(user).filter(product_id=product_id)
 
     if data.get("tier"):
         qs = qs.filter(tier=data["tier"])
 
-    # Latest run_date for this product
     run_date = _parse_date(data.get("run_date"))
     if not run_date:
         run_date = (
@@ -496,7 +499,9 @@ def get_forecast(data, user):
             .first()
         )
     if not run_date:
-        return {"product_id": "No forecast available for this product."}, None
+        return {
+            "product_id": "No forecast available for this product."
+        }, None
 
     qs = qs.filter(run_date=run_date)
 
@@ -511,16 +516,6 @@ def get_forecast(data, user):
 
 
 def get_forecast_accuracy(data, user):
-    """
-    Payload:
-    {
-        "action": "GetForecastAccuracy",
-        "tier": "RETAILER",             # optional
-        "model_name": "ses",            # optional
-        "segment": "stable",            # optional
-        "limit": 50                     # optional
-    }
-    """
     qs = _scoped_accuracies(user)
 
     if data.get("tier"):
@@ -542,68 +537,48 @@ def get_forecast_accuracy(data, user):
     return {}, qs.filter(period_end=latest).order_by("-wape")[:limit]
 
 
-def get_bulk_forecast_action(data, user):
+# =====================================================================
+# Bulk forecast
+# =====================================================================
+
+def _filter_bulk_result(result, pending_ids):
     """
-    Payload:
-    {
-        "action": "GetBulkForecast",
-        "tier": "RETAILER",                    # optional, defaults to user's tier
-        "lead_time_days": 7,                    # required
-        "order_days": 14,                       # required
-        "product_ids": ["<uuid>", ...],         # optional
-        "min_avg_daily_demand": 0.5,            # optional
-        "include_daily": true,                  # optional, default true
-        "run_date": "2026-09-15"                # optional, defaults to latest
-    }
-
-    Only platform staff may pass entity_id explicitly. Everyone else
-    gets their own entity's forecast.
+    Remove any product from the bulk-forecast result whose id is in
+    `pending_ids`. Updates the total count if the result carries one,
+    so the UI doesn't say "200 products" while rendering 195.
     """
-    tier = data.get("tier")
-    if not tier:
-        # Derive from the user's entity type
-        from analytics.utils.domains import tier_of
-        et = user.entity.entity_type if user.entity else None
-        tier = tier_of(et) if et else None
-    if tier not in ("WHOLESALER", "RETAILER"):
-        return {"tier": "Could not determine tier. Pass tier explicitly."}, None
+    if not pending_ids or not isinstance(result, dict):
+        return result
 
-    try:
-        lead_time_days = int(data.get("lead_time_days", 0))
-        order_days = int(data.get("order_days", 0))
-    except (TypeError, ValueError):
-        return {"lead_time_days": "Must be an integer.", "order_days": "Must be an integer."}, None
+    products = result.get("products")
+    if not isinstance(products, list):
+        return result
 
-    if lead_time_days <= 0:
-        return {"lead_time_days": "Must be greater than zero."}, None
-    if order_days <= 0:
-        return {"order_days": "Must be greater than zero."}, None
+    filtered = [
+        p for p in products
+        if str(p.get("product_id")) not in pending_ids
+    ]
+    if len(filtered) == len(products):
+        return result
 
-    # Determine target entity
-    entity_id = getattr(user, "entity_id", None)
-    if data.get("entity_id"):
-        if not user.is_staff:
-            return {"entity_id": "Only platform staff may specify entity."}, None
-        entity_id = data["entity_id"]
+    out = {**result, "products": filtered}
 
-    if not entity_id:
-        return {"entity_id": "No entity on user."}, None
+    # If the service returns a count, keep it in sync.
+    for k in ("total_products", "count", "product_count"):
+        if isinstance(out.get(k), int):
+            out[k] = len(filtered)
 
-    try:
-        result = get_bulk_forecast(
-            entity_id=entity_id,
-            tier=tier,
-            lead_time_days=lead_time_days,
-            order_days=order_days,
-            product_ids=data.get("product_ids"),
-            min_avg_daily_demand=data.get("min_avg_daily_demand"),
-            include_daily=data.get("include_daily", True),
-            run_date=_parse_date(data.get("run_date")),
-        )
-    except Exception as e:
-        return {"detail": str(e)}, None
+    # Nested summary object variant.
+    summary = out.get("summary")
+    if isinstance(summary, dict):
+        summary = {**summary}
+        for k in ("total_products", "count", "product_count"):
+            if isinstance(summary.get(k), int):
+                summary[k] = len(filtered)
+        out["summary"] = summary
 
-    return {}, result
+    return out
+
 
 def get_bulk_forecast_action(data, user):
     """
@@ -620,30 +595,45 @@ def get_bulk_forecast_action(data, user):
         "include_campaigns": true,
         "run_date": "2026-09-16"
     }
+
+    Products already on an unreceived retailer order are excluded
+    from the returned `products` list.
     """
     tier = data.get("tier")
     if not tier:
         from analytics.utils.domains import tier_of
+
         et = user.entity.entity_type if user.entity else None
         tier = tier_of(et) if et else None
     if tier not in ("WHOLESALER", "RETAILER"):
-        return {"tier": "Could not determine tier. Pass tier explicitly."}, None
+        return {
+            "tier": "Could not determine tier. Pass tier explicitly."
+        }, None
 
     try:
         lead_time_days = int(data.get("lead_time_days", 0))
         order_days = int(data.get("order_days", 0))
     except (TypeError, ValueError):
-        return {"lead_time_days": "Must be an integer.", "order_days": "Must be an integer."}, None
+        return {
+            "lead_time_days": "Must be an integer.",
+            "order_days": "Must be an integer.",
+        }, None
 
     if lead_time_days <= 0:
-        return {"lead_time_days": "Must be greater than zero."}, None
+        return {
+            "lead_time_days": "Must be greater than zero."
+        }, None
     if order_days <= 0:
         return {"order_days": "Must be greater than zero."}, None
 
     entity_id = getattr(user, "entity_id", None)
     if data.get("entity_id"):
         if not user.is_staff:
-            return {"entity_id": "Only platform staff may specify entity."}, None
+            return {
+                "entity_id": (
+                    "Only platform staff may specify entity."
+                )
+            }, None
         entity_id = data["entity_id"]
 
     if not entity_id:
@@ -665,4 +655,24 @@ def get_bulk_forecast_action(data, user):
     except Exception as e:
         return {"detail": str(e)}, None
 
+    # Suppress products already on an unreceived order.
+    pending_ids = _product_ids_on_pending_orders(user)
+    if pending_ids:
+        result = _filter_bulk_result(result, pending_ids)
+
     return {}, result
+
+
+# =====================================================================
+# Helpers
+# =====================================================================
+
+def _parse_date(value):
+    if not value:
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
