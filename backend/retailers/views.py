@@ -685,24 +685,24 @@ def customerOrdersStaffAPIView(request):
         if len(errors)>0:
             return custom_errors_response(1,"No open indent",errors)
         
-    # elif request.data["action"] == "CloseIndent":
+    elif request.data["action"] == "CloseIndent":
     
-    #     errors, retailer_orders = retailer_utils.close_indent(
-    #         request.data, request.user
-    #     )
-    #     if retailer_orders:
-    #         serializer = RetailerOrdersSerializer(
-    #             retailer_orders, many=True, context={"request": request}
-    #         )
-    #         return custom_success_message(
-    #             0,
-    #             "Indent closed  successfully",
-    #             serializer.data,
-    #             "retailer_orders",
-    #         )
+        errors, retailer_orders = retailer_utils.close_indent(
+            request.data, request.user
+        )
+        if retailer_orders:
+            serializer = RetailerOrdersSerializer(
+                retailer_orders, many=True, context={"request": request}
+            )
+            return custom_success_message(
+                0,
+                "Indent closed  successfully",
+                serializer.data,
+                "retailer_orders",
+            )
 
-    #     if len(errors)>0:
-    #         return custom_errors_response(1,"Retailer indent not closed",errors)
+        if len(errors)>0:
+            return custom_errors_response(1,"Retailer indent not closed",errors)
     elif request.data["action"] == "UpdateOutOfStockItem":
     
         errors, out_of_stock_item = retailer_utils.update_out_of_stock_item(

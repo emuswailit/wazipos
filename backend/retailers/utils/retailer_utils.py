@@ -2410,66 +2410,151 @@ def make_customer_order_payment(data, user):
     return errors, None
 
 
-# @transaction.atomic
-# def close_indent(data,user):
-#     retailer_indent_id =""
-#     retailer_indent =None
-#     employee = None
-#     retailer_orders =[]
-    
-#     errors =[]
-#     if Employees.objects.filter(user=user,entity=user.entity).exists():
-#         employee = Employees.objects.filter(user=user,entity=user.entity).first()
-#     else:
-#         errors.append("Not an employee")
+@transaction.atomic
+def close_indent(data, user):
+    """
+    Close a retailer indent by committing every line item to its
+    wholesaler as a RetailerOrder.
 
-#     if not "retailer_indent" in data or data["retailer_indent"]=="":
-#         errors.append("Retailer Indent is required")
-#         return errors,[]
-#     else:
-#         retailer_indent_id=data["retailer_indent"]
+    Returns (errors, retailer_orders).
+      - Success: errors == [], retailer_orders == [<orders>]
+      - Failure: errors == [<messages>], retailer_orders == []
 
-#     if RetailerIndent.objects.filter(id=retailer_indent_id,owner=user).exists():
-#         retailer_indent  =  RetailerIndent.objects.filter(id=retailer_indent_id,owner=user).first()
+    Every branch returns the same shape so the view can use a
+    single `if retailer_orders:` check.
+    """
+    from collections import defaultdict
 
-#     if retailer_indent.is_open=="false":
-#         errors.append("Retailer indent is closed")
-#         return errors, None
+    errors = []
+    retailer_orders = []
 
-#     if RetailerIndentItem.objects.filter(retailer_indent_id=retailer_indent_id).exists():
-#         items =  RetailerIndentItem.objects.filter(retailer_indent_id=retailer_indent_id).all()
+    # ---- validate indent id ----
+    retailer_indent_id = data.get("retailer_indent")
+    if not retailer_indent_id:
+        errors.append("Retailer Indent is required")
+        return errors, []
 
-#         wholesalers = list(set(map(get_wholesalers,items)))
-       
+    # ---- load indent ----
+    retailer_indent = (
+        RetailerIndent.objects
+        .filter(id=retailer_indent_id, owner=user)
+        .first()
+    )
+    if retailer_indent is None:
+        errors.append("Indent not found")
+        return errors, []
 
-#         for wholesaler in wholesalers:
-#             retailer_order=None
-#             wholesaler_indent_items=[]
-#             wholesaler_indent_items = RetailerIndentItem.objects.filter(wholesale_receipt__entity=wholesaler,retailer_indent=retailer_indent).all()
-#             if len(wholesaler_indent_items)>0:
-#                 reference_number = generate_reference_number(user.entity,user)
-#                 retailer_order = RetailerOrders.objects.create(wholesaler=wholesaler, retailer=user.entity,entity=user.entity,owner=user,employee=employee, reference_number=reference_number )
-                
-#                 for indent_item in wholesaler_indent_items:
-#                     if WholesalerPriceDiscounts.objects.filter(wholesale_receipt= indent_item.wholesale_receipt).exists():
-                  
-#                     created_item = RetailerOrderItems.objects.create(
-#                         retailer_order=retailer_order,
-#                         wholesaler_receipt=indent_item.wholesale_receipt,
-#                         entity =retailer_order.entity,
-#                         purchased_quantity=indent_item.required_quantity,
-#                         owner =user,
-                       
-#                         )
-                
-#                 retailer_orders.append(retailer_order)
+    if retailer_indent.is_open == "false":
+        errors.append("Retailer indent is closed")
+        return errors, []
 
-#         retailer_indent.is_open="false"
-#         retailer_indent.save()
-#         return [],retailer_orders
-#     else:
-#         errors.append("No indent items")   
-#         return errors,[]
+    # ---- gather items ----
+    items = list(
+        RetailerIndentItem.objects
+        .filter(retailer_indent_id=retailer_indent_id)
+        .select_related(
+            "wholesale_receipt",
+            "wholesale_receipt__received_from",
+            "wholesaler_price_discount",
+            "wholesaler_quantity_discount",
+        )
+    )
+    if not items:
+        errors.append("No indent items")
+        return errors, []
+
+    # ---- group by wholesaler ----
+    # Any item without a receipt or without a resolvable wholesaler
+    # is a hard error — otherwise the indent would close with those
+    # lines silently dropped from the resulting orders.
+    by_wholesaler = defaultdict(list)
+    for item in items:
+        if not item.wholesale_receipt:
+            errors.append(f"Item {item.id} has no receipt")
+            continue
+
+        wid = item.wholesale_receipt.received_from_id
+        if not wid:
+            errors.append(
+                f"Receipt {item.wholesale_receipt_id} has no wholesaler"
+            )
+            continue
+
+        by_wholesaler[wid].append(item)
+
+    if errors:
+        return errors, []
+
+    # ---- create one order per wholesaler ----
+    for wholesaler_id, wholesaler_items in by_wholesaler.items():
+        reference_number = generate_reference_number(
+            user.entity, user
+        )
+
+        retailer_order = RetailerOrders.objects.create(
+            wholesaler_id=wholesaler_id,
+            retailer=user.entity,
+            entity=user.entity,
+            owner=user,
+            reference_number=reference_number,
+            status="SUBMITTED",
+            order_origin="RETAILER",
+        )
+
+        for indent_item in wholesaler_items:
+            qty = int(indent_item.required_quantity or 0)
+
+            # ---- quantity discount ----
+            qd = indent_item.wholesaler_quantity_discount
+            if (
+                qd is not None
+                and (qd.limit_quantity or 0) > 0
+                and (qd.awarded_quantity or 0) > 0
+            ):
+                blocks = qty // int(qd.limit_quantity)
+                discount_qty = blocks * int(qd.awarded_quantity)
+            else:
+                discount_qty = 0
+
+            # ---- pricing (from the item's own profit_estimate) ----
+            est = indent_item.profit_estimate or {}
+            cost_unit = _q(est.get("cost_per_unit") or 0)
+            sell_unit = _q(est.get("sell_per_unit") or 0)
+            purchased_total = _q(cost_unit * qty)
+
+            RetailerOrderItems.objects.create(
+                retailer_order=retailer_order,
+                retailer_indent_item=indent_item,
+                wholesaler_receipt=indent_item.wholesale_receipt,
+                purchased_quantity=qty,
+                discount_quantity=discount_qty,
+                total_quantity=qty + discount_qty,
+                unit_of_issue=getattr(
+                    indent_item.wholesale_receipt,
+                    "unit_of_receipt",
+                    "Pack",
+                ),
+                item_price=cost_unit,
+                item_price_total=purchased_total,
+                item_final_price=cost_unit,
+                item_final_price_total=purchased_total,
+                item_net_price=cost_unit,
+                item_net_price_total=purchased_total,
+                intended_retail_unit_price=sell_unit,
+                intended_retail_unit_price_source=est.get(
+                    "pricing_source", "markup"
+                ),
+                entity=retailer_order.entity,
+                owner=user,
+            )
+
+        retailer_orders.append(retailer_order)
+
+    # ---- flip status ----
+    retailer_indent.is_open = "false"
+    retailer_indent.save()
+
+    return [], retailer_orders
 
 @transaction.atomic
 def create_out_of_stock_item(data, user):
