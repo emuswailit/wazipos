@@ -525,6 +525,21 @@ class IndentItemSource(models.TextChoices):
 
 # retailers/models.py — RetailerIndent
 
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
+from django.db.models import Q
+
+from .base import EntityRelatedModel  # wherever that lives
+from .users import Users              # or wherever Users/EntityRelatedModel come from
+
+
+def _q(value):
+    """Quantize a Decimal to 2 places. Assumed already defined in this module."""
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
 class RetailerIndent(EntityRelatedModel):
     """
     A replenishment plan for a retailer.
@@ -535,13 +550,15 @@ class RetailerIndent(EntityRelatedModel):
     commitment path — campaign or not.
 
     Invariant: at most one open indent per retailer entity.
-    Enforced at three layers:
-      1. UniqueConstraint with a partial WHERE clause (the
-         database-level guarantee; survives races).
-      2. clean() — form/admin friendly error before hitting the DB.
-      3. save() — pre-check that turns the common sequential
-         conflict into a ValidationError instead of an
-         IntegrityError.
+
+    Enforcement:
+      - save() — when persisting a row with is_open="true", closes
+        any other open indents for the same entity inside the same
+        transaction before writing self.
+      - UniqueConstraint on (entity) WHERE is_open='true' — the
+        DB-level guarantee. Should never fire given the save()
+        behaviour, but kept as a safety net against concurrent
+        transactions that bypass the application logic.
     """
 
     class Meta:
@@ -611,7 +628,7 @@ class RetailerIndent(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.indent_number or '(unsaved)'} · {self.entity_title}"
+        return f"{self.indent_number or '(unsaved)'} · {self.entity.title}"
 
     # ------------------------------------------------------------------
     # Validation
@@ -619,33 +636,14 @@ class RetailerIndent(EntityRelatedModel):
 
     def clean(self):
         """
-        Surface a friendly error before the DB constraint fires.
+        No-op beyond the base class.
 
-        Called by full_clean() — Django admin, DRF serializers, and
-        any explicit form validation. Not called by save(), so this
-        is not a race-safe guard on its own — see save() below and
-        the UniqueConstraint in Meta.
+        The open-indent invariant is enforced by save() via
+        auto-close, not by raising. Forms and DRF serializers that
+        call full_clean() therefore won't block a save that would
+        legitimately replace an existing open indent.
         """
         super().clean()
-
-        if self.is_open != "true" or not self.entity_id:
-            return
-
-        conflict = (
-            RetailerIndent.objects
-            .filter(entity_id=self.entity_id, is_open="true")
-            .exclude(pk=self.pk)
-            .exists()
-        )
-        if conflict:
-            raise ValidationError(
-                {
-                    "is_open": (
-                        "This retailer already has an open indent. "
-                        "Close it before opening a new one."
-                    )
-                }
-            )
 
     # ------------------------------------------------------------------
     # Persistence
@@ -655,27 +653,32 @@ class RetailerIndent(EntityRelatedModel):
         if not self.indent_number:
             self.indent_number = self._generate_indent_number()
 
-        # Pre-check: only relevant when this row is / will be open
-        # and has an entity. Closing a row is always safe.
+        # Invariant: at most one open indent per entity.
         #
-        # The check is not atomic — two concurrent saves can both
-        # pass it, and the UniqueConstraint catches the loser. That
-        # is intentional: the constraint is the guarantee, this is
-        # just a nicer error for the common case.
+        # When writing a row that will be open, close every other
+        # open indent for the same entity *before* super().save().
+        # The partial unique constraint in Meta would otherwise
+        # fire the moment a second open row tried to land.
+        #
+        # The sibling UPDATE and the write of self run in the same
+        # transaction, so external observers see either "the old
+        # indent is open" or "the new indent is open", never both
+        # and never neither.
+        #
+        # `.exclude(pk=self.pk)` is a no-op when pk is None (a fresh
+        # insert), which is exactly what we want: every existing
+        # open sibling gets closed.
         if self.is_open == "true" and self.entity_id:
-            conflict = (
-                RetailerIndent.objects
-                .filter(entity_id=self.entity_id, is_open="true")
-                .exclude(pk=self.pk)
-                .exists()
-            )
-            if conflict:
-                raise ValidationError(
-                    "This retailer already has an open indent. "
-                    "Close it before opening a new one."
+            with transaction.atomic():
+                (
+                    RetailerIndent.objects
+                    .filter(entity_id=self.entity_id, is_open="true")
+                    .exclude(pk=self.pk)
+                    .update(is_open="false")
                 )
-
-        super().save(*args, **kwargs)
+                super().save(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)
 
     def _generate_indent_number(self):
         if not self.entity_id:
@@ -712,9 +715,9 @@ class RetailerIndent(EntityRelatedModel):
         Roll up item-level profit_estimate into header aggregates.
         Only counts items with a profit_estimate (i.e. priced).
 
-        Note: calls super().save() directly, bypassing the
-        open-indent pre-check in save(). That's intentional —
-        recomputing totals must never raise a conflict error.
+        Calls super().save() directly — this method never touches
+        is_open, so the close-siblings logic in save() is irrelevant
+        and the extra transactional wrapper would be wasted work.
         """
         items = self.indent_for_item.all()
 
