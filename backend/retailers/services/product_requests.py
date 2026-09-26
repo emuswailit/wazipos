@@ -1117,8 +1117,8 @@ def handle_confirm_offers(user, data, request=None):
                 if indent is None:
                     indent = RetailerIndent.objects.create(
                         entity=req.entity,
-                        entity_title=req.entity_title,
                         is_open="true",
+                        owner=request.user
                     )
                     created_new_indent = True
 
