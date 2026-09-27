@@ -265,6 +265,18 @@ def load_retailer_product_requests():
     return result
 
 
+@app.task
+def load_retailer_requisitions():
+
+    result= async_to_sync(channel_layer.group_send)(
+            'retailer-requisitions',
+            {
+                "type": "send_retailer_requisitions"
+            },
+        )
+    return result
+
+
 
 # @classmethod
 # def encode_json(cls, content):

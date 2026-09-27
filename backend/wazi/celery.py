@@ -71,6 +71,11 @@ app.conf.beat_schedule = {
         "schedule": 120.0,
         "args": None,
     },
+    "load_retailer_requisitions": {
+        "task": "retailers.tasks.load_retailer_requisitions",
+        "schedule": 120.0,
+        "args": None,
+    },
 
     # ── Analytics ──────────────────────────────────────────────────
     # Full pipeline once a day at midnight (Africa/Nairobi)

@@ -1,280 +1,192 @@
-# import json
-import simplejson as json
-from symtable import Function
-from channels.generic.websocket import AsyncWebsocketConsumer,JsonWebsocketConsumer,WebsocketConsumer
-from asgiref.sync import async_to_sync
-from asgiref.sync import sync_to_async
+# retailers/consumers.py
+
+import json
+from datetime import date, datetime, timedelta
+
+import dateutil.parser
+import simplejson
+from asgiref.sync import async_to_sync, sync_to_async
 from channels.db import database_sync_to_async
-from retailers.models import OutOfStock, RetailerReceipts,CustomerOrders,Prescriptions,RetailerIndent,RetailerProductRequest
-from retailers.serializers import RetailerReceiptsSerializer,OutOfStocksSerializer,CustomerOrdersSerializer, RetailerIndentSerializer, MiniCustomerOrdersSerializer,RetailPrescriptionsSerializer,RetailerProductRequestSerializer
-from products.models import Products
-from authentication.serializers import UsersSerializer
-from authentication.models import Users
-from djangochannelsrestframework.generics import GenericAsyncAPIConsumer
-from djangochannelsrestframework.observer import model_observer
-from djangochannelsrestframework.decorators import action
-from djangochannelsrestframework.mixins import ListModelMixin
+from channels.generic.websocket import (
+    AsyncJsonWebsocketConsumer,
+    AsyncWebsocketConsumer,
+    JsonWebsocketConsumer,
+    WebsocketConsumer,
+)
+from django.utils import timezone
 from djangochannelsrestframework import permissions
-from uuid import UUID
+from djangochannelsrestframework.decorators import action
+from djangochannelsrestframework.generics import GenericAsyncAPIConsumer
+from djangochannelsrestframework.mixins import ListModelMixin
+from djangochannelsrestframework.observer import model_observer
+
+from authentication.models import Users
+from authentication.serializers import UsersSerializer
 from core.date_utils import get_formatted_from_date, get_formatted_to_date
+from products.models import Products
+from retailers.models import (
+    CustomerOrders,
+    OutOfStock,
+    Prescriptions,
+    RetailerIndent,
+    RetailerProductRequest,
+    RetailerReceipts,
+)
+from retailers.serializers import (
+    CustomerOrdersSerializer,
+    MiniCustomerOrdersSerializer,
+    OutOfStocksSerializer,
+    RetailPrescriptionsSerializer,
+    RetailerIndentSerializer,
+    RetailerProductRequestSerializer,
+    RetailerReceiptsSerializer,
+)
+from symtable import Function
+from utils.UUIDEncoder import UUIDEncoder
+
 import asyncio
 import logging
-import dateutil.parser
-from django.utils import timezone
-from datetime import date, datetime, timedelta
-import json
-import uuid 
+import time
+from decimal import Decimal
+from uuid import UUID
 
 logger = logging.getLogger("retailers.consumers")
 
-# class UUIDEncoder(json.JSONEncoder):
-#     def default(self, obj):
-#         if isinstance(obj, UUID):
-#             # if the obj is uuid, we simply return the value of uuid
-#             return obj.hex
-#         return json.JSONEncoder.default(self, obj)
 
-class UUIDEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, uuid.UUID):
-            # Explicitly return the standard string representation
-            return str(obj)
-        return super().default(obj)
-
-# class WholesaleDiscountsConsumer(JsonWebsocketConsumer):
-#     def connect(self):
-#         print("Am at the connect")
-#         async_to_sync(self.channel_layer.group_add('wholesaler-discounts',self.channel_name))
-#         self.accept()
-    
-#     def disconnect(self, code):
-#         print("Disconnected!")
-#         async_to_sync(self.channel_layer.group_discard('wholesaler-discounts',self.channel_name))
-#         return super().disconnect(code)
-
-       
-#     def send_wholesaler_discounts(self, event):
-#         print("Am at the consumer")
-#         print("Event", event)
-#         discounts_message = event['data']
-#         print("messs",json.loads(discounts_message))
-#         # receipts=RetailerReceipts.objects.filter(unit_quantity__gte=0).all()
-#         # retailer_receipts =RetailerReceiptsSerializer(receipts,many=True).data
-#         async_to_sync(self.send(json.loads(discounts_message))) 
-
-
-
-# from channels.generic.websocket import AsyncWebsocketConsumer
+# =====================================================================
+# Wholesaler discounts (dormant — kept for reference)
+# =====================================================================
 
 class WholesaleDiscountsConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         print("Am at the connect")
-        await self.channel_layer.group_add('wholesaler-discounts',self.channel_name)
+        await self.channel_layer.group_add(
+            'wholesaler-discounts',
+            self.channel_name,
+        )
         await self.accept()
 
-    async def disconnect(self):
-        await self.channel_layer.group_discard('wholesaler-discounts',self.channel_name)
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            'wholesaler-discounts',
+            self.channel_name,
+        )
 
     async def send_wholesaler_discounts(self, event):
         print("Am at the consumer")
         print("Event", event)
         discounts_message = event['data']
-        print("messs",discounts_message)
+        print("messs", discounts_message)
         await self.send(discounts_message)
 
 
-
-import asyncio
-import json
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-
-
+# =====================================================================
+# Retailer out-of-stocks
+# =====================================================================
 
 class RetailerOutOfStocksConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'oss',
-            self.channel_name
+            'oss',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'out_of_stocks': json.loads(self.datum),
-                    
-                })
-
-
-        
+            'out_of_stocks': json.loads(self.datum),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'oss',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
         os_items = OutOfStock.objects.all()
-        print("qsw",os_items)
-        # for item in os_items:
-            # print("idem",item)
-        self.out_of_stocks = os_items
-        sers =OutOfStocksSerializer(os_items,many=True,).data
-        data=json.dumps(sers,cls=UUIDEncoder)
-        print("Data as s2s",data)
-        self.datum=data
-
+        print("qsw", os_items)
+        sers = OutOfStocksSerializer(os_items, many=True).data
+        data = json.dumps(sers, cls=UUIDEncoder)
+        print("Data as s2s", data)
+        self.datum = data
 
     async def send_retailer_out_of_stocks(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'out_of_stocks': json.loads(self.datum)
-                   
-                })
-# retailers/consumers.py
-
-import json
-import time
-from datetime import timedelta
-from decimal import Decimal
-
-import numpy as np
-import pandas as pd
-from asgiref.sync import sync_to_async
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.db import transaction
-from django.db.models import Sum
-from django.utils import timezone
-from sklearn.linear_model import LinearRegression
-
-from products.models import Products
-from retailers.models import (
-    CustomerOrderItems,
-    IndentItemSource,
-    OutOfStock,
-    RetailerIndent,
-    RetailerIndentItem,
-    RetailerOrderItems,
-    RetailerReceipts,
-)
-from wholesalers.models import (
-    WholesalerPriceDiscounts,
-    WholesalerQuantityDiscounts,
-    WholesalerReceipts,
-)
+            'out_of_stocks': json.loads(self.datum),
+        })
 
 
-class UUIDEncoder(json.JSONEncoder):
-    """Encoder for UUID / date / datetime / Decimal."""
-
-    def default(self, obj):
-        import datetime
-        import decimal
-        import uuid
-
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-        if isinstance(obj, (datetime.date, datetime.datetime)):
-            return obj.isoformat()
-        if isinstance(obj, decimal.Decimal):
-            return str(obj)
-        return super().default(obj)
-
-
-import json
-import time
-
-from asgiref.sync import sync_to_async
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.utils import timezone
-
-from retailers.helpers import UUIDEncoder
-
-from retailers.models import (
-    OutOfStock,
-    RetailerIndent,
-    RetailerOrderItems,
-    RetailerReceipts,
-)
-
-
+# =====================================================================
+# Retailer inventory
+# =====================================================================
 
 class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'retail-inventory',
-            self.channel_name
+            'retail-inventory',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'inventory': json.loads(self.datum),
-                    
-                })
+            'inventory': json.loads(self.datum),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'retail-inventory',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-        retailer_receipts = RetailerReceipts.objects.filter(entity=self.user.entity,current_unit_quantity__gte=0)
-        self.retailer_receipts = retailer_receipts
-        sers =RetailerReceiptsSerializer(retailer_receipts,many=True,context={'request': None}).data
-        data=json.dumps(sers,cls=UUIDEncoder)
- 
-        
-        self.datum=data
-
+        retailer_receipts = RetailerReceipts.objects.filter(
+            entity=self.user.entity,
+            current_unit_quantity__gte=0,
+        )
+        sers = RetailerReceiptsSerializer(
+            retailer_receipts,
+            many=True,
+            context={'request': None},
+        ).data
+        self.datum = json.dumps(sers, cls=UUIDEncoder)
 
     async def send_retailer_receipts(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'inventory': json.loads(self.datum),
-                    
-                })
+            'inventory': json.loads(self.datum),
+        })
 
 
-# apps/retailers/consumers.py
-
-import json
-
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-
-from .models import RetailerIndent
-from .serializers import RetailerIndentSerializer
-
-
-
+# =====================================================================
+# Retailer indents
+# =====================================================================
 
 class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
     GROUP_NAME = "retailer-indents"
@@ -327,152 +239,196 @@ class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
         ).data
         return json.loads(json.dumps(data, cls=UUIDEncoder))
 
+
+# =====================================================================
+# Shop inventory
+# =====================================================================
+
 class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         self.selected_query_entity = self.scope["selected_query_entity"]
         print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'shop-inventory',
-            self.channel_name
+            'shop-inventory',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'shop_inventory': json.loads(self.shop_inventory),
-                    
-                })
+            'shop_inventory': json.loads(self.shop_inventory),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'shop-inventory',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-
-        shop_inventory = RetailerReceipts.objects.filter(unit_quantity__gte=0,entity_id=self.selected_query_entity).exclude(product__is_pom=True)
-       
-        sers =RetailerReceiptsSerializer(shop_inventory,many=True,context={'request': None}).data
-        data=json.dumps(sers,cls=UUIDEncoder)
- 
-        self.shop_inventory = data
-        
-
+        shop_inventory = (
+            RetailerReceipts.objects
+            .filter(
+                unit_quantity__gte=0,
+                entity_id=self.selected_query_entity,
+            )
+            .exclude(product__is_pom=True)
+        )
+        sers = RetailerReceiptsSerializer(
+            shop_inventory,
+            many=True,
+            context={'request': None},
+        ).data
+        self.shop_inventory = json.dumps(sers, cls=UUIDEncoder)
 
     async def send_shop_inventory(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'shop_inventory': json.loads(self.shop_inventory),
-                    
-                })
-        
+            'shop_inventory': json.loads(self.shop_inventory),
+        })
 
+
+# =====================================================================
+# Retailer dashboard
+# =====================================================================
 
 class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'retailer-dashboard',
-            self.channel_name
+            'retailer-dashboard',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'retailer_dashboard': json.loads(self.retailer_dashboard),
-                    
-                })
+            'retailer_dashboard': json.loads(self.retailer_dashboard),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'retailer-dashboard',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-        from retailers.models import CustomerOrderItems,CustomerOrders,RetailerReceipts,CustomerOrderPayment
+        from retailers.models import (
+            CustomerOrderItems,
+            CustomerOrderPayment,
+            CustomerOrders,
+            RetailerReceipts,
+        )
         from wholesalers.models import RetailerOrders
-        final={}
-        weekly_orders =[]
-        days=[]
+
+        final = {}
+        weekly_orders = []
+        days = []
         now = datetime.now()
 
         for x in range(7):
-            items_value=0.00
-            all_payments_value=0.00
-            orders=[]
+            items_value = 0.00
+            all_payments_value = 0.00
+            orders = []
             d = now - timedelta(days=x)
             next_d = d + timedelta(days=1)
             days.append(d)
-            all_payments = CustomerOrderPayment.objects.filter(entity=self.user.entity,status="SUCCESS").all()
-            for payment in all_payments:
-                all_payments_value=all_payments_value+float(payment.amount)
 
-            all_receipts = RetailerReceipts.objects.filter(entity=self.user.entity).all()
-            all_orders = CustomerOrders.objects.filter(entity=self.user.entity,).all()
-            all_requisitions = RetailerOrders.objects.filter(entity=self.user.entity,).all()
-            final["retailer_receipts"]=len(all_receipts)
-            final["customer_orders"]=len(all_orders)
-            final["wholesale_requisitions"]=len(all_requisitions)
-            final["all_payments_count"]=len(all_payments)
-            final["all_payments_value"]=all_payments_value
+            all_payments = (
+                CustomerOrderPayment.objects
+                .filter(entity=self.user.entity, status="SUCCESS")
+                .all()
+            )
+            for payment in all_payments:
+                all_payments_value += float(payment.amount)
+
+            all_receipts = (
+                RetailerReceipts.objects
+                .filter(entity=self.user.entity)
+                .all()
+            )
+            all_orders = (
+                CustomerOrders.objects
+                .filter(entity=self.user.entity)
+                .all()
+            )
+            all_requisitions = (
+                RetailerOrders.objects
+                .filter(entity=self.user.entity)
+                .all()
+            )
+
+            final["retailer_receipts"] = len(all_receipts)
+            final["customer_orders"] = len(all_orders)
+            final["wholesale_requisitions"] = len(all_requisitions)
+            final["all_payments_count"] = len(all_payments)
+            final["all_payments_value"] = all_payments_value
 
             followers = self.user.entity.followers.all()
-            final["followers"]=len(followers)
+            final["followers"] = len(followers)
 
-            ## Filtering order items and orders
+            items = CustomerOrderItems.objects.filter(
+                entity=self.user.entity,
+                created__gte=d,
+                created__lt=next_d,
+                customer_order__is_paid="true",
+            )
+            orders = CustomerOrders.objects.filter(
+                entity=self.user.entity,
+                created__gte=d,
+                created__lt=next_d,
+                is_paid="true",
+            ).all()
 
-            items = CustomerOrderItems.objects.filter(entity=self.user.entity,created__gte=d,created__lt=next_d,customer_order__is_paid="true")
-            orders = CustomerOrders.objects.filter(entity=self.user.entity,created__gte=d,created__lt=next_d,is_paid="true").all()
             for item in items:
-                items_value=items_value+ float(item.item_price_total)
-                print(item.created)
-            weekly_orders.append({"date":d.strftime("%Y-%m-%d"),"items":len(items),"value":items_value,"orders":len(orders)})
-        
-        final["weekly_orders"]=weekly_orders
+                items_value += float(item.item_price_total)
 
-        data=json.dumps(final,cls=UUIDEncoder)
- 
-        self.retailer_dashboard = data
-        
+            weekly_orders.append({
+                "date": d.strftime("%Y-%m-%d"),
+                "items": len(items),
+                "value": items_value,
+                "orders": len(orders),
+            })
 
+        final["weekly_orders"] = weekly_orders
+        self.retailer_dashboard = json.dumps(final, cls=UUIDEncoder)
 
     async def send_retailer_dashboard(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'retailer_dashboard': json.loads(self.retailer_dashboard),
-                    
-                })
-        
+            'retailer_dashboard': json.loads(self.retailer_dashboard),
+        })
 
 
+# =====================================================================
+# Bodaboda assigned orders
+# =====================================================================
 
 class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
     print("Am here at boda")
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:
@@ -480,30 +436,30 @@ class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
             return
         else:
             print("user at boda", self.user)
-        
+
         await self.channel_layer.group_add(
-            f'bodaboda-assigned-order',
-            self.channel_name
+            'bodaboda-assigned-order',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
-        if self.bodaboda_assigned_order and len(self.bodaboda_assigned_order)>0:
+        if self.bodaboda_assigned_order and len(self.bodaboda_assigned_order) > 0:
             await self.send_json({
-                        'bodaboda_assigned_order': json.loads(self.bodaboda_assigned_order),
-                        
-                    })
+                'bodaboda_assigned_order': json.loads(
+                    self.bodaboda_assigned_order
+                ),
+            })
         else:
             await self.send_json({
-                        'bodaboda_assigned_order': None,
-                        
-                    })
+                'bodaboda_assigned_order': None,
+            })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'bodaboda-assigned-order',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
@@ -512,232 +468,231 @@ class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
         from entitylocations.models import BodaLocations
 
         bodaboda = None
-        bodaboda_assigned_order=None
-        self.bodaboda_assigned_order=None
-        data=None
-        yesterday = dateutil.parser.parse(str( date.today() - timedelta(days = 1))).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        # yesterday = date.today() - timedelta(days = 1)
+        bodaboda_assigned_order = None
+        self.bodaboda_assigned_order = None
+        data = None
+
+        yesterday = dateutil.parser.parse(
+            str(date.today() - timedelta(days=1))
+        ).strftime("%Y-%m-%d %H:%M:%S")
         print("Yesterday", yesterday)
+
         if BodaLocations.objects.filter(owner=self.user).exists():
-            bodaboda = BodaLocations.objects.filter(owner=self.user).first()
+            bodaboda = BodaLocations.objects.filter(
+                owner=self.user
+            ).first()
 
-            if CustomerOrders.objects.filter(bodaboda=bodaboda,created__gte=yesterday,status="ASSIGNED").exists():
-                bodaboda_assigned_order = CustomerOrders.objects.filter(bodaboda=bodaboda,created__gte=yesterday,status="ASSIGNED").all()
-     
-
-                self.bodaboda_assigned_order = bodaboda_assigned_order
-        
-                orders =CustomerOrdersSerializer(bodaboda_assigned_order,many=True,context={'request': None}).data
-                data=json.dumps(orders,cls=UUIDEncoder)
-                
-                self.bodaboda_assigned_order=data
+            if CustomerOrders.objects.filter(
+                bodaboda=bodaboda,
+                created__gte=yesterday,
+                status="ASSIGNED",
+            ).exists():
+                bodaboda_assigned_order = (
+                    CustomerOrders.objects
+                    .filter(
+                        bodaboda=bodaboda,
+                        created__gte=yesterday,
+                        status="ASSIGNED",
+                    )
+                    .all()
+                )
+                orders = CustomerOrdersSerializer(
+                    bodaboda_assigned_order,
+                    many=True,
+                    context={'request': None},
+                ).data
+                self.bodaboda_assigned_order = json.dumps(
+                    orders, cls=UUIDEncoder
+                )
             else:
-                self.bodaboda_assigned_order=None
-
+                self.bodaboda_assigned_order = None
         else:
-            self.bodaboda_assigned_order=None
+            self.bodaboda_assigned_order = None
 
     async def send_bodaboda_assigned_order(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
-        if self.bodaboda_assigned_order and len(self.bodaboda_assigned_order)>0:
+        if self.bodaboda_assigned_order and len(self.bodaboda_assigned_order) > 0:
             await self.send_json({
-                        'bodaboda_assigned_order': json.loads(self.bodaboda_assigned_order),
-                        
-                    })
+                'bodaboda_assigned_order': json.loads(
+                    self.bodaboda_assigned_order
+                ),
+            })
         else:
             await self.send_json({
-                        'bodaboda_assigned_order': None,
-                        
-                    })
-        
+                'bodaboda_assigned_order': None,
+            })
 
-        
+
+# =====================================================================
+# Customer orders
+# =====================================================================
 
 class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'customer-orders',
-            self.channel_name
+            'customer-orders',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'customer_orders': json.loads(self.customer_orders),
-                    
-                })
+            'customer_orders': json.loads(self.customer_orders),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'customer-orders',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-        formatted_from_date = dateutil.parser.parse(str(timezone.now().date())).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        customer_orders = CustomerOrders.objects.filter(entity=self.user.entity,created__gte=formatted_from_date).order_by('-created')
+        formatted_from_date = dateutil.parser.parse(
+            str(timezone.now().date())
+        ).strftime("%Y-%m-%d %H:%M:%S")
 
-        self.customer_orders = customer_orders
-        
-        orders =CustomerOrdersSerializer(customer_orders,many=True,context={'request': None}).data
-        data=json.dumps(orders,cls=UUIDEncoder)
-        
-        self.customer_orders=data
+        customer_orders = CustomerOrders.objects.filter(
+            entity=self.user.entity,
+            created__gte=formatted_from_date,
+        ).order_by('-created')
 
+        orders = CustomerOrdersSerializer(
+            customer_orders,
+            many=True,
+            context={'request': None},
+        ).data
+        self.customer_orders = json.dumps(orders, cls=UUIDEncoder)
 
     async def send_customer_orders(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'customer_orders': json.loads(self.customer_orders),
-                    
-                })
+            'customer_orders': json.loads(self.customer_orders),
+        })
 
-        
+
+# =====================================================================
+# User orders
+# =====================================================================
+
 class UserOrdersConsumer(AsyncJsonWebsocketConsumer):
-    
-    async def connect(self):
 
+    async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'user-orders',
-            self.channel_name
+            'user-orders',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'user_orders': json.loads(self.user_orders),
-                    
-                })
+            'user_orders': json.loads(self.user_orders),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'user-orders',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-        user_orders = CustomerOrders.objects.filter(customer=self.user)[:10]
+        user_orders = CustomerOrders.objects.filter(
+            customer=self.user
+        )[:10]
 
-        self.user_orders = user_orders
-        
-        orders =CustomerOrdersSerializer(user_orders,many=True,context={'request': None}).data
-        data=json.dumps(orders,cls=UUIDEncoder)
-        
-        self.user_orders=data
-
+        orders = CustomerOrdersSerializer(
+            user_orders,
+            many=True,
+            context={'request': None},
+        ).data
+        self.user_orders = json.dumps(orders, cls=UUIDEncoder)
 
     async def send_user_orders(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'customer_orders': json.loads(self.user_orders),
-                    
-                })
-        
+            'customer_orders': json.loads(self.user_orders),
+        })
+
+
+# =====================================================================
+# User prescriptions
+# =====================================================================
+
 class UserPrescriptionsConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'user-prescriptions',
-            self.channel_name
+            'user-prescriptions',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'user_prescriptions': json.loads(self.user_prescriptions),
-                    
-                })
+            'user_prescriptions': json.loads(self.user_prescriptions),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'user-prescriptions',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-        user_prescriptions = Prescriptions.objects.filter(created_by=self.user)
+        user_prescriptions = Prescriptions.objects.filter(
+            created_by=self.user
+        )
 
-        self.user_prescriptions = user_prescriptions
-        
-        orders =RetailPrescriptionsSerializer(user_prescriptions,many=True,context={'request': None}).data
-        data=json.dumps(orders,cls=UUIDEncoder)
-        
-        self.user_prescriptions=data
-
+        orders = RetailPrescriptionsSerializer(
+            user_prescriptions,
+            many=True,
+            context={'request': None},
+        ).data
+        self.user_prescriptions = json.dumps(orders, cls=UUIDEncoder)
 
     async def send_user_prescriptions(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'user_prescriptions': json.loads(self.user_prescriptions),
-                    
-                })
-        
+            'user_prescriptions': json.loads(self.user_prescriptions),
+        })
 
 
-# class CustomerOrderNotificationConsumer(ListModelMixin, GenericAsyncAPIConsumer):
-
-#     queryset = CustomerOrders.objects.all()
-#     serializer_class = CustomerOrdersSerializer
-#     permissions = (permissions.AllowAny,)
-
-#     async def connect(self, **kwargs):
-#         self.user = self.scope["user"]
-#         logger.warn("Connected to retailer consumer")
-#         await self.model_change.subscribe()
-#         await super().connect()
-
-#     @model_observer(CustomerOrders)
-#     async def model_change(self, message, observer=None, **kwargs):
-#         logger.warn("message", message)
-#         await self.send_json(message)
-
-#     @model_change.serializer
-#     def model_serialize(self, instance, action, **kwargs):
-#         print("the instance",instance)
-#         data = dict(data=CustomerOrdersSerializer(instance=instance).data,context={'request':  None}, action=action.value)
-#         data_j=json.dumps(data,cls=UUIDEncoder)
-#         self.retailer_receipts= data_j
-#         logger.warn(self.retailer_receipts)
-#         return json.loads(self.retailer_receipts)
-    
+# =====================================================================
+# Retailer receipts (observer)
+# =====================================================================
 
 class RetailerReceiptsConsumer(ListModelMixin, GenericAsyncAPIConsumer):
 
@@ -746,59 +701,30 @@ class RetailerReceiptsConsumer(ListModelMixin, GenericAsyncAPIConsumer):
     permissions = (permissions.AllowAny,)
 
     async def connect(self, **kwargs):
-        logger.warn("Connected to retailer consumer")
+        logger.warning("Connected to retailer consumer")
         await self.model_change.subscribe()
         await super().connect()
 
     @model_observer(RetailerReceipts)
     async def model_change(self, message, observer=None, **kwargs):
-        logger.warn("message", message)
+        logger.warning("message", message)
         await self.send_json(message)
 
     @model_change.serializer
     def model_serialize(self, instance, action, **kwargs):
-        data = dict(data=RetailerReceiptsSerializer(instance=instance).data,context={'request':  None}, action=action.value)
-        data_j=json.dumps(data,cls=UUIDEncoder)
-        self.retailer_receipts= data_j
-        logger.warn(self.retailer_receipts)
+        data = dict(
+            data=RetailerReceiptsSerializer(instance=instance).data,
+            context={'request': None},
+            action=action.value,
+        )
+        self.retailer_receipts = json.dumps(data, cls=UUIDEncoder)
+        logger.warning(self.retailer_receipts)
         return json.loads(self.retailer_receipts)
-# class RetailerReceiptsConsumer(GenericAsyncAPIConsumer):
-#     queryset = Users.objects.all()
-#     serializer_class = UsersSerializer
 
-#     @model_observer(RetailerReceipts)
-#     async def retailer_receipts_activity(
-#         self,
-#         message: RetailerReceiptsSerializer,
-#         observer=None,
-#         subscribing_request_ids=[],
-#         **kwargs
-#     ):
-#         print("receipts",message.data)
-#         await self.send_json(message.data)
 
-#     @retailer_receipts_activity.serializer
-#     def retailer_receipts_activity(self, instance: RetailerReceipts, action, **kwargs) -> RetailerReceiptsSerializer:
-#         """This will return the retailer receipts serializer"""
-#         return RetailerReceiptsSerializer(instance)
-
-#     @retailer_receipts_activity.groups_for_signal
-#     def retailer_receipts_activity(self, instance: RetailerReceipts, **kwargs):
-#         # this block of code is called very often *DO NOT make DB QUERIES HERE*
-#         yield f'-user__{instance.id}'  #! the string **user** is the ``Comment's`` user field.
-
-#     @retailer_receipts_activity.groups_for_consumer
-#     def retailer_receipts_activity(self, school=None, classroom=None, **kwargs):
-#         # This is called when you subscribe/unsubscribe
-#         yield f'-user__{self.scope["user"].pk}'
-
-#     @action()
-#     async def subscribe_to_retailer_receipts_activity(self, request_id, **kwargs):
-#         # We will check if the user is authenticated for subscribing.
-#         if "user" in self.scope and self.scope["user"].is_authenticated:
-#             print("logged in user",self.scope["user"]['first_name'])
-#             await self.retailer_receipts_activity.subscribe(request_id=request_id)
-
+# =====================================================================
+# Customer order notifications
+# =====================================================================
 
 class CustomerOrderNotificationsConsumer(WebsocketConsumer):
     def connect(self):
@@ -806,7 +732,7 @@ class CustomerOrderNotificationsConsumer(WebsocketConsumer):
         if user.is_authenticated:
             self.group_name = f"user_{user.id}"
             async_to_sync(self.channel_layer.group_add)(
-                self.group_name, self.channel_name
+                self.group_name, self.channel_name,
             )
             self.accept()
         else:
@@ -818,174 +744,122 @@ class CustomerOrderNotificationsConsumer(WebsocketConsumer):
             print("Channel name", self.channel_name)
 
             async_to_sync(self.channel_layer.group_discard)(
-                self.group_name, self.channel_name
+                self.group_name, self.channel_name,
             )
 
     def send_notification(self, event):
         print("Event data received in consumer:", event)
 
-        customer_name = event["customer_name"]
-        customer_phone = event["customer_phone"]
-        delivery_method = event["delivery_method"]
-        is_received = event["is_received"]
-        is_delivered = event["is_delivered"]
-        selected_payment_method = event["selected_payment_method"]
-        selected_payment_method_title = event["selected_payment_method_title"]
-        is_paid = event["is_paid"]
-        shipping_cost = event["shipping_cost"]
-        order_price_total = event["order_price_total"]
-        entity = event["entity"]
-        entity_title = event["entity_title"]
-        owner = event["owner"]
-        status = event["status"]
-        id = event["id"]
         self.send(text_data=json.dumps({
-           "customer_name": customer_name,
-           "customer_phone": customer_phone,
-           "delivery_method": delivery_method,
-           "is_received": is_received,
-           "is_delivered": is_delivered,
-           "selected_payment_method": selected_payment_method,
-           "selected_payment_method_title": selected_payment_method_title,
-           "is_paid": is_paid,
-           "shipping_cost": shipping_cost,
-           "order_price_total": order_price_total,
-           "entity": entity,
-           "entity_title": entity_title,
-           "owner": owner,
-
-           "status": status,
-           "id": id,    
-      
+            "customer_name": event["customer_name"],
+            "customer_phone": event["customer_phone"],
+            "delivery_method": event["delivery_method"],
+            "is_received": event["is_received"],
+            "is_delivered": event["is_delivered"],
+            "selected_payment_method": event["selected_payment_method"],
+            "selected_payment_method_title": event["selected_payment_method_title"],
+            "is_paid": event["is_paid"],
+            "shipping_cost": event["shipping_cost"],
+            "order_price_total": event["order_price_total"],
+            "entity": event["entity"],
+            "entity_title": event["entity_title"],
+            "owner": event["owner"],
+            "status": event["status"],
+            "id": event["id"],
         }))
 
 
-
-        
+# =====================================================================
+# Order details
+# =====================================================================
 
 class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
-    
+
     async def connect(self):
         self.user = self.scope["user"]
         print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'customer-order-details',
-            self.channel_name
+            'customer-order-details',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'customer_order_details': json.loads(self.datum),
-                    
-                })
-
-
-        
+            'customer_order_details': json.loads(self.datum),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'customer-order-details',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
         order_id = self.scope["url_route"]["kwargs"]["order_id"]
-        customer_order = CustomerOrders.objects.filter(id=order_id).first()
-       
-        self.customer_order = customer_order
-        sers =CustomerOrdersSerializer(customer_order,many=False,).data
-        data=json.dumps(sers,cls=UUIDEncoder)
-        print("Data as s2s",data)
-        self.datum=data
+        customer_order = CustomerOrders.objects.filter(
+            id=order_id
+        ).first()
 
+        sers = CustomerOrdersSerializer(
+            customer_order,
+            many=False,
+        ).data
+        self.datum = json.dumps(sers, cls=UUIDEncoder)
 
     async def send_customer_order_details(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'customer_order_details': json.loads(self.datum)
-                   
-                })
+            'customer_order_details': json.loads(self.datum),
+        })
 
 
-# retailers/consumers.py
-
-import json
-import time
-from datetime import timedelta
-from decimal import Decimal
-
-from asgiref.sync import sync_to_async
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.db import transaction
-from django.db.models import Sum
-from django.utils import timezone
-
-from products.models import Products
-
-from retailers.models import (
-    CustomerOrderItems,
-    IndentItemSource,
-    OutOfStock,
-    RetailerIndent,
-    RetailerIndentItem,
-    RetailerOrderItems,
-    RetailerReceipts,
-)
-from wholesalers.models import (
-    WholesalerPriceDiscounts,
-    WholesalerQuantityDiscounts,
-    WholesalerReceipts,
-)
-
+# =====================================================================
+# Retailer product requests
+# =====================================================================
 
 class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
+
     async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:
             return
-        
+
         await self.channel_layer.group_add(
-            f'retailer-product-requests',
-            self.channel_name
+            'retailer-product-requests',
+            self.channel_name,
         )
         await self.accept()
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'retailer_product_requests': json.loads(self.retailer_product_requests),
-                    
-                })
+            'retailer_product_requests': json.loads(
+                self.retailer_product_requests
+            ),
+        })
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             'retailer-product-requests',
-            self.channel_name
+            self.channel_name,
         )
         await self.close()
 
     @sync_to_async
     def helper_func(self):
-        formatted_from_date = dateutil.parser.parse(str(timezone.now().date())).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        # retailer_product_requests = RetailerProductRequest.objects.filter(retailer=self.user.entity,created__gte=formatted_from_date).order_by('-created')
         retailer_product_requests = (
             RetailerProductRequest.objects
-            .filter(
-                entity=self.user.entity,
-            )
+            .filter(entity=self.user.entity)
             .exclude(
                 status__in=[
                     RetailerProductRequest.Status.CANCELLED,
@@ -996,21 +870,94 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
             .distinct()
             .order_by('-created')
         )
-        
-        self.retailer_product_requests = retailer_product_requests
-        
-        product_requests =RetailerProductRequestSerializer(retailer_product_requests,many=True,context={'request': None}).data
-        data=json.dumps(product_requests,cls=UUIDEncoder)
-        
-        self.retailer_product_requests=data
 
+        product_requests = RetailerProductRequestSerializer(
+            retailer_product_requests,
+            many=True,
+            context={'request': None},
+        ).data
+        self.retailer_product_requests = json.dumps(
+            product_requests, cls=UUIDEncoder
+        )
 
     async def send_retailer_product_requests(self, event):
-        # Call the heper async Function
+        # Call the helper async Function
         await self.helper_func()
 
         # Broadcast result to the group
         await self.send_json({
-                    'retailer_product_requests': json.loads(self.retailer_product_requests),
-                    
-                })
+            'retailer_product_requests': json.loads(
+                self.retailer_product_requests
+            ),
+        })
+
+
+# =====================================================================
+# Retailer requisitions
+# =====================================================================
+
+class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Live retailer requisitions registry.
+
+    Serves the retailer's own orders — filters on `retailer`
+    (the retailer-side FK on RetailerOrders), not `entity`
+    (which is the wholesaler-side field).
+    """
+
+    async def connect(self):
+        self.user = self.scope["user"]
+        if not self.user.is_authenticated:
+            return
+
+        await self.channel_layer.group_add(
+            'retailer-requisitions',
+            self.channel_name,
+        )
+        await self.accept()
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+            'retailer-requisitions': json.loads(
+                self.retailer_requisitions
+            ),
+        })
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            'retailer-requisitions',
+            self.channel_name,
+        )
+        await self.close()
+
+    @sync_to_async
+    def helper_func(self):
+        from wholesalers.models import RetailerOrders
+        from wholesalers.serializers import RetailerOrdersSerializer
+
+        retailer_orders = (
+            RetailerOrders.objects
+            .filter(retailer=self.user.entity)
+            .order_by('-created')[:20]
+        )
+
+        orders = RetailerOrdersSerializer(
+            retailer_orders,
+            many=True,
+            context={'request': None},
+        ).data
+        self.retailer_requisitions = json.dumps(
+            orders, cls=UUIDEncoder
+        )
+
+    async def send_retailer_requisitions(self, event):
+        # Call the helper async Function
+        await self.helper_func()
+
+        # Broadcast result to the group
+        await self.send_json({
+            'retailer-requisitions': json.loads(
+                self.retailer_requisitions
+            ),
+        })
