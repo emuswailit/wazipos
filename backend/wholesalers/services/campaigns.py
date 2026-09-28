@@ -222,6 +222,7 @@ def create_campaign(data: Dict, user):
         entity = _get_wholesaler_entity(user)
         create_log("info",f"Entity: {entity}")
         campaign = WholesalerCampaign(
+            entity=entity,
             wholesaler=entity,
             title=(data.get("title") or "").strip(),
             description=data.get("description", "") or "",
