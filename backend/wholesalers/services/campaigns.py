@@ -30,6 +30,8 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext_lazy as _
 
+from utils.logging import create_log
+
 from ..models import (
     WholesalerCampaign,
     WholesalerCampaignAudience,
@@ -218,6 +220,7 @@ def create_campaign(data: Dict, user):
     """Create a draft campaign owned by the user's entity."""
     try:
         entity = _get_wholesaler_entity(user)
+        create_log("info",f"Entity: {entity}")
         campaign = WholesalerCampaign(
             wholesaler=entity,
             title=(data.get("title") or "").strip(),
