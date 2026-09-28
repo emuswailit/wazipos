@@ -426,315 +426,69 @@ class WholesalerQuantityDiscounts(EntityRelatedModel):
             from django.core.exceptions import ValidationError
             raise ValidationError(errors)
         
-# class RetailerOrders(EntityRelatedModel):
-#     """
-#     Order that a wholesaler places on a wholesaler
-#     """
+"""
+Wholesaler campaign models.
 
-#     ORDER_ORIGIN_CHOICES = (
-#         ("RETAILER", "RETAILER"),
-#         ("STAFF", "STAFF"),
-#     )
-#     DELIVERY_CHOICES = (
-#         ("SELF", "SELF"),
-#         ("COURIER", "COURIER"),
-#     )
-#     TERMS_CHOICES = (
-#         ("CASH", "CASH"),
-#         ("CONTRACT", "CONTRACT"),
-#         ("CREDIT", "CREDIT"),
-#         ("FACILITY", "FACILITY"),
-#         ("PLACEMENT", "PLACEMENT"),
-#     )
+A campaign is a presentation layer over receipts and existing
+discount models. Opting in seeds a RetailerIndent — the indent
+remains the single commitment path, so campaign pricing and
+indent pricing cannot drift.
+"""
 
-#     ORDER_TYPE_CHOICES = (
-#         ("EMERGENCY", "EMERGENCY"),
-#         ("NORMAL", "NORMAL"),
-#     )
-#     ORDER_STATUS_CHOICES = (
-#         ("COMPLETED", "COMPLETED"),
-#         ("SUBMITTED", "SUBMITTED"),
-#         ("PROCESSING", "PROCESSING"),
-#         ("DISPATCHED", "DISPATCHED"),
-#         ("RECEIVED", "RECEIVED"),
-#         ("CANCELLED", "CANCELLED"),
-#     )
+import uuid
+from decimal import Decimal
+from typing import Dict
 
-#     retailer = models.ForeignKey(
-#         Entities, related_name="wholesalerOrderRetailer", on_delete=models.CASCADE
-#     )
-#     wholesaler = models.ForeignKey(
-#         Entities, related_name="wholesalerOrderWholesaler", on_delete=models.CASCADE
-#     )
-#     facilitator = models.ForeignKey(
-#         Entities, related_name="wholesalerOrderFacilitator", on_delete=models.CASCADE,null=True,blank=True
-#     )
-#     # retailer_order_number = models.CharField(
-#     #     max_length=10, unique=True
-#     # )
-#     draft_id = models.CharField(max_length=100, null=True, blank=True)
-#     payment_method = models.ForeignKey(
-#         "payments.PaymentMethods",
-#         related_name="reatiler_order_payment_method",
-#         on_delete=models.CASCADE, null=True, blank=True
-#     )
-#     document_number = models.ForeignKey(
-#         DocumentNumbers,
-#         related_name="retailer_order_document_number",
-#         on_delete=models.CASCADE, null=True, blank=True
-#     )
-#     shipping_amount = models.DecimalField(
-#         max_digits=7, default=0.00, decimal_places=2
-#     )
-#     order_discount_total = models.DecimalField(
-#         max_digits=7, default=0.00, decimal_places=2, null=True, blank=True
-#     )
-#     order_gross_price_total = models.DecimalField(
-#         max_digits=7, default=0.00, decimal_places=2, null=True, blank=True
-#     )
-#     final_price = models.DecimalField(
-#         max_digits=7, default=0.00, decimal_places=2, null=True, blank=True
-#     )
-#     final_price_total = models.DecimalField(
-#         max_digits=7, default=0.00, decimal_places=2, null=True, blank=True
-#     )
-#     order_tax_total = models.DecimalField(
-#         max_digits=7, default=0.00, decimal_places=2, null=True, blank=True
-#     )
-#     order_terms = models.CharField(max_length=20, choices=TERMS_CHOICES)
-#     order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES)
-#     status = models.CharField(
-#         max_length=20, choices=ORDER_STATUS_CHOICES, default='SUBMITTED')
-#     is_paid = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='false'
-#     )
-#     paid_at = models.DateTimeField(auto_now_add=True)
-#     is_delivered = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true'
-#     )
-#     delivered_at = models.DateTimeField(auto_now_add=True)
-#     employee = models.ForeignKey(
-#         Employees, related_name="employee_creating_order", on_delete=models.CASCADE,null=True,blank=True
-#     )
-#     delivered_by = models.ForeignKey(
-#         Users,
-#         related_name="wholesalerOrderDeliveredBy",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     is_processed = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true'
-#     )
-#     processed_at = models.DateTimeField(auto_now_add=True)
-#     processed_by = models.ForeignKey(
-#         Users,
-#         related_name="wholesalerOrderProcessedBy",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     is_packed = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true'
-#     )
-#     packed_at = models.DateTimeField(auto_now_add=True)
-#     packed_by = models.ForeignKey(
-#         Users,
-#         related_name="wholesalerOrderPackedBy",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     is_received = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true'
-#     )
-#     reference_number = models.CharField(
-#         max_length=56,null=True, blank=True
-#     )
-#     received_at = models.DateTimeField(auto_now_add=True)
-#     received_by = models.ForeignKey(
-#         Users,
-#         related_name="wholesalerOrderReceivedBy",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     is_approved = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true'
-#     )
-#     approved_at = models.DateTimeField(auto_now_add=True)
-#     approved_by = models.ForeignKey(
-#         Users,
-#         related_name="wholesalerOrderApprovedBy",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     is_dispatched = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='true'
-#     )
-#     dispatched_at = models.DateTimeField(auto_now_add=True)
-#     dispatched_by = models.ForeignKey(
-#         Users,
-#         related_name="wholesalerOrderDispatchedBy",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     order_origin = models.CharField(
-#         max_length=20, choices=ORDER_ORIGIN_CHOICES)
-#     delivery_method = models.CharField(max_length=20, choices=DELIVERY_CHOICES)
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         User, related_name="wholesaler_order_owner", on_delete=models.CASCADE
-#     )
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
+from django.db.models import F, Q
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
-#     def save(self, *args, **kwargs):
-#         # self.retailer_order_number = self.retailer_order_number.upper()
-
-#         super(RetailerOrders, self).save(*args, **kwargs)
+# 100 KB. Previously mis-labelled as 300 KB in WholesalerPriceDiscountBanners.
+COMPRESS_THRESHOLD_BYTES = 100 * 1024
 
 
-# class RetailerOrderItems(EntityRelatedModel):
-#     retailer_order = models.ForeignKey(
-#         RetailerOrders, related_name="retailer_order", on_delete=models.CASCADE
-#     )
-#     wholesaler_receipt = models.ForeignKey(
-#         WholesalerReceipts, related_name="order_item_wholesaler_receipt", on_delete=models.CASCADE
-#     )
-#     purchased_quantity = models.IntegerField(default=0)
-#     discount_quantity = models.IntegerField(default=0)
-#     total_quantity = models.IntegerField(default=0)
+"""
+Wholesaler campaign models.
 
-#     item_price = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_price_total = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_final_price = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_final_price_total = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     unit_of_issue = models.CharField(max_length=20,choices=UNITS_OF_ISSUE_CHOICES, default="Pack")
+Data definitions and row-level behavior only. Workflows that span
+multiple rows (publication, opt-in) live in services.py.
+"""
+# 100 KB. Previously mis-labelled as 300 KB in WholesalerPriceDiscountBanners.
+COMPRESS_THRESHOLD_BYTES = 100 * 1024
 
-#     item_tax = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_tax_total = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_counter_price_discount = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_counter_price_discount_amount = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_counter_price_discount_amount_total = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True,default=0.00
-#     )
-#     item_price_discount = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_price_discount_total = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_net_price = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     item_net_price_total = models.DecimalField(
-#         max_digits=7, decimal_places=2, null=True, blank=True
-#     )
-#     stakeholders = models.ManyToManyField(Stakes)
-#     is_received = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='false'
-#     )
-#     is_issued = models.CharField(
-#         max_length=50,
-#         choices=TRUE_FALSE_OPTIONS,
-#         default='false'
-#     )
-#     item_pending_amount = models.DecimalField(
-#         max_digits=12, decimal_places=2, null=True, blank=True)
-#     item_paid_amount = models.DecimalField(
-#         max_digits=12, decimal_places=2, default=0.00)
-#     employee = models.ForeignKey(
-#         Employees, related_name="employee_creating_order_item", on_delete=models.CASCADE, null=True, blank=True
-#     )
-#     created = models.DateField(auto_now_add=True)
-#     updated = models.DateField(auto_now=True)
-#     owner = models.ForeignKey(
-#         User, related_name="wholesaler_order_item_owner", on_delete=models.CASCADE
-#     )
 
-#     class Meta:
-#         constraints = [
-#             models.UniqueConstraint(
-#                 fields=["retailer_order", "wholesaler_receipt"],
-#                 name="One item per order",
-#             )
-#         ]
+# ---------------------------------------------------------------------------
+# Upload paths
+# ---------------------------------------------------------------------------
 
-#     def __str__(self) -> str:
-#         return f"{self.wholesaler_receipt.product.title}"
+def wholesaler_campaign_hero_upload_to(instance, filename):
+    """
+    `instance.uuid` is generated on instantiation (default=uuid.uuid4),
+    so it is always populated — even before the first save.
+    """
+    return f"campaigns/{instance.uuid}/hero/{filename}"
 
-#     # def save(self, *args, **kwargs):
 
-#     #     self.item_price_total= float(self.purchased_quantity) * float(self.wholesaler_receipt.pack_selling_price)
-#     #     quantity_discount =None
-#     #     applicable_discounts =[]
-#     #     price_discount = None
-#     #     if WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=self.wholesaler_receipt,is_active="true",limit_quantity__gte=self.purchased_quantity).exists():
-#     #         applicable_discounts =WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt=self.wholesaler_receipt,is_active="true",limit_quantity__gte=self.purchased_quantity).all()
+def wholesaler_campaign_banner_upload_to(instance, filename):
+    key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
+    return f"campaigns/{key}/banners/{filename}"
 
-#     #         for disc in applicable_discounts:
-#     #             if self.purchased_quantity % disc.limit_quantity>0 and self.purchased_quantity % disc.limit_quantity <self.purchased_quantity:
-#     #                 quantity_discount = disc
-#     #                 self.discount_quantity=quantity_discount.awarded_quantity
-#     #                 self.total_quantity = self.purchased_quantity + quantity_discount.awarded_quantity
-#     #                 return
-                
 
-#     #     if WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=self.wholesaler_receipt,is_active="true").exists():
-#     #         price_discount =WholesalerPriceDiscounts.objects.filter(wholesaler_receipt=self.wholesaler_receipt,is_active="true").first()
-
-#     #         self.item_price_discount = float(self.wholesaler_receipt.pack_selling_price)* float(price_discount.percent)/100.00  
-#     #         self.item_net_price = float(self.wholesaler_receipt.pack_selling_price) - float(self.item_price_discount)
-
-#     #         self.item_net_price_total = self.item_net_price * float(self.purchased_quantity)
-#     #     super(RetailerOrderItems, self).save(*args, **kwargs)
-
-def wholesaler_campaign_image_upload_to(instance, filename):
-    return f"campaigns/{instance.id or 'draft'}/{filename}"
-
+# ---------------------------------------------------------------------------
+# Campaign
+# ---------------------------------------------------------------------------
 
 class WholesalerCampaign(EntityRelatedModel):
     """
-    Wholesaler-initiated offer: a curated set of receipts, each
-    with optional price and quantity discounts, published to
-    retailers with suggested quantities and projected earnings.
+    Wholesaler-initiated offer: a curated set of receipts, each with
+    optional price and quantity discounts, published to retailers with
+    suggested quantities and projected earnings.
 
     Opting in seeds a RetailerIndent — the indent is the sole
-    commitment path, campaign or not.
+    commitment path, campaign or not. See services.publish_campaign and
+    services.opt_in_to_campaign.
     """
 
     class Status(models.TextChoices):
@@ -742,7 +496,6 @@ class WholesalerCampaign(EntityRelatedModel):
         PUBLISHED = "PUBLISHED", _("Published")
         CLOSED = "CLOSED", _("Closed")
         CANCELLED = "CANCELLED", _("Cancelled")
-
     wholesaler = models.ForeignKey(
         "authentication.Entities",
         related_name="campaigns_published",
@@ -750,22 +503,33 @@ class WholesalerCampaign(EntityRelatedModel):
     )
     title = models.CharField(max_length=200)
     description = models.TextField(max_length=500, blank=True, default="")
+
     banner = models.ImageField(
-        upload_to=wholesaler_campaign_image_upload_to,
-        null=True, blank=True,
+        upload_to=wholesaler_campaign_hero_upload_to,
+        null=True,
+        blank=True,
     )
+
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.DRAFT,
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
     )
     start = models.DateField()
     end = models.DateField()
     is_active = models.CharField(
-        max_length=10, choices=TRUE_FALSE_OPTIONS, default="true",
+        max_length=10,
+        choices=TRUE_FALSE_OPTIONS,
+        default="true",
     )
     budget_cap = models.DecimalField(
-        max_digits=14, decimal_places=2, null=True, blank=True,
-        help_text="Optional cap on total campaign value, wholesaler-side.",
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional cap on total committed value, wholesaler-side.",
     )
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -775,10 +539,27 @@ class WholesalerCampaign(EntityRelatedModel):
         indexes = [
             models.Index(fields=["wholesaler", "status"]),
             models.Index(fields=["start", "end"]),
+            models.Index(fields=["status", "is_active", "start", "end"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(end__gte=F("start")),
+                name="campaign_end_on_or_after_start",
+            ),
         ]
 
     def __str__(self):
         return f"{self.wholesaler.title} — {self.title}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.start and self.end and self.end < self.start:
+            errors["end"] = _("End date must be on or after start date.")
+        if self.budget_cap is not None and self.budget_cap < 0:
+            errors["budget_cap"] = _("Budget cap cannot be negative.")
+        if errors:
+            raise ValidationError(errors)
 
     @property
     def is_currently_active(self) -> bool:
@@ -790,14 +571,85 @@ class WholesalerCampaign(EntityRelatedModel):
         )
 
 
-class WholesalerCampaignItem(EntityRelatedModel):
+# ---------------------------------------------------------------------------
+# Banner (gallery)
+# ---------------------------------------------------------------------------
+
+class WholesalerCampaignBanner(EntityRelatedModel):
     """
-    One receipt on a campaign. Price and quantity discounts are
-    reused from the existing discount models.
+    One image in a campaign's gallery.
+
+    FK-only relationship (no M2M). Each banner belongs to exactly one
+    campaign — the previous discount-banner model carried both a FK and
+    a M2M to the same parent, which created two writable,
+    non-authoritative join paths.
     """
 
     campaign = models.ForeignKey(
-        WholesalerCampaign, related_name="items", on_delete=models.CASCADE,
+        WholesalerCampaign,
+        related_name="banners",
+        on_delete=models.CASCADE,
+    )
+    image = models.ImageField(upload_to=wholesaler_campaign_banner_upload_to)
+    thumbnail = AdvanceThumbnailField(
+        source_field="image",
+        upload_to="thumbnails/campaigns/",
+        null=True,
+        blank=True,
+        size=(300, 300),
+    )
+    caption = models.CharField(max_length=200, blank=True, default="")
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.CharField(
+        max_length=10,
+        choices=TRUE_FALSE_OPTIONS,
+        default="true",
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name_plural = "Wholesaler Campaign Banners"
+        ordering = ["sort_order", "id"]
+        indexes = [
+            models.Index(fields=["campaign", "is_active", "sort_order"]),
+        ]
+
+    def __str__(self):
+        return f"{self.campaign.title} · banner {self.pk or 'unsaved'}"
+
+    def save(self, *args, **kwargs):
+        # Compress on insert only. Re-encoding on every metadata edit
+        # would degrade an already-compressed image each time a caption
+        # changes.
+        if (
+            self._state.adding
+            and self.image
+            and getattr(self.image, "size", 0) > COMPRESS_THRESHOLD_BYTES
+        ):
+            self.image = compress_image(self.image)
+        super().save(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Campaign item
+# ---------------------------------------------------------------------------
+
+class WholesalerCampaignItem(EntityRelatedModel):
+    """
+    One receipt on a campaign.
+
+    Price and quantity discounts are reused from the existing discount
+    models. The `published_*` fields freeze the values the retailer is
+    projected against at publication — see services.snapshot_item_terms.
+    """
+
+    campaign = models.ForeignKey(
+        WholesalerCampaign,
+        related_name="items",
+        on_delete=models.CASCADE,
     )
     wholesaler_receipt = models.ForeignKey(
         "WholesalerReceipts",
@@ -808,13 +660,15 @@ class WholesalerCampaignItem(EntityRelatedModel):
         "WholesalerPriceDiscounts",
         related_name="campaign_items",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     wholesaler_quantity_discount = models.ForeignKey(
         "WholesalerQuantityDiscounts",
         related_name="campaign_items",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
 
     suggested_quantity = models.IntegerField(default=0)
@@ -823,14 +677,19 @@ class WholesalerCampaignItem(EntityRelatedModel):
         max_digits=10, decimal_places=2, null=True, blank=True,
     )
 
+    # Frozen at publication. Authoritative for projection once set.
     published_unit_price = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True,
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
         help_text="Receipt's effective unit price at publication.",
     )
     published_bonus_quantity = models.IntegerField(
         default=0,
         help_text="Free units earned per block at publication.",
     )
+    published_at = models.DateTimeField(null=True, blank=True)
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -842,49 +701,122 @@ class WholesalerCampaignItem(EntityRelatedModel):
             models.UniqueConstraint(
                 fields=["campaign", "wholesaler_receipt"],
                 name="One receipt per campaign",
-            )
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["campaign", "wholesaler_receipt"]),
         ]
 
     def __str__(self):
         return f"{self.wholesaler_receipt.product.title} on {self.campaign.title}"
 
-    def project_for_quantity(self, quantity: int, markup_pct: Decimal):
-        from retailers.models import RetailerIndentItem
+    # -- row-level validation -----------------------------------------------
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        receipt = self.wholesaler_receipt
+        pd = self.wholesaler_price_discount
+        qd = self.wholesaler_quantity_discount
+
+        if pd is not None:
+            if pd.wholesaler_receipt_id != receipt.pk:
+                errors["wholesaler_price_discount"] = _(
+                    "Price discount does not belong to this receipt."
+                )
+            elif pd.end < self.campaign.start or pd.start > self.campaign.end:
+                errors["wholesaler_price_discount"] = _(
+                    "Price discount window does not overlap the campaign."
+                )
+
+        if qd is not None:
+            qd_receipt_id = getattr(qd, "wholesaler_receipt_id", None)
+            if qd_receipt_id is not None and qd_receipt_id != receipt.pk:
+                errors["wholesaler_quantity_discount"] = _(
+                    "Quantity discount does not belong to this receipt."
+                )
+
+        if self.suggested_quantity is not None and self.suggested_quantity < 0:
+            errors["suggested_quantity"] = _("Suggested quantity cannot be negative.")
+
+        if self.per_retailer_limit is not None and self.per_retailer_limit < 0:
+            errors["per_retailer_limit"] = _("Per-retailer limit cannot be negative.")
+
+        if errors:
+            raise ValidationError(errors)
+
+    def validate_windows_cover_campaign(self) -> None:
         """
-        Run the same math as RetailerIndentItem.recalculate against
-        an unsaved probe. Guarantees the projection the retailer
-        sees matches the line they get on opt-in.
+        Publish-time validation. Every attached discount must remain valid
+        through the campaign end — otherwise the item advertises a deal
+        that disappears mid-flight.
         """
-        probe = RetailerIndentItem(
-            retailer_indent=None,
-            wholesale_receipt=self.wholesaler_receipt,
-            wholesaler_price_discount=self.wholesaler_price_discount,
-            wholesaler_quantity_discount=self.wholesaler_quantity_discount,
-            required_quantity=quantity,
-            recommended_retail_price=self.retail_price_hint,
-            supplier_unit_selling_price=None,
-        )
-        probe.recalculate(markup_override=markup_pct)
-        return probe.profit_estimate    
+        errors = {}
+        for field, discount in (
+            ("wholesaler_price_discount", self.wholesaler_price_discount),
+            ("wholesaler_quantity_discount", self.wholesaler_quantity_discount),
+        ):
+            if discount is None:
+                continue
+            if discount.end < self.campaign.end:
+                errors[field] = _(
+                    "Discount ends %(disc_end)s, before campaign end %(camp_end)s."
+                ) % {"disc_end": discount.end, "camp_end": self.campaign.end}
+        if errors:
+            raise ValidationError(errors)
+
+    # -- projection (thin delegate to services) -----------------------------
+
+    def project_for_quantity(self, quantity: int, markup_pct):
+        """
+        Convenience wrapper so templates/views can call
+        `item.project_for_quantity(...)` directly. Implementation lives in
+        services.project_item_for_quantity.
+        """
+        from .services import project_item_for_quantity
+        return project_item_for_quantity(self, quantity, markup_pct)
+
+
+# ---------------------------------------------------------------------------
+# Audience
+# ---------------------------------------------------------------------------
 
 class WholesalerCampaignAudience(EntityRelatedModel):
     """
-    Which retailers see this campaign, and opt-in state.
+    Which retailers see this campaign, and their opt-in state.
+
+    `retailer_indent` is the attribution spine: it links the opt-in to
+    the indent it produced. Without it, budget reconciliation, conversion
+    analytics, and double-opt-in protection are all guesswork.
     """
 
     campaign = models.ForeignKey(
-        WholesalerCampaign, related_name="audience", on_delete=models.CASCADE,
+        WholesalerCampaign,
+        related_name="audience",
+        on_delete=models.CASCADE,
     )
     retailer = models.ForeignKey(
         "authentication.Entities",
         related_name="campaigns_received",
         on_delete=models.CASCADE,
     )
+    retailer_indent = models.ForeignKey(
+        "retailers.RetailerIndent",
+        related_name="campaign_optins",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
     opted_in_at = models.DateTimeField(null=True, blank=True)
     opted_out_at = models.DateTimeField(null=True, blank=True)
     is_visible = models.CharField(
-        max_length=10, choices=TRUE_FALSE_OPTIONS, default="true",
+        max_length=10,
+        choices=TRUE_FALSE_OPTIONS,
+        default="true",
     )
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -895,11 +827,20 @@ class WholesalerCampaignAudience(EntityRelatedModel):
             models.UniqueConstraint(
                 fields=["campaign", "retailer"],
                 name="One audience row per retailer per campaign",
-            )
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["retailer", "is_visible"]),
+            models.Index(fields=["campaign", "opted_in_at"]),
         ]
 
     def __str__(self):
         return f"{self.retailer.title} · {self.campaign.title}"
+
+    @property
+    def has_opted_in(self) -> bool:
+        return self.opted_in_at is not None and self.opted_out_at is None
+    
 
 class CommitType(models.TextChoices):
     CASH = "CASH", _("Paid in cash")
@@ -907,6 +848,8 @@ class CommitType(models.TextChoices):
     PLACEMENT = "PLACEMENT", _("Placement approved")
     FACILITY = "FACILITY", _("Facility approved")
     
+
+
 class RetailerOrders(EntityRelatedModel):
     """
     An order a retailer places on a wholesaler. Generated from
