@@ -8,7 +8,7 @@ from authentication.models import EntityBranches
 from employees.validators import employees_models_validators
 from ..utils import sacco_models_validators
 from authentication.models import Users
-from campaign_utils.logging import create_log
+from utils.logging import create_log
 from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
 from decouple import config
 from core.phone_number_utils import get_telco_by_phone_number

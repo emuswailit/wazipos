@@ -33,7 +33,7 @@ from intergrations.jambopay.jp_mobile_money_checkout import jambopay_mobile_chec
 from intergrations.jambopay.jambopay_wallet import get_account_by_phone, jambopay_wallet_checkout
 
 from authentication.validators import authentication_models_validators
-from campaign_utils.logging import create_log
+from utils.logging import create_log
 from core.date_utils import get_yesterday,get_today,get_tommorow
 from transport.models import BodabodaTrips
 

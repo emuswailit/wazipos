@@ -15,7 +15,7 @@ from authentication.validators.authentication_models_validators import validate_
 from products.models import Products,Entities
 from wholesalers.serializers import RetailerOrdersSerializer,RetailerOrderItemsSerializer
 from retailers.serializers import RetailerReceiptsSerializer
-from campaign_utils.logging import create_log
+from utils.logging import create_log
 import datetime
 
 

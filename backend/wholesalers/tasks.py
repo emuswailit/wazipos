@@ -2,7 +2,7 @@ from celery import Celery
 from celery import shared_task
 from django.utils import timezone
 from .models import WholesalerPriceDiscounts
-from campaign_utils.logging import create_log
+from utils.logging import create_log
 app = Celery()
 # from wazi.celery import app   
 from . import models

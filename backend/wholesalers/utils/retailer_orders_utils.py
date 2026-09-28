@@ -32,7 +32,7 @@ from decouple import config
 import requests
 from payments.models import PaymentMethods,PayoutAccounts
 from retailers.models import RetailerReceipts
-from campaign_utils.logging import create_log
+from utils.logging import create_log
 from intergrations.mpesa import mpesa_express_api,  transaction_status_api,c2b_register_url
 from intergrations.jambopay.jambopay_wallet import  jambopay_wallet_checkout, get_wallet_balance
 from core.utils import random_string_generator

@@ -1,8 +1,8 @@
 import random
-from campaign_utils.logging import create_log
+from utils.logging import create_log
 import re
 from rest_framework.response import Response
-from campaign_utils.mailing import send_email
+from utils.mailing import send_email
 from django.db.models import Q
 from django.db import models
 from datetime import date, timedelta, timezone,datetime
