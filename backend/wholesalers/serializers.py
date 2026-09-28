@@ -234,7 +234,7 @@ class WholesalerCampaignListSerializer(BaseModelSerializer):
             "created",
             "updated",
         ]
-        read_only_fields = ["status"]
+        read_only_fields = ["status","entity","id"]
 
     def get_item_count(self, obj):
         return getattr(obj, "item_count", None) or obj.items.count()
