@@ -13,7 +13,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-from utils.logging import create_log
+from campaign_utils.logging import create_log
 import json
 from uuid import UUID
 from django_advance_thumbnail import AdvanceThumbnailField

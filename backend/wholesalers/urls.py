@@ -20,7 +20,7 @@ urlpatterns = [
         name="retailer-orders-apiview",
     ),
     path(
-    "retailers/campaigns",
+    "campaigns",
     views.campaignsAPIView,
     name="campaigns-apiview",
 ),
