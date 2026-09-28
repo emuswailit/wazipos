@@ -134,11 +134,11 @@ retailer opt into?
 from datetime import date
 from decimal import Decimal
 
-from wholesalers.models import (
-    WholesalerCampaign,
-    WholesalerCampaignAudience,
-    WholesalerCampaignItem,
-)
+# from wholesalers.models import (
+#     WholesalerCampaign,
+#     WholesalerCampaignAudience,
+#     WholesalerCampaignItem,
+# )
 
 
 # Scoring weights — must sum to 1.0

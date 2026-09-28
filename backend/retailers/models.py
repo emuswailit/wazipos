@@ -892,14 +892,14 @@ class RetailerIndentItem(EntityRelatedModel):
         blank=True,
         related_name="indent_items_priced_against",
     )
-    campaign_item = models.ForeignKey(
-        "wholesalers.WholesalerCampaignItem",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="indent_items",
-        help_text="Set when this line was created by accepting a campaign.",
-    )
+    # campaign_item = models.ForeignKey(
+    #     "wholesalers.WholesalerCampaignItem",
+    #     on_delete=models.SET_NULL,
+    #     null=True,
+    #     blank=True,
+    #     related_name="indent_items",
+    #     help_text="Set when this line was created by accepting a campaign.",
+    # )
 
     required_quantity = models.IntegerField(default=0)
     total_quantity = models.IntegerField(default=0)
