@@ -16,11 +16,11 @@ from core.date_utils import numOfDays
 
 from rest_framework import serializers
 
-# from .models import (
-#     WholesalerCampaign,
-#     WholesalerCampaignAudience,
-#     WholesalerCampaignItem,
-# )
+from .models import (
+    WholesalerCampaign,
+    WholesalerCampaignAudience,
+    WholesalerCampaignItem,
+)
 
 
 # =====================================================================
@@ -35,7 +35,7 @@ class WholesalerCampaignAudienceListSerializer(BaseModelSerializer):
     opted_in = serializers.SerializerMethodField()
 
     class Meta:
-        # model = WholesalerCampaignAudience
+        model = WholesalerCampaignAudience
         fields = [
             "id",
             "campaign",
@@ -65,7 +65,7 @@ class WholesalerCampaignAudienceDetailSerializer(BaseModelSerializer):
     opted_in = serializers.SerializerMethodField()
 
     class Meta:
-        # model = WholesalerCampaignAudience
+        model = WholesalerCampaignAudience
         fields = [
             "id",
             "campaign",
@@ -102,7 +102,7 @@ class WholesalerCampaignItemListSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        # model = WholesalerCampaignItem
+        model = WholesalerCampaignItem
         fields = [
             "id",
             "campaign",
@@ -157,7 +157,7 @@ class WholesalerCampaignItemDetailSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        # model = WholesalerCampaignItem
+        model = WholesalerCampaignItem
         fields = [
             "id",
             "campaign",
@@ -214,7 +214,7 @@ class WholesalerCampaignListSerializer(BaseModelSerializer):
     audience_count = serializers.SerializerMethodField()
 
     class Meta:
-        # model = WholesalerCampaign
+        model = WholesalerCampaign
         fields = [
             "id",
             "wholesaler",
@@ -259,7 +259,7 @@ class WholesalerCampaignDetailSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        # model = WholesalerCampaign
+        model = WholesalerCampaign
         fields = [
             "id",
             "wholesaler",
