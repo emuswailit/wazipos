@@ -8,7 +8,6 @@ from django.db.models import Sum
 # Third-party
 from PIL import Image
 from django_advance_thumbnail import AdvanceThumbnailField
-import retailers
 
 # Django
 from django.contrib.auth import get_user_model
@@ -31,10 +30,11 @@ from distributors.models import (
     WholesalerOrders,
     WholesalerOrderItems,
 )
-from drugs.models import Users as DrugsUsers  # note: renamed to avoid clash
+from drugs.models import Users as DrugsUsers
 from employees.models import Employees
 from payments.models import PayoutAccounts
 from products.models import Products
+
 User = get_user_model()
 
 
@@ -45,6 +45,7 @@ def wholesaler_price_discount_image_upload_to(instance, filename):
     new_filename = "%s-%s.%s" % (slug, instance.id, file_extension)
     return new_filename
 
+
 def wholesaler_quantity_discount_image_upload_to(instance, filename):
     title = instance.wholesaler_quantity_discount.title
     slug = slugify(title)
@@ -52,15 +53,15 @@ def wholesaler_quantity_discount_image_upload_to(instance, filename):
     new_filename = "%s-%s.%s" % (slug, instance.id, file_extension)
     return new_filename
 
+
 def compress_image(image):
     im = Image.open(image)
     if im.mode != 'RGB':
         im = im.convert('RGB')
     im_io = BytesIO()
-    im.save(im_io, 'jpeg', quality=70,optimize=True)
+    im.save(im_io, 'jpeg', quality=70, optimize=True)
     new_image = File(im_io, name=image.name)
     return new_image
-
 
 
 class WholesalerReceipts(EntityRelatedModel):
@@ -76,7 +77,6 @@ class WholesalerReceipts(EntityRelatedModel):
         "products.Products",
         on_delete=models.CASCADE,
     )
-
     received_from = models.ForeignKey(
         "authentication.Entities",
         related_name="variationReceiptDistributor",
@@ -174,13 +174,18 @@ class WholesalerReceipts(EntityRelatedModel):
 
         super().save(*args, **kwargs)
 
+
 class WholesalerPriceDiscountBanners(EntityRelatedModel):
     """Model for uploading price discount banners"""
 
     wholesaler_price_discount = models.ForeignKey(
-        "WholesalerPriceDiscounts", related_name="wholesaler_price_discount_banners", on_delete=models.CASCADE
+        "WholesalerPriceDiscounts",
+        related_name="wholesaler_price_discount_banners",
+        on_delete=models.CASCADE,
     )
-    price_discount_banner = models.ImageField(upload_to=wholesaler_price_discount_image_upload_to)
+    price_discount_banner = models.ImageField(
+        upload_to=wholesaler_price_discount_image_upload_to,
+    )
     thumbnail = AdvanceThumbnailField(
         source_field="price_discount_banners",
         upload_to="thumbnails/discounts/price",
@@ -198,16 +203,13 @@ class WholesalerPriceDiscountBanners(EntityRelatedModel):
     def save(self, force_insert=False, force_update=False, using=None, *args, **kwargs):
         if self.price_discount_banner:
             price_discount_banner = self.price_discount_banner
-            if (
-                price_discount_banner.size > 0.1 * 1024 * 1024
-            ):  # if size greater than 300kb then it will send to compress price_discount_banner function
+            if price_discount_banner.size > 0.1 * 1024 * 1024:
                 self.price_discount_banner = compress_image(price_discount_banner)
         super(WholesalerPriceDiscountBanners, self).save(*args, **kwargs)
 
     def __str__(self):
         return self.wholesaler_price_discount.title
 
-            
 
 class WholesalerPriceDiscounts(EntityRelatedModel):
     """
@@ -291,11 +293,6 @@ class WholesalerPriceDiscounts(EntityRelatedModel):
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        """
-        Save the discount, then sync the parent receipt's derived
-        price fields. Idempotent — the receipt is recomputed from
-        scratch each time.
-        """
         super().save(*args, **kwargs)
         self.wholesaler_receipt.sync_price_from_discounts()
 
@@ -305,14 +302,17 @@ class WholesalerPriceDiscounts(EntityRelatedModel):
         receipt.sync_price_from_discounts()
 
 
-
 class WholesalerQuantityDiscountBanners(EntityRelatedModel):
     """Model for uploading quantity discount banners"""
 
     wholesaler_quantity_discount = models.ForeignKey(
-        "WholesalerQuantityDiscounts", related_name="wholesaler_quantity_discount_banners", on_delete=models.CASCADE
+        "WholesalerQuantityDiscounts",
+        related_name="wholesaler_quantity_discount_banners",
+        on_delete=models.CASCADE,
     )
-    quantity_discount_banner = models.ImageField(upload_to=wholesaler_quantity_discount_image_upload_to)
+    quantity_discount_banner = models.ImageField(
+        upload_to=wholesaler_quantity_discount_image_upload_to,
+    )
     thumbnail = AdvanceThumbnailField(
         source_field="quantity_discount_banner",
         upload_to="thumbnails/discounts/quantity",
@@ -330,15 +330,13 @@ class WholesalerQuantityDiscountBanners(EntityRelatedModel):
     def save(self, force_insert=False, force_update=False, using=None, *args, **kwargs):
         if self.quantity_discount_banner:
             quantity_discount_banner = self.quantity_discount_banner
-            if (
-                quantity_discount_banner.size > 0.1 * 1024 * 1024
-            ):  # if size greater than 300kb then it will send to compress quantity_discount_banner function
+            if quantity_discount_banner.size > 0.1 * 1024 * 1024:
                 self.quantity_discount_banner = compress_image(quantity_discount_banner)
         super(WholesalerQuantityDiscountBanners, self).save(*args, **kwargs)
 
     def __str__(self):
         return self.wholesaler_quantity_discount.title
-   
+
 
 class WholesalerQuantityDiscounts(EntityRelatedModel):
     """
@@ -426,15 +424,11 @@ class WholesalerQuantityDiscounts(EntityRelatedModel):
         if errors:
             from django.core.exceptions import ValidationError
             raise ValidationError(errors)
-        
-# """
-# Wholesaler campaign models.
 
-# A campaign is a presentation layer over receipts and existing
-# discount models. Opting in seeds a RetailerIndent — the indent
-# remains the single commitment path, so campaign pricing and
-# indent pricing cannot drift.
-# """
+
+# ---------------------------------------------------------------------------
+# Campaign models
+# ---------------------------------------------------------------------------
 
 import uuid
 from decimal import Decimal
@@ -446,29 +440,10 @@ from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-# 100 KB. Previously mis-labelled as 300 KB in WholesalerPriceDiscountBanners.
 COMPRESS_THRESHOLD_BYTES = 100 * 1024
 
-
-"""
-Wholesaler campaign models.
-
-Data definitions and row-level behavior only. Workflows that span
-multiple rows (publication, opt-in) live in services.py.
-"""
-# 100 KB. Previously mis-labelled as 300 KB in WholesalerPriceDiscountBanners.
-COMPRESS_THRESHOLD_BYTES = 100 * 1024
-
-
-# ---------------------------------------------------------------------------
-# Upload paths
-# ---------------------------------------------------------------------------
 
 def wholesaler_campaign_hero_upload_to(instance, filename):
-    """
-    `instance.uuid` is generated on instantiation (default=uuid.uuid4),
-    so it is always populated — even before the first save.
-    """
     return f"campaigns/{instance.uuid}/hero/{filename}"
 
 
@@ -477,10 +452,6 @@ def wholesaler_campaign_banner_upload_to(instance, filename):
     return f"campaigns/{key}/banners/{filename}"
 
 
-# ---------------------------------------------------------------------------
-# Campaign
-# ---------------------------------------------------------------------------
-
 class WholesalerCampaign(EntityRelatedModel):
     """
     Wholesaler-initiated offer: a curated set of receipts, each with
@@ -488,8 +459,7 @@ class WholesalerCampaign(EntityRelatedModel):
     suggested quantities and projected earnings.
 
     Opting in seeds a RetailerIndent — the indent is the sole
-    commitment path, campaign or not. See services.publish_campaign and
-    services.opt_in_to_campaign.
+    commitment path, campaign or not.
     """
 
     class Status(models.TextChoices):
@@ -497,6 +467,9 @@ class WholesalerCampaign(EntityRelatedModel):
         PUBLISHED = "PUBLISHED", _("Published")
         CLOSED = "CLOSED", _("Closed")
         CANCELLED = "CANCELLED", _("Cancelled")
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+
     wholesaler = models.ForeignKey(
         "authentication.Entities",
         related_name="campaigns_published",
@@ -572,18 +545,9 @@ class WholesalerCampaign(EntityRelatedModel):
         )
 
 
-# ---------------------------------------------------------------------------
-# Banner (gallery)
-# ---------------------------------------------------------------------------
-
 class WholesalerCampaignBanner(EntityRelatedModel):
     """
     One image in a campaign's gallery.
-
-    FK-only relationship (no M2M). Each banner belongs to exactly one
-    campaign — the previous discount-banner model carried both a FK and
-    a M2M to the same parent, which created two writable,
-    non-authoritative join paths.
     """
 
     campaign = models.ForeignKey(
@@ -622,9 +586,6 @@ class WholesalerCampaignBanner(EntityRelatedModel):
         return f"{self.campaign.title} · banner {self.pk or 'unsaved'}"
 
     def save(self, *args, **kwargs):
-        # Compress on insert only. Re-encoding on every metadata edit
-        # would degrade an already-compressed image each time a caption
-        # changes.
         if (
             self._state.adding
             and self.image
@@ -634,17 +595,9 @@ class WholesalerCampaignBanner(EntityRelatedModel):
         super().save(*args, **kwargs)
 
 
-# ---------------------------------------------------------------------------
-# Campaign item
-# ---------------------------------------------------------------------------
-
 class WholesalerCampaignItem(EntityRelatedModel):
     """
     One receipt on a campaign.
-
-    Price and quantity discounts are reused from the existing discount
-    models. The `published_*` fields freeze the values the retailer is
-    projected against at publication — see services.snapshot_item_terms.
     """
 
     campaign = models.ForeignKey(
@@ -678,7 +631,6 @@ class WholesalerCampaignItem(EntityRelatedModel):
         max_digits=10, decimal_places=2, null=True, blank=True,
     )
 
-    # Frozen at publication. Authoritative for projection once set.
     published_unit_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -710,8 +662,6 @@ class WholesalerCampaignItem(EntityRelatedModel):
 
     def __str__(self):
         return f"{self.wholesaler_receipt.product.title} on {self.campaign.title}"
-
-    # -- row-level validation -----------------------------------------------
 
     def clean(self):
         super().clean()
@@ -748,11 +698,6 @@ class WholesalerCampaignItem(EntityRelatedModel):
             raise ValidationError(errors)
 
     def validate_windows_cover_campaign(self) -> None:
-        """
-        Publish-time validation. Every attached discount must remain valid
-        through the campaign end — otherwise the item advertises a deal
-        that disappears mid-flight.
-        """
         errors = {}
         for field, discount in (
             ("wholesaler_price_discount", self.wholesaler_price_discount),
@@ -767,29 +712,14 @@ class WholesalerCampaignItem(EntityRelatedModel):
         if errors:
             raise ValidationError(errors)
 
-    # -- projection (thin delegate to services) -----------------------------
-
     def project_for_quantity(self, quantity: int, markup_pct):
-        """
-        Convenience wrapper so templates/views can call
-        `item.project_for_quantity(...)` directly. Implementation lives in
-        services.project_item_for_quantity.
-        """
         from .services import project_item_for_quantity
         return project_item_for_quantity(self, quantity, markup_pct)
 
 
-# ---------------------------------------------------------------------------
-# Audience
-# ---------------------------------------------------------------------------
-
 class WholesalerCampaignAudience(EntityRelatedModel):
     """
     Which retailers see this campaign, and their opt-in state.
-
-    `retailer_indent` is the attribution spine: it links the opt-in to
-    the indent it produced. Without it, budget reconciliation, conversion
-    analytics, and double-opt-in protection are all guesswork.
     """
 
     campaign = models.ForeignKey(
@@ -841,20 +771,18 @@ class WholesalerCampaignAudience(EntityRelatedModel):
     @property
     def has_opted_in(self) -> bool:
         return self.opted_in_at is not None and self.opted_out_at is None
-    
+
 
 class CommitType(models.TextChoices):
     CASH = "CASH", _("Paid in cash")
     CREDIT = "CREDIT", _("Credit approved")
     PLACEMENT = "PLACEMENT", _("Placement approved")
     FACILITY = "FACILITY", _("Facility approved")
-    
 
 
 class RetailerOrders(EntityRelatedModel):
     """
-    An order a retailer places on a wholesaler. Generated from
-    an indent (or created directly for one-off orders).
+    An order a retailer places on a wholesaler.
     """
 
     ORDER_ORIGIN_CHOICES = (
@@ -986,7 +914,6 @@ class RetailerOrders(EntityRelatedModel):
         on_delete=models.CASCADE, null=True, blank=True,
     )
 
-    # ---- Timestamps (nullable, set explicitly on transition) ----
     paid_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
@@ -1040,15 +967,12 @@ class RetailerOrders(EntityRelatedModel):
         help_text="Denormalized flag for fast filtering.",
     )
     cancelled_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name_plural = "Retailer Orders"
 
     def __str__(self):
         return f"{self.retailer.title}-{self.id}"
-
-    # ------------------------------------------------------------------
-    # Aggregates
-    # ------------------------------------------------------------------
 
     def recalculate(self, save=True):
         agg = self.retailer_order.aggregate(
@@ -1076,19 +1000,11 @@ class RetailerOrders(EntityRelatedModel):
                 "updated",
             ])
 
-    # ------------------------------------------------------------------
-    # Shipping allocation
-    # ------------------------------------------------------------------
-
     def allocate_shipping_to_receipts(self, save=True):
-        # from retailers.models import RetailerReceipts
-        """
-        Spread shipping_amount across active RetailerReceipts
-        created from this order, proportional to line value.
-        Idempotent — wipes and rebuilds.
-        """
+        from retailers.models import RetailerReceipts
+
         receipts = list(
-            retailers.models.RetailerReceipts.objects.filter(
+            RetailerReceipts.objects.filter(
                 retailer_order=self, is_active="true",
             )
         )
@@ -1145,21 +1061,10 @@ class RetailerOrders(EntityRelatedModel):
             return max(0, (self.received_at - self.approved_at).days)
         return None
 
-from decimal import Decimal
 
-from django.db import models
-
-from authentication.models import  Users
-
-from employees.models import Employees
 class RetailerOrderItems(EntityRelatedModel):
     """
     One committed line on a retailer order.
-
-    Generated from a RetailerIndentItem. Pricing snapshots are
-    copied from the indent — not recomputed — so the order stays
-    faithful to what the retailer agreed to, even if a discount
-    expires or a receipt price changes between indent and order.
     """
 
     retailer_order = models.ForeignKey(
@@ -1285,15 +1190,6 @@ class RetailerOrderItems(EntityRelatedModel):
         return f"{self.wholesaler_receipt.product.title}"
 
     def recalculate(self, save=True):
-        """
-        Recompute derived fields from purchased_quantity,
-        item_price, item_final_price and unit-level discounts.
-
-        Only used when this item is NOT generated from an indent
-        (i.e. one-off / manual orders). Items generated from an
-        indent copy their snapshot from the indent item and should
-        save with recalculate=False.
-        """
         qty = Decimal(str(self.purchased_quantity or 0))
         final_unit = _q(self.item_final_price or 0)
         list_unit = _q(self.item_price or final_unit)
@@ -1309,17 +1205,13 @@ class RetailerOrderItems(EntityRelatedModel):
         self.item_tax_total = _q(tax_unit * qty)
 
         total_qty = Decimal(str(self.total_quantity or self.purchased_quantity or 0))
-        shipping_unit = Decimal("0.00")  # populated after receipt allocation
+        shipping_unit = Decimal("0.00")
         self.item_final_price_total = _q(
             (final_unit + tax_unit + shipping_unit) * total_qty
         )
 
         if save:
             self.save(recalculate=False)
-
-    # ------------------------------------------------------------------
-    # Display helpers
-    # ------------------------------------------------------------------
 
     @property
     def product_title(self):
@@ -1336,7 +1228,6 @@ class RetailerOrderItems(EntityRelatedModel):
 
     @property
     def line_margin(self):
-        """Projected margin on this line: retail total − net cost total."""
         if (
             self.intended_retail_unit_price is None
             or self.item_net_price_total is None
@@ -1348,13 +1239,11 @@ class RetailerOrderItems(EntityRelatedModel):
         )
 
     def save(self, *args, **kwargs):
-        # Escape hatch for the generation service: copy snapshots
-        # from the indent item and skip recomputation.
         if kwargs.pop("recalculate", False):
             self.recalculate(save=False)
         super().save(*args, **kwargs)
 
-    
+
 class RetailerOrderPayments(EntityRelatedModel):
     PAYMENT_STATUS_CHOICES = (
         ("INITIATED", "INITIATED"),
@@ -1366,13 +1255,6 @@ class RetailerOrderPayments(EntityRelatedModel):
     retailer_order = models.ForeignKey(
         RetailerOrders, related_name="wholesalerOrders", on_delete=models.CASCADE
     )
-    # entity_collection_account = models.ForeignKey(
-    #     "payments.EntityPSPCollectionAccount",
-    #     related_name="wholesaler_collection_account",
-    #     on_delete=models.CASCADE,
-    #     null=True,
-    #     blank=True,
-    # )
     payout_account = models.ForeignKey(
         "payments.PayoutAccounts",
         related_name="entity_payout_account",
@@ -1423,32 +1305,13 @@ class RetailerOrderPayments(EntityRelatedModel):
     )
 
     def save(self, *args, **kwargs):
-        
         self.retailer_order.pay_in_reference_number = self.pay_in_reference_number
         super(RetailerOrderPayments, self).save(*args, **kwargs)
-
-
-
-# wholesalers/models.py
 
 
 class WholesalerReceiptReturns(EntityRelatedModel):
     """
     Wholesaler-side record of a return initiated by a retailer.
-
-    Created atomically with the retailer's StockAdjustment when the
-    retailer ships goods back. Lifecycle:
-
-      PENDING_CONFIRMATION  → created, awaiting wholesaler action
-      CONFIRMED             → wholesaler confirmed physical receipt
-                              (stock-in and/or write-off applied)
-      SETTLED               → financially closed
-      REJECTED              → wholesaler refused the return
-      CANCELLED             → cancelled before confirmation
-
-    The retailer's ledger is corrected at creation time via the paired
-    StockAdjustment; this record drives the wholesaler's ledger on
-    confirmation only.
     """
 
     class ReturnReasonOptions(models.TextChoices):
@@ -1480,7 +1343,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         WRITE_OFF = "WRITE_OFF", _("Cast / write off")
         PARTIAL_TAKE_BACK = "PARTIAL_TAKE_BACK", _("Partial take back, rest written off")
 
-    # ---- References ----
     retailer_order = models.ForeignKey(
         RetailerOrders,
         related_name="wholesaler_receipt_returns",
@@ -1534,7 +1396,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         on_delete=models.CASCADE,
     )
 
-    # ---- Identity / audit ----
     draft_id = models.CharField(max_length=256, null=True, blank=True)
     document_number = models.ForeignKey(
         DocumentNumbers,
@@ -1544,7 +1405,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
     )
     reference_number = models.CharField(max_length=100, null=True, blank=True)
 
-    # ---- Quantity ----
     quantity = models.IntegerField(default=0)
     unit_of_return = models.CharField(
         max_length=20,
@@ -1552,7 +1412,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         default="Pack",
     )
 
-    # ---- Financial snapshot ----
     unit_price_paid = models.DecimalField(
         max_digits=10, decimal_places=2, default=0.00,
         help_text=_("Frozen from retailer_order_item.item_final_price at creation."),
@@ -1567,7 +1426,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         max_digits=14, decimal_places=2, default=0.00,
     )
 
-    # ---- Reason ----
     reason = models.CharField(
         max_length=30,
         choices=ReturnReasonOptions.choices,
@@ -1580,7 +1438,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         default=ReturnTypeOptions.REFUND,
     )
 
-    # ---- Confirmation (wholesaler decision) ----
     confirmation_outcome = models.CharField(
         max_length=20,
         choices=ConfirmationOptions.choices,
@@ -1590,7 +1447,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
     written_off_quantity = models.IntegerField(default=0)
     confirmation_notes = models.TextField(blank=True)
 
-    # ---- State ----
     status = models.CharField(
         max_length=30,
         choices=ReturnStatusOptions.choices,
@@ -1603,7 +1459,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
     )
 
-    # ---- Who did what ----
     employee = models.ForeignKey(
         Employees,
         related_name="employee_creating_wholesaler_return",
@@ -1629,7 +1484,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         null=True, blank=True,
     )
 
-    # ---- Timestamps ----
     confirmed_at = models.DateTimeField(null=True, blank=True)
     settled_at = models.DateTimeField(null=True, blank=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
@@ -1656,10 +1510,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
     def __str__(self) -> str:
         return f"Return {self.id} — {self.product.title} × {self.quantity}"
 
-    # ------------------------------------------------------------------
-    # Derived
-    # ------------------------------------------------------------------
-
     @property
     def net_refund_per_unit(self) -> Decimal:
         return _q(
@@ -1673,10 +1523,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         )
         if save:
             super().save(update_fields=["total_refund_amount", "updated"])
-
-    # ------------------------------------------------------------------
-    # Validation
-    # ------------------------------------------------------------------
 
     def clean(self):
         super().clean()
@@ -1698,27 +1544,10 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         if errors:
             raise ValidationError(errors)
 
-    # ------------------------------------------------------------------
-    # Save — handles both creation and update concerns
-    # ------------------------------------------------------------------
-
     def save(self, *args, **kwargs):
-        """
-        Creation concerns:
-          - Derive product from the receipt if not supplied.
-          - Freeze unit_price_paid from the source order line.
-          - Default unit_price_refunded to unit_price_paid.
-          - Compute total_refund_amount.
-
-        Update concerns:
-          - Never change `product` after creation (immutable identity).
-          - Never change `quantity` after confirmation.
-          - Recompute total_refund_amount if refund inputs changed.
-        """
         is_new = self._state.adding
 
         if is_new:
-            # --- Creation ---
             if not self.product_id and self.retailer_receipt_id:
                 self.product_id = self.retailer_receipt.product_id
 
@@ -1738,8 +1567,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
                 self.unit_price_refunded = self.unit_price_paid
 
         else:
-            # --- Update ---
-            # Enforce immutability of core identity fields after confirmation.
             if self.status in (
                 self.ReturnStatusOptions.CONFIRMED,
                 self.ReturnStatusOptions.SETTLED,
@@ -1759,7 +1586,6 @@ class WholesalerReceiptReturns(EntityRelatedModel):
                         "Issue a compensating return instead."
                     )
 
-        # Recompute derived total (safe on both create and update)
         self.total_refund_amount = _q(
             self.net_refund_per_unit * Decimal(str(self.quantity or 0))
         )
