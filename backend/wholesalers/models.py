@@ -8,6 +8,7 @@ from django.db.models import Sum
 # Third-party
 from PIL import Image
 from django_advance_thumbnail import AdvanceThumbnailField
+import retailers
 
 # Django
 from django.contrib.auth import get_user_model
@@ -1080,14 +1081,14 @@ class RetailerOrders(EntityRelatedModel):
     # ------------------------------------------------------------------
 
     def allocate_shipping_to_receipts(self, save=True):
-        from retailers.models import RetailerReceipts
+        # from retailers.models import RetailerReceipts
         """
         Spread shipping_amount across active RetailerReceipts
         created from this order, proportional to line value.
         Idempotent — wipes and rebuilds.
         """
         receipts = list(
-            RetailerReceipts.objects.filter(
+            retailers.models.RetailerReceipts.objects.filter(
                 retailer_order=self, is_active="true",
             )
         )
