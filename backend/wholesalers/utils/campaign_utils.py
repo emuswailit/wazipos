@@ -13,11 +13,11 @@ from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 from django.utils.translation import gettext_lazy as _
 
-# from ..models import (
-#     WholesalerCampaign,
-#     WholesalerCampaignAudience,
-#     WholesalerCampaignItem,
-# )
+from ..models import (
+    WholesalerCampaign,
+    WholesalerCampaignAudience,
+    WholesalerCampaignItem,
+)
 
 
 # ===========================================================================
