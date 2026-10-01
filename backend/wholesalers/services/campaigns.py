@@ -25,12 +25,10 @@ from decimal import Decimal, InvalidOperation
 from typing import Dict, Optional
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext_lazy as _
-
-from utils.logging import create_log
 
 from ..models import (
     WholesalerCampaign,
@@ -71,13 +69,27 @@ def _parse_decimal(value) -> Optional[Decimal]:
         raise ValidationError(_("Enter a valid number."))
 
 
-def _get_wholesaler_entity(user):
-    """
-    Resolve the entity that owns this user's campaigns.
+# FIX: added. `int(...)` on junk input raises ValueError, which used to
+# escape the (errors, result) contract and blow up the view.
+def _parse_int(
+    value,
+    *,
+    field: str,
+    default: int = 0,
+    allow_none: bool = False,
+) -> Optional[int]:
+    if value in (None, ""):
+        return None if allow_none else default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValidationError({field: _("Enter a valid integer.")})
 
-    Adjust to match how ownership is modelled on your User / Entities
-    relationship — the check is here so every service inherits it.
-    """
+
+# FIX: renamed from `_get_wholesaler_entity`. The same function resolves
+# both wholesaler and retailer entities — the old name and its error string
+# implied wholesaler-only.
+def _get_user_entity(user):
     entity = getattr(user, "entity", None)
     if entity is None:
         raise ValidationError(_("User is not associated with an entity."))
@@ -99,7 +111,7 @@ def _get_campaign(data: Dict, user, *, require_owner: bool = True) -> Wholesaler
         raise ValidationError({"campaign_id": _("Campaign not found.")})
 
     if require_owner:
-        entity = _get_wholesaler_entity(user)
+        entity = _get_user_entity(user)
         if campaign.wholesaler_id != entity.pk:
             raise ValidationError(
                 {"campaign_id": _("Campaign does not belong to your entity.")}
@@ -120,7 +132,7 @@ def _get_item(data: Dict, user) -> WholesalerCampaignItem:
     if item is None:
         raise ValidationError({"item_id": _("Campaign item not found.")})
 
-    entity = _get_wholesaler_entity(user)
+    entity = _get_user_entity(user)
     if item.campaign.wholesaler_id != entity.pk:
         raise ValidationError(
             {"item_id": _("Campaign item does not belong to your entity.")}
@@ -141,14 +153,16 @@ def _get_audience(data: Dict, user, *, as_wholesaler: bool = True) -> Wholesaler
     if audience is None:
         raise ValidationError({"audience_id": _("Audience row not found.")})
 
+    # FIX: use _get_user_entity for both branches. The old
+    # `user.entity_id` access silently diverged from `user.entity`.
+    entity = _get_user_entity(user)
     if as_wholesaler:
-        entity = _get_wholesaler_entity(user)
         if audience.campaign.wholesaler_id != entity.pk:
             raise ValidationError(
                 {"audience_id": _("Audience row does not belong to your entity.")}
             )
     else:
-        if audience.retailer_id != getattr(user, "entity_id", None):
+        if audience.retailer_id != entity.pk:
             raise ValidationError(
                 {"audience_id": _("Audience row does not belong to you.")}
             )
@@ -219,8 +233,9 @@ def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
 def create_campaign(data: Dict, user):
     """Create a draft campaign owned by the user's entity."""
     try:
-        entity = _get_wholesaler_entity(user)
-        create_log("info",f"Entity: {entity}")
+        entity = _get_user_entity(user)
+        # FIX: removed stray create_log("info", ...) debug call.
+
         campaign = WholesalerCampaign(
             entity=entity,
             wholesaler=entity,
@@ -255,6 +270,17 @@ def update_campaign(data: Dict, user):
                 _("Only draft or published campaigns can be updated.")
             )
 
+        # FIX: refuse to move the window on a published campaign. The
+        # published_* snapshots on every item were frozen against the old
+        # window and become silently stale.
+        if (
+            campaign.status == WholesalerCampaign.Status.PUBLISHED
+            and ("start" in data or "end" in data)
+        ):
+            raise ValidationError(
+                _("Start and end dates cannot be changed once a campaign is published.")
+            )
+
         if "title" in data:
             campaign.title = (data.get("title") or "").strip()
         if "description" in data:
@@ -277,9 +303,11 @@ def delete_campaign(data: Dict, user):
     """Delete a campaign and everything hanging off it (cascades)."""
     try:
         campaign = _get_campaign(data, user)
-        if campaign.status == WholesalerCampaign.Status.PUBLISHED and campaign.audience.filter(
-            opted_in_at__isnull=False,
-        ).exists():
+        # FIX: use the queryset helper so re-opted-in rows count as opt-ins.
+        if (
+            campaign.status == WholesalerCampaign.Status.PUBLISHED
+            and campaign.audience.opted_in().exists()
+        ):
             raise ValidationError(
                 _("Cannot delete a published campaign that has opt-ins. Close it instead.")
             )
@@ -293,6 +321,7 @@ def _apply_publication(campaign: WholesalerCampaign) -> None:
     """The multi-row workflow. Raises ValidationError on failure."""
     items = list(
         campaign.items.select_related(
+            "campaign",                       # FIX: avoids N+1 in validate_windows_cover_campaign
             "wholesaler_receipt",
             "wholesaler_price_discount",
             "wholesaler_quantity_discount",
@@ -301,14 +330,20 @@ def _apply_publication(campaign: WholesalerCampaign) -> None:
     if not items:
         raise ValidationError(_("Cannot publish a campaign with no items."))
 
+    # FIX: publishing a campaign nobody can see is almost always a bug.
+    if not campaign.audience.filter(is_visible="true").exists():
+        raise ValidationError(
+            _("Cannot publish a campaign with no visible audience.")
+        )
+
     for item in items:
         item.validate_windows_cover_campaign()
 
     for item in items:
         _snapshot_item_terms(item)
 
-    campaign.status = WholesalerCampaign.Status.PUBLISHED
-    campaign.save(update_fields=["status", "updated"])
+    # FIX: use the model transition so published_at is set.
+    campaign.mark_published()
 
 
 @transaction.atomic
@@ -330,8 +365,8 @@ def close_campaign(data: Dict, user):
         campaign = _get_campaign(data, user)
         if campaign.status != WholesalerCampaign.Status.PUBLISHED:
             raise ValidationError(_("Only published campaigns can be closed."))
-        campaign.status = WholesalerCampaign.Status.CLOSED
-        campaign.save(update_fields=["status", "updated"])
+        # FIX: use the model transition helper.
+        campaign.mark_closed()
         return None, campaign
     except ValidationError as exc:
         return _errors_from(exc), None
@@ -384,11 +419,16 @@ def add_campaign_item(data: Dict, user):
             wholesaler_quantity_discount=_resolve_discount(
                 WholesalerQuantityDiscounts, data.get("wholesaler_quantity_discount_id"), receipt,
             ),
-            suggested_quantity=int(data.get("suggested_quantity") or 0),
-            per_retailer_limit=(
-                int(data["per_retailer_limit"])
-                if data.get("per_retailer_limit") not in (None, "")
-                else None
+            # FIX: safe int parsing.
+            suggested_quantity=_parse_int(
+                data.get("suggested_quantity"),
+                field="suggested_quantity",
+                default=0,
+            ),
+            per_retailer_limit=_parse_int(
+                data.get("per_retailer_limit"),
+                field="per_retailer_limit",
+                allow_none=True,
             ),
             retail_price_hint=_parse_decimal(data.get("retail_price_hint")),
             owner=user,
@@ -420,12 +460,16 @@ def update_campaign_item(data: Dict, user):
                 WholesalerQuantityDiscounts, data.get("wholesaler_quantity_discount_id"), receipt,
             )
         if "suggested_quantity" in data:
-            item.suggested_quantity = int(data.get("suggested_quantity") or 0)
+            item.suggested_quantity = _parse_int(
+                data.get("suggested_quantity"),
+                field="suggested_quantity",
+                default=0,
+            )
         if "per_retailer_limit" in data:
-            item.per_retailer_limit = (
-                int(data["per_retailer_limit"])
-                if data.get("per_retailer_limit") not in (None, "")
-                else None
+            item.per_retailer_limit = _parse_int(
+                data.get("per_retailer_limit"),
+                field="per_retailer_limit",
+                allow_none=True,
             )
         if "retail_price_hint" in data:
             item.retail_price_hint = _parse_decimal(data.get("retail_price_hint"))
@@ -479,12 +523,17 @@ def add_campaign_audience(data: Dict, user):
             existing.save(update_fields=["is_visible", "updated"])
             return None, existing
 
-        audience = WholesalerCampaignAudience.objects.create(
-            campaign=campaign,
-            retailer=retailer,
-            is_visible="true",
-            owner=user,
-        )
+        # FIX: catch the unique-constraint race. Two concurrent requests
+        # could both pass the .first() check above.
+        try:
+            audience = WholesalerCampaignAudience.objects.create(
+                campaign=campaign,
+                retailer=retailer,
+                is_visible="true",
+                owner=user,
+            )
+        except IntegrityError:
+            raise ValidationError(_("This retailer is already on the audience."))
         return None, audience
     except ValidationError as exc:
         return _errors_from(exc), None
@@ -499,7 +548,9 @@ def remove_campaign_audience(data: Dict, user):
     """
     try:
         audience = _get_audience(data, user, as_wholesaler=True)
-        if audience.opted_in_at is not None:
+        # FIX: use the instance property so re-opted-in rows are treated
+        # correctly (soft-hide, not hard-delete).
+        if audience.has_opted_in:
             audience.is_visible = "false"
             audience.save(update_fields=["is_visible", "updated"])
         else:
@@ -534,6 +585,18 @@ def project_campaign(data: Dict, user):
         if campaign is None or not campaign.is_currently_active:
             raise ValidationError({"campaign_id": _("Campaign is not currently active.")})
 
+        # FIX: verify the caller is actually on this campaign's audience.
+        retailer_entity = _get_user_entity(user)
+        audience = (
+            WholesalerCampaignAudience.objects
+            .filter(campaign=campaign, retailer=retailer_entity)
+            .first()
+        )
+        if audience is None or audience.is_visible != "true":
+            raise ValidationError(
+                {"campaign_id": _("This campaign is not visible to you.")}
+            )
+
         markup_pct = _parse_decimal(data.get("markup_pct")) or Decimal("0")
 
         items_by_id = {
@@ -553,7 +616,11 @@ def project_campaign(data: Dict, user):
         projections = []
         for entry in requested:
             item_id = entry.get("item_id")
-            quantity = int(entry.get("quantity") or 0)
+            quantity = _parse_int(
+                entry.get("quantity"),
+                field="items",
+                default=0,
+            )
             item = items_by_id.get(item_id)
             if item is None:
                 raise ValidationError(
@@ -565,7 +632,12 @@ def project_campaign(data: Dict, user):
                 )
             if item.per_retailer_limit is not None and quantity > item.per_retailer_limit:
                 raise ValidationError(
-                    {"items": _("Quantity for item %(id)s exceeds the per-retailer limit.") % {"id": item_id}}
+                    {
+                        "items": _(
+                            "Quantity for item %(id)s exceeds the per-retailer limit."
+                        )
+                        % {"id": item_id}
+                    }
                 )
 
             profit = project_item_for_quantity(item, quantity, markup_pct)
@@ -601,7 +673,7 @@ def opt_in_campaign(data: Dict, user):
     from retailers.models import RetailerIndent, RetailerIndentItem
 
     try:
-        retailer_entity = _get_wholesaler_entity(user)
+        retailer_entity = _get_user_entity(user)
 
         campaign_id = data.get("campaign_id")
         if not campaign_id:
@@ -622,7 +694,9 @@ def opt_in_campaign(data: Dict, user):
         if not campaign.is_currently_active:
             raise ValidationError(_("Campaign is not currently active."))
 
-        if audience.opted_in_at is not None:
+        # FIX: use the timestamp comparison. The old `opted_in_at is not
+        # None` check rejected a retailer who opted out and wants back in.
+        if audience.has_opted_in:
             raise ValidationError(_("You have already opted in to this campaign."))
 
         items_by_id = {
@@ -644,7 +718,7 @@ def opt_in_campaign(data: Dict, user):
         resolved = []
         for entry in requested:
             item_id = entry.get("item_id")
-            quantity = int(entry.get("quantity") or 0)
+            quantity = _parse_int(entry.get("quantity"), field="items", default=0)
             item = items_by_id.get(item_id)
             if item is None:
                 raise ValidationError(
@@ -661,7 +735,7 @@ def opt_in_campaign(data: Dict, user):
                     .filter(
                         retailer_indent__retailer=retailer_entity,
                         retailer_indent__campaign=campaign,
-                        wholesaler_receipt=item.wholesaler_receipt,
+                        wholesale_receipt=item.wholesaler_receipt,
                     )
                     .aggregate(total=models.Sum("required_quantity"))
                     .get("total") or 0
@@ -700,11 +774,12 @@ def opt_in_campaign(data: Dict, user):
             line.save()
             created_lines.append(line)
 
-        audience.opted_in_at = timezone.now()
-        audience.opted_out_at = None
+        # FIX: opt_in refreshes opted_in_at but leaves opted_out_at in
+        # place, so the audit trail survives a re-opt-in.
+        audience.opt_in(save=False)
         audience.retailer_indent = indent
         audience.save(
-            update_fields=["opted_in_at", "opted_out_at", "retailer_indent", "updated"]
+            update_fields=["opted_in_at", "retailer_indent", "updated"]
         )
 
         return None, {"indent": indent, "items": created_lines}
@@ -718,7 +793,7 @@ def opt_out_campaign(data: Dict, user):
     that is a separate commercial decision, not a campaign action.
     """
     try:
-        retailer_entity = _get_wholesaler_entity(user)
+        retailer_entity = _get_user_entity(user)
 
         campaign_id = data.get("campaign_id")
         if not campaign_id:
@@ -732,11 +807,13 @@ def opt_out_campaign(data: Dict, user):
         )
         if audience is None:
             raise ValidationError(_("You are not on the audience for this campaign."))
-        if audience.opted_in_at is None:
+
+        # FIX: idempotency. Repeated calls no longer keep pushing
+        # opted_out_at forward past opted_in_at.
+        if not audience.has_opted_in:
             raise ValidationError(_("You have not opted in to this campaign."))
 
-        audience.opted_out_at = timezone.now()
-        audience.save(update_fields=["opted_out_at", "updated"])
+        audience.opt_out()
         return None, audience
     except ValidationError as exc:
         return _errors_from(exc), None

@@ -1226,7 +1226,7 @@ def _get_campaign_details(request):
     Sample request:
         {
             "action": "GetCampaignDetails",
-            "campaign_id": 42
+            "campaign_id": "5b8f1c2a-9d4e-4b7a-8c1f-3e6a9d2f7b4c"
         }
     """
     campaign, errors = campaign_utils.get_campaign_details(

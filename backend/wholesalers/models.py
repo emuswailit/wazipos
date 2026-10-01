@@ -443,13 +443,16 @@ from django.utils.translation import gettext_lazy as _
 COMPRESS_THRESHOLD_BYTES = 100 * 1024
 
 
-def wholesaler_campaign_hero_upload_to(instance, filename):
-    return f"campaigns/{instance.uuid}/hero/{filename}"
-
-
+# FIX: renamed — this is the campaign's single banner/hero, and the old name
+# ("hero") collided conceptually with WholesalerCampaignBanner. Field and
+# function now agree.
 def wholesaler_campaign_banner_upload_to(instance, filename):
+    return f"campaigns/{instance.uuid}/banner/{filename}"
+
+
+def wholesaler_campaign_gallery_upload_to(instance, filename):
     key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
-    return f"campaigns/{key}/banners/{filename}"
+    return f"campaigns/{key}/gallery/{filename}"
 
 
 class WholesalerCampaign(EntityRelatedModel):
@@ -479,7 +482,7 @@ class WholesalerCampaign(EntityRelatedModel):
     description = models.TextField(max_length=500, blank=True, default="")
 
     banner = models.ImageField(
-        upload_to=wholesaler_campaign_hero_upload_to,
+        upload_to=wholesaler_campaign_banner_upload_to,
         null=True,
         blank=True,
     )
@@ -503,6 +506,11 @@ class WholesalerCampaign(EntityRelatedModel):
         blank=True,
         help_text="Optional cap on total committed value, wholesaler-side.",
     )
+
+    # FIX: track when the campaign actually went live. Item.published_at
+    # already exists; the campaign itself needs the same so you don't have
+    # to derive it from min(item.published_at).
+    published_at = models.DateTimeField(null=True, blank=True)
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -544,6 +552,19 @@ class WholesalerCampaign(EntityRelatedModel):
             and self.start <= today <= self.end
         )
 
+    # FIX: convenience transition. Callers should use this rather than
+    # flipping `status` by hand, so published_at stays consistent.
+    def mark_published(self, *, save: bool = True) -> None:
+        self.status = self.Status.PUBLISHED
+        self.published_at = timezone.now()
+        if save:
+            self.save(update_fields=["status", "published_at", "updated"])
+
+    def mark_closed(self, *, save: bool = True) -> None:
+        self.status = self.Status.CLOSED
+        if save:
+            self.save(update_fields=["status", "updated"])
+
 
 class WholesalerCampaignBanner(EntityRelatedModel):
     """
@@ -555,7 +576,8 @@ class WholesalerCampaignBanner(EntityRelatedModel):
         related_name="banners",
         on_delete=models.CASCADE,
     )
-    image = models.ImageField(upload_to=wholesaler_campaign_banner_upload_to)
+    # FIX: upload_to now points at the gallery helper, not the banner helper.
+    image = models.ImageField(upload_to=wholesaler_campaign_gallery_upload_to)
     thumbnail = AdvanceThumbnailField(
         source_field="image",
         upload_to="thumbnails/campaigns/",
@@ -656,8 +678,11 @@ class WholesalerCampaignItem(EntityRelatedModel):
                 name="One receipt per campaign",
             ),
         ]
+        # FIX: the old (campaign, wholesaler_receipt) index duplicated the
+        # unique constraint's implicit index. Reversed it so the reverse
+        # lookup ("all campaigns a receipt appears on") is fast.
         indexes = [
-            models.Index(fields=["campaign", "wholesaler_receipt"]),
+            models.Index(fields=["wholesaler_receipt", "campaign"]),
         ]
 
     def __str__(self):
@@ -665,6 +690,14 @@ class WholesalerCampaignItem(EntityRelatedModel):
 
     def clean(self):
         super().clean()
+
+        # FIX: guard against unsaved / partially-constructed instances.
+        # Accessing self.campaign.start or receipt.pk on an unsaved object
+        # used to trigger a DB hit inside validation (or silently pass with
+        # a None pk), so bail early when the essentials aren't there.
+        if not self.wholesaler_receipt_id or not self.campaign_id:
+            return
+
         errors = {}
 
         receipt = self.wholesaler_receipt
@@ -677,16 +710,26 @@ class WholesalerCampaignItem(EntityRelatedModel):
                     "Price discount does not belong to this receipt."
                 )
             elif pd.end < self.campaign.start or pd.start > self.campaign.end:
+                # Overlap-only here — a draft campaign can carry a
+                # partially-overlapping discount. Use
+                # validate_windows_cover_campaign() at publish time.
                 errors["wholesaler_price_discount"] = _(
                     "Price discount window does not overlap the campaign."
                 )
 
         if qd is not None:
-            qd_receipt_id = getattr(qd, "wholesaler_receipt_id", None)
-            if qd_receipt_id is not None and qd_receipt_id != receipt.pk:
-                errors["wholesaler_quantity_discount"] = _(
-                    "Quantity discount does not belong to this receipt."
-                )
+            # FIX: distinguish "field absent" from "field present but null".
+            # The previous getattr(..., None) collapsed both into None, so
+            # the ownership check silently skipped whenever the QD FK was
+            # nullable — exactly the case you most want to catch.
+            if hasattr(qd, "wholesaler_receipt_id"):
+                if (
+                    qd.wholesaler_receipt_id is not None
+                    and qd.wholesaler_receipt_id != receipt.pk
+                ):
+                    errors["wholesaler_quantity_discount"] = _(
+                        "Quantity discount does not belong to this receipt."
+                    )
 
         if self.suggested_quantity is not None and self.suggested_quantity < 0:
             errors["suggested_quantity"] = _("Suggested quantity cannot be negative.")
@@ -698,6 +741,13 @@ class WholesalerCampaignItem(EntityRelatedModel):
             raise ValidationError(errors)
 
     def validate_windows_cover_campaign(self) -> None:
+        """
+        Strict publish-time check: every attached discount must be live for
+        the whole campaign window, not merely overlap it.
+
+        clean() allows partial overlap (assembling a draft). Call this
+        explicitly before flipping status to PUBLISHED.
+        """
         errors = {}
         for field, discount in (
             ("wholesaler_price_discount", self.wholesaler_price_discount),
@@ -705,10 +755,23 @@ class WholesalerCampaignItem(EntityRelatedModel):
         ):
             if discount is None:
                 continue
-            if discount.end < self.campaign.end:
+            # FIX: also assert the discount starts on or before the campaign
+            # start. Previously only the end was checked, so a discount
+            # beginning mid-campaign passed.
+            if discount.start > self.campaign.start:
+                errors[field] = _(
+                    "Discount starts %(disc_start)s, after campaign start %(camp_start)s."
+                ) % {
+                    "disc_start": discount.start,
+                    "camp_start": self.campaign.start,
+                }
+            elif discount.end < self.campaign.end:
                 errors[field] = _(
                     "Discount ends %(disc_end)s, before campaign end %(camp_end)s."
-                ) % {"disc_end": discount.end, "camp_end": self.campaign.end}
+                ) % {
+                    "disc_end": discount.end,
+                    "camp_end": self.campaign.end,
+                }
         if errors:
             raise ValidationError(errors)
 
@@ -768,9 +831,51 @@ class WholesalerCampaignAudience(EntityRelatedModel):
     def __str__(self):
         return f"{self.retailer.title} · {self.campaign.title}"
 
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        # FIX: a linked indent must belong to the same retailer as this
+        # audience row. Previously nothing stopped linking retailer A's
+        # indent to retailer B's audience.
+        if self.retailer_indent_id and self.retailer_id:
+            indent_retailer_id = getattr(
+                self.retailer_indent, "retailer_id", None
+            )
+            if (
+                indent_retailer_id is not None
+                and indent_retailer_id != self.retailer_id
+            ):
+                errors["retailer_indent"] = _(
+                    "Linked indent belongs to a different retailer."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    # FIX: compare timestamps so opt-in → opt-out → opt-in reads as True.
+    # The old version returned False the moment opted_out_at was non-null,
+    # even if the retailer had since re-opted in.
     @property
     def has_opted_in(self) -> bool:
-        return self.opted_in_at is not None and self.opted_out_at is None
+        if self.opted_in_at is None:
+            return False
+        if self.opted_out_at is None:
+            return True
+        return self.opted_in_at > self.opted_out_at
+
+    # FIX: state transition helpers that keep the timestamp pair coherent.
+    # opt_in refreshes opted_in_at without clearing opted_out_at, so the
+    # audit trail survives; has_opted_in does the comparison.
+    def opt_in(self, *, save: bool = True) -> None:
+        self.opted_in_at = timezone.now()
+        if save:
+            self.save(update_fields=["opted_in_at", "updated"])
+
+    def opt_out(self, *, save: bool = True) -> None:
+        self.opted_out_at = timezone.now()
+        if save:
+            self.save(update_fields=["opted_out_at", "updated"])
 
 
 class CommitType(models.TextChoices):
