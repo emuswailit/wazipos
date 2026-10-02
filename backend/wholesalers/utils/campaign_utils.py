@@ -17,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from ..models import (
     WholesalerCampaign,
     WholesalerCampaignAudience,
+    WholesalerCampaignBanners,
     WholesalerCampaignItem,
 )
 
@@ -51,9 +52,14 @@ def _campaign_queryset():
     """
     Base queryset for campaign reads.
 
-    Prefetches items and audience so detail serializers don't issue N+1
-    queries. List serializers ignore the prefetch and cost only the
-    parent row.
+    Prefetches items, audience and banners so detail serializers don't
+    issue N+1 queries. List serializers ignore the prefetches and cost
+    only the parent row.
+
+    NOTE: the reverse-relation name for the campaign's banner M2M is
+    `campaign_banners` (see WholesalerCampaign.campaign_banners). The
+    previous `"banners"` string was the old singular model's related
+    name and no longer exists.
     """
     item_qs = (
         WholesalerCampaignItem.objects
@@ -70,13 +76,15 @@ def _campaign_queryset():
         .select_related("retailer")
         .order_by("id")
     )
+    banner_qs = WholesalerCampaignBanners.objects.order_by("created", "id")
+
     return (
         WholesalerCampaign.objects
         .select_related("wholesaler")
         .prefetch_related(
             Prefetch("items", queryset=item_qs),
             Prefetch("audience", queryset=audience_qs),
-            "banners",
+            Prefetch("campaign_banners", queryset=banner_qs),
         )
     )
 
@@ -237,18 +245,25 @@ def get_campaign_audience(data, user):
         .filter(campaign_id=campaign_id)
     )
 
-    # Use the queryset helpers from WholesalerCampaignAudience's custom
-    # manager. An inline filter of
+    # `has_opted_in` compares timestamps, so a row where the retailer
+    # opted in, opted out, then opted back in correctly reads as
+    # opted-in. An inline filter of
     # `opted_in_at__isnull=False, opted_out_at__isnull=True`
-    # would miss rows where the retailer opted in, opted out, then opted
-    # back in — they have both timestamps set, and `opted_in()` catches
-    # them by comparing timestamps.
+    # would miss that case.
     opted_in = data.get("opted_in")
     if opted_in is not None:
-        if str(opted_in).lower() == "true":
-            qs = qs.opted_in()
-        elif str(opted_in).lower() == "false":
-            qs = qs.not_opted_in()
+        value = str(opted_in).lower()
+        if value == "true":
+            qs = qs.filter(opted_in_at__isnull=False).filter(
+                # opted_in_at > opted_out_at, or no opt-out at all
+                models.Q(opted_out_at__isnull=True)
+                | models.Q(opted_in_at__gt=models.F("opted_out_at"))
+            )
+        elif value == "false":
+            qs = qs.filter(
+                models.Q(opted_in_at__isnull=True)
+                | models.Q(opted_in_at__lte=models.F("opted_out_at"))
+            )
 
     return qs.order_by("id")
 
@@ -283,14 +298,21 @@ def get_my_campaigns(data, user):
         is_visible="true",
     )
 
-    # Same queryset helpers as get_campaign_audience, so re-opted-in
-    # rows are counted consistently across both endpoints.
     opted_in = data.get("opted_in")
     if opted_in is not None:
-        if str(opted_in).lower() == "true":
-            audience_qs = audience_qs.opted_in()
-        elif str(opted_in).lower() == "false":
-            audience_qs = audience_qs.not_opted_in()
+        value = str(opted_in).lower()
+        if value == "true":
+            audience_qs = audience_qs.filter(
+                opted_in_at__isnull=False
+            ).filter(
+                models.Q(opted_out_at__isnull=True)
+                | models.Q(opted_in_at__gt=models.F("opted_out_at"))
+            )
+        elif value == "false":
+            audience_qs = audience_qs.filter(
+                models.Q(opted_in_at__isnull=True)
+                | models.Q(opted_in_at__lte=models.F("opted_out_at"))
+            )
 
     campaign_ids = audience_qs.values_list("campaign_id", flat=True)
     qs = _campaign_queryset().filter(pk__in=campaign_ids)
