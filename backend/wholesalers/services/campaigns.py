@@ -527,6 +527,11 @@ def add_campaign_item(data: Dict, user):
         if campaign.status != WholesalerCampaign.Status.DRAFT:
             raise ValidationError(_("Items can only be added to draft campaigns."))
 
+        # WholesalerCampaignItem inherits from EntityRelatedModel, so
+        # `entity` is required. `full_clean()` will reject a null value,
+        # so set it up front.
+        entity = _get_user_entity(user)
+
         receipt_id = data.get("wholesaler_receipt_id")
         if not receipt_id:
             raise ValidationError(
@@ -540,6 +545,7 @@ def add_campaign_item(data: Dict, user):
 
         item = WholesalerCampaignItem(
             campaign=campaign,
+            entity=entity,
             wholesaler_receipt=receipt,
             wholesaler_price_discount=_resolve_discount(
                 WholesalerPriceDiscounts, data.get("wholesaler_price_discount_id"), receipt,
@@ -633,6 +639,10 @@ def add_campaign_audience(data: Dict, user):
         if campaign.status != WholesalerCampaign.Status.DRAFT:
             raise ValidationError(_("Audience can only be edited on draft campaigns."))
 
+        # WholesalerCampaignAudience inherits from EntityRelatedModel,
+        # so `entity` is required on both create paths below.
+        entity = _get_user_entity(user)
+
         retailer_id = data.get("retailer_id")
         if not retailer_id:
             raise ValidationError({"retailer_id": _("This field is required.")})
@@ -653,6 +663,7 @@ def add_campaign_audience(data: Dict, user):
         try:
             audience = WholesalerCampaignAudience.objects.create(
                 campaign=campaign,
+                entity=entity,
                 retailer=retailer,
                 is_visible="true",
                 owner=user,
