@@ -174,7 +174,87 @@ class WholesalerReceipts(EntityRelatedModel):
 
         super().save(*args, **kwargs)
 
+    # ------------------------------------------------------------------
+    # Price sync
+    # ------------------------------------------------------------------
+    def sync_price_from_discounts(self):
+        """
+        Recompute `final_unit_selling_price` and
+        `discount_unit_selling_price` from the currently-active
+        price discount (if any).
 
+        Rules:
+          - The most-recent active discount wins.
+          - `offer_price` is authoritative, but if it is zero the
+            discount's `percent` is used to derive it from the
+            receipt's list price. The create view often forces
+            `offer_price=0.00` and relies on `percent`.
+          - When no discount is active, or the derived price is
+            not actually lower than the list price, the receipt
+            reverts to `unit_selling_price` with a zero discount.
+
+        Only the two price fields are written — this avoids
+        re-running the bar-code sync in `save()` and any other
+        downstream side effects.
+        """
+        today = timezone.now().date()
+
+        active = (
+            self.wholesaler_price_discount_receipt
+            .filter(
+                is_active="true",
+                start__lte=today,
+                end__gte=today,
+            )
+            .order_by("-start", "-created")
+            .first()
+        )
+
+        list_price = Decimal(str(self.unit_selling_price or "0.00"))
+
+        if active is not None:
+            offer = Decimal(str(active.offer_price or "0.00"))
+
+            # Fall back to percent-derived pricing when the discount
+            # view created the row with offer_price=0.00.
+            if offer <= Decimal("0.00"):
+                pct = Decimal(str(active.percent or "0.00"))
+                if pct > Decimal("0.00"):
+                    offer = (
+                        list_price
+                        * (Decimal("100.00") - pct)
+                        / Decimal("100.00")
+                    ).quantize(Decimal("0.01"))
+
+            # Only write a change when the offer is a real reduction.
+            # An expired / inactive row will fail the filter above,
+            # and a zero-percent discount produces offer == list.
+            if (
+                Decimal("0.00") < offer < list_price
+            ):
+                self.final_unit_selling_price = offer
+                self.discount_unit_selling_price = (
+                    list_price - offer
+                ).quantize(Decimal("0.01"))
+                super().save(
+                    update_fields=[
+                        "final_unit_selling_price",
+                        "discount_unit_selling_price",
+                    ]
+                )
+                return
+
+        # No active discount, or the discount is a no-op — revert.
+        self.final_unit_selling_price = list_price
+        self.discount_unit_selling_price = Decimal("0.00")
+        super().save(
+            update_fields=[
+                "final_unit_selling_price",
+                "discount_unit_selling_price",
+            ]
+        )
+
+        
 class WholesalerPriceDiscountBanners(EntityRelatedModel):
     """Model for uploading price discount banners"""
 
