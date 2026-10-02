@@ -1471,6 +1471,7 @@ from utils.logging import create_log
 @parser_classes([JSONParser, MultiPartParser, FormParser])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
 def campaignsAPIView(request):
+    create_log("INFO", "=== campaignsAPIView ===")
     """
     Single POST entry point. Dispatch is by the `action` key in the body.
 
