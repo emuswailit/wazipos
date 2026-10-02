@@ -124,80 +124,78 @@ class WholesalerCampaignItemListSerializer(BaseModelSerializer):
         ]
 
 
-class WholesalerCampaignItemDetailSerializer(BaseModelSerializer):
-    receipt_title = serializers.CharField(
-        source="wholesaler_receipt.product.title", read_only=True,
-    )
-    wholesaler_title = serializers.CharField(
-        source="wholesaler_receipt.received_from.title",
-        read_only=True,
-        default="",
-    )
-    price_discount_title = serializers.CharField(
-        source="wholesaler_price_discount.title",
-        read_only=True,
-        default="",
-    )
-    quantity_discount_title = serializers.CharField(
-        source="wholesaler_quantity_discount.title",
-        read_only=True,
-        default="",
-    )
-    receipt_unit_selling_price = serializers.DecimalField(
-        source="wholesaler_receipt.unit_selling_price",
-        max_digits=10,
-        decimal_places=2,
+class WholesalerCampaignItemDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer for WholesalerCampaignItem — used by both the detail
+    endpoint (`GetCampaignDetails`, which nests items) and by
+    `GetCampaignItems`.
+
+    Exposes `wholesaler_receipt_title` (product name) and the batch
+    so the frontend can render meaningful rows instead of raw UUIDs.
+    """
+
+    # -------- Read-through fields on the receipt relation --------
+    wholesaler_receipt_title = serializers.CharField(
+        source="wholesaler_receipt.product.title",
         read_only=True,
     )
-    receipt_final_unit_selling_price = serializers.DecimalField(
-        source="wholesaler_receipt.final_unit_selling_price",
-        max_digits=10,
-        decimal_places=2,
+    wholesaler_receipt_batch = serializers.CharField(
+        source="wholesaler_receipt.batch",
+        read_only=True,
+        allow_null=True,
+        allow_blank=True,
+    )
+    wholesaler_receipt_product_id = serializers.CharField(
+        source="wholesaler_receipt.product.id",
         read_only=True,
     )
 
+    # -------- Convenience labels for the campaign item --------
+    suggested_quantity_str = serializers.SerializerMethodField(read_only=True)
+    per_retailer_limit_str = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
-        model = WholesalerCampaignItem
-        fields = [
+        model = models.WholesalerCampaignItem
+        fields = (
             "id",
             "campaign",
             "wholesaler_receipt",
-            "receipt_title",
-            "wholesaler_title",
-            "receipt_unit_selling_price",
-            "receipt_final_unit_selling_price",
+            "wholesaler_receipt_title",
+            "wholesaler_receipt_batch",
+            "wholesaler_receipt_product_id",
             "wholesaler_price_discount",
-            "price_discount_title",
             "wholesaler_quantity_discount",
-            "quantity_discount_title",
             "suggested_quantity",
+            "suggested_quantity_str",
             "per_retailer_limit",
+            "per_retailer_limit_str",
             "retail_price_hint",
             "published_unit_price",
             "published_bonus_quantity",
-            "owner",
+            "published_at",
             "created",
             "updated",
-        ]
-        read_only_fields = [
+            "owner",
+        )
+        read_only_fields = (
+            "id",
+            "created",
+            "updated",
+            "owner",
             "published_unit_price",
             "published_bonus_quantity",
-        ]
+            "published_at",
+        )
 
-    def validate(self, data):
-        if data.get("per_retailer_limit") is not None and data.get(
-            "per_retailer_limit"
-        ) < 0:
-            raise serializers.ValidationError(
-                {"per_retailer_limit": "Must be zero or greater."}
-            )
-        if data.get("suggested_quantity", 0) < 0:
-            raise serializers.ValidationError(
-                {"suggested_quantity": "Must be zero or greater."}
-            )
-        return data
+    def get_suggested_quantity_str(self, obj):
+        if obj.suggested_quantity is None:
+            return ""
+        return f"{obj.suggested_quantity}"
 
-
+    def get_per_retailer_limit_str(self, obj):
+        if obj.per_retailer_limit is None:
+            return ""
+        return f"{obj.per_retailer_limit}"
 # =====================================================================
 # Campaign
 # =====================================================================
