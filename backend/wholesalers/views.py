@@ -1474,6 +1474,8 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
                         campaign_banner=file,
                         wholesaler_campaign=item,
                         entity=request.user.entity,
+                        wholesaler=request.user.entity,
+
                     )
                     uploaded_files.append(content)
 
