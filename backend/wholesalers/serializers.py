@@ -202,13 +202,21 @@ class WholesalerCampaignItemDetailSerializer(BaseModelSerializer):
 # Campaign
 # =====================================================================
 
-
 class WholesalerCampaignListSerializer(BaseModelSerializer):
     wholesaler_title = serializers.CharField(
         source="wholesaler.title", read_only=True,
     )
     status_label = serializers.CharField(
         source="get_status_display", read_only=True,
+    )
+    # Explicit declaration so the banner is always emitted in list
+    # responses. `null` when there is no banner; an absolute URL when
+    # there is. Read-only — banners are set through the create/update
+    # action, not through this serializer.
+    banner = serializers.ImageField(
+        read_only=True,
+        allow_null=True,
+        required=False,
     )
     item_count = serializers.SerializerMethodField()
     audience_count = serializers.SerializerMethodField()
@@ -234,7 +242,7 @@ class WholesalerCampaignListSerializer(BaseModelSerializer):
             "created",
             "updated",
         ]
-        read_only_fields = ["status","entity","id"]
+        read_only_fields = ["status", "entity", "id"]
 
     def get_item_count(self, obj):
         return getattr(obj, "item_count", None) or obj.items.count()
@@ -243,12 +251,22 @@ class WholesalerCampaignListSerializer(BaseModelSerializer):
         return getattr(obj, "audience_count", None) or obj.audience.count()
 
 
+
 class WholesalerCampaignDetailSerializer(BaseModelSerializer):
     wholesaler_title = serializers.CharField(
         source="wholesaler.title", read_only=True,
     )
     status_label = serializers.CharField(
         source="get_status_display", read_only=True,
+    )
+    # Same explicit declaration as the list serializer. Read-only here
+    # too — the create/update action receives the file via
+    # request.FILES and attaches it in services.create_campaign /
+    # services.update_campaign.
+    banner = serializers.ImageField(
+        read_only=True,
+        allow_null=True,
+        required=False,
     )
     is_currently_active = serializers.BooleanField(read_only=True)
     items = WholesalerCampaignItemListSerializer(
@@ -289,8 +307,7 @@ class WholesalerCampaignDetailSerializer(BaseModelSerializer):
             raise serializers.ValidationError(
                 {"end": "end must be on or after start."}
             )
-        return data
-
+        return data        
 
 # =====================================================================
 # Action payloads
