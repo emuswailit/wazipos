@@ -1506,7 +1506,7 @@ def campaignsAPIView(request):
                 for key in request.FILES
             }
             create_log(
-                "info",
+                "INFO",
                 f"campaignsAPIView upload — action={action} "
                 f"content_type={request.content_type} "
                 f"files={file_summary} "
@@ -1514,7 +1514,7 @@ def campaignsAPIView(request):
             )
         except Exception as log_err:
             create_log(
-                "error",
+                "ERROR",
                 f"campaignsAPIView logging failed: {log_err}",
             )
     # -------------------------------------------
