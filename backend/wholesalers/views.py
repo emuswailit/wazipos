@@ -1169,13 +1169,13 @@ def _paginate(serializer_class, queryset, request):
 from utils.logging import create_log
 @campaign_action("CreateCampaign")
 def _create_campaign(request):
-    print("=== CreateCampaign ===")
-    create_log("content_type:", request.content_type)
-    create_log("POST keys:", list(request.POST.keys()))
-    create_log("FILES keys:", list(request.FILES.keys()))
-    create_log("data keys:", list(request.data.keys()))
-    create_log("FILES.get('banner'):", repr(request.FILES.get("banner")))
-    create_log("data.get('banner'):", repr(request.data.get("banner")))
+    create_log("=== CreateCampaign ===")
+    create_log("INFO:", request.content_type)
+    create_log("INFO", list(request.POST.keys()))
+    create_log("INFO", list(request.FILES.keys()))
+    create_log("INFO", list(request.data.keys()))
+    create_log("INFO", repr(request.FILES.get("banner")))
+    create_log("INFO", repr(request.data.get("banner")))
 
     errors, campaign = services.create_campaign(
         request.data,
