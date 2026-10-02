@@ -1169,7 +1169,7 @@ def _paginate(serializer_class, queryset, request):
 from utils.logging import create_log
 @campaign_action("CreateCampaign")
 def _create_campaign(request):
-    create_log("=== CreateCampaign ===")
+    create_log("INFO","=== CreateCampaign ===")
     create_log("INFO:", request.content_type)
     create_log("INFO", list(request.POST.keys()))
     create_log("INFO", list(request.FILES.keys()))
