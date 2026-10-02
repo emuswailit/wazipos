@@ -69,8 +69,6 @@ def _parse_decimal(value) -> Optional[Decimal]:
         raise ValidationError(_("Enter a valid number."))
 
 
-# FIX: added. `int(...)` on junk input raises ValueError, which used to
-# escape the (errors, result) contract and blow up the view.
 def _parse_int(
     value,
     *,
@@ -86,9 +84,6 @@ def _parse_int(
         raise ValidationError({field: _("Enter a valid integer.")})
 
 
-# FIX: renamed from `_get_wholesaler_entity`. The same function resolves
-# both wholesaler and retailer entities — the old name and its error string
-# implied wholesaler-only.
 def _get_user_entity(user):
     entity = getattr(user, "entity", None)
     if entity is None:
@@ -153,8 +148,6 @@ def _get_audience(data: Dict, user, *, as_wholesaler: bool = True) -> Wholesaler
     if audience is None:
         raise ValidationError({"audience_id": _("Audience row not found.")})
 
-    # FIX: use _get_user_entity for both branches. The old
-    # `user.entity_id` access silently diverged from `user.entity`.
     entity = _get_user_entity(user)
     if as_wholesaler:
         if audience.campaign.wholesaler_id != entity.pk:
@@ -230,11 +223,15 @@ def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
 # Campaign lifecycle
 # ===========================================================================
 
-def create_campaign(data: Dict, user):
-    """Create a draft campaign owned by the user's entity."""
+def create_campaign(data: Dict, user, files=None):
+    """
+    Create a draft campaign owned by the user's entity.
+
+    `files` is `request.FILES` from the view — empty for JSON requests,
+    populated for multipart requests that include a banner file.
+    """
     try:
         entity = _get_user_entity(user)
-        # FIX: removed stray create_log("info", ...) debug call.
 
         campaign = WholesalerCampaign(
             entity=entity,
@@ -250,6 +247,13 @@ def create_campaign(data: Dict, user):
         if not campaign.title:
             raise ValidationError({"title": _("This field is required.")})
 
+        # Attach the uploaded banner if present. No-op when the client
+        # sends plain JSON or omits the `banner` field entirely.
+        if files:
+            banner = files.get("banner")
+            if banner is not None:
+                campaign.banner = banner
+
         campaign.full_clean()
         campaign.save()
         return None, campaign
@@ -257,8 +261,13 @@ def create_campaign(data: Dict, user):
         return _errors_from(exc), None
 
 
-def update_campaign(data: Dict, user):
-    """Update the mutable fields of a draft campaign."""
+def update_campaign(data: Dict, user, files=None):
+    """
+    Update the mutable fields of a draft or published campaign.
+
+    `files` is `request.FILES` from the view — empty for JSON requests,
+    populated for multipart requests that replace the banner file.
+    """
     try:
         campaign = _get_campaign(data, user)
 
@@ -270,7 +279,7 @@ def update_campaign(data: Dict, user):
                 _("Only draft or published campaigns can be updated.")
             )
 
-        # FIX: refuse to move the window on a published campaign. The
+        # Refuse to move the window on a published campaign. The
         # published_* snapshots on every item were frozen against the old
         # window and become silently stale.
         if (
@@ -280,6 +289,12 @@ def update_campaign(data: Dict, user):
             raise ValidationError(
                 _("Start and end dates cannot be changed once a campaign is published.")
             )
+
+        # Replace the banner if a new file was uploaded.
+        if files:
+            banner = files.get("banner")
+            if banner is not None:
+                campaign.banner = banner
 
         if "title" in data:
             campaign.title = (data.get("title") or "").strip()
@@ -303,7 +318,6 @@ def delete_campaign(data: Dict, user):
     """Delete a campaign and everything hanging off it (cascades)."""
     try:
         campaign = _get_campaign(data, user)
-        # FIX: use the queryset helper so re-opted-in rows count as opt-ins.
         if (
             campaign.status == WholesalerCampaign.Status.PUBLISHED
             and campaign.audience.opted_in().exists()
@@ -321,7 +335,7 @@ def _apply_publication(campaign: WholesalerCampaign) -> None:
     """The multi-row workflow. Raises ValidationError on failure."""
     items = list(
         campaign.items.select_related(
-            "campaign",                       # FIX: avoids N+1 in validate_windows_cover_campaign
+            "campaign",
             "wholesaler_receipt",
             "wholesaler_price_discount",
             "wholesaler_quantity_discount",
@@ -330,7 +344,6 @@ def _apply_publication(campaign: WholesalerCampaign) -> None:
     if not items:
         raise ValidationError(_("Cannot publish a campaign with no items."))
 
-    # FIX: publishing a campaign nobody can see is almost always a bug.
     if not campaign.audience.filter(is_visible="true").exists():
         raise ValidationError(
             _("Cannot publish a campaign with no visible audience.")
@@ -342,7 +355,6 @@ def _apply_publication(campaign: WholesalerCampaign) -> None:
     for item in items:
         _snapshot_item_terms(item)
 
-    # FIX: use the model transition so published_at is set.
     campaign.mark_published()
 
 
@@ -365,7 +377,6 @@ def close_campaign(data: Dict, user):
         campaign = _get_campaign(data, user)
         if campaign.status != WholesalerCampaign.Status.PUBLISHED:
             raise ValidationError(_("Only published campaigns can be closed."))
-        # FIX: use the model transition helper.
         campaign.mark_closed()
         return None, campaign
     except ValidationError as exc:
@@ -419,7 +430,6 @@ def add_campaign_item(data: Dict, user):
             wholesaler_quantity_discount=_resolve_discount(
                 WholesalerQuantityDiscounts, data.get("wholesaler_quantity_discount_id"), receipt,
             ),
-            # FIX: safe int parsing.
             suggested_quantity=_parse_int(
                 data.get("suggested_quantity"),
                 field="suggested_quantity",
@@ -523,8 +533,6 @@ def add_campaign_audience(data: Dict, user):
             existing.save(update_fields=["is_visible", "updated"])
             return None, existing
 
-        # FIX: catch the unique-constraint race. Two concurrent requests
-        # could both pass the .first() check above.
         try:
             audience = WholesalerCampaignAudience.objects.create(
                 campaign=campaign,
@@ -548,8 +556,6 @@ def remove_campaign_audience(data: Dict, user):
     """
     try:
         audience = _get_audience(data, user, as_wholesaler=True)
-        # FIX: use the instance property so re-opted-in rows are treated
-        # correctly (soft-hide, not hard-delete).
         if audience.has_opted_in:
             audience.is_visible = "false"
             audience.save(update_fields=["is_visible", "updated"])
@@ -585,7 +591,6 @@ def project_campaign(data: Dict, user):
         if campaign is None or not campaign.is_currently_active:
             raise ValidationError({"campaign_id": _("Campaign is not currently active.")})
 
-        # FIX: verify the caller is actually on this campaign's audience.
         retailer_entity = _get_user_entity(user)
         audience = (
             WholesalerCampaignAudience.objects
@@ -694,8 +699,6 @@ def opt_in_campaign(data: Dict, user):
         if not campaign.is_currently_active:
             raise ValidationError(_("Campaign is not currently active."))
 
-        # FIX: use the timestamp comparison. The old `opted_in_at is not
-        # None` check rejected a retailer who opted out and wants back in.
         if audience.has_opted_in:
             raise ValidationError(_("You have already opted in to this campaign."))
 
@@ -774,8 +777,6 @@ def opt_in_campaign(data: Dict, user):
             line.save()
             created_lines.append(line)
 
-        # FIX: opt_in refreshes opted_in_at but leaves opted_out_at in
-        # place, so the audit trail survives a re-opt-in.
         audience.opt_in(save=False)
         audience.retailer_indent = indent
         audience.save(
@@ -808,8 +809,6 @@ def opt_out_campaign(data: Dict, user):
         if audience is None:
             raise ValidationError(_("You are not on the audience for this campaign."))
 
-        # FIX: idempotency. Repeated calls no longer keep pushing
-        # opted_out_at forward past opted_in_at.
         if not audience.has_opted_in:
             raise ValidationError(_("You have not opted in to this campaign."))
 

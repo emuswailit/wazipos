@@ -1,24 +1,56 @@
-from email import errors
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    parser_classes,
+)
 from rest_framework import exceptions, generics, permissions, status
-from . import wholesaler_permissions, utils, serializers
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.pagination import PageNumberPagination
-from core.responses import custom_errors_response, custom_success_message, custom_error_response
-from retailers.retail_permissions import EntitySubscriptionPermission
-from wholesalers.wholesaler_permissions import WholesalerEmployeePermission,WholesalerAndRetailerEmployeePermission
 from rest_framework.response import Response
-from core.responses import custom_error_response, custom_success_message,  custom_plain_response,custom_success_message_with_reference
+
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.db import IntegrityError
+from django.db.models import Prefetch, Q
+
+from core.responses import (
+    custom_error_response,
+    custom_errors_response,
+    custom_plain_response,
+    custom_success_message,
+    custom_success_message_with_reference,
+)
+from core import app_permissions
+from retailers.retail_permissions import EntitySubscriptionPermission
+from retailers.models import (
+    RetailerProductRequest,
+    RetailerProductRequestItem,
+    RetailerProductRequestOffer,
+    RetailerProductRequestResponse,
+)
+from retailers.serializers import (
+    RetailerProductRequestSerializer,
+    RetailerProductRequestListSerializer,
+)
+
+from wholesalers.wholesaler_permissions import (
+    WholesalerEmployeePermission,
+    WholesalerAndRetailerEmployeePermission,
+)
+
+from . import models
+from . import serializers
+from . import utils
 from .utils import retailer_orders_utils, wholesaler_receipt_utils
 from .services import campaigns as services
 from .utils import campaign_utils
-from rest_framework.parsers import MultiPartParser, FormParser
-from core import app_permissions
-from . import models
-from django.shortcuts import get_object_or_404, render
-from django.db import IntegrityError
+from .services.request_response import wholesaler_respond_to_request
 
 
-
+# ===========================================================================
+# Wholesaler receipts — staff
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
@@ -85,7 +117,7 @@ def wholesalerReceiptsStaffAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
     elif request.data["action"] == "GetWholesaleReceiptDetails":
-      
+
 
         product = wholesaler_receipt_utils.get_wholesale_receipt_details(request.data, request.user)
         if product:
@@ -102,6 +134,10 @@ def wholesalerReceiptsStaffAPIView(request):
         raise exceptions.ValidationError(
             f'Action { request.data["action"]} is unknown')
 
+
+# ===========================================================================
+# Wholesaler receipts dispatcher — general reads
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
@@ -162,7 +198,7 @@ def wholesalerReceiptsAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
     elif request.data["action"] == "GetWholesaleReceiptDetails":
-      
+
 
         product = wholesaler_receipt_utils.get_wholesale_receipt_details(request.data, request.user)
         if product:
@@ -219,6 +255,10 @@ def wholesalerReceiptsAPIView(request):
             f'Action { request.data["action"]} is unknown')
 
 
+# ===========================================================================
+# Retailer orders dispatcher — entity
+# ===========================================================================
+
 @api_view(["POST"])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
 def retailerOrdersAPIView(request):
@@ -243,7 +283,7 @@ def retailerOrdersAPIView(request):
             )
 
         else:
-           
+
             return custom_errors_response(
                 1, "Retailer order could not be created",errors
             )
@@ -339,16 +379,6 @@ def retailerOrdersAPIView(request):
             return custom_error_response(
                 1, "Item could not be deleted to order"
             )
-        # if (retailer_orders_utils.delete_retailer_order_item(
-        #         request.data, request.user)):
-
-        #     return Response(
-        #         data={
-        #             "response_code": 0,
-        #             "response_message": "Retailer order item deleted succesfully",
-        #         },
-
-        #     )
     elif request.data["action"] == "UpdateRetailerOrderItem":
         retailer_order = retailer_orders_utils.update_retailer_order_item(
             request.data, request.user)
@@ -398,7 +428,7 @@ def retailerOrdersAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
-    
+
     elif request.data["action"] == "SearchRetailerOrders":
         """Search retailer orders """
 
@@ -410,48 +440,15 @@ def retailerOrdersAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
-        # wholesaler_receipt = utils.update_wholesaler_receipt(
-        #     request.data, request.user)
 
-        # if wholesaler_receipt:
-        #     serializer = serializers.WholesalerReceiptsSerializer(
-        #         wholesaler_receipt, many=False, context={"request": request}
-        #     )
-        #     return custom_success_message(
-        #         0, "Wholesaler inventory receipt updated successfully", serializer.data, 'wholesaler_receipt'
-        #     )
-
-        # else:
-        #     return custom_error_response(
-        #         1, "Wholesaler inventory receipt could not be updated"
-        #     )
-    # elif request.data["action"] == "DeleteRetailerOrder":
-    #     if (retailer_orders_utils.delete_retailer_order(
-    #             request.data, request.user)):
-
-    #         return Response(
-    #             data={
-    #                 "response_code": 0,
-    #                 "response_message": "Retailer order deleted succesfully",
-    #             },
-
-    #         )
-    #     """Search wholesaler receipts """
-
-    #     wholesaler_receipts = utils.search_wholesaler_receipts(
-    #         request.data, request.user)
-    #     paginator = PageNumberPagination()
-    #     page = paginator.paginate_queryset(wholesaler_receipts, request)
-    #     serializer = serializers.WholesalerReceiptsSerializer(
-    #         page, many=True, context={"request": request}
-    #     )
-    #     return paginator.get_paginated_response(serializer.data)
-    
-    
     else:
         raise exceptions.ValidationError(
             f'Action { request.data["action"]} is unknown')
 
+
+# ===========================================================================
+# Retailer orders dispatcher — staff
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes([WholesalerEmployeePermission])
@@ -543,16 +540,6 @@ def retailerOrdersStaffAPIView(request):
             return custom_error_response(
                 1, "Item could not be deleted to order"
             )
-        # if (retailer_orders_utils.delete_retailer_order_item(
-        #         request.data, request.user)):
-
-        #     return Response(
-        #         data={
-        #             "response_code": 0,
-        #             "response_message": "Retailer order item deleted succesfully",
-        #         },
-
-        #     )
     elif request.data["action"] == "UpdateRetailerOrderItem":
         retailer_order = retailer_orders_utils.update_retailer_order_item(
             request.data, request.user)
@@ -613,21 +600,6 @@ def retailerOrdersStaffAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
-        # wholesaler_receipt = utils.update_wholesaler_receipt(
-        #     request.data, request.user)
-
-        # if wholesaler_receipt:
-        #     serializer = serializers.WholesalerReceiptsSerializer(
-        #         wholesaler_receipt, many=False, context={"request": request}
-        #     )
-        #     return custom_success_message(
-        #         0, "Wholesaler inventory receipt updated successfully", serializer.data, 'wholesaler_receipt'
-        #     )
-
-        # else:
-        #     return custom_error_response(
-        #         1, "Wholesaler inventory receipt could not be updated"
-        #     )
     elif request.data["action"] == "DeleteRetailerOrder":
         if (retailer_orders_utils.delete_retailer_order(
                 request.data, request.user)):
@@ -653,6 +625,10 @@ def retailerOrdersStaffAPIView(request):
         raise exceptions.ValidationError(
             f'Action { request.data["action"]} is unknown')
 
+
+# ===========================================================================
+# Price discount — create / update
+# ===========================================================================
 
 class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
     """
@@ -690,7 +666,7 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
 
         if not percent:
             raise exceptions.ValidationError("Percentage is required")
-        
+
         if not title:
             raise exceptions.ValidationError("Title is required")
 
@@ -704,7 +680,6 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
             serializer = serializers.WholesalerPriceDiscountsSerializer(
                 data=request.data, context=serializer_context
             )
-            # serializer.is_valid(raise_exception=   True)
             if serializer.is_valid():
                 try:
                     serializer.save(owner=request.user,
@@ -728,9 +703,6 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
                 item.save()
                 context = serializer.data
                 arr =[]
-                # context["images"] = [file.id for file in uploaded_files]
-                # context["images"] = [file.id for file in uploaded_files]
-                # context["images"] = [image for image in uploaded_files]
                 arr= serializers.WholesalerPriceDiscountBannersSerializer(item.price_discount_banners,context={'request': request}, many=True).data,
                 context["price_discount_banners"] =arr
 
@@ -745,7 +717,7 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
                     status=status.HTTP_201_CREATED,
                 )
             else:
-                default_errors = serializer.errors  # default errors dict
+                default_errors = serializer.errors
                 errors_messages = []
                 for field_name, field_errors in default_errors.items():
                     for field_error in field_errors:
@@ -771,7 +743,6 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
             serializer = serializers.WholesalerPriceDiscountsSerializer(
                 data=request.data, context=serializer_context
             )
-            # serializer.is_valid(raise_exception=   True)
             if serializer.is_valid():
                 try:
                     serializer.save(owner=request.user,
@@ -787,12 +758,8 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
                     },
                     status=status.HTTP_200_OK,
                 )
-                    # raise exceptions.ValidationError(
-                    # f"{exc}"
-                    # )
 
                 user_data = serializer.data
-                # Retrieve user from database
                 errors_messages = []
                 return Response(
                     data={
@@ -804,7 +771,7 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
                     status=status.HTTP_201_CREATED,
                 )
             else:
-                default_errors = serializer.errors  # default errors dict
+                default_errors = serializer.errors
                 errors_messages = []
                 for field_name, field_errors in default_errors.items():
                     for field_error in field_errors:
@@ -821,12 +788,6 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            
-
-from django.utils.dateparse import parse_date
-
-
-from django.utils.dateparse import parse_date
 
 
 class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
@@ -836,14 +797,12 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
     Fixes applied:
       - `name` class attribute preserved — urls.py reads it.
       - Date strings from `request.data` are parsed before assignment.
-        Without this, `is_currently_active` crashes during serialization
-        with `'<=' not supported between instances of 'str' and 'datetime.date'`.
       - Fields are collected and saved once, not once per field.
       - `refresh_from_db()` before serialization so the serializer sees
         `date` objects, not in-memory strings.
     """
 
-    name = "wholesale-price-discount-update"          # ← REQUIRED
+    name = "wholesale-price-discount-update"
     permission_classes = (WholesalerEmployeePermission,)
     serializer_class = serializers.WholesalerPriceDiscountsSerializer
     parser_classes = (MultiPartParser, FormParser)
@@ -854,7 +813,6 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         files = request.FILES.getlist("price_discount_banners")
         instance = self.get_object()
 
-        # ---- 1. Attach any new banners ----
         if files:
             uploaded_files = []
             for file in files:
@@ -867,7 +825,6 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
                 uploaded_files.append(content)
             instance.price_discount_banners.add(*uploaded_files)
 
-        # ---- 2. Collect scalar updates, coerce types, save once ----
         data = request.data
         update_fields: list[str] = []
 
@@ -906,7 +863,6 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         if update_fields:
             instance.save(update_fields=update_fields)
 
-        # ---- 3. Refresh so serializer sees DB-canonical types ----
         instance.refresh_from_db()
 
         return Response(
@@ -925,6 +881,10 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         self.check_object_permissions(self.request, obj)
         return obj
 
+
+# ===========================================================================
+# Quantity discount — create / update
+# ===========================================================================
 
 class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
     """
@@ -956,7 +916,6 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
             serializer = serializers.WholesalerQuantityDiscountsSerializer(
                 data=request.data, context=serializer_context
             )
-            # serializer.is_valid(raise_exception=   True)
             if serializer.is_valid():
                 try:
                     serializer.save(owner=request.user,
@@ -980,9 +939,6 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
                 item.save()
                 context = serializer.data
                 arr =[]
-                # context["images"] = [file.id for file in uploaded_files]
-                # context["images"] = [file.id for file in uploaded_files]
-                # context["images"] = [image for image in uploaded_files]
                 arr= serializers.WholesalerQuantityDiscountBannersSerializer(item.quantity_discount_banners,context={'request': request}, many=True).data,
                 context["quantity_discount_banners"] =arr
 
@@ -997,7 +953,7 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
                     status=status.HTTP_201_CREATED,
                 )
             else:
-                default_errors = serializer.errors  # default errors dict
+                default_errors = serializer.errors
                 errors_messages = []
                 for field_name, field_errors in default_errors.items():
                     for field_error in field_errors:
@@ -1023,7 +979,6 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
             serializer = serializers.WholesalerQuantityDiscountsSerializer(
                 data=request.data, context=serializer_context
             )
-            # serializer.is_valid(raise_exception=   True)
             if serializer.is_valid():
                 try:
                     serializer.save(owner=request.user,
@@ -1034,7 +989,6 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
                     )
 
                 user_data = serializer.data
-                # Retrieve user from database
                 errors_messages = []
                 return Response(
                     data={
@@ -1046,7 +1000,7 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
                     status=status.HTTP_201_CREATED,
                 )
             else:
-                default_errors = serializer.errors  # default errors dict
+                default_errors = serializer.errors
                 errors_messages = []
                 for field_name, field_errors in default_errors.items():
                     for field_error in field_errors:
@@ -1063,18 +1017,14 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            
 
-from django.utils.dateparse import parse_date
 
 class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
     Update quantity discount with banners.
-
-    Same fixes as the price-side update view.
     """
 
-    name = "quantity-discount-update"                 # ← REQUIRED
+    name = "quantity-discount-update"
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = serializers.WholesalerQuantityDiscountsSerializer
     parser_classes = (MultiPartParser, FormParser)
@@ -1085,7 +1035,6 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         files = request.FILES.getlist("quantity_discount_banners")
         instance = self.get_object()
 
-        # ---- 1. Attach any new banners ----
         if files:
             uploaded_files = []
             for file in files:
@@ -1098,7 +1047,6 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
                 uploaded_files.append(content)
             instance.quantity_discount_banners.add(*uploaded_files)
 
-        # ---- 2. Collect scalar updates, coerce types, save once ----
         data = request.data
         update_fields: list[str] = []
 
@@ -1166,6 +1114,7 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         self.check_object_permissions(self.request, obj)
         return obj
 
+
 # ===========================================================================
 # Wholesaler campaigns — unified dispatcher
 # ===========================================================================
@@ -1221,7 +1170,7 @@ def _paginate(serializer_class, queryset, request):
 @campaign_action("CreateCampaign")
 def _create_campaign(request):
     """
-    Sample request:
+    Sample request (JSON):
         {
             "action": "CreateCampaign",
             "title": "Ramadan Essentials 2026",
@@ -1230,8 +1179,24 @@ def _create_campaign(request):
             "end": "2026-03-15",
             "budget_cap": "500000.00"
         }
+
+    Sample request (multipart, with a banner):
+        POST /wholesalers/campaigns/
+        Content-Type: multipart/form-data
+
+        action: CreateCampaign
+        title: Ramadan Essentials 2026
+        description: Discounted staples for the Ramadan window.
+        start: 2026-02-01
+        end: 2026-03-15
+        budget_cap: 500000.00
+        banner: <file>
     """
-    errors, campaign = services.create_campaign(request.data, request.user)
+    errors, campaign = services.create_campaign(
+        request.data,
+        request.user,
+        files=request.FILES,
+    )
     if not campaign:
         return _fail("Campaign could not be created", errors)
     return _ok(
@@ -1248,7 +1213,7 @@ def _get_entity_campaigns(request):
     Sample request:
         {
             "action": "GetEntityCampaigns",
-            "status": "PUBLISHED",     // optional
+            "status": "PUBLISHED",
             "page": 1
         }
     """
@@ -1283,16 +1248,31 @@ def _get_campaign_details(request):
 @campaign_action("UpdateCampaign")
 def _update_campaign(request):
     """
-    Sample request:
+    Sample request (JSON):
         {
             "action": "UpdateCampaign",
-            "campaign_id": 42,
+            "campaign_id": "5b8f1c2a-9d4e-4b7a-8c1f-3e6a9d2f7b4c",
             "title": "Ramadan Essentials 2026 — Revised",
             "end": "2026-03-20",
             "budget_cap": "750000.00"
         }
+
+    Sample request (multipart, replacing the banner):
+        POST /wholesalers/campaigns/
+        Content-Type: multipart/form-data
+
+        action: UpdateCampaign
+        campaign_id: 5b8f1c2a-9d4e-4b7a-8c1f-3e6a9d2f7b4c
+        title: Ramadan Essentials 2026 — Revised
+        end: 2026-03-20
+        budget_cap: 750000.00
+        banner: <file>
     """
-    errors, campaign = services.update_campaign(request.data, request.user)
+    errors, campaign = services.update_campaign(
+        request.data,
+        request.user,
+        files=request.FILES,
+    )
     if not campaign:
         return _fail("Campaign could not be updated", errors)
     return _ok(
@@ -1305,13 +1285,6 @@ def _update_campaign(request):
 
 @campaign_action("DeleteCampaign")
 def _delete_campaign(request):
-    """
-    Sample request:
-        {
-            "action": "DeleteCampaign",
-            "campaign_id": 42
-        }
-    """
     errors, campaign = services.delete_campaign(request.data, request.user)
     if not campaign:
         return _fail("Campaign could not be deleted", errors)
@@ -1320,13 +1293,6 @@ def _delete_campaign(request):
 
 @campaign_action("PublishCampaign")
 def _publish_campaign(request):
-    """
-    Sample request:
-        {
-            "action": "PublishCampaign",
-            "campaign_id": 42
-        }
-    """
     errors, campaign = services.publish_campaign(request.data, request.user)
     if not campaign:
         return _fail("Campaign could not be published", errors)
@@ -1340,13 +1306,6 @@ def _publish_campaign(request):
 
 @campaign_action("CloseCampaign")
 def _close_campaign(request):
-    """
-    Sample request:
-        {
-            "action": "CloseCampaign",
-            "campaign_id": 42
-        }
-    """
     errors, campaign = services.close_campaign(request.data, request.user)
     if not campaign:
         return _fail("Campaign could not be closed", errors)
@@ -1390,16 +1349,6 @@ def _add_campaign_item(request):
 
 @campaign_action("UpdateCampaignItem")
 def _update_campaign_item(request):
-    """
-    Sample request:
-        {
-            "action": "UpdateCampaignItem",
-            "item_id": 501,
-            "suggested_quantity": 25,
-            "per_retailer_limit": 150,
-            "retail_price_hint": "139.99"
-        }
-    """
     errors, item = services.update_campaign_item(request.data, request.user)
     if not item:
         return _fail("Campaign item could not be updated", errors)
@@ -1413,13 +1362,6 @@ def _update_campaign_item(request):
 
 @campaign_action("DeleteCampaignItem")
 def _delete_campaign_item(request):
-    """
-    Sample request:
-        {
-            "action": "DeleteCampaignItem",
-            "item_id": 501
-        }
-    """
     errors, item = services.delete_campaign_item(request.data, request.user)
     if not item:
         return _fail("Campaign item could not be deleted", errors)
@@ -1428,14 +1370,6 @@ def _delete_campaign_item(request):
 
 @campaign_action("GetCampaignItems")
 def _get_campaign_items(request):
-    """
-    Sample request:
-        {
-            "action": "GetCampaignItems",
-            "campaign_id": 42,
-            "page": 1
-        }
-    """
     items = campaign_utils.get_campaign_items(request.data, request.user)
     return _paginate(
         serializers.WholesalerCampaignItemListSerializer, items, request,
@@ -1469,13 +1403,6 @@ def _add_campaign_audience(request):
 
 @campaign_action("RemoveCampaignAudience")
 def _remove_campaign_audience(request):
-    """
-    Sample request:
-        {
-            "action": "RemoveCampaignAudience",
-            "audience_id": 1204
-        }
-    """
     errors, audience = services.remove_campaign_audience(request.data, request.user)
     if not audience:
         return _fail("Audience could not be removed", errors)
@@ -1484,14 +1411,6 @@ def _remove_campaign_audience(request):
 
 @campaign_action("GetCampaignAudience")
 def _get_campaign_audience(request):
-    """
-    Sample request:
-        {
-            "action": "GetCampaignAudience",
-            "campaign_id": 42,
-            "page": 1
-        }
-    """
     audience = campaign_utils.get_campaign_audience(request.data, request.user)
     return _paginate(
         serializers.WholesalerCampaignAudienceListSerializer, audience, request,
@@ -1504,14 +1423,6 @@ def _get_campaign_audience(request):
 
 @campaign_action("GetMyCampaigns")
 def _get_my_campaigns(request):
-    """
-    Sample request:
-        {
-            "action": "GetMyCampaigns",
-            "active_only": true,
-            "page": 1
-        }
-    """
     campaigns = campaign_utils.get_my_campaigns(request.data, request.user)
     return _paginate(
         serializers.WholesalerCampaignListSerializer, campaigns, request,
@@ -1520,18 +1431,6 @@ def _get_my_campaigns(request):
 
 @campaign_action("ProjectCampaign")
 def _project_campaign(request):
-    """
-    Sample request:
-        {
-            "action": "ProjectCampaign",
-            "campaign_id": 42,
-            "markup_pct": "12.50",
-            "items": [
-                {"item_id": 501, "quantity": 20},
-                {"item_id": 502, "quantity": 5}
-            ]
-        }
-    """
     errors, projections = services.project_campaign(request.data, request.user)
     if projections is None:
         return _fail("Projection could not be computed", errors)
@@ -1542,18 +1441,6 @@ def _project_campaign(request):
 
 @campaign_action("OptInCampaign")
 def _opt_in_campaign(request):
-    """
-    Sample request:
-        {
-            "action": "OptInCampaign",
-            "campaign_id": 42,
-            "markup_pct": "12.50",
-            "items": [
-                {"item_id": 501, "quantity": 20},
-                {"item_id": 502, "quantity": 5}
-            ]
-        }
-    """
     errors, result = services.opt_in_campaign(request.data, request.user)
     if not result:
         return _fail("Campaign could not be accepted", errors)
@@ -1571,13 +1458,6 @@ def _opt_in_campaign(request):
 
 @campaign_action("OptOutCampaign")
 def _opt_out_campaign(request):
-    """
-    Sample request:
-        {
-            "action": "OptOutCampaign",
-            "campaign_id": 42
-        }
-    """
     errors, audience = services.opt_out_campaign(request.data, request.user)
     if not audience:
         return _fail("Could not opt out", errors)
@@ -1594,6 +1474,7 @@ def _opt_out_campaign(request):
 # ---------------------------------------------------------------------------
 
 @api_view(["POST"])
+@parser_classes([JSONParser, MultiPartParser, FormParser])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
 def campaignsAPIView(request):
     """
@@ -1601,6 +1482,9 @@ def campaignsAPIView(request):
 
     Missing action → 400 "Action is not supplied"
     Unknown action → 400 "Action <name> is unknown"
+
+    Accepts JSON and multipart/form-data. The latter is required for
+    CreateCampaign / UpdateCampaign when a banner file is attached.
     """
     action = request.data.get("action")
     if not action:
@@ -1613,18 +1497,9 @@ def campaignsAPIView(request):
     return handler(request)
 
 
-# wholesalers/views.py
-
-from rest_framework import exceptions, permissions
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.pagination import PageNumberPagination
-
-from core.responses import custom_success_message, custom_errors_response
-from retailers.retail_permissions import EntitySubscriptionPermission
-
-from wholesalers import utils
-from wholesalers import serializers
-
+# ===========================================================================
+# Wholesaler receipt returns dispatcher
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
@@ -1637,11 +1512,7 @@ def receiptReturnsAPIView(request):
 
     Supported actions and their payloads:
 
-    // ----------------------------------------------------------------
-    // 1. InitiateReturn — retailer sends stock back to a wholesaler.
-    //    Creates the StockAdjustment and the WholesalerReceiptReturns
-    //    atomically.
-    // ----------------------------------------------------------------
+    // InitiateReturn — retailer sends stock back to a wholesaler.
     {
         "action": "InitiateReturn",
         "retailer_receipt": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
@@ -1652,22 +1523,15 @@ def receiptReturnsAPIView(request):
         "unit_price_refunded": "45.00",
         "restocking_fee_percent": "5.00"
     }
-    // Required: retailer_receipt, quantity, reason, justification
-    // Optional: return_type, unit_price_refunded, restocking_fee_percent
-    // reason choices: EXPIRED | NEAR_EXPIRY | DAMAGED | WRONG_ITEM |
-    //                 SHORT_DATED | QUALITY | OVER_ORDERED | RECALL | OTHER
-    // return_type choices: REFUND | EXCHANGE | REPLACEMENT
 
-    // ----------------------------------------------------------------
-    // 2. CreateReturn — wholesaler records a return handled offline.
-    // ----------------------------------------------------------------
+    // CreateReturn — wholesaler records a return handled offline.
     {
         "action": "CreateReturn",
-        "wholesaler_entity": "3e21a7b8-9c4d-4e5f-8a1b-2c6d9e7f3a4b",
-        "retailer_entity": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
-        "retailer_receipt": "5a6b7c8d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-        "wholesaler_receipt": "9d8c7b6a-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
-        "product": "b1c2d3e4-f5a6-7b8c-9d0e-1f2a3b4c5d6e",
+        "wholesaler_entity": "...",
+        "retailer_entity": "...",
+        "retailer_receipt": "...",
+        "wholesaler_receipt": "...",
+        "product": "...",
         "quantity": 12,
         "reason": "QUALITY",
         "justification": "Client reported discoloration on 3 units",
@@ -1676,157 +1540,83 @@ def receiptReturnsAPIView(request):
         "unit_price_refunded": "120.00",
         "restocking_fee_percent": "0.00"
     }
-    // Required: wholesaler_entity, retailer_entity, product,
-    //           quantity, reason, justification
 
-    // ----------------------------------------------------------------
-    // 3. ListReturns — list returns scoped to caller's entity.
-    // ----------------------------------------------------------------
+    // ListReturns — list returns scoped to caller's entity.
     {
         "action": "ListReturns",
         "status": "PENDING_CONFIRMATION",
         "reason": "NEAR_EXPIRY",
         "return_type": "REFUND",
         "confirmation_outcome": "PENDING",
-        "wholesaler_entity": "3e21a7b8-9c4d-4e5f-8a1b-2c6d9e7f3a4b",
-        "retailer_entity": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
+        "wholesaler_entity": "...",
+        "retailer_entity": "...",
         "search": "paracetamol"
     }
-    // All filters optional. Pagination via DRF PageNumberPagination.
 
-    // Minimal version:
-    {
-        "action": "ListReturns"
-    }
-
-    // ----------------------------------------------------------------
-    // 4. GetReturnDetails — retrieve one return by ID.
-    // ----------------------------------------------------------------
+    // GetReturnDetails
     {
         "action": "GetReturnDetails",
         "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
     }
-    // Required: return_id
 
-    // ----------------------------------------------------------------
-    // 5. UpdateReturn — update a PENDING_CONFIRMATION return.
-    //    Whitelisted fields: justification, reference_number,
-    //                        return_type, unit_price_refunded,
-    //                        restocking_fee_percent
-    // ----------------------------------------------------------------
+    // UpdateReturn — whitelisted fields: justification, reference_number,
+    // return_type, unit_price_refunded, restocking_fee_percent.
     {
         "action": "UpdateReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-        "justification": "Updated: batch number confirmed as B-2024-118",
+        "return_id": "...",
+        "justification": "...",
         "reference_number": "RMA-2026-0091",
         "return_type": "EXCHANGE",
         "unit_price_refunded": "118.50",
         "restocking_fee_percent": "2.50"
     }
-    // Required: return_id
-    // Optional: any whitelisted field
 
-    // ----------------------------------------------------------------
-    // 6. DeleteReturn — delete a PENDING_CONFIRMATION return.
-    // ----------------------------------------------------------------
+    // DeleteReturn
     {
         "action": "DeleteReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
-    }
-    // Required: return_id
-
-    // ----------------------------------------------------------------
-    // 7a. ConfirmReturn — full take-back into inventory.
-    // ----------------------------------------------------------------
-    {
-        "action": "ConfirmReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-        "outcome": "TAKE_BACK",
-        "notes": "Goods received in good condition"
-    }
-    // Required: return_id, outcome
-    // outcome choices: TAKE_BACK | WRITE_OFF | PARTIAL_TAKE_BACK
-
-    // ----------------------------------------------------------------
-    // 7b. ConfirmReturn — full write-off (cast).
-    // ----------------------------------------------------------------
-    {
-        "action": "ConfirmReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-        "outcome": "WRITE_OFF",
-        "notes": "All units expired on arrival, discarded"
+        "return_id": "..."
     }
 
-    // ----------------------------------------------------------------
-    // 7c. ConfirmReturn — partial take-back.
-    //     confirmed_quantity + written_off_quantity MUST equal
-    //     the return's total quantity.
-    // ----------------------------------------------------------------
+    // ConfirmReturn — TAKE_BACK | WRITE_OFF | PARTIAL_TAKE_BACK
     {
         "action": "ConfirmReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "return_id": "...",
         "outcome": "PARTIAL_TAKE_BACK",
         "confirmed_quantity": 8,
         "written_off_quantity": 2,
         "notes": "8 units sellable, 2 damaged in transit"
     }
 
-    // ----------------------------------------------------------------
-    // 8. RejectReturn — wholesaler rejects the return.
-    // ----------------------------------------------------------------
+    // RejectReturn
     {
         "action": "RejectReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "return_id": "...",
         "reason": "Return not authorized — no RMA was issued"
     }
-    // Required: return_id
-    // Optional: reason
 
-    // ----------------------------------------------------------------
-    // 9a. SettleReturn — original refund terms.
-    // ----------------------------------------------------------------
+    // SettleReturn
     {
         "action": "SettleReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
-        "notes": "Refund issued per original agreement"
-    }
-
-    // ----------------------------------------------------------------
-    // 9b. SettleReturn — override refund values at settle time.
-    // ----------------------------------------------------------------
-    {
-        "action": "SettleReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "return_id": "...",
         "unit_price_refunded": "110.00",
         "restocking_fee_percent": "10.00",
         "notes": "Agreed to deduct 10% restocking fee after inspection"
     }
-    // Required: return_id
-    // Optional: unit_price_refunded, restocking_fee_percent, notes
 
-    // ----------------------------------------------------------------
-    // 10. CancelReturn — cancel pre-confirmation (either party).
-    // ----------------------------------------------------------------
+    // CancelReturn
     {
         "action": "CancelReturn",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "return_id": "...",
         "reason": "Return no longer needed — goods found in stock"
     }
-    // Required: return_id
-    // Optional: reason
 
-    // ----------------------------------------------------------------
-    // 11. GetStaleReturns — returns stuck in PENDING_CONFIRMATION.
-    // ----------------------------------------------------------------
+    // GetStaleReturns
     {
         "action": "GetStaleReturns",
         "days": 14
     }
-    // Optional: days (default 7)
 
-    // ----------------------------------------------------------------
-    // 12. GetReturnMismatches — quantity drift between paired records.
-    // ----------------------------------------------------------------
+    // GetReturnMismatches
     {
         "action": "GetReturnMismatches"
     }
@@ -1836,23 +1626,6 @@ def receiptReturnsAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-    # =================================================================
-    # Lifecycle
-    # =================================================================
-
-    # -----------------------------------------------------------------
-    # InitiateReturn
-    # Payload: {
-    #     "action": "InitiateReturn",
-    #     "retailer_receipt": "<uuid>",
-    #     "quantity": <int>,
-    #     "reason": "<enum>",
-    #     "justification": "<string>",
-    #     "return_type": "REFUND" | "EXCHANGE" | "REPLACEMENT",
-    #     "unit_price_refunded": "<decimal>",
-    #     "restocking_fee_percent": "<decimal>"
-    # }
-    # -----------------------------------------------------------------
     if action == "InitiateReturn":
         errors, ret = utils.initiate_return(request.data, request.user)
         if ret:
@@ -1864,24 +1637,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be initiated", errors)
 
-    # -----------------------------------------------------------------
-    # CreateReturn
-    # Payload: {
-    #     "action": "CreateReturn",
-    #     "wholesaler_entity": "<uuid>",
-    #     "retailer_entity": "<uuid>",
-    #     "product": "<uuid>",
-    #     "quantity": <int>,
-    #     "reason": "<enum>",
-    #     "justification": "<string>",
-    #     "retailer_receipt": "<uuid>",
-    #     "wholesaler_receipt": "<uuid>",
-    #     "return_type": "REFUND" | "EXCHANGE" | "REPLACEMENT",
-    #     "unit_price_paid": "<decimal>",
-    #     "unit_price_refunded": "<decimal>",
-    #     "restocking_fee_percent": "<decimal>"
-    # }
-    # -----------------------------------------------------------------
     elif action == "CreateReturn":
         errors, ret = utils.create_return(request.data, request.user)
         if ret:
@@ -1893,20 +1648,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be created", errors)
 
-    # -----------------------------------------------------------------
-    # ListReturns
-    # Payload: {
-    #     "action": "ListReturns",
-    #     "status": "<enum>",
-    #     "reason": "<enum>",
-    #     "return_type": "<enum>",
-    #     "confirmation_outcome": "<enum>",
-    #     "wholesaler_entity": "<uuid>",
-    #     "retailer_entity": "<uuid>",
-    #     "search": "<string>"
-    # }
-    # All filters optional. Response is paginated.
-    # -----------------------------------------------------------------
     elif action == "ListReturns":
         qs = utils.get_entity_returns(request.data, request.user)
         paginator = PageNumberPagination()
@@ -1916,13 +1657,6 @@ def receiptReturnsAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
 
-    # -----------------------------------------------------------------
-    # GetReturnDetails
-    # Payload: {
-    #     "action": "GetReturnDetails",
-    #     "return_id": "<uuid>"
-    # }
-    # -----------------------------------------------------------------
     elif action == "GetReturnDetails":
         ret, errors = utils.get_return_details(request.data, request.user)
         if ret:
@@ -1934,19 +1668,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be retrieved", errors)
 
-    # -----------------------------------------------------------------
-    # UpdateReturn
-    # Payload: {
-    #     "action": "UpdateReturn",
-    #     "return_id": "<uuid>",
-    #     "justification": "<string>",
-    #     "reference_number": "<string>",
-    #     "return_type": "REFUND" | "EXCHANGE" | "REPLACEMENT",
-    #     "unit_price_refunded": "<decimal>",
-    #     "restocking_fee_percent": "<decimal>"
-    # }
-    # Only whitelisted fields are accepted.
-    # -----------------------------------------------------------------
     elif action == "UpdateReturn":
         errors, ret = utils.update_return(request.data, request.user)
         if ret:
@@ -1958,13 +1679,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be updated", errors)
 
-    # -----------------------------------------------------------------
-    # DeleteReturn
-    # Payload: {
-    #     "action": "DeleteReturn",
-    #     "return_id": "<uuid>"
-    # }
-    # -----------------------------------------------------------------
     elif action == "DeleteReturn":
         errors, ret = utils.delete_return(request.data, request.user)
         if ret:
@@ -1973,36 +1687,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be deleted", errors)
 
-    # =================================================================
-    # State transitions
-    # =================================================================
-
-    # -----------------------------------------------------------------
-    # ConfirmReturn
-    # Payload (full take-back): {
-    #     "action": "ConfirmReturn",
-    #     "return_id": "<uuid>",
-    #     "outcome": "TAKE_BACK",
-    #     "notes": "<string>"
-    # }
-    #
-    # Payload (full write-off): {
-    #     "action": "ConfirmReturn",
-    #     "return_id": "<uuid>",
-    #     "outcome": "WRITE_OFF",
-    #     "notes": "<string>"
-    # }
-    #
-    # Payload (partial): {
-    #     "action": "ConfirmReturn",
-    #     "return_id": "<uuid>",
-    #     "outcome": "PARTIAL_TAKE_BACK",
-    #     "confirmed_quantity": <int>,
-    #     "written_off_quantity": <int>,
-    #     "notes": "<string>"
-    # }
-    # confirmed + written_off MUST equal the return's quantity.
-    # -----------------------------------------------------------------
     elif action == "ConfirmReturn":
         errors, ret = utils.confirm_return(request.data, request.user)
         if ret:
@@ -2014,14 +1698,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be confirmed", errors)
 
-    # -----------------------------------------------------------------
-    # RejectReturn
-    # Payload: {
-    #     "action": "RejectReturn",
-    #     "return_id": "<uuid>",
-    #     "reason": "<string>"
-    # }
-    # -----------------------------------------------------------------
     elif action == "RejectReturn":
         errors, ret = utils.reject_return(request.data, request.user)
         if ret:
@@ -2033,17 +1709,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be rejected", errors)
 
-    # -----------------------------------------------------------------
-    # SettleReturn
-    # Payload: {
-    #     "action": "SettleReturn",
-    #     "return_id": "<uuid>",
-    #     "unit_price_refunded": "<decimal>",
-    #     "restocking_fee_percent": "<decimal>",
-    #     "notes": "<string>"
-    # }
-    # Only return_id required; the rest are optional overrides.
-    # -----------------------------------------------------------------
     elif action == "SettleReturn":
         errors, ret = utils.settle_return(request.data, request.user)
         if ret:
@@ -2055,14 +1720,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be settled", errors)
 
-    # -----------------------------------------------------------------
-    # CancelReturn
-    # Payload: {
-    #     "action": "CancelReturn",
-    #     "return_id": "<uuid>",
-    #     "reason": "<string>"
-    # }
-    # -----------------------------------------------------------------
     elif action == "CancelReturn":
         errors, ret = utils.cancel_return(request.data, request.user)
         if ret:
@@ -2074,18 +1731,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be cancelled", errors)
 
-    # =================================================================
-    # Reconciliation
-    # =================================================================
-
-    # -----------------------------------------------------------------
-    # GetStaleReturns
-    # Payload: {
-    #     "action": "GetStaleReturns",
-    #     "days": <int>  // optional, default 7
-    # }
-    # Returns stuck in PENDING_CONFIRMATION beyond N days.
-    # -----------------------------------------------------------------
     elif action == "GetStaleReturns":
         qs = utils.get_stale_returns(request.data, request.user)
         paginator = PageNumberPagination()
@@ -2095,13 +1740,6 @@ def receiptReturnsAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
 
-    # -----------------------------------------------------------------
-    # GetReturnMismatches
-    # Payload: {
-    #     "action": "GetReturnMismatches"
-    # }
-    # Returns where the paired StockAdjustment quantity doesn't match.
-    # -----------------------------------------------------------------
     elif action == "GetReturnMismatches":
         qs = utils.get_return_mismatches(request.data, request.user)
         paginator = PageNumberPagination()
@@ -2113,37 +1751,11 @@ def receiptReturnsAPIView(request):
 
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")
-    
-
-# wholesalers/views.py — product requests dispatcher
-
-from django.utils import timezone
-from django.db.models import Q, Prefetch
-from rest_framework import exceptions, permissions
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.pagination import PageNumberPagination
-
-from core.responses import custom_success_message, custom_errors_response
-from retailers.retail_permissions import EntitySubscriptionPermission
-
-from retailers.models import (
-    RetailerProductRequest,
-    RetailerProductRequestItem,
-    RetailerProductRequestOffer,
-    RetailerProductRequestResponse,
-)
-from retailers.serializers import (
-    RetailerProductRequestSerializer,
-    RetailerProductRequestListSerializer,
-)
-
-from .models import WholesalerPriceDiscounts, WholesalerQuantityDiscounts
-from .services.request_response import wholesaler_respond_to_request
 
 
-# =====================================================================
-# Wholesaler product requests — unified dispatcher
-# =====================================================================
+# ===========================================================================
+# Wholesaler product requests dispatcher
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
@@ -2159,7 +1771,6 @@ def productRequestsAPIView(request):
     if not action:
         raise exceptions.ValidationError("Action is not supplied")
 
-    # =================================================================
     if action == "GetIncoming":
         qs = (
             RetailerProductRequest.objects
@@ -2189,7 +1800,6 @@ def productRequestsAPIView(request):
         serializer = RetailerProductRequestListSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
-    # =================================================================
     elif action == "GetRequestDetails":
         request_id = request.data.get("request_id")
         if not request_id:
@@ -2221,7 +1831,6 @@ def productRequestsAPIView(request):
             RetailerProductRequestSerializer(req).data, "request",
         )
 
-    # =================================================================
     elif action == "Respond":
         request_id = request.data.get("request_id")
         if not request_id:
@@ -2246,7 +1855,6 @@ def productRequestsAPIView(request):
                 1, "Response must accept or reject at least one line", {},
             )
 
-        # Validate each accepted line
         for payload in accepted_lines:
             item_id = payload.get("item_id")
             if not item_id:
@@ -2269,14 +1877,12 @@ def productRequestsAPIView(request):
                     {"accepted_lines": "Each accepted line requires receipt_id or receipt."},
                 )
 
-            # Validate the item belongs to the request
             if not req.items.filter(id=item_id).exists():
                 return custom_errors_response(
                     1, "Line not found on this request",
                     {"accepted_lines": f"Item {item_id} does not belong to this request."},
                 )
 
-        # Validate rejections
         for payload in rejected_lines:
             if not payload.get("item_id"):
                 return custom_errors_response(
@@ -2289,7 +1895,6 @@ def productRequestsAPIView(request):
                     {"rejected_lines": f"Item {payload['item_id']} does not belong to this request."},
                 )
 
-        # Overlap check
         accepted_ids = {p["item_id"] for p in accepted_lines}
         rejected_ids = {p["item_id"] for p in rejected_lines}
         if accepted_ids & rejected_ids:
@@ -2310,7 +1915,6 @@ def productRequestsAPIView(request):
         except ValueError as e:
             return custom_errors_response(1, "Response could not be recorded", {"detail": str(e)})
 
-        # Notify the retailer
         from analytics.realtime import push_request_response
         push_request_response(str(req.entity_id), {
             "request_id": str(req.id),
@@ -2333,7 +1937,6 @@ def productRequestsAPIView(request):
             "response",
         )
 
-    # =================================================================
     elif action == "GetActiveDiscountsForProducts":
         product_ids = request.data.get("product_ids", [])
         if not product_ids:
@@ -2346,7 +1949,7 @@ def productRequestsAPIView(request):
         today = timezone.now().date()
 
         price_discounts = (
-            WholesalerPriceDiscounts.objects
+            models.WholesalerPriceDiscounts.objects
             .filter(
                 entity=request.user.entity,
                 is_active="true",
@@ -2365,7 +1968,7 @@ def productRequestsAPIView(request):
         )
 
         qty_discounts = (
-            WholesalerQuantityDiscounts.objects
+            models.WholesalerQuantityDiscounts.objects
             .filter(
                 entity=request.user.entity,
                 is_active="true",
@@ -2392,12 +1995,13 @@ def productRequestsAPIView(request):
             "discounts",
         )
 
-    # =================================================================
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")
 
 
-# wholesalers/views.py — order commit dispatcher
+# ===========================================================================
+# Order commit dispatcher
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
@@ -2416,7 +2020,6 @@ def retailerOrdersCommitAPIView(request):
     from .models import RetailerOrders
     from .services.commit_order import commit_order
 
-    # =================================================================
     if action == "CommitOrder":
         order_id = request.data.get("order_id")
         commit_type = request.data.get("commit_type")
@@ -2471,7 +2074,6 @@ def retailerOrdersCommitAPIView(request):
             "order",
         )
 
-    # =================================================================
     elif action == "RejectOrder":
         order_id = request.data.get("order_id")
         reason = request.data.get("reason", "")
@@ -2502,7 +2104,6 @@ def retailerOrdersCommitAPIView(request):
         order.cancelled_at = now
         order.save(update_fields=["status", "cancelled_at", "updated"])
 
-        # Notify the retailer
         from analytics.realtime import push_order_rejected
         push_order_rejected(str(order.retailer_id), {
             "order_id": str(order.id),
