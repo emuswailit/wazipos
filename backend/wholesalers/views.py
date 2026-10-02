@@ -1441,162 +1441,168 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
 
     def post(self, request):
         title = request.POST.get("title", None)
-        budget_cap = request.POST.get("budget_cap", 0)
-        start = request.POST.get("start", None)
-        end = request.POST.get("end", None)
 
         if not title:
             raise exceptions.ValidationError("Title is required")
 
         files = request.FILES.getlist("campaign_banners")
         if files:
-            request.data.pop("campaign_banners")
-            serializer_context = {
-                "request": request,
-            }
+            # The M2M is read-only on the serializer, so removing the
+            # field name from request.data prevents DRF from complaining
+            # about an unexpected key. Banners are attached below, after
+            # the campaign has a PK.
+            request.data.pop("campaign_banners", None)
 
+            serializer_context = {"request": request}
             serializer = serializers.WholesalerCampaignSerializer(
                 data=request.data, context=serializer_context
             )
+
             if serializer.is_valid():
                 try:
-                    serializer.save(owner=request.user,
-                                    entity=request.user.entity)
+                    # `wholesaler` is a required FK on WholesalerCampaign.
+                    # `entity` alone is not enough — the column will be
+                    # NOT NULL on insert.
+                    campaign = serializer.save(
+                        owner=request.user,
+                        entity=request.user.entity,
+                        wholesaler=request.user.entity,
+                    )
                 except IntegrityError as exc:
                     raise exceptions.ValidationError(exc)
-                item = models.WholesalerCampaign.objects.get(id=serializer.data["id"])
-                errors_messages = []
 
                 uploaded_files = []
                 for file in files:
                     content = models.WholesalerCampaignBanners.objects.create(
                         owner=request.user,
                         campaign_banner=file,
-                        wholesaler_campaign=item,
+                        wholesaler_campaign=campaign,
                         entity=request.user.entity,
-                        wholesaler=request.user.entity,
-
                     )
                     uploaded_files.append(content)
 
-                item.campaign_banners.add(*uploaded_files)
-                item.save()
-                context = serializer.data
-                arr = []
-                arr = serializers.WholesalerCampaignBannersSerializer(
-                    item.campaign_banners,
-                    context={'request': request},
-                    many=True,
-                ).data,
-                context["campaign_banners"] = arr
+                campaign.campaign_banners.add(*uploaded_files)
 
-                errors_messages = []
                 return Response(
                     data={
                         "response_code": 0,
                         "response_message": "Wholesaler campaign succesfully created",
-                        "wholesaler_campaign": serializers.WholesalerCampaignSerializer(item, context={'request': request}).data,
-                        "errors": errors_messages,
+                        "wholesaler_campaign": serializers.WholesalerCampaignSerializer(
+                            campaign, context={"request": request}
+                        ).data,
+                        "errors": [],
                     },
                     status=status.HTTP_201_CREATED,
                 )
-            else:
-                default_errors = serializer.errors
-                errors_messages = []
-                for field_name, field_errors in default_errors.items():
-                    for field_error in field_errors:
-                        error_message = "%s: %s" % (field_name, field_error)
-                        errors_messages.append(error_message)
 
-                return Response(
-                    data={
-                        "response_code": 1,
-                        "response_message": "Wholesaler campaign not created",
-                        "wholesaler_campaign": serializer.data,
-                        "errors": errors_messages,
-                        "status": status.HTTP_200_OK,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-        else:
+            # Invalid — do NOT touch serializer.data here. Accessing
+            # .data on an invalid serializer raises AssertionError.
+            errors_messages = []
+            for field_name, field_errors in serializer.errors.items():
+                for field_error in field_errors:
+                    errors_messages.append("%s: %s" % (field_name, field_error))
 
-            serializer_context = {
-                "request": request,
-            }
-
-            serializer = serializers.WholesalerCampaignSerializer(
-                data=request.data, context=serializer_context
+            return Response(
+                data={
+                    "response_code": 1,
+                    "response_message": "Wholesaler campaign not created",
+                    "wholesaler_campaign": None,
+                    "errors": errors_messages,
+                },
+                status=status.HTTP_200_OK,
             )
-            if serializer.is_valid():
-                try:
-                    serializer.save(owner=request.user,
-                                    entity=request.user.entity,
-                                    wholesaler=request.user.entity
-                                    )
-                except IntegrityError as exc:
-                    raise exceptions.ValidationError(
-                        f"{exc}"
-                    )
 
-                user_data = serializer.data
-                errors_messages = []
-                return Response(
-                    data={
-                        "response_code": 0,
-                        "response_message": "Wholesaler campaign succesfully created",
-                        "wholesaler_campaign": serializer.data,
-                        "errors": errors_messages,
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
-            else:
-                default_errors = serializer.errors
-                errors_messages = []
-                for field_name, field_errors in default_errors.items():
-                    for field_error in field_errors:
-                        error_message = "%s: %s" % (field_name, field_error)
-                        errors_messages.append(error_message)
+        # ---- No files: bannerless create ----
+        serializer_context = {"request": request}
+        serializer = serializers.WholesalerCampaignSerializer(
+            data=request.data, context=serializer_context
+        )
 
-                return Response(
-                    data={
-                        "response_code": 1,
-                        "response_message": "Wholesaler campaign not created",
-                        "wholesaler_campaign": serializer.data,
-                        "errors": errors_messages,
-                        "status": status.HTTP_400_BAD_REQUEST,
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
+        if serializer.is_valid():
+            try:
+                serializer.save(
+                    owner=request.user,
+                    entity=request.user.entity,
+                    wholesaler=request.user.entity,
                 )
+            except IntegrityError as exc:
+                raise exceptions.ValidationError(f"{exc}")
+
+            return Response(
+                data={
+                    "response_code": 0,
+                    "response_message": "Wholesaler campaign succesfully created",
+                    "wholesaler_campaign": serializer.data,
+                    "errors": [],
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        errors_messages = []
+        for field_name, field_errors in serializer.errors.items():
+            for field_error in field_errors:
+                errors_messages.append("%s: %s" % (field_name, field_error))
+
+        return Response(
+            data={
+                "response_code": 1,
+                "response_message": "Wholesaler campaign not created",
+                "wholesaler_campaign": None,
+                "errors": errors_messages,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
     Update campaign with banners.
+
+    POST /wholesalers/campaigns/<uuid:pk>/update
+    Content-Type: multipart/form-data
+
+    Response envelope:
+        { response_code, response_message, wholesaler_campaign, errors }
+    matching the create view so the frontend reads a single shape.
     """
 
     name = "campaign-update"
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = serializers.WholesalerCampaignSerializer
     parser_classes = (MultiPartParser, FormParser)
-    queryset = models.WholesalerCampaign.objects.all()
     lookup_fields = ("pk",)
 
+    def get_queryset(self):
+        """
+        Scope to campaigns owned by the caller's entity.
+
+        Without this, any authenticated user could update any campaign
+        by guessing/knowing its UUID. The default queryset on the class
+        was `WholesalerCampaign.objects.all()`.
+        """
+        return models.WholesalerCampaign.objects.filter(
+            wholesaler=self.request.user.entity
+        )
+
     def update(self, request, *args, **kwargs):
-        files = request.FILES.getlist("campaign_banners")
         instance = self.get_object()
 
+        # ---- 1. Attach any new banners (additive — existing ones stay) ----
+        files = request.FILES.getlist("campaign_banners")
         if files:
-            uploaded_files = []
+            uploaded = []
             for file in files:
-                content = models.WholesalerCampaignBanners.objects.create(
-                    owner=request.user,
-                    campaign_banner=file,
-                    entity=request.user.entity,
-                    wholesaler_campaign=instance,
+                uploaded.append(
+                    models.WholesalerCampaignBanners.objects.create(
+                        owner=request.user,
+                        campaign_banner=file,
+                        entity=request.user.entity,
+                        wholesaler_campaign=instance,
+                    )
                 )
-                uploaded_files.append(content)
-            instance.campaign_banners.add(*uploaded_files)
+            instance.campaign_banners.add(*uploaded)
 
+        # ---- 2. Apply mutable scalar fields ----
         data = request.data
         update_fields: list[str] = []
 
@@ -1605,6 +1611,8 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
             instance.title = title
             update_fields.append("title")
 
+        # `is not None` (not truthiness) so the client can clear the
+        # description by sending an empty string.
         description = data.get("description")
         if description is not None:
             instance.description = description
@@ -1612,6 +1620,18 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
 
         status_value = data.get("status")
         if status_value:
+            if status_value not in models.WholesalerCampaign.Status.values:
+                return Response(
+                    data={
+                        "response_code": 1,
+                        "response_message": "Campaign not updated",
+                        "wholesaler_campaign": None,
+                        "errors": [
+                            f"status: '{status_value}' is not a valid choice."
+                        ],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             instance.status = status_value
             update_fields.append("status")
 
@@ -1642,15 +1662,52 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
                 instance.end = parsed
                 update_fields.append("end")
 
+        # ---- 3. Validate before writing ----
+        # The model has a CheckConstraint (end >= start). If we save
+        # without checking, an invalid range raises IntegrityError and
+        # the client gets an opaque 500. Also run full_clean so the
+        # business rules in WholesalerCampaign.clean() apply.
+        try:
+            instance.full_clean(exclude=None, validate_unique=False)
+        except DjangoValidationError as exc:
+            # exc.message_dict is {field: [msg, ...]} — flatten to a
+            # list of "field: msg" strings, matching the create view.
+            errors_messages = []
+            if hasattr(exc, "message_dict"):
+                for field_name, field_errors in exc.message_dict.items():
+                    for msg in field_errors:
+                        errors_messages.append(f"{field_name}: {msg}")
+            else:
+                errors_messages = list(exc.messages)
+            return Response(
+                data={
+                    "response_code": 1,
+                    "response_message": "Campaign not updated",
+                    "wholesaler_campaign": None,
+                    "errors": errors_messages,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---- 4. Save ----
         if update_fields:
             instance.save(update_fields=update_fields)
 
         instance.refresh_from_db()
 
+        # ---- 5. Envelope response ----
+        # Matches the create view. The frontend modal checks
+        # `env.response_code === 0` and reads `env.wholesaler_campaign`.
         return Response(
-            serializers.WholesalerCampaignSerializer(
-                instance, context={"request": request}
-            ).data
+            data={
+                "response_code": 0,
+                "response_message": "Campaign updated successfully",
+                "wholesaler_campaign": serializers.WholesalerCampaignSerializer(
+                    instance, context={"request": request}
+                ).data,
+                "errors": [],
+            },
+            status=status.HTTP_200_OK,
         )
 
     def get_object(self):
