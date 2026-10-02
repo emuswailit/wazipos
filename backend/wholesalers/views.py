@@ -1183,7 +1183,7 @@ def _get_entity_campaigns(request):
     """
     campaigns = campaign_utils.get_entity_campaigns(request.data, request.user)
     return _paginate(
-        serializers.WholesalerCampaignListSerializer, campaigns, request,
+        serializers.WholesalerCampaignSerializer, campaigns, request,
     )
 
 
@@ -1202,7 +1202,7 @@ def _get_campaign_details(request):
     if not campaign:
         return _fail("Campaign could not be retrieved", errors)
     return _ok(
-        serializers.WholesalerCampaignDetailSerializer,
+        serializers.WholesalerCampaignSerializer,
         campaign, request,
         message="Campaign retrieved successfully",
         key="campaign",
@@ -1223,7 +1223,7 @@ def _publish_campaign(request):
     if not campaign:
         return _fail("Campaign could not be published", errors)
     return _ok(
-        serializers.WholesalerCampaignDetailSerializer,
+        serializers.WholesalerCampaignSerializer,
         campaign, request,
         message="Campaign published successfully",
         key="campaign",
@@ -1351,7 +1351,7 @@ def _get_campaign_audience(request):
 def _get_my_campaigns(request):
     campaigns = campaign_utils.get_my_campaigns(request.data, request.user)
     return _paginate(
-        serializers.WholesalerCampaignListSerializer, campaigns, request,
+        serializers.WholesalerCampaignSerializer, campaigns, request,
     )
 
 
