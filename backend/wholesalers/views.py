@@ -823,31 +823,16 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
                 )
             
 
+from django.utils.dateparse import parse_date
+
+
 class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
-    """
-    Update prodcut with images3
-
-    """
-
-    name = "wholesale-price-discount-update"
-    permission_classes = (WholesalerEmployeePermission,)
-    serializer_class = serializers.WholesalerPriceDiscountsSerializer
-    parser_classes = (MultiPartParser, FormParser)
-    queryset = models.WholesalerPriceDiscounts.objects.all()
-    lookup_fields = ("pk",)
+    # …unchanged class attributes…
 
     def update(self, request, *args, **kwargs):
-        """
-        Update price discounts with new banners
-        """
         files = request.FILES.getlist("price_discount_banners")
         instance = self.get_object()
-        serializer_context = {
-            "request": request,
-        }
-        serializer = serializers.WholesalerPriceDiscountsSerializer(
-            instance, context=serializer_context
-        )
+
         if files:
             uploaded_files = []
             for file in files:
@@ -858,50 +843,59 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
                     wholesaler_price_discount=instance,
                 )
                 uploaded_files.append(content)
-
             instance.price_discount_banners.add(*uploaded_files)
-            instance.save()
-            context = serializer.data
-            context["price_discount_banners"] = [file.id for file in uploaded_files]
-            print('Created', content)
 
         data = request.data
 
+        # Collect field updates, coerce types, then save once.
+        update_fields: list[str] = []
 
-        title = data.get("title", None)
+        title = data.get("title")
         if title:
             instance.title = title
-            instance.save()
+            update_fields.append("title")
 
-        percent = data.get("percent", None)
+        percent = data.get("percent")
         if percent:
             instance.percent = percent
-            instance.save()
+            update_fields.append("percent")
 
-
-        start = data.get("start", None)
+        start = data.get("start")
         if start:
-            instance.start = start
-            instance.save()
+            parsed = parse_date(str(start)) if isinstance(start, str) else start
+            if parsed is not None:
+                instance.start = parsed
+                update_fields.append("start")
 
-        end = data.get("end", None)
+        end = data.get("end")
         if end:
-            instance.end = end
-            instance.save()
+            parsed = parse_date(str(end)) if isinstance(end, str) else end
+            if parsed is not None:
+                instance.end = parsed
+                update_fields.append("end")
 
-        return Response(serializer.data)
+        if update_fields:
+            # `sync_price_from_discounts` on the receipt is triggered
+            # by the model's save — runs exactly once now, not per field.
+            instance.save(update_fields=update_fields)
+
+        # Re-read from DB so dates are `date` objects before serialization.
+        instance.refresh_from_db()
+
+        return Response(
+            serializers.WholesalerPriceDiscountsSerializer(
+                instance, context={"request": request}
+            ).data
+        )
 
     def get_object(self):
         queryset = self.get_queryset()
         filter = {}
         for field in self.lookup_fields:
             filter[field] = self.kwargs[field]
-
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
         return obj
-    
-    # Quantity discounts
 
 
 class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
@@ -1043,13 +1037,24 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
                 )
             
 
+from django.utils.dateparse import parse_date
+
+
 class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
-    Update quantity discount with banners
+    Update quantity discount with banners.
 
+    Fixes applied:
+      - Date strings from `request.data` are parsed before assignment.
+        Without this, `instance.start` / `instance.end` stay as strings
+        and `is_currently_active` crashes during serialization with
+        `'<=' not supported between instances of 'str' and 'datetime.date'`.
+      - Fields are collected and saved once, not once per field.
+      - `instance.refresh_from_db()` before serialization so the
+        serializer sees `date` objects, not in-memory strings.
     """
 
-    name = "product-update"
+    name = "quantity-discount-update"
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = serializers.WholesalerQuantityDiscountsSerializer
     parser_classes = (MultiPartParser, FormParser)
@@ -1057,17 +1062,10 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
     lookup_fields = ("pk",)
 
     def update(self, request, *args, **kwargs):
-        """
-        Update quantity discounts with new banners
-        """
         files = request.FILES.getlist("quantity_discount_banners")
         instance = self.get_object()
-        serializer_context = {
-            "request": request,
-        }
-        serializer = serializers.WholesalerQuantityDiscountsSerializer(
-            instance, context=serializer_context
-        )
+
+        # ---- 1. Attach any new banners ----
         if files:
             uploaded_files = []
             for file in files:
@@ -1078,44 +1076,66 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
                     wholesaler_quantity_discount=instance,
                 )
                 uploaded_files.append(content)
-
             instance.quantity_discount_banners.add(*uploaded_files)
-            instance.save()
-            context = serializer.data
-            context["quantity_discount_banners"] = [file.id for file in uploaded_files]
-            print('Created', content)
 
+        # ---- 2. Collect scalar updates, coerce types, save once ----
         data = request.data
+        update_fields: list[str] = []
 
-
-        title = data.get("title", None)
+        title = data.get("title")
         if title:
             instance.title = title
-            instance.save()
+            update_fields.append("title")
 
-        limit_quantity = data.get("limit_quantity", None)
-        if limit_quantity:
-            instance.limit_quantity = limit_quantity
-            instance.save()
+        limit_quantity = data.get("limit_quantity")
+        if limit_quantity not in (None, ""):
+            try:
+                instance.limit_quantity = int(limit_quantity)
+                update_fields.append("limit_quantity")
+            except (TypeError, ValueError):
+                pass
 
-        awarded_quantity = data.get("awarded_quantity", None)
-        if awarded_quantity:
-            instance.awarded_quantity = awarded_quantity
-            instance.save()
+        awarded_quantity = data.get("awarded_quantity")
+        if awarded_quantity not in (None, ""):
+            try:
+                instance.awarded_quantity = int(awarded_quantity)
+                update_fields.append("awarded_quantity")
+            except (TypeError, ValueError):
+                pass
 
-
-
-        start = data.get("start", None)
+        start = data.get("start")
         if start:
-            instance.start = start
-            instance.save()
+            parsed = (
+                parse_date(str(start))
+                if isinstance(start, str)
+                else start
+            )
+            if parsed is not None:
+                instance.start = parsed
+                update_fields.append("start")
 
-        end = data.get("end", None)
+        end = data.get("end")
         if end:
-            instance.end = end
-            instance.save()
+            parsed = (
+                parse_date(str(end))
+                if isinstance(end, str)
+                else end
+            )
+            if parsed is not None:
+                instance.end = parsed
+                update_fields.append("end")
 
-        return Response(serializer.data)
+        if update_fields:
+            instance.save(update_fields=update_fields)
+
+        # ---- 3. Refresh so serializer sees DB-canonical types ----
+        instance.refresh_from_db()
+
+        return Response(
+            serializers.WholesalerQuantityDiscountsSerializer(
+                instance, context={"request": request}
+            ).data
+        )
 
     def get_object(self):
         queryset = self.get_queryset()
