@@ -826,13 +826,35 @@ class WholesalerPriceDiscountsCreateAPIView(generics.GenericAPIView):
 from django.utils.dateparse import parse_date
 
 
+from django.utils.dateparse import parse_date
+
+
 class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
-    # …unchanged class attributes…
+    """
+    Update price discount with banners.
+
+    Fixes applied:
+      - `name` class attribute preserved — urls.py reads it.
+      - Date strings from `request.data` are parsed before assignment.
+        Without this, `is_currently_active` crashes during serialization
+        with `'<=' not supported between instances of 'str' and 'datetime.date'`.
+      - Fields are collected and saved once, not once per field.
+      - `refresh_from_db()` before serialization so the serializer sees
+        `date` objects, not in-memory strings.
+    """
+
+    name = "wholesale-price-discount-update"          # ← REQUIRED
+    permission_classes = (WholesalerEmployeePermission,)
+    serializer_class = serializers.WholesalerPriceDiscountsSerializer
+    parser_classes = (MultiPartParser, FormParser)
+    queryset = models.WholesalerPriceDiscounts.objects.all()
+    lookup_fields = ("pk",)
 
     def update(self, request, *args, **kwargs):
         files = request.FILES.getlist("price_discount_banners")
         instance = self.get_object()
 
+        # ---- 1. Attach any new banners ----
         if files:
             uploaded_files = []
             for file in files:
@@ -845,9 +867,8 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
                 uploaded_files.append(content)
             instance.price_discount_banners.add(*uploaded_files)
 
+        # ---- 2. Collect scalar updates, coerce types, save once ----
         data = request.data
-
-        # Collect field updates, coerce types, then save once.
         update_fields: list[str] = []
 
         title = data.get("title")
@@ -856,30 +877,36 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
             update_fields.append("title")
 
         percent = data.get("percent")
-        if percent:
+        if percent not in (None, ""):
             instance.percent = percent
             update_fields.append("percent")
 
         start = data.get("start")
         if start:
-            parsed = parse_date(str(start)) if isinstance(start, str) else start
+            parsed = (
+                parse_date(str(start))
+                if isinstance(start, str)
+                else start
+            )
             if parsed is not None:
                 instance.start = parsed
                 update_fields.append("start")
 
         end = data.get("end")
         if end:
-            parsed = parse_date(str(end)) if isinstance(end, str) else end
+            parsed = (
+                parse_date(str(end))
+                if isinstance(end, str)
+                else end
+            )
             if parsed is not None:
                 instance.end = parsed
                 update_fields.append("end")
 
         if update_fields:
-            # `sync_price_from_discounts` on the receipt is triggered
-            # by the model's save — runs exactly once now, not per field.
             instance.save(update_fields=update_fields)
 
-        # Re-read from DB so dates are `date` objects before serialization.
+        # ---- 3. Refresh so serializer sees DB-canonical types ----
         instance.refresh_from_db()
 
         return Response(
@@ -893,6 +920,7 @@ class WholesalerPriceDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         filter = {}
         for field in self.lookup_fields:
             filter[field] = self.kwargs[field]
+
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
         return obj
@@ -1039,22 +1067,14 @@ class WholesalerQuantityDiscountsCreateAPIView(generics.GenericAPIView):
 
 from django.utils.dateparse import parse_date
 
-
 class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
     Update quantity discount with banners.
 
-    Fixes applied:
-      - Date strings from `request.data` are parsed before assignment.
-        Without this, `instance.start` / `instance.end` stay as strings
-        and `is_currently_active` crashes during serialization with
-        `'<=' not supported between instances of 'str' and 'datetime.date'`.
-      - Fields are collected and saved once, not once per field.
-      - `instance.refresh_from_db()` before serialization so the
-        serializer sees `date` objects, not in-memory strings.
+    Same fixes as the price-side update view.
     """
 
-    name = "quantity-discount-update"
+    name = "quantity-discount-update"                 # ← REQUIRED
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = serializers.WholesalerQuantityDiscountsSerializer
     parser_classes = (MultiPartParser, FormParser)
@@ -1128,7 +1148,6 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         if update_fields:
             instance.save(update_fields=update_fields)
 
-        # ---- 3. Refresh so serializer sees DB-canonical types ----
         instance.refresh_from_db()
 
         return Response(
@@ -1146,7 +1165,6 @@ class WholesalerQuantityDiscountUpdateAPIView(generics.RetrieveUpdateAPIView):
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
         return obj
-
 
 # ===========================================================================
 # Wholesaler campaigns — unified dispatcher
