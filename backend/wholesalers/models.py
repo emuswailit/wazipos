@@ -254,7 +254,7 @@ class WholesalerReceipts(EntityRelatedModel):
             ]
         )
 
-        
+
 class WholesalerPriceDiscountBanners(EntityRelatedModel):
     """Model for uploading price discount banners"""
 
@@ -533,6 +533,29 @@ def wholesaler_campaign_banner_upload_to(instance, filename):
 def wholesaler_campaign_gallery_upload_to(instance, filename):
     key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
     return f"campaigns/{key}/gallery/{filename}"
+
+
+# wholesalers/models.py
+
+# -----------------------------------------------------------------------------
+# Upload path helpers
+# -----------------------------------------------------------------------------
+
+
+def wholesaler_campaign_gallery_upload_to(instance, filename):
+    key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
+    return f"campaigns/{key}/gallery/{filename}"
+
+
+# Backward-compat alias.
+#
+# Migration 0001_initial was generated when this function was named
+# `wholesaler_campaign_hero_upload_to`. Django stores the callable path
+# in the migration state, so renaming the function broke the migration
+# loader on any project where 0001 has not yet been applied. Keep this
+# alias so the historical migration can import it. New code should use
+# `wholesaler_campaign_banner_upload_to`.
+wholesaler_campaign_hero_upload_to = wholesaler_campaign_banner_upload_to
 
 
 class WholesalerCampaign(EntityRelatedModel):
