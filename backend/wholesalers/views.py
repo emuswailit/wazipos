@@ -1530,7 +1530,9 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
             if serializer.is_valid():
                 try:
                     serializer.save(owner=request.user,
-                                    entity=request.user.entity)
+                                    entity=request.user.entity,
+                                    wholesaler=request.user.entity
+                                    )
                 except IntegrityError as exc:
                     raise exceptions.ValidationError(
                         f"{exc}"
