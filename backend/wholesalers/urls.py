@@ -66,5 +66,16 @@ urlpatterns = [
         views.retailerOrdersCommitAPIView,
         name="wholesaler-retailer-orders-commit",
     ),
+
+    path(
+    "campaigns/create",
+    views.WholesalerCampaignsCreateAPIView.as_view(),
+    name=views.WholesalerCampaignsCreateAPIView.name,
+),
+path(
+    "campaigns/<uuid:pk>/update",
+    views.WholesalerCampaignUpdateAPIView.as_view(),
+    name=views.WholesalerCampaignUpdateAPIView.name,
+),
     
 ]

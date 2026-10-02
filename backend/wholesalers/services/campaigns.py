@@ -19,6 +19,13 @@ Domain helpers (`_build_probe`, `_snapshot_item_terms`,
 `project_item_for_quantity`) are kept here as the single source of
 truth for campaign-item projection math — WholesalerCampaignItem
 delegates to `project_item_for_quantity`.
+
+Banners
+-------
+Campaigns use a many-to-many with `WholesalerCampaignBanners`, mirroring
+the quantity/price discount pattern. The multipart field name is
+`campaign_banners`; multiple files per request are supported. The
+older singular `banner` field name is still accepted as a fallback.
 """
 
 from decimal import Decimal, InvalidOperation
@@ -35,6 +42,7 @@ from utils.logging import create_log
 from ..models import (
     WholesalerCampaign,
     WholesalerCampaignAudience,
+    WholesalerCampaignBanners,
     WholesalerCampaignItem,
 )
 
@@ -165,51 +173,100 @@ def _get_audience(data: Dict, user, *, as_wholesaler: bool = True) -> Wholesaler
 
 
 # ---------------------------------------------------------------------------
-# Banner extraction
+# Banner extraction & attachment
 #
-# For multipart requests, DRF merges POST fields and FILES into
-# `request.data` (a QueryDict), so the file is reachable from either
-# `files.get("banner")` or `data.get("banner")`. This helper tries
-# both, prefers request.FILES when available, and refuses to attach
-# anything that isn't a real file-like object — so a stale URL string
-# coming through on some future edit path can't corrupt the field.
+# Campaigns store banners as a many-to-many with WholesalerCampaignBanners
+# (mirroring WholesalerPriceDiscountBanners / WholesalerQuantityDiscountBanners).
+# The multipart field name is `campaign_banners`; multiple files per request
+# are supported. The singular `banner` name is accepted for legacy clients.
+#
+# DRF merges POST fields and FILES into `request.data` (a QueryDict) for
+# multipart requests, so files are reachable from either request.FILES or
+# request.data. The helpers below check both, prefer request.FILES, and
+# only accept real file-like objects — so a stale URL string cannot
+# corrupt the field.
 # ---------------------------------------------------------------------------
 
-def _extract_banner(data, files):
+_BANNER_FIELD_NAMES = ("campaign_banners", "banner")
+
+
+def _extract_banners(data, files) -> list:
     """
-    Return the uploaded banner file from `files` or `data`, or None.
+    Return every uploaded banner file from `files` or `data`.
 
-    Accepts:
-      - request.FILES.get("banner")           — canonical
-      - request.data.get("banner")            — QueryDict merge fallback
-      - request.data.getlist("banner")[0]     — multi-file upload edge case
+    Checks `campaign_banners` first (canonical, multi-file) then `banner`
+    (legacy, single-file). Deduplicates by object identity so a file that
+    appears in both request.FILES and request.data is only attached once.
     """
-    # 1. request.FILES — canonical source.
-    if files is not None:
-        try:
-            candidate = files.get("banner")
-            if candidate is not None and hasattr(candidate, "read"):
-                return candidate
-        except Exception:
-            pass
+    collected = []
+    seen = set()
 
-    # 2. request.data — DRF QueryDict merges POST + FILES.
-    if data is not None and hasattr(data, "get"):
-        candidate = data.get("banner")
-        if candidate is not None and hasattr(candidate, "read"):
-            return candidate
+    def _collect(container, field_name):
+        if container is None:
+            return
 
-        # 3. Multi-file — take the first file part.
-        if hasattr(data, "getlist"):
+        # Multi-file — canonical path.
+        if hasattr(container, "getlist"):
             try:
-                candidates = data.getlist("banner")
-                for c in candidates:
-                    if c is not None and hasattr(c, "read"):
-                        return c
+                for candidate in container.getlist(field_name):
+                    if (
+                        candidate is not None
+                        and hasattr(candidate, "read")
+                        and id(candidate) not in seen
+                    ):
+                        collected.append(candidate)
+                        seen.add(id(candidate))
+                return
             except Exception:
                 pass
 
-    return None
+        # Single-file fallback — used when a non-QueryDict is passed.
+        if hasattr(container, "get"):
+            try:
+                candidate = container.get(field_name)
+                if (
+                    candidate is not None
+                    and hasattr(candidate, "read")
+                    and id(candidate) not in seen
+                ):
+                    collected.append(candidate)
+                    seen.add(id(candidate))
+            except Exception:
+                pass
+
+    for field_name in _BANNER_FIELD_NAMES:
+        _collect(files, field_name)
+        _collect(data, field_name)
+
+    return collected
+
+
+def _attach_campaign_banners(campaign, data, files, user) -> list:
+    """
+    Create WholesalerCampaignBanners rows for every uploaded file and
+    attach them to the campaign's M2M. No-op when nothing was uploaded.
+    """
+    banners = _extract_banners(data, files)
+    if not banners:
+        return []
+
+    entity = (
+        getattr(campaign, "entity", None)
+        or getattr(campaign, "wholesaler", None)
+    )
+
+    created = []
+    for file in banners:
+        banner = WholesalerCampaignBanners.objects.create(
+            owner=user,
+            entity=entity,
+            wholesaler_campaign=campaign,
+            campaign_banner=file,
+        )
+        created.append(banner)
+
+    campaign.campaign_banners.add(*created)
+    return created
 
 
 # ===========================================================================
@@ -278,7 +335,7 @@ def create_campaign(data: Dict, user, files=None):
     Create a draft campaign owned by the user's entity.
 
     `files` is `request.FILES` from the view — empty for JSON requests,
-    populated for multipart requests that include a banner file.
+    populated for multipart requests that include banner files.
     """
     try:
         entity = _get_user_entity(user)
@@ -297,22 +354,18 @@ def create_campaign(data: Dict, user, files=None):
         if not campaign.title:
             raise ValidationError({"title": _("This field is required.")})
 
-        # Attach the banner if a file was uploaded. `_extract_banner`
-        # looks in both request.FILES and request.data, so this works
-        # whether or not the view forwards `files=request.FILES`.
-        banner = _extract_banner(data, files)
-        if banner is not None:
-            campaign.banner = banner
-
         campaign.full_clean()
         campaign.save()
 
-        if banner is not None:
+        # Attach banners after the campaign has a PK. `_extract_banners`
+        # checks both request.FILES and request.data, so this works
+        # whether or not the view forwards `files=request.FILES`.
+        banners = _attach_campaign_banners(campaign, data, files, user)
+        if banners:
             create_log(
-                "info",
-                f"create_campaign — banner attached to "
-                f"campaign {campaign.pk}: "
-                f"{campaign.banner.name if campaign.banner else None}",
+                "INFO",
+                f"create_campaign — {len(banners)} banner(s) attached to "
+                f"campaign {campaign.pk}",
             )
 
         return None, campaign
@@ -325,7 +378,7 @@ def update_campaign(data: Dict, user, files=None):
     Update the mutable fields of a draft or published campaign.
 
     `files` is `request.FILES` from the view — empty for JSON requests,
-    populated for multipart requests that replace the banner file.
+    populated for multipart requests that add banner files.
     """
     try:
         campaign = _get_campaign(data, user)
@@ -349,11 +402,6 @@ def update_campaign(data: Dict, user, files=None):
                 _("Start and end dates cannot be changed once a campaign is published.")
             )
 
-        # Replace the banner if a new file was uploaded.
-        banner = _extract_banner(data, files)
-        if banner is not None:
-            campaign.banner = banner
-
         if "title" in data:
             campaign.title = (data.get("title") or "").strip()
         if "description" in data:
@@ -368,12 +416,14 @@ def update_campaign(data: Dict, user, files=None):
         campaign.full_clean()
         campaign.save()
 
-        if banner is not None:
+        # Banners are additive — new files are appended to the existing
+        # set. Removing a specific banner is a separate action.
+        banners = _attach_campaign_banners(campaign, data, files, user)
+        if banners:
             create_log(
-                "info",
-                f"update_campaign — banner replaced on "
-                f"campaign {campaign.pk}: "
-                f"{campaign.banner.name if campaign.banner else None}",
+                "INFO",
+                f"update_campaign — {len(banners)} banner(s) added to "
+                f"campaign {campaign.pk}",
             )
 
         return None, campaign

@@ -202,113 +202,131 @@ class WholesalerCampaignItemDetailSerializer(BaseModelSerializer):
 # Campaign
 # =====================================================================
 
-class WholesalerCampaignListSerializer(BaseModelSerializer):
-    wholesaler_title = serializers.CharField(
-        source="wholesaler.title", read_only=True,
-    )
-    status_label = serializers.CharField(
-        source="get_status_display", read_only=True,
-    )
-    # Explicit declaration so the banner is always emitted in list
-    # responses. `null` when there is no banner; an absolute URL when
-    # there is. Read-only — banners are set through the create/update
-    # action, not through this serializer.
-    banner = serializers.ImageField(
-        read_only=True,
-        allow_null=True,
-        required=False,
-    )
-    item_count = serializers.SerializerMethodField()
-    audience_count = serializers.SerializerMethodField()
+class WholesalerCampaignBannersSerializer(serializers.ModelSerializer):
+    campaign_banner = serializers.ImageField(read_only=True)
+    thumbnail = serializers.ImageField(read_only=True)
 
     class Meta:
-        model = WholesalerCampaign
-        fields = [
+        model = models.WholesalerCampaignBanners
+        fields = (
             "id",
-            "wholesaler",
-            "wholesaler_title",
-            "title",
-            "description",
-            "banner",
-            "status",
-            "status_label",
-            "start",
-            "end",
-            "is_active",
-            "budget_cap",
-            "item_count",
-            "audience_count",
-            "owner",
+            "wholesaler_campaign",
+            "campaign_banner",
+            "thumbnail",
             "created",
             "updated",
-        ]
-        read_only_fields = ["status", "entity", "id"]
+            "owner",
+            "entity",
+        )
+        read_only_fields = (
+            "id",
+            "created",
+            "updated",
+            "owner",
+            "entity",
+            "thumbnail",
+        )
 
-    def get_item_count(self, obj):
-        return getattr(obj, "item_count", None) or obj.items.count()
-
-    def get_audience_count(self, obj):
-        return getattr(obj, "audience_count", None) or obj.audience.count()
 
 
-
-class WholesalerCampaignDetailSerializer(BaseModelSerializer):
-    wholesaler_title = serializers.CharField(
-        source="wholesaler.title", read_only=True,
+class WholesalerCampaignSerializer(serializers.ModelSerializer):
+    campaign_banners = WholesalerCampaignBannersSerializer(
+        many=True, read_only=True,
     )
-    status_label = serializers.CharField(
-        source="get_status_display", read_only=True,
-    )
-    # Same explicit declaration as the list serializer. Read-only here
-    # too — the create/update action receives the file via
-    # request.FILES and attaches it in services.create_campaign /
-    # services.update_campaign.
-    banner = serializers.ImageField(
-        read_only=True,
-        allow_null=True,
-        required=False,
-    )
+
+    entity_title = serializers.SerializerMethodField(read_only=True)
+    status_display = serializers.SerializerMethodField(read_only=True)
+    budget_cap_str = serializers.SerializerMethodField(read_only=True)
     is_currently_active = serializers.BooleanField(read_only=True)
-    items = WholesalerCampaignItemListSerializer(
-        many=True, read_only=True,
-    )
-    audience = WholesalerCampaignAudienceListSerializer(
-        many=True, read_only=True,
-    )
+
+    # Duration preview — convenience for the frontend.
+    duration = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
-        model = WholesalerCampaign
-        fields = [
+        model = models.WholesalerCampaign
+        fields = (
             "id",
-            "wholesaler",
-            "wholesaler_title",
+            "entity",
+            "entity_title",
+            "campaign_banners",
             "title",
             "description",
-            "banner",
+            "budget_cap",
+            "budget_cap_str",
             "status",
-            "status_label",
-            "is_active",
-            "is_currently_active",
+            "status_display",
+            "duration",
             "start",
             "end",
-            "budget_cap",
-            "items",
-            "audience",
-            "owner",
+            "is_currently_active",
             "created",
             "updated",
-        ]
-        read_only_fields = ["status"]
+            "owner",
+        )
+        read_only_fields = (
+            "id",
+            "created",
+            "updated",
+            "owner",
+            "entity",
+            "is_currently_active",
+            "duration",
+        )
+        extra_kwargs = {
+            "campaign_banners": {"required": False},
+        }
+
+    # ------------------------------------------------------------------
+    # Method fields
+    # ------------------------------------------------------------------
+
+    def get_budget_cap_str(self, obj):
+        if obj.budget_cap is not None:
+            return f"{obj.budget_cap}"
+        return ""
+
+    def get_entity_title(self, obj):
+        return obj.entity.title if obj.entity else ""
+
+    def get_status_display(self, obj):
+        return obj.get_status_display() if obj.status else ""
+
+    def get_duration(self, obj):
+        """
+        Convenience for the frontend: campaign window as a dict so
+        it can be rendered without date arithmetic on the client.
+        """
+        if not obj.start or not obj.end:
+            return None
+        return {
+            "start": obj.start.isoformat(),
+            "end": obj.end.isoformat(),
+            "days": (obj.end - obj.start).days + 1,
+            "display": f"{obj.start.isoformat()} → {obj.end.isoformat()}",
+        }
+
+    # ------------------------------------------------------------------
+    # Validation — mirrors WholesalerCampaign.clean()
+    # ------------------------------------------------------------------
 
     def validate(self, data):
         start = data.get("start", getattr(self.instance, "start", None))
         end = data.get("end", getattr(self.instance, "end", None))
         if start and end and end < start:
             raise serializers.ValidationError(
-                {"end": "end must be on or after start."}
+                {"end": "End date must be on or after start date."}
             )
-        return data        
 
+        budget_cap = data.get(
+            "budget_cap",
+            getattr(self.instance, "budget_cap", None),
+        )
+        if budget_cap is not None and budget_cap < 0:
+            raise serializers.ValidationError(
+                {"budget_cap": "Budget cap cannot be negative."}
+            )
+
+        return data     
 # =====================================================================
 # Action payloads
 # =====================================================================

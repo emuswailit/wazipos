@@ -523,39 +523,86 @@ from django.utils.translation import gettext_lazy as _
 COMPRESS_THRESHOLD_BYTES = 100 * 1024
 
 
-# FIX: renamed — this is the campaign's single banner/hero, and the old name
-# ("hero") collided conceptually with WholesalerCampaignBanner. Field and
-# function now agree.
-def wholesaler_campaign_banner_upload_to(instance, filename):
-    return f"campaigns/{instance.uuid}/banner/{filename}"
-
-
-def wholesaler_campaign_gallery_upload_to(instance, filename):
-    key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
-    return f"campaigns/{key}/gallery/{filename}"
-
-
-# wholesalers/models.py
-
 # -----------------------------------------------------------------------------
 # Upload path helpers
 # -----------------------------------------------------------------------------
 
+def wholesaler_campaign_image_upload_to(instance, filename):
+    """
+    Upload path for a campaign banner. Mirrors
+    `wholesaler_quantity_discount_image_upload_to` /
+    `wholesaler_price_discount_image_upload_to`.
+    """
+    title = instance.wholesaler_campaign.title
+    slug = slugify(title)
+    basename, file_extension = filename.split(".")
+    new_filename = "%s-%s.%s" % (slug, instance.id, file_extension)
+    return new_filename
+
+
+# -----------------------------------------------------------------------------
+# Legacy upload path helpers — kept so historical migrations can still import
+# them by dotted path. New code should use `wholesaler_campaign_image_upload_to`.
+# -----------------------------------------------------------------------------
+
+def wholesaler_campaign_banner_upload_to(instance, filename):
+    """Legacy helper for the removed single `banner` field."""
+    return f"campaigns/{instance.uuid}/banner/{filename}"
+
+
+# Backward-compat alias. Migration 0001_initial was generated when this
+# function was named `wholesaler_campaign_hero_upload_to`. Django stores
+# the callable path in migration state, so keep this alias so the loader
+# can still import it on a fresh DB.
+wholesaler_campaign_hero_upload_to = wholesaler_campaign_banner_upload_to
+
 
 def wholesaler_campaign_gallery_upload_to(instance, filename):
+    """Legacy helper for the removed singular `WholesalerCampaignBanner`."""
     key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
     return f"campaigns/{key}/gallery/{filename}"
 
 
-# Backward-compat alias.
-#
-# Migration 0001_initial was generated when this function was named
-# `wholesaler_campaign_hero_upload_to`. Django stores the callable path
-# in the migration state, so renaming the function broke the migration
-# loader on any project where 0001 has not yet been applied. Keep this
-# alias so the historical migration can import it. New code should use
-# `wholesaler_campaign_banner_upload_to`.
-wholesaler_campaign_hero_upload_to = wholesaler_campaign_banner_upload_to
+class WholesalerCampaignBanners(EntityRelatedModel):
+    """
+    Model for uploading campaign banners.
+
+    Mirrors WholesalerPriceDiscountBanners / WholesalerQuantityDiscountBanners:
+    a campaign owns many banners via an M2M, and each banner row points
+    back at the campaign through the FK below.
+    """
+
+    wholesaler_campaign = models.ForeignKey(
+        "WholesalerCampaign",
+        related_name="wholesaler_campaign_banners",
+        on_delete=models.CASCADE,
+    )
+    campaign_banner = models.ImageField(
+        upload_to=wholesaler_campaign_image_upload_to,
+    )
+    thumbnail = AdvanceThumbnailField(
+        source_field="campaign_banner",
+        upload_to="thumbnails/campaigns",
+        null=True,
+        blank=True,
+        size=(300, 300),
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name_plural = "Wholesaler Campaign Banners"
+
+    def save(self, force_insert=False, force_update=False, using=None, *args, **kwargs):
+        if self.campaign_banner:
+            campaign_banner = self.campaign_banner
+            if campaign_banner.size > 0.1 * 1024 * 1024:
+                self.campaign_banner = compress_image(campaign_banner)
+        super(WholesalerCampaignBanners, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return self.wholesaler_campaign.title
 
 
 class WholesalerCampaign(EntityRelatedModel):
@@ -566,6 +613,9 @@ class WholesalerCampaign(EntityRelatedModel):
 
     Opting in seeds a RetailerIndent — the indent is the sole
     commitment path, campaign or not.
+
+    Banners are stored as a many-to-many with WholesalerCampaignBanners,
+    mirroring the price / quantity discount pattern.
     """
 
     class Status(models.TextChoices):
@@ -584,9 +634,9 @@ class WholesalerCampaign(EntityRelatedModel):
     title = models.CharField(max_length=200)
     description = models.TextField(max_length=500, blank=True, default="")
 
-    banner = models.ImageField(
-        upload_to=wholesaler_campaign_banner_upload_to,
-        null=True,
+    campaign_banners = models.ManyToManyField(
+        WholesalerCampaignBanners,
+        related_name="campaign_banners",
         blank=True,
     )
 
@@ -610,9 +660,6 @@ class WholesalerCampaign(EntityRelatedModel):
         help_text="Optional cap on total committed value, wholesaler-side.",
     )
 
-    # FIX: track when the campaign actually went live. Item.published_at
-    # already exists; the campaign itself needs the same so you don't have
-    # to derive it from min(item.published_at).
     published_at = models.DateTimeField(null=True, blank=True)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -655,8 +702,6 @@ class WholesalerCampaign(EntityRelatedModel):
             and self.start <= today <= self.end
         )
 
-    # FIX: convenience transition. Callers should use this rather than
-    # flipping `status` by hand, so published_at stays consistent.
     def mark_published(self, *, save: bool = True) -> None:
         self.status = self.Status.PUBLISHED
         self.published_at = timezone.now()
@@ -667,57 +712,6 @@ class WholesalerCampaign(EntityRelatedModel):
         self.status = self.Status.CLOSED
         if save:
             self.save(update_fields=["status", "updated"])
-
-
-class WholesalerCampaignBanner(EntityRelatedModel):
-    """
-    One image in a campaign's gallery.
-    """
-
-    campaign = models.ForeignKey(
-        WholesalerCampaign,
-        related_name="banners",
-        on_delete=models.CASCADE,
-    )
-    # FIX: upload_to now points at the gallery helper, not the banner helper.
-    image = models.ImageField(upload_to=wholesaler_campaign_gallery_upload_to)
-    thumbnail = AdvanceThumbnailField(
-        source_field="image",
-        upload_to="thumbnails/campaigns/",
-        null=True,
-        blank=True,
-        size=(300, 300),
-    )
-    caption = models.CharField(max_length=200, blank=True, default="")
-    sort_order = models.PositiveIntegerField(default=0)
-    is_active = models.CharField(
-        max_length=10,
-        choices=TRUE_FALSE_OPTIONS,
-        default="true",
-    )
-
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(User, on_delete=models.CASCADE)
-
-    class Meta:
-        verbose_name_plural = "Wholesaler Campaign Banners"
-        ordering = ["sort_order", "id"]
-        indexes = [
-            models.Index(fields=["campaign", "is_active", "sort_order"]),
-        ]
-
-    def __str__(self):
-        return f"{self.campaign.title} · banner {self.pk or 'unsaved'}"
-
-    def save(self, *args, **kwargs):
-        if (
-            self._state.adding
-            and self.image
-            and getattr(self.image, "size", 0) > COMPRESS_THRESHOLD_BYTES
-        ):
-            self.image = compress_image(self.image)
-        super().save(*args, **kwargs)
 
 
 class WholesalerCampaignItem(EntityRelatedModel):
@@ -781,9 +775,6 @@ class WholesalerCampaignItem(EntityRelatedModel):
                 name="One receipt per campaign",
             ),
         ]
-        # FIX: the old (campaign, wholesaler_receipt) index duplicated the
-        # unique constraint's implicit index. Reversed it so the reverse
-        # lookup ("all campaigns a receipt appears on") is fast.
         indexes = [
             models.Index(fields=["wholesaler_receipt", "campaign"]),
         ]
@@ -794,10 +785,6 @@ class WholesalerCampaignItem(EntityRelatedModel):
     def clean(self):
         super().clean()
 
-        # FIX: guard against unsaved / partially-constructed instances.
-        # Accessing self.campaign.start or receipt.pk on an unsaved object
-        # used to trigger a DB hit inside validation (or silently pass with
-        # a None pk), so bail early when the essentials aren't there.
         if not self.wholesaler_receipt_id or not self.campaign_id:
             return
 
@@ -813,18 +800,11 @@ class WholesalerCampaignItem(EntityRelatedModel):
                     "Price discount does not belong to this receipt."
                 )
             elif pd.end < self.campaign.start or pd.start > self.campaign.end:
-                # Overlap-only here — a draft campaign can carry a
-                # partially-overlapping discount. Use
-                # validate_windows_cover_campaign() at publish time.
                 errors["wholesaler_price_discount"] = _(
                     "Price discount window does not overlap the campaign."
                 )
 
         if qd is not None:
-            # FIX: distinguish "field absent" from "field present but null".
-            # The previous getattr(..., None) collapsed both into None, so
-            # the ownership check silently skipped whenever the QD FK was
-            # nullable — exactly the case you most want to catch.
             if hasattr(qd, "wholesaler_receipt_id"):
                 if (
                     qd.wholesaler_receipt_id is not None
@@ -858,9 +838,6 @@ class WholesalerCampaignItem(EntityRelatedModel):
         ):
             if discount is None:
                 continue
-            # FIX: also assert the discount starts on or before the campaign
-            # start. Previously only the end was checked, so a discount
-            # beginning mid-campaign passed.
             if discount.start > self.campaign.start:
                 errors[field] = _(
                     "Discount starts %(disc_start)s, after campaign start %(camp_start)s."
@@ -938,9 +915,6 @@ class WholesalerCampaignAudience(EntityRelatedModel):
         super().clean()
         errors = {}
 
-        # FIX: a linked indent must belong to the same retailer as this
-        # audience row. Previously nothing stopped linking retailer A's
-        # indent to retailer B's audience.
         if self.retailer_indent_id and self.retailer_id:
             indent_retailer_id = getattr(
                 self.retailer_indent, "retailer_id", None
@@ -956,9 +930,6 @@ class WholesalerCampaignAudience(EntityRelatedModel):
         if errors:
             raise ValidationError(errors)
 
-    # FIX: compare timestamps so opt-in → opt-out → opt-in reads as True.
-    # The old version returned False the moment opted_out_at was non-null,
-    # even if the retailer had since re-opted in.
     @property
     def has_opted_in(self) -> bool:
         if self.opted_in_at is None:
@@ -967,9 +938,6 @@ class WholesalerCampaignAudience(EntityRelatedModel):
             return True
         return self.opted_in_at > self.opted_out_at
 
-    # FIX: state transition helpers that keep the timestamp pair coherent.
-    # opt_in refreshes opted_in_at without clearing opted_out_at, so the
-    # audit trail survives; has_opted_in does the comparison.
     def opt_in(self, *, save: bool = True) -> None:
         self.opted_in_at = timezone.now()
         if save:
