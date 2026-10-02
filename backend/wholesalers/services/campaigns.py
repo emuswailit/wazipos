@@ -306,15 +306,34 @@ def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
     """
     Freeze the terms shown to retailers for a single campaign item.
 
-    NOTE: `unit_selling_price` and `bonus_quantity` are the field names on
-    RetailerIndentItem assumed by this snapshot. Adjust the two
-    assignments if your probe exposes them under different names.
+    Field mapping to RetailerIndentItem:
+      - final_supplier_unit_selling_price → published_unit_price
+        (post-price-discount unit cost the retailer pays per paid unit)
+      - bonus_rule_free_quantity         → published_bonus_quantity
+        (free units earned per block, independent of the probe quantity)
+
+    The probe is built with quantity=1 purely to trigger recalculate();
+    the two fields we snapshot are quantity-independent, so the choice
+    of 1 does not affect the values.
     """
     probe = _build_probe(item, quantity=1)
     probe.recalculate()
 
-    item.published_unit_price = probe.unit_selling_price
-    item.published_bonus_quantity = getattr(probe, "bonus_quantity", 0) or 0
+    unit_price = getattr(probe, "final_supplier_unit_selling_price", None)
+    if unit_price in (None, ""):
+        # Recalculate should always populate it, but fall back to the
+        # receipt's own resolved price if it's somehow missing.
+        receipt = item.wholesaler_receipt
+        unit_price = (
+            getattr(receipt, "final_unit_selling_price", None)
+            or getattr(receipt, "unit_selling_price", None)
+            or Decimal("0.00")
+        )
+
+    bonus = getattr(probe, "bonus_rule_free_quantity", None) or 0
+
+    item.published_unit_price = unit_price
+    item.published_bonus_quantity = int(bonus)
     item.published_at = timezone.now()
     item.save(
         update_fields=[
@@ -324,7 +343,6 @@ def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
             "updated",
         ]
     )
-
 
 # ===========================================================================
 # Campaign lifecycle
