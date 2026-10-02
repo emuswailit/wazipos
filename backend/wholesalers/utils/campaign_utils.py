@@ -11,6 +11,7 @@ but returns either a queryset (for paginated lists) or a
 
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from ..models import (
@@ -24,12 +25,12 @@ from ..models import (
 # Private helpers
 # ===========================================================================
 
-def _get_wholesaler_entity(user):
+def _get_user_entity(user):
     """
     Resolve the entity that owns this user's campaigns.
 
-    Mirror of the helper in services/campaigns.py. Kept local so utils
-    has no dependency on the services package.
+    Mirror of the helper in services/campaigns.py. Kept local so
+    campaign_utils has no dependency on the services package.
     """
     entity = getattr(user, "entity", None)
     if entity is None:
@@ -102,7 +103,7 @@ def get_entity_campaigns(data, user):
 
     Returns a queryset suitable for PageNumberPagination.
     """
-    entity = _get_wholesaler_entity(user)
+    entity = _get_user_entity(user)
     qs = _campaign_queryset().filter(wholesaler=entity)
 
     status = data.get("status")
@@ -114,7 +115,6 @@ def get_entity_campaigns(data, user):
         qs = qs.filter(is_active=str(is_active).lower())
 
     if data.get("active_only"):
-        from django.utils import timezone
         today = timezone.now().date()
         qs = qs.filter(
             is_active="true",
@@ -143,7 +143,7 @@ def get_campaign_details(data, user):
         if not campaign_id:
             raise ValidationError({"campaign_id": _("This field is required.")})
 
-        entity = _get_wholesaler_entity(user)
+        entity = _get_user_entity(user)
         campaign = (
             _campaign_queryset()
             .filter(pk=campaign_id, wholesaler=entity)
@@ -177,7 +177,7 @@ def get_campaign_items(data, user):
     if not campaign_id:
         raise ValidationError({"campaign_id": _("This field is required.")})
 
-    entity = _get_wholesaler_entity(user)
+    entity = _get_user_entity(user)
     owns = WholesalerCampaign.objects.filter(
         pk=campaign_id, wholesaler=entity,
     ).exists()
@@ -224,7 +224,7 @@ def get_campaign_audience(data, user):
     if not campaign_id:
         raise ValidationError({"campaign_id": _("This field is required.")})
 
-    entity = _get_wholesaler_entity(user)
+    entity = _get_user_entity(user)
     owns = WholesalerCampaign.objects.filter(
         pk=campaign_id, wholesaler=entity,
     ).exists()
@@ -237,12 +237,18 @@ def get_campaign_audience(data, user):
         .filter(campaign_id=campaign_id)
     )
 
+    # Use the queryset helpers from WholesalerCampaignAudience's custom
+    # manager. An inline filter of
+    # `opted_in_at__isnull=False, opted_out_at__isnull=True`
+    # would miss rows where the retailer opted in, opted out, then opted
+    # back in — they have both timestamps set, and `opted_in()` catches
+    # them by comparing timestamps.
     opted_in = data.get("opted_in")
     if opted_in is not None:
         if str(opted_in).lower() == "true":
-            qs = qs.filter(opted_in_at__isnull=False, opted_out_at__isnull=True)
+            qs = qs.opted_in()
         elif str(opted_in).lower() == "false":
-            qs = qs.filter(opted_in_at__isnull=True)
+            qs = qs.not_opted_in()
 
     return qs.order_by("id")
 
@@ -270,21 +276,21 @@ def get_my_campaigns(data, user):
     Returns a queryset of WholesalerCampaign, suitable for
     PageNumberPagination.
     """
-    entity = _get_wholesaler_entity(user)
+    entity = _get_user_entity(user)
 
     audience_qs = WholesalerCampaignAudience.objects.filter(
         retailer=entity,
         is_visible="true",
     )
 
+    # Same queryset helpers as get_campaign_audience, so re-opted-in
+    # rows are counted consistently across both endpoints.
     opted_in = data.get("opted_in")
     if opted_in is not None:
         if str(opted_in).lower() == "true":
-            audience_qs = audience_qs.filter(
-                opted_in_at__isnull=False, opted_out_at__isnull=True,
-            )
+            audience_qs = audience_qs.opted_in()
         elif str(opted_in).lower() == "false":
-            audience_qs = audience_qs.filter(opted_in_at__isnull=True)
+            audience_qs = audience_qs.not_opted_in()
 
     campaign_ids = audience_qs.values_list("campaign_id", flat=True)
     qs = _campaign_queryset().filter(pk__in=campaign_ids)
@@ -298,10 +304,13 @@ def get_my_campaigns(data, user):
         qs = qs.filter(status=WholesalerCampaign.Status.PUBLISHED)
 
     if data.get("active_only"):
-        from django.utils import timezone
         today = timezone.now().date()
+        # Also assert status=PUBLISHED here. A campaign that was closed
+        # mid-window has a valid date range but should not show up in
+        # the retailer inbox under active_only.
         qs = qs.filter(
             is_active="true",
+            status=WholesalerCampaign.Status.PUBLISHED,
             start__lte=today,
             end__gte=today,
         )

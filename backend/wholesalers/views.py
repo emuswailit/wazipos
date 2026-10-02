@@ -1463,6 +1463,10 @@ def _opt_out_campaign(request):
 # Entry point
 # ---------------------------------------------------------------------------
 
+from utils.logging import create_log
+
+# … other imports unchanged …
+
 @api_view(["POST"])
 @parser_classes([JSONParser, MultiPartParser, FormParser])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
@@ -1473,10 +1477,48 @@ def campaignsAPIView(request):
     Missing action → 400 "Action is not supplied"
     Unknown action → 400 "Action <name> is unknown"
 
-    Accepts JSON and multipart/form-data. The latter is required for
-    CreateCampaign / UpdateCampaign when a banner file is attached.
+    Accepts JSON, multipart/form-data, and application/x-www-form-urlencoded.
+    Multipart is required for CreateCampaign / UpdateCampaign when a
+    banner file is attached.
+
+    Banner flow:
+      client (FormData) →
+        campaignsAPIView (this view, parses multipart) →
+          handler e.g. _create_campaign(request) →
+            services.create_campaign(request.data, user, files=request.FILES) →
+              WholesalerCampaign.banner = request.FILES["banner"]
     """
     action = request.data.get("action")
+
+    # ----- Log only when a file is present -----
+    # Uploads are rare and worth recording; polling actions
+    # (GetEntityCampaigns, GetCampaignDetails, …) stay quiet.
+    if request.FILES:
+        try:
+            file_summary = {
+                key: {
+                    "name": getattr(request.FILES[key], "name", "?"),
+                    "size": getattr(request.FILES[key], "size", "?"),
+                    "content_type": getattr(
+                        request.FILES[key], "content_type", "?"
+                    ),
+                }
+                for key in request.FILES
+            }
+            create_log(
+                "info",
+                f"campaignsAPIView upload — action={action} "
+                f"content_type={request.content_type} "
+                f"files={file_summary} "
+                f"post_keys={list(request.POST.keys())}",
+            )
+        except Exception as log_err:
+            create_log(
+                "error",
+                f"campaignsAPIView logging failed: {log_err}",
+            )
+    # -------------------------------------------
+
     if not action:
         raise exceptions.ValidationError("Action is not supplied")
 
@@ -1485,7 +1527,6 @@ def campaignsAPIView(request):
         raise exceptions.ValidationError(f"Action {action} is unknown")
 
     return handler(request)
-
 
 # ===========================================================================
 # Wholesaler receipt returns dispatcher

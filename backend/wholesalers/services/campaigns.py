@@ -30,6 +30,8 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext_lazy as _
 
+from utils.logging import create_log
+
 from ..models import (
     WholesalerCampaign,
     WholesalerCampaignAudience,
@@ -162,6 +164,54 @@ def _get_audience(data: Dict, user, *, as_wholesaler: bool = True) -> Wholesaler
     return audience
 
 
+# ---------------------------------------------------------------------------
+# Banner extraction
+#
+# For multipart requests, DRF merges POST fields and FILES into
+# `request.data` (a QueryDict), so the file is reachable from either
+# `files.get("banner")` or `data.get("banner")`. This helper tries
+# both, prefers request.FILES when available, and refuses to attach
+# anything that isn't a real file-like object — so a stale URL string
+# coming through on some future edit path can't corrupt the field.
+# ---------------------------------------------------------------------------
+
+def _extract_banner(data, files):
+    """
+    Return the uploaded banner file from `files` or `data`, or None.
+
+    Accepts:
+      - request.FILES.get("banner")           — canonical
+      - request.data.get("banner")            — QueryDict merge fallback
+      - request.data.getlist("banner")[0]     — multi-file upload edge case
+    """
+    # 1. request.FILES — canonical source.
+    if files is not None:
+        try:
+            candidate = files.get("banner")
+            if candidate is not None and hasattr(candidate, "read"):
+                return candidate
+        except Exception:
+            pass
+
+    # 2. request.data — DRF QueryDict merges POST + FILES.
+    if data is not None and hasattr(data, "get"):
+        candidate = data.get("banner")
+        if candidate is not None and hasattr(candidate, "read"):
+            return candidate
+
+        # 3. Multi-file — take the first file part.
+        if hasattr(data, "getlist"):
+            try:
+                candidates = data.getlist("banner")
+                for c in candidates:
+                    if c is not None and hasattr(c, "read"):
+                        return c
+            except Exception:
+                pass
+
+    return None
+
+
 # ===========================================================================
 # Projection — domain math
 # ===========================================================================
@@ -247,15 +297,24 @@ def create_campaign(data: Dict, user, files=None):
         if not campaign.title:
             raise ValidationError({"title": _("This field is required.")})
 
-        # Attach the uploaded banner if present. No-op when the client
-        # sends plain JSON or omits the `banner` field entirely.
-        if files:
-            banner = files.get("banner")
-            if banner is not None:
-                campaign.banner = banner
+        # Attach the banner if a file was uploaded. `_extract_banner`
+        # looks in both request.FILES and request.data, so this works
+        # whether or not the view forwards `files=request.FILES`.
+        banner = _extract_banner(data, files)
+        if banner is not None:
+            campaign.banner = banner
 
         campaign.full_clean()
         campaign.save()
+
+        if banner is not None:
+            create_log(
+                "info",
+                f"create_campaign — banner attached to "
+                f"campaign {campaign.pk}: "
+                f"{campaign.banner.name if campaign.banner else None}",
+            )
+
         return None, campaign
     except ValidationError as exc:
         return _errors_from(exc), None
@@ -291,10 +350,9 @@ def update_campaign(data: Dict, user, files=None):
             )
 
         # Replace the banner if a new file was uploaded.
-        if files:
-            banner = files.get("banner")
-            if banner is not None:
-                campaign.banner = banner
+        banner = _extract_banner(data, files)
+        if banner is not None:
+            campaign.banner = banner
 
         if "title" in data:
             campaign.title = (data.get("title") or "").strip()
@@ -309,6 +367,15 @@ def update_campaign(data: Dict, user, files=None):
 
         campaign.full_clean()
         campaign.save()
+
+        if banner is not None:
+            create_log(
+                "info",
+                f"update_campaign — banner replaced on "
+                f"campaign {campaign.pk}: "
+                f"{campaign.banner.name if campaign.banner else None}",
+            )
+
         return None, campaign
     except ValidationError as exc:
         return _errors_from(exc), None
