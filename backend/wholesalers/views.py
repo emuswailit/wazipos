@@ -1360,10 +1360,11 @@ def _get_my_campaigns(request):
 def _get_my_campaign_details(request):
     """
     Retailer-facing: one campaign the caller is on the audience for,
-    with the retailer-safe item list and their own audience row.
+    with the retailer-safe item list — each item carrying its own
+    per-retailer quantity recommendation — and the caller's own
+    audience row.
 
-    Gated by audience membership, not campaign ownership — a retailer
-    is authorized as long as an audience row exists for their entity.
+    Gated by audience membership, not campaign ownership.
 
     Sample request:
         {
@@ -1371,6 +1372,10 @@ def _get_my_campaign_details(request):
             "campaign_id": "5b8f1c2a-9d4e-4b7a-8c1f-3e6a9d2f7b4c"
         }
     """
+    from analytics.services.campaign_advisor import (
+        recommend_quantities_for_campaign_items,
+    )
+
     try:
         campaign, items, audience = campaign_utils.get_my_campaign_details(
             request.data, request.user,
@@ -1383,6 +1388,34 @@ def _get_my_campaign_details(request):
         )
         return _fail("Campaign could not be retrieved", errors)
 
+    # One batched recommendation pass across every item — 5 queries
+    # total, independent of item count. No N+1.
+    recommendations = recommend_quantities_for_campaign_items(
+        items=items,
+        retailer_entity=audience.retailer,
+        service_level="balanced",
+    )
+
+    items_data = serializers.RetailerCampaignItemSerializer(
+        items, many=True, context={"request": request},
+    ).data
+
+    for row in items_data:
+        row["recommendation"] = recommendations.get(
+            str(row["id"]),
+            {
+                "recommended_quantity": int(row.get("suggested_quantity") or 0),
+                "confidence": "none",
+                "reason": "No recommendation computed.",
+                "current_on_hand": 0,
+                "expected_demand": 0.0,
+                "safety_stock": 0.0,
+                "demand_pattern": None,
+                "forecast_wape": None,
+                "capped_by_limit": False,
+            },
+        )
+
     return Response(
         data={
             "response_code": 0,
@@ -1390,9 +1423,7 @@ def _get_my_campaign_details(request):
             "campaign": serializers.WholesalerCampaignSerializer(
                 campaign, context={"request": request},
             ).data,
-            "items": serializers.RetailerCampaignItemSerializer(
-                items, many=True, context={"request": request},
-            ).data,
+            "items": items_data,
             "my_audience": {
                 "id": str(audience.id),
                 "has_opted_in": audience.has_opted_in,
@@ -1414,6 +1445,180 @@ def _get_my_campaign_details(request):
             "errors": [],
         },
         status=status.HTTP_200_OK,
+    )
+
+
+@campaign_action("GetCampaignItemSuggestion")
+def _get_campaign_item_suggestion(request):
+    """
+    Quantity suggestion for a campaign item.
+
+    Two modes, selected by the payload shape:
+
+    // Mode A — wholesaler pre-fills `suggested_quantity` when picking
+    //           a product in the builder. The item doesn't exist yet,
+    //           so pass the receipt id + the live audience.
+    {
+        "action": "GetCampaignItemSuggestion",
+        "campaign_id": "...",
+        "wholesaler_receipt_id": "...",
+        "retailer_ids": ["...", "..."]    // optional, overrides DB
+    }
+    Returns: { suggested_quantity, audience_size, expected_total_volume,
+               confidence, reason }
+
+    // Mode B — per-retailer recommendation when the modal opens a
+    //           campaign item (only used by the batch fallback path —
+    //           the primary flow attaches `recommendation` inside
+    //           GetMyCampaignDetails).
+    {
+        "action": "GetCampaignItemSuggestion",
+        "campaign_id": "...",
+        "item_id": "...",
+        "retailer_id": "..."              // optional; defaults to caller
+    }
+    """
+    from analytics.services.campaign_advisor import (
+        recommend_campaign_item_quantity,
+        suggest_wholesale_item_quantity,
+    )
+    from authentication.models import Entities
+
+    campaign_id = request.data.get("campaign_id")
+    if not campaign_id:
+        return _fail(
+            "Suggestion could not be computed",
+            {"campaign_id": "This field is required."},
+        )
+
+    campaign = (
+        models.WholesalerCampaign.objects
+        .select_related("wholesaler")
+        .filter(pk=campaign_id)
+        .first()
+    )
+    if campaign is None:
+        return _fail(
+            "Suggestion could not be computed",
+            {"campaign_id": "Campaign not found."},
+        )
+
+    item_id = request.data.get("item_id")
+    receipt_id = request.data.get("wholesaler_receipt_id")
+    retailer_id = request.data.get("retailer_id")
+    retailer_ids_payload = request.data.get("retailer_ids") or []
+
+    # ---- Mode B: item_id present → per-retailer recommendation ----
+    if item_id:
+        item = (
+            models.WholesalerCampaignItem.objects
+            .select_related(
+                "campaign",
+                "wholesaler_receipt",
+                "wholesaler_receipt__product",
+            )
+            .filter(pk=item_id, campaign=campaign)
+            .first()
+        )
+        if item is None:
+            return _fail(
+                "Suggestion could not be computed",
+                {"item_id": "Campaign item not found."},
+            )
+
+        if retailer_id:
+            retailer = Entities.objects.filter(pk=retailer_id).first()
+            if retailer is None:
+                return _fail(
+                    "Suggestion could not be computed",
+                    {"retailer_id": "Retailer entity not found."},
+                )
+        else:
+            retailer = getattr(request.user, "entity", None)
+            if retailer is None:
+                return _fail(
+                    "Suggestion could not be computed",
+                    {"detail": "User is not associated with an entity."},
+                )
+
+        suggestion = recommend_campaign_item_quantity(
+            product=item.wholesaler_receipt.product,
+            retailer_entity=retailer,
+            campaign_start=campaign.start,
+            campaign_end=campaign.end,
+            per_retailer_limit=item.per_retailer_limit,
+            service_level="balanced",
+        )
+
+        return custom_success_message(
+            0,
+            "Suggestion computed",
+            {
+                "item_id": str(item.id),
+                "retailer_id": str(retailer.pk),
+                **suggestion,
+            },
+            "suggestion",
+        )
+
+    # ---- Mode A: wholesaler-side, receipt-based ----
+    if not receipt_id:
+        return _fail(
+            "Suggestion could not be computed",
+            {
+                "wholesaler_receipt_id":
+                    "Provide either item_id or wholesaler_receipt_id.",
+            },
+        )
+
+    receipt = (
+        models.WholesalerReceipts.objects
+        .select_related("product")
+        .filter(pk=receipt_id)
+        .first()
+    )
+    if receipt is None:
+        return _fail(
+            "Suggestion could not be computed",
+            {"wholesaler_receipt_id": "Receipt not found."},
+        )
+
+    entity = getattr(request.user, "entity", None)
+    if entity is None or campaign.wholesaler_id != entity.pk:
+        return _fail(
+            "Suggestion could not be computed",
+            {"campaign_id": "Campaign does not belong to your entity."},
+        )
+
+    # Prefer the audience supplied by the client (live Formik state).
+    # Fall back to the persisted rows when the client didn't send any.
+    if retailer_ids_payload:
+        audience_ids = list(retailer_ids_payload)
+    else:
+        audience_ids = list(
+            models.WholesalerCampaignAudience.objects
+            .filter(campaign=campaign, is_visible="true")
+            .values_list("retailer_id", flat=True)
+        )
+
+    suggestion = suggest_wholesale_item_quantity(
+        product=receipt.product,
+        wholesaler_entity=entity,
+        campaign_start=campaign.start,
+        campaign_end=campaign.end,
+        audience_entity_ids=audience_ids,
+        service_level="balanced",
+    )
+
+    return custom_success_message(
+        0,
+        "Suggestion computed",
+        {
+            "wholesaler_receipt_id": str(receipt.id),
+            "audience_size": len(audience_ids),
+            **suggestion,
+        },
+        "suggestion",
     )
 
 
@@ -1509,10 +1714,6 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
 
         files = request.FILES.getlist("campaign_banners")
         if files:
-            # The M2M is read-only on the serializer, so removing the
-            # field name from request.data prevents DRF from complaining
-            # about an unexpected key. Banners are attached below, after
-            # the campaign has a PK.
             request.data.pop("campaign_banners", None)
 
             serializer_context = {"request": request}
@@ -1522,9 +1723,6 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
 
             if serializer.is_valid():
                 try:
-                    # `wholesaler` is a required FK on WholesalerCampaign.
-                    # `entity` alone is not enough — the column will be
-                    # NOT NULL on insert.
                     campaign = serializer.save(
                         owner=request.user,
                         entity=request.user.entity,
@@ -1557,8 +1755,6 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
                     status=status.HTTP_201_CREATED,
                 )
 
-            # Invalid — do NOT touch serializer.data here. Accessing
-            # .data on an invalid serializer raises AssertionError.
             errors_messages = []
             for field_name, field_errors in serializer.errors.items():
                 for field_error in field_errors:
@@ -1574,7 +1770,6 @@ class WholesalerCampaignsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        # ---- No files: bannerless create ----
         serializer_context = {"request": request}
         serializer = serializers.WholesalerCampaignSerializer(
             data=request.data, context=serializer_context
@@ -1635,13 +1830,6 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
     lookup_fields = ("pk",)
 
     def get_queryset(self):
-        """
-        Scope to campaigns owned by the caller's entity.
-
-        Without this, any authenticated user could update any campaign
-        by guessing/knowing its UUID. The default queryset on the class
-        was `WholesalerCampaign.objects.all()`.
-        """
         return models.WholesalerCampaign.objects.filter(
             wholesaler=self.request.user.entity
         )
@@ -1649,7 +1837,6 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
 
-        # ---- 1. Attach any new banners (additive — existing ones stay) ----
         files = request.FILES.getlist("campaign_banners")
         if files:
             uploaded = []
@@ -1664,7 +1851,6 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
                 )
             instance.campaign_banners.add(*uploaded)
 
-        # ---- 2. Apply mutable scalar fields ----
         data = request.data
         update_fields: list[str] = []
 
@@ -1673,8 +1859,6 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
             instance.title = title
             update_fields.append("title")
 
-        # `is not None` (not truthiness) so the client can clear the
-        # description by sending an empty string.
         description = data.get("description")
         if description is not None:
             instance.description = description
@@ -1724,16 +1908,9 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
                 instance.end = parsed
                 update_fields.append("end")
 
-        # ---- 3. Validate before writing ----
-        # The model has a CheckConstraint (end >= start). If we save
-        # without checking, an invalid range raises IntegrityError and
-        # the client gets an opaque 500. Also run full_clean so the
-        # business rules in WholesalerCampaign.clean() apply.
         try:
             instance.full_clean(exclude=None, validate_unique=False)
         except DjangoValidationError as exc:
-            # exc.message_dict is {field: [msg, ...]} — flatten to a
-            # list of "field: msg" strings, matching the create view.
             errors_messages = []
             if hasattr(exc, "message_dict"):
                 for field_name, field_errors in exc.message_dict.items():
@@ -1751,15 +1928,11 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ---- 4. Save ----
         if update_fields:
             instance.save(update_fields=update_fields)
 
         instance.refresh_from_db()
 
-        # ---- 5. Envelope response ----
-        # Matches the create view. The frontend modal checks
-        # `env.response_code === 0` and reads `env.wholesaler_campaign`.
         return Response(
             data={
                 "response_code": 0,
@@ -1795,117 +1968,6 @@ def receiptReturnsAPIView(request):
 
     Route:  POST /api/v1/wholesalers/receipt-returns
     Body:   { "action": "<ActionName>", ...payload }
-
-    Supported actions and their payloads:
-
-    // InitiateReturn — retailer sends stock back to a wholesaler.
-    {
-        "action": "InitiateReturn",
-        "retailer_receipt": "8f14e45f-ea0f-4f2a-b3c1-7d3c5a9b6c10",
-        "quantity": 25,
-        "reason": "NEAR_EXPIRY",
-        "justification": "Batch expiring in 40 days, returning to wholesaler",
-        "return_type": "REFUND",
-        "unit_price_refunded": "45.00",
-        "restocking_fee_percent": "5.00"
-    }
-
-    // CreateReturn — wholesaler records a return handled offline.
-    {
-        "action": "CreateReturn",
-        "wholesaler_entity": "...",
-        "retailer_entity": "...",
-        "retailer_receipt": "...",
-        "wholesaler_receipt": "...",
-        "product": "...",
-        "quantity": 12,
-        "reason": "QUALITY",
-        "justification": "Client reported discoloration on 3 units",
-        "return_type": "EXCHANGE",
-        "unit_price_paid": "120.00",
-        "unit_price_refunded": "120.00",
-        "restocking_fee_percent": "0.00"
-    }
-
-    // ListReturns — list returns scoped to caller's entity.
-    {
-        "action": "ListReturns",
-        "status": "PENDING_CONFIRMATION",
-        "reason": "NEAR_EXPIRY",
-        "return_type": "REFUND",
-        "confirmation_outcome": "PENDING",
-        "wholesaler_entity": "...",
-        "retailer_entity": "...",
-        "search": "paracetamol"
-    }
-
-    // GetReturnDetails
-    {
-        "action": "GetReturnDetails",
-        "return_id": "c9a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
-    }
-
-    // UpdateReturn — whitelisted fields: justification, reference_number,
-    // return_type, unit_price_refunded, restocking_fee_percent.
-    {
-        "action": "UpdateReturn",
-        "return_id": "...",
-        "justification": "...",
-        "reference_number": "RMA-2026-0091",
-        "return_type": "EXCHANGE",
-        "unit_price_refunded": "118.50",
-        "restocking_fee_percent": "2.50"
-    }
-
-    // DeleteReturn
-    {
-        "action": "DeleteReturn",
-        "return_id": "..."
-    }
-
-    // ConfirmReturn — TAKE_BACK | WRITE_OFF | PARTIAL_TAKE_BACK
-    {
-        "action": "ConfirmReturn",
-        "return_id": "...",
-        "outcome": "PARTIAL_TAKE_BACK",
-        "confirmed_quantity": 8,
-        "written_off_quantity": 2,
-        "notes": "8 units sellable, 2 damaged in transit"
-    }
-
-    // RejectReturn
-    {
-        "action": "RejectReturn",
-        "return_id": "...",
-        "reason": "Return not authorized — no RMA was issued"
-    }
-
-    // SettleReturn
-    {
-        "action": "SettleReturn",
-        "return_id": "...",
-        "unit_price_refunded": "110.00",
-        "restocking_fee_percent": "10.00",
-        "notes": "Agreed to deduct 10% restocking fee after inspection"
-    }
-
-    // CancelReturn
-    {
-        "action": "CancelReturn",
-        "return_id": "...",
-        "reason": "Return no longer needed — goods found in stock"
-    }
-
-    // GetStaleReturns
-    {
-        "action": "GetStaleReturns",
-        "days": 14
-    }
-
-    // GetReturnMismatches
-    {
-        "action": "GetReturnMismatches"
-    }
     """
     try:
         action = request.data["action"]
