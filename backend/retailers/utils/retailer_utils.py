@@ -1611,7 +1611,7 @@ def close_retailer_indent(data, user):
         RetailerIndentItem.objects
         .filter(retailer_indent=indent)
         .select_related(
-            "wholesale_receipt__received_from",
+            "wholesale_receipt__entity",
             "wholesaler_price_discount",
             "wholesaler_quantity_discount",
         )
@@ -1625,7 +1625,7 @@ def close_retailer_indent(data, user):
         if not item.wholesale_receipt:
             errors.append(f"Item {item.id} has no receipt")
             continue
-        wid = item.wholesale_receipt.received_from_id
+        wid = item.wholesale_receipt.entity.id
         if wid is None:
             errors.append(
                 f"Receipt {item.wholesale_receipt_id} has no wholesaler"
