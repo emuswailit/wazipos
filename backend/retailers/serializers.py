@@ -1916,6 +1916,12 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
     has_items = serializers.SerializerMethodField()
     active_item_count = serializers.SerializerMethodField()
 
+    # ---- Campaign attribution ----
+    # `campaign` is the FK id (read-only). Its title is exposed
+    # separately so the frontend doesn't need an extra fetch when it
+    # just wants to render "from <campaign name>".
+    campaign_title = serializers.SerializerMethodField(read_only=True)
+
     # ---- Lead-time aggregate ----
     average_lead_time_days = serializers.DecimalField(
         max_digits=6,
@@ -1956,6 +1962,10 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
             "entity",
             "entity_title",
 
+            # Campaign attribution
+            "campaign",
+            "campaign_title",
+
             # Ordering parameters
             "lead_time",
             "order_days",
@@ -1994,6 +2004,8 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "indent_number",
+            "campaign",            # set by the campaign opt-in service, not via API
+            "campaign_title",
             "average_lead_time_days",
             "average_variance_days",
             "min_lead_time_days",
@@ -2016,6 +2028,12 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
     def get_entity_title(self, obj):
         return obj.entity.title if obj.entity else ""
 
+    def get_campaign_title(self, obj):
+        # `select_related("campaign")` on the queryset avoids an N+1
+        # here. Without it, this fires one query per indent.
+        campaign = getattr(obj, "campaign", None)
+        return campaign.title if campaign else ""
+
     def get_retailer_indent_items(self, obj):
         items = obj.indent_for_item.all()
         return RetailerIndentItemsSerializer(
@@ -2027,6 +2045,8 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
 
     def get_active_item_count(self, obj):
         return obj.indent_for_item.count()
+
+        
 # class RetailerIndentSerializer(serializers.ModelSerializer):
 #     retailer_indent_items = serializers.SerializerMethodField(read_only=True)
 #     indent_number = serializers.SerializerMethodField(read_only=True)

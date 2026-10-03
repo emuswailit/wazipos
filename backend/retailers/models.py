@@ -501,7 +501,6 @@ class RetailQuantityDiscounts(EntityRelatedModel):
         on_delete=models.CASCADE,
     )
 
-
 class RetailerIndent(EntityRelatedModel):
     """
     A replenishment plan for a retailer.
@@ -524,6 +523,27 @@ class RetailerIndent(EntityRelatedModel):
     )
     lead_time = models.IntegerField(default=0)
     order_days = models.IntegerField(default=30)
+
+    # Optional attribution — which campaign spawned this indent, if any.
+    #
+    # Referenced by string ("wholesalers.WholesalerCampaign") to avoid
+    # a circular import: RetailerIndent is in retailers.models, and
+    # WholesalerCampaign is in wholesalers.models. Django resolves the
+    # string lazily when the app registry is ready, so neither module
+    # has to import the other.
+    #
+    # SET_NULL on delete: a campaign can be deleted (drafts are, and
+    # published campaigns get closed rather than removed, but drafts
+    # are removable). The indent survives; only the attribution is
+    # lost.
+    campaign = models.ForeignKey(
+        "wholesalers.WholesalerCampaign",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="indents",
+        help_text="Campaign this indent was seeded from, if any.",
+    )
 
     budget_amount = models.DecimalField(
         max_digits=14, decimal_places=2, null=True, blank=True,
@@ -698,7 +718,6 @@ class RetailerIndent(EntityRelatedModel):
                 "over_budget",
                 "updated",
             ])
-
 
 class RetailerIndentItem(EntityRelatedModel):
     """
