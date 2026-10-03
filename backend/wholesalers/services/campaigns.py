@@ -856,7 +856,7 @@ def opt_in_campaign(data: Dict, user):
             resolved.append((item, quantity))
 
         indent = RetailerIndent.objects.create(
-            retailer=retailer_entity,
+            entity=retailer_entity,
             campaign=campaign,
             owner=user,
         )
