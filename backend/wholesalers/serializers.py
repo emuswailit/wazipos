@@ -512,6 +512,8 @@ class CampaignAudienceBulkWriteSerializer(serializers.Serializer):
 
 
 class WholesalerReceiptsSerializer(serializers.ModelSerializer):
+    category = serializers.SerializerMethodField(read_only=True)
+    category_title = serializers.SerializerMethodField(read_only=True)
     title = serializers.SerializerMethodField(read_only=True)
     manufacturer = serializers.SerializerMethodField(read_only=True)
     manufacturer_title = serializers.SerializerMethodField(read_only=True)
@@ -544,18 +546,28 @@ class WholesalerReceiptsSerializer(serializers.ModelSerializer):
             "in_placement", "description", "created", "updated", "expiry_status",
             "received_from_details", "manufacturer", "manufacturer_title",
             "origin_country", "packaging", "units_per_pack",
-            "quantity_discounts", "price_discount", "images", "owner",
+            "quantity_discounts", "price_discount", "images", "owner","category","category_title"
         )
         read_only_fields = (
             "id", "created", "updated",
             "quantity_discounts", "price_discount", "images",
             "days_to_expiry", "expiry_status",
             "owner", "entity",
+            "category", "category_title", "title", "manufacturer", "manufacturer_title",
         )
 
     # ------------------------------------------------------------------
     # Nested display helpers
     # ------------------------------------------------------------------
+    def get_category(self, obj):
+        if obj.product.category:
+            return obj.product.category.id
+        return None
+
+    def get_category_title(self, obj):
+        if obj.product.category:
+            return obj.product.category.title
+        return None
 
     def get_received_from_details(self, obj):
         if obj.received_from:
