@@ -1595,19 +1595,17 @@ def close_retailer_indent(data, user):
     from wholesalers.models import RetailerOrders, RetailerOrderItems
 
     errors = []
+
     indent_id = data.get("indent")
     if not indent_id:
-        errors.append("Indent ID is required")
-        return errors, None
+        return ["Indent ID is required"], None
 
     indent = RetailerIndent.objects.filter(id=indent_id).first()
     if not indent:
-        errors.append("Indent with provided ID does not exist")
-        return errors, None
+        return ["Indent with provided ID does not exist"], None
 
     if indent.is_open == "false":
-        errors.append("Indent is already closed")
-        return errors, None
+        return ["Indent is already closed"], None
 
     indent_items = list(
         RetailerIndentItem.objects
@@ -1619,9 +1617,9 @@ def close_retailer_indent(data, user):
         )
     )
     if not indent_items:
-        errors.append("Indent has no items")
-        return errors, None
+        return ["Indent has no items"], None
 
+    # ---- Group items by wholesaler, collecting per-item errors ----
     by_wholesaler = {}
     for item in indent_items:
         if not item.wholesale_receipt:
@@ -1635,6 +1633,19 @@ def close_retailer_indent(data, user):
             continue
         by_wholesaler.setdefault(wid, []).append(item)
 
+    # ---- Fail fast: no valid items to order from ----
+    # Ensure the indent is open before we bail, so a partial state can't
+    # leave it stuck closed.
+    if not by_wholesaler:
+        if indent.is_open != "true":
+            indent.is_open = "true"
+            indent.save(update_fields=["is_open", "updated"])
+        return errors or ["No valid items to order from"], indent
+
+    # ---- Create one order per wholesaler, with its items ----
+    orders_created = 0
+    items_created = 0
+
     for wid, group in by_wholesaler.items():
         document_number = generate_document_number(
             user.entity, user, "RETAILERORDER",
@@ -1647,6 +1658,7 @@ def close_retailer_indent(data, user):
             entity=user.entity,
             status="SUBMITTED",
             order_origin="RETAILER",
+            retailer_indent=indent,
         )
 
         for indent_item in group:
@@ -1690,7 +1702,35 @@ def close_retailer_indent(data, user):
                 entity=indent.entity,
                 owner=user,
             )
+            items_created += 1
 
+        # Only count the order if it actually received items. An empty
+        # order is worse than no order — it shows up in the wholesaler's
+        # inbox with nothing to act on.
+        if items_created > orders_created * 0:  # see note below
+            pass  # placeholder — see the corrected block below
+
+        # Counts are tracked per iteration, so re-evaluate after inner loop.
+        # (Simplified below.)
+        if any(
+            RetailerOrderItems.objects.filter(retailer_order=order).exists()
+            for _ in (0,)
+        ):
+            orders_created += 1
+        else:
+            order.delete()
+
+    # ---- Gate on actual creation ----
+    if orders_created == 0 or items_created == 0:
+        if indent.is_open != "true":
+            indent.is_open = "true"
+            indent.save(update_fields=["is_open", "updated"])
+        errors.append(
+            "No retailer orders were created — indent remains open."
+        )
+        return errors, indent
+
+    # ---- Success: close the indent ----
     indent.is_open = "false"
     indent.save(update_fields=["is_open", "updated"])
     return [], indent

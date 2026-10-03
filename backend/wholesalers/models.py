@@ -1001,6 +1001,14 @@ class RetailerOrders(EntityRelatedModel):
         Entities, related_name="wholesalerOrderFacilitator",
         on_delete=models.CASCADE, null=True, blank=True,
     )
+    retailer_indent = models.ForeignKey(
+        "retailers.RetailerIndent",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="retailer_orders",
+        help_text="Indent this order was generated from, if any.",
+    )
     draft_id = models.CharField(max_length=100, null=True, blank=True)
     payment_method = models.ForeignKey(
         "payments.PaymentMethods",

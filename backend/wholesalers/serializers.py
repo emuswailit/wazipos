@@ -902,7 +902,6 @@ class WholesalerReceiptsWithAnalyticsSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = models.RetailerOrders
 #         fields = "__all__"
-
 class RetailerOrdersSerializer(serializers.ModelSerializer):
     telco = serializers.SerializerMethodField(read_only=True)
     description = serializers.SerializerMethodField(read_only=True)
@@ -935,6 +934,14 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
     commit_type_display = serializers.SerializerMethodField(read_only=True)
     committed_by_title = serializers.SerializerMethodField(read_only=True)
 
+    # ---- NEW: indent attribution ----
+    # `retailer_indent` is the FK id (read-only — set by the
+    # close_retailer_indent service, not by clients).
+    # `retailer_indent_number` is the human-readable indent number,
+    # exposed separately so the frontend can render "from IND-ABC123"
+    # without an extra fetch.
+    retailer_indent_number = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = models.RetailerOrders
         fields = (
@@ -953,6 +960,10 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "draft_id",
             "status",
             "reference_number",
+
+            # ---- NEW: indent attribution ----
+            "retailer_indent",
+            "retailer_indent_number",
 
             "shipping_amount",
             "order_discount_total",
@@ -986,7 +997,7 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "actual_lead_time_days",
             "payment_summary",
 
-            # ---- NEW: commit fields ----
+            # ---- commit fields ----
             "is_committed",
             "commit_type",
             "commit_type_display",
@@ -1035,7 +1046,7 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             # Event-driven flags
             "is_paid",
             "is_delivered",
-            # ---- NEW: commit fields, all read-only ----
+            # ---- commit fields, all read-only ----
             "is_committed",
             "commit_type",
             "committed_at",
@@ -1043,6 +1054,9 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "committed_by_user",
             "commit_note",
             "cancelled_at",
+            # ---- NEW: indent attribution ----
+            "retailer_indent",
+            "retailer_indent_number",
         )
 
     # ------------------------------------------------------------------
@@ -1084,7 +1098,7 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
     def get_actual_lead_time_days(self, obj):
         return obj.actual_lead_time_days
 
-    # ---- NEW: commit display resolvers ----
+    # ---- commit display resolvers ----
     def get_commit_type_display(self, obj):
         if not obj.commit_type:
             return None
@@ -1094,6 +1108,19 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
         if obj.committed_by_entity:
             return obj.committed_by_entity.title
         return None
+
+    # ---- NEW: indent display resolver ----
+    def get_retailer_indent_number(self, obj):
+        """
+        Human-readable indent number for orders generated from an
+        indent. Returns "" when the order wasn't seeded by an indent
+        (staff-created orders, direct retailer drafts).
+
+        `select_related("retailer_indent")` on the queryset avoids
+        an N+1 here. Without it, this fires one query per order.
+        """
+        indent = getattr(obj, "retailer_indent", None)
+        return indent.indent_number if indent else ""
 
     # ------------------------------------------------------------------
     # Addresses and contact details
@@ -1176,6 +1203,7 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
             "balance_due": round(max(0.0, owed - paid), 2),
             "is_paid": paid >= owed if owed else False,
         }
+
 
 class WholesalerPriceDiscountBannersSerializer(serializers.ModelSerializer):
     class Meta:
