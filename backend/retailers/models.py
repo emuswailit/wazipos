@@ -594,7 +594,7 @@ class RetailerIndent(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.indent_number or '(unsaved)'} · {self.entity_title}"
+        return f"{self.indent_number or '(unsaved)'} · {self.entity.title}"
 
     def clean(self):
         super().clean()
