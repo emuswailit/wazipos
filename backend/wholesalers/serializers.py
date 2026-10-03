@@ -284,7 +284,6 @@ class WholesalerCampaignBannersSerializer(serializers.ModelSerializer):
         )
 
 
-
 class WholesalerCampaignSerializer(serializers.ModelSerializer):
     campaign_banners = WholesalerCampaignBannersSerializer(
         many=True, read_only=True,
@@ -297,6 +296,11 @@ class WholesalerCampaignSerializer(serializers.ModelSerializer):
 
     # Duration preview — convenience for the frontend.
     duration = serializers.SerializerMethodField(read_only=True)
+
+    # One-line summary of item-level discounts, e.g.
+    # "Up to 40% off · Buy 10 get 1 free". Empty string when no item
+    # on the campaign carries a price or quantity discount.
+    discount_summary = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.WholesalerCampaign
@@ -318,6 +322,7 @@ class WholesalerCampaignSerializer(serializers.ModelSerializer):
             "created",
             "updated",
             "owner",
+            "discount_summary",
         )
         read_only_fields = (
             "id",
@@ -327,6 +332,7 @@ class WholesalerCampaignSerializer(serializers.ModelSerializer):
             "entity",
             "is_currently_active",
             "duration",
+            "discount_summary",
         )
         extra_kwargs = {
             "campaign_banners": {"required": False},
@@ -361,6 +367,59 @@ class WholesalerCampaignSerializer(serializers.ModelSerializer):
             "display": f"{obj.start.isoformat()} → {obj.end.isoformat()}",
         }
 
+    def get_discount_summary(self, obj):
+        """
+        One-line summary of the item-level discounts on this campaign.
+
+        Examples:
+            "Up to 40% off · Buy 10 get 1 free"
+            "Up to 25% off"
+            "Buy 5 get 1 free"
+            "" (no discounts)
+
+        Reads from the prefetched `items` relation. For this to be
+        cheap on list endpoints, the queryset must use
+        `campaign_utils._campaign_queryset()`, which prefetches items
+        with their price/quantity discounts attached. Without that
+        prefetch, this fires 2 extra queries per item.
+        """
+        items = obj.items.all()
+        if not items:
+            return ""
+
+        max_pct = 0.0
+        has_price = False
+        qty_terms = set()
+
+        for it in items:
+            pd = getattr(it, "wholesaler_price_discount", None)
+            if pd is not None:
+                try:
+                    pct = float(pd.percent or 0)
+                except (TypeError, ValueError):
+                    pct = 0.0
+                if pct > max_pct:
+                    max_pct = pct
+                has_price = True
+
+            qd = getattr(it, "wholesaler_quantity_discount", None)
+            if qd is not None:
+                buy = int(qd.limit_quantity or 0)
+                free = int(qd.awarded_quantity or 0)
+                if buy and free:
+                    qty_terms.add(f"Buy {buy} get {free} free")
+                elif free:
+                    qty_terms.add(f"+{free} free")
+
+        parts = []
+        if has_price and max_pct > 0:
+            parts.append(f"Up to {max_pct:.0f}% off")
+        elif has_price:
+            parts.append("Price discount")
+        parts.extend(sorted(qty_terms))
+
+        return " · ".join(parts)
+
     # ------------------------------------------------------------------
     # Validation — mirrors WholesalerCampaign.clean()
     # ------------------------------------------------------------------
@@ -382,7 +441,8 @@ class WholesalerCampaignSerializer(serializers.ModelSerializer):
                 {"budget_cap": "Budget cap cannot be negative."}
             )
 
-        return data     
+        return data
+
 # =====================================================================
 # Action payloads
 # =====================================================================

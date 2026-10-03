@@ -174,17 +174,6 @@ def _get_audience(data: Dict, user, *, as_wholesaler: bool = True) -> Wholesaler
 
 # ---------------------------------------------------------------------------
 # Banner extraction & attachment
-#
-# Campaigns store banners as a many-to-many with WholesalerCampaignBanners
-# (mirroring WholesalerPriceDiscountBanners / WholesalerQuantityDiscountBanners).
-# The multipart field name is `campaign_banners`; multiple files per request
-# are supported. The singular `banner` name is accepted for legacy clients.
-#
-# DRF merges POST fields and FILES into `request.data` (a QueryDict) for
-# multipart requests, so files are reachable from either request.FILES or
-# request.data. The helpers below check both, prefer request.FILES, and
-# only accept real file-like objects — so a stale URL string cannot
-# corrupt the field.
 # ---------------------------------------------------------------------------
 
 _BANNER_FIELD_NAMES = ("campaign_banners", "banner")
@@ -193,10 +182,6 @@ _BANNER_FIELD_NAMES = ("campaign_banners", "banner")
 def _extract_banners(data, files) -> list:
     """
     Return every uploaded banner file from `files` or `data`.
-
-    Checks `campaign_banners` first (canonical, multi-file) then `banner`
-    (legacy, single-file). Deduplicates by object identity so a file that
-    appears in both request.FILES and request.data is only attached once.
     """
     collected = []
     seen = set()
@@ -205,7 +190,6 @@ def _extract_banners(data, files) -> list:
         if container is None:
             return
 
-        # Multi-file — canonical path.
         if hasattr(container, "getlist"):
             try:
                 for candidate in container.getlist(field_name):
@@ -220,7 +204,6 @@ def _extract_banners(data, files) -> list:
             except Exception:
                 pass
 
-        # Single-file fallback — used when a non-QueryDict is passed.
         if hasattr(container, "get"):
             try:
                 candidate = container.get(field_name)
@@ -294,8 +277,7 @@ def _build_probe(item: WholesalerCampaignItem, quantity: int):
 def project_item_for_quantity(item: WholesalerCampaignItem, quantity: int, markup_pct: Decimal):
     """
     Run the same math as RetailerIndentItem.recalculate against an unsaved
-    probe. Public because WholesalerCampaignItem.project_for_quantity
-    delegates here.
+    probe.
     """
     probe = _build_probe(item, quantity)
     probe.recalculate(markup_override=markup_pct)
@@ -305,24 +287,12 @@ def project_item_for_quantity(item: WholesalerCampaignItem, quantity: int, marku
 def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
     """
     Freeze the terms shown to retailers for a single campaign item.
-
-    Field mapping to RetailerIndentItem:
-      - final_supplier_unit_selling_price → published_unit_price
-        (post-price-discount unit cost the retailer pays per paid unit)
-      - bonus_rule_free_quantity         → published_bonus_quantity
-        (free units earned per block, independent of the probe quantity)
-
-    The probe is built with quantity=1 purely to trigger recalculate();
-    the two fields we snapshot are quantity-independent, so the choice
-    of 1 does not affect the values.
     """
     probe = _build_probe(item, quantity=1)
     probe.recalculate()
 
     unit_price = getattr(probe, "final_supplier_unit_selling_price", None)
     if unit_price in (None, ""):
-        # Recalculate should always populate it, but fall back to the
-        # receipt's own resolved price if it's somehow missing.
         receipt = item.wholesaler_receipt
         unit_price = (
             getattr(receipt, "final_unit_selling_price", None)
@@ -344,6 +314,7 @@ def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
         ]
     )
 
+
 # ===========================================================================
 # Campaign lifecycle
 # ===========================================================================
@@ -351,9 +322,6 @@ def _snapshot_item_terms(item: WholesalerCampaignItem) -> None:
 def create_campaign(data: Dict, user, files=None):
     """
     Create a draft campaign owned by the user's entity.
-
-    `files` is `request.FILES` from the view — empty for JSON requests,
-    populated for multipart requests that include banner files.
     """
     try:
         entity = _get_user_entity(user)
@@ -375,9 +343,6 @@ def create_campaign(data: Dict, user, files=None):
         campaign.full_clean()
         campaign.save()
 
-        # Attach banners after the campaign has a PK. `_extract_banners`
-        # checks both request.FILES and request.data, so this works
-        # whether or not the view forwards `files=request.FILES`.
         banners = _attach_campaign_banners(campaign, data, files, user)
         if banners:
             create_log(
@@ -394,9 +359,6 @@ def create_campaign(data: Dict, user, files=None):
 def update_campaign(data: Dict, user, files=None):
     """
     Update the mutable fields of a draft or published campaign.
-
-    `files` is `request.FILES` from the view — empty for JSON requests,
-    populated for multipart requests that add banner files.
     """
     try:
         campaign = _get_campaign(data, user)
@@ -409,9 +371,6 @@ def update_campaign(data: Dict, user, files=None):
                 _("Only draft or published campaigns can be updated.")
             )
 
-        # Refuse to move the window on a published campaign. The
-        # published_* snapshots on every item were frozen against the old
-        # window and become silently stale.
         if (
             campaign.status == WholesalerCampaign.Status.PUBLISHED
             and ("start" in data or "end" in data)
@@ -434,8 +393,6 @@ def update_campaign(data: Dict, user, files=None):
         campaign.full_clean()
         campaign.save()
 
-        # Banners are additive — new files are appended to the existing
-        # set. Removing a specific banner is a separate action.
         banners = _attach_campaign_banners(campaign, data, files, user)
         if banners:
             create_log(
@@ -545,9 +502,6 @@ def add_campaign_item(data: Dict, user):
         if campaign.status != WholesalerCampaign.Status.DRAFT:
             raise ValidationError(_("Items can only be added to draft campaigns."))
 
-        # WholesalerCampaignItem inherits from EntityRelatedModel, so
-        # `entity` is required. `full_clean()` will reject a null value,
-        # so set it up front.
         entity = _get_user_entity(user)
 
         receipt_id = data.get("wholesaler_receipt_id")
@@ -657,8 +611,6 @@ def add_campaign_audience(data: Dict, user):
         if campaign.status != WholesalerCampaign.Status.DRAFT:
             raise ValidationError(_("Audience can only be edited on draft campaigns."))
 
-        # WholesalerCampaignAudience inherits from EntityRelatedModel,
-        # so `entity` is required on both create paths below.
         entity = _get_user_entity(user)
 
         retailer_id = data.get("retailer_id")
@@ -696,9 +648,6 @@ def add_campaign_audience(data: Dict, user):
 def remove_campaign_audience(data: Dict, user):
     """
     Remove a retailer from the audience.
-
-    Hard-deletes if they never opted in, otherwise soft-hides so the
-    attribution link to their indent is preserved.
     """
     try:
         audience = _get_audience(data, user, as_wholesaler=True)
@@ -750,8 +699,11 @@ def project_campaign(data: Dict, user):
 
         markup_pct = _parse_decimal(data.get("markup_pct")) or Decimal("0")
 
+        # Key by str(pk) — the JSON payload sends UUIDs as strings, and
+        # uuid.UUID(...) != "..." in Python, so a dict keyed on raw pk
+        # would miss every lookup.
         items_by_id = {
-            item.pk: item
+            str(item.pk): item
             for item in campaign.items.select_related(
                 "wholesaler_receipt",
                 "wholesaler_receipt__product",
@@ -772,7 +724,7 @@ def project_campaign(data: Dict, user):
                 field="items",
                 default=0,
             )
-            item = items_by_id.get(item_id)
+            item = items_by_id.get(str(item_id))
             if item is None:
                 raise ValidationError(
                     {"items": _("Item %(id)s is not on this campaign.") % {"id": item_id}}
@@ -793,8 +745,8 @@ def project_campaign(data: Dict, user):
 
             profit = project_item_for_quantity(item, quantity, markup_pct)
             projections.append({
-                "item_id": item.pk,
-                "receipt_id": item.wholesaler_receipt_id,
+                "item_id": str(item.pk),
+                "receipt_id": str(item.wholesaler_receipt_id),
                 "product_title": item.wholesaler_receipt.product.title,
                 "quantity": quantity,
                 "published_unit_price": str(item.published_unit_price or ""),
@@ -848,8 +800,9 @@ def opt_in_campaign(data: Dict, user):
         if audience.has_opted_in:
             raise ValidationError(_("You have already opted in to this campaign."))
 
+        # Key by str(pk) — same reasoning as project_campaign.
         items_by_id = {
-            item.pk: item
+            str(item.pk): item
             for item in campaign.items.select_related(
                 "wholesaler_receipt",
                 "wholesaler_price_discount",
@@ -868,7 +821,7 @@ def opt_in_campaign(data: Dict, user):
         for entry in requested:
             item_id = entry.get("item_id")
             quantity = _parse_int(entry.get("quantity"), field="items", default=0)
-            item = items_by_id.get(item_id)
+            item = items_by_id.get(str(item_id))
             if item is None:
                 raise ValidationError(
                     {"items": _("Item %(id)s is not on this campaign.") % {"id": item_id}}
@@ -936,8 +889,7 @@ def opt_in_campaign(data: Dict, user):
 
 def opt_out_campaign(data: Dict, user):
     """
-    Mark the retailer's opt-in as withdrawn. Does not delete the indent —
-    that is a separate commercial decision, not a campaign action.
+    Mark the retailer's opt-in as withdrawn.
     """
     try:
         retailer_entity = _get_user_entity(user)
