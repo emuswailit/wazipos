@@ -10,6 +10,7 @@ but returns either a queryset (for paginated lists) or a
 """
 
 from django.core.exceptions import ValidationError
+from django.db import models                    # ← used by Q / F in audience filters
 from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -55,11 +56,6 @@ def _campaign_queryset():
     Prefetches items, audience and banners so detail serializers don't
     issue N+1 queries. List serializers ignore the prefetches and cost
     only the parent row.
-
-    NOTE: the reverse-relation name for the campaign's banner M2M is
-    `campaign_banners` (see WholesalerCampaign.campaign_banners). The
-    previous `"banners"` string was the old singular model's related
-    name and no longer exists.
     """
     item_qs = (
         WholesalerCampaignItem.objects
@@ -90,7 +86,7 @@ def _campaign_queryset():
 
 
 # ===========================================================================
-# Campaign reads
+# Campaign reads — wholesaler
 # ===========================================================================
 
 def get_entity_campaigns(data, user):
@@ -101,13 +97,6 @@ def get_entity_campaigns(data, user):
         status       — one of DRAFT / PUBLISHED / CLOSED / CANCELLED
         is_active    — "true" / "false"
         active_only  — if truthy, restrict to currently-active campaigns
-
-    Sample request:
-        {
-            "action": "GetEntityCampaigns",
-            "status": "PUBLISHED",     // optional
-            "page": 1
-        }
 
     Returns a queryset suitable for PageNumberPagination.
     """
@@ -138,12 +127,6 @@ def get_campaign_details(data, user):
     """
     Fetch a single campaign owned by the caller's entity.
 
-    Sample request:
-        {
-            "action": "GetCampaignDetails",
-            "campaign_id": 42
-        }
-
     Returns `(campaign, None)` on success, `(None, errors)` otherwise.
     """
     try:
@@ -165,19 +148,12 @@ def get_campaign_details(data, user):
 
 
 # ===========================================================================
-# Item reads
+# Item reads — wholesaler
 # ===========================================================================
 
 def get_campaign_items(data, user):
     """
     List items on a campaign owned by the caller's entity.
-
-    Sample request:
-        {
-            "action": "GetCampaignItems",
-            "campaign_id": 42,
-            "page": 1
-        }
 
     Returns a queryset suitable for PageNumberPagination.
     """
@@ -207,7 +183,7 @@ def get_campaign_items(data, user):
 
 
 # ===========================================================================
-# Audience reads
+# Audience reads — wholesaler
 # ===========================================================================
 
 def get_campaign_audience(data, user):
@@ -218,13 +194,6 @@ def get_campaign_audience(data, user):
     Optional filter via `data`:
         opted_in  — "true" to return only retailers who opted in,
                     "false" for those who have not.
-
-    Sample request:
-        {
-            "action": "GetCampaignAudience",
-            "campaign_id": 42,
-            "page": 1
-        }
 
     Returns a queryset suitable for PageNumberPagination.
     """
@@ -255,7 +224,6 @@ def get_campaign_audience(data, user):
         value = str(opted_in).lower()
         if value == "true":
             qs = qs.filter(opted_in_at__isnull=False).filter(
-                # opted_in_at > opted_out_at, or no opt-out at all
                 models.Q(opted_out_at__isnull=True)
                 | models.Q(opted_in_at__gt=models.F("opted_out_at"))
             )
@@ -280,13 +248,6 @@ def get_my_campaigns(data, user):
         status       — one of DRAFT / PUBLISHED / CLOSED / CANCELLED
         opted_in     — "true" / "false" to filter by opt-in state
         active_only  — if truthy, restrict to currently-active campaigns
-
-    Sample request:
-        {
-            "action": "GetMyCampaigns",
-            "active_only": true,
-            "page": 1
-        }
 
     Returns a queryset of WholesalerCampaign, suitable for
     PageNumberPagination.
@@ -338,3 +299,54 @@ def get_my_campaigns(data, user):
         )
 
     return qs.order_by("-start", "-created")
+
+
+def get_my_campaign_details(data, user):
+    """
+    Retailer-scoped campaign detail.
+
+    Gated by audience membership, not campaign ownership. Returns a
+    tuple `(campaign, items, audience_row)` on success and raises
+    ValidationError otherwise.
+
+    The caller's audience row is returned so the view can tell the
+    frontend whether the retailer has already opted in, and — if so —
+    which indent was created.
+    """
+    campaign_id = data.get("campaign_id") or data.get("id")
+    if not campaign_id:
+        raise ValidationError({"campaign_id": _("This field is required.")})
+
+    retailer_entity = _get_user_entity(user)
+
+    audience = (
+        WholesalerCampaignAudience.objects
+        .select_related(
+            "campaign",
+            "campaign__wholesaler",
+            "retailer_indent",
+        )
+        .filter(campaign_id=campaign_id, retailer=retailer_entity)
+        .first()
+    )
+    if audience is None:
+        raise ValidationError({"campaign_id": _("Campaign not found.")})
+
+    campaign = audience.campaign
+
+    # Prefetch via the same queryset the wholesaler path uses so
+    # the receipt and product relations are already joined — the
+    # serializer reads `wholesaler_receipt.product.title`.
+    items = list(
+        WholesalerCampaignItem.objects
+        .select_related(
+            "wholesaler_receipt",
+            "wholesaler_receipt__product",
+            "wholesaler_price_discount",
+            "wholesaler_quantity_discount",
+        )
+        .filter(campaign=campaign)
+        .order_by("id")
+    )
+
+    return campaign, items, audience
