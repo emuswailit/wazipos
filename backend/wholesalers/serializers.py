@@ -127,19 +127,9 @@ class RetailerCampaignItemSerializer(serializers.ModelSerializer):
     """
     Retailer-safe view of WholesalerCampaignItem.
 
-    Deliberately omits wholesaler_price_discount, wholesaler_quantity_discount,
-    retail_price_hint, and every internal cost field. Exposes only what a
-    retailer needs to decide whether to opt in:
-
-      - product title and batch (read-through on the receipt)
-      - published_unit_price    — what they pay per paid unit
-      - published_bonus_quantity — free units per block
-      - suggested_quantity      — the wholesaler's recommendation
-      - per_retailer_limit      — the per-retailer cap
-
-    The read-through fields are populated via serializer `source=` so the
-    queryset must prefetch `wholesaler_receipt__product`. Both the retailer
-    detail view and its queryset already do this.
+    Exposes the discount terms (percent off, buy-N-get-M) so the
+    retailer can see WHY the published price is what it is. Does not
+    expose wholesaler-side ids or cost fields.
     """
 
     product_title = serializers.CharField(
@@ -153,6 +143,9 @@ class RetailerCampaignItemSerializer(serializers.ModelSerializer):
         allow_blank=True,
     )
 
+    price_discount = serializers.SerializerMethodField()
+    quantity_discount = serializers.SerializerMethodField()
+
     class Meta:
         model = models.WholesalerCampaignItem
         fields = (
@@ -163,9 +156,32 @@ class RetailerCampaignItemSerializer(serializers.ModelSerializer):
             "published_bonus_quantity",
             "suggested_quantity",
             "per_retailer_limit",
+            "price_discount",
+            "quantity_discount",
         )
         read_only_fields = fields
-        
+
+    def get_price_discount(self, obj):
+        pd = obj.wholesaler_price_discount
+        if pd is None:
+            return None
+        return {
+            "title": pd.title,
+            "percent": str(pd.percent or ""),
+            "offer_price": str(pd.offer_price or ""),
+            "normal_price": str(pd.normal_price or ""),
+        }
+
+    def get_quantity_discount(self, obj):
+        qd = obj.wholesaler_quantity_discount
+        if qd is None:
+            return None
+        return {
+            "title": qd.title,
+            "buy_quantity": int(qd.limit_quantity or 0),
+            "free_quantity": int(qd.awarded_quantity or 0),
+        }
+
 class WholesalerCampaignItemDetailSerializer(serializers.ModelSerializer):
     """
     Serializer for WholesalerCampaignItem — used by both the detail
