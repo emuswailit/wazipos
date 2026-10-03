@@ -123,7 +123,49 @@ class WholesalerCampaignItemListSerializer(BaseModelSerializer):
             "published_bonus_quantity",
         ]
 
+class RetailerCampaignItemSerializer(serializers.ModelSerializer):
+    """
+    Retailer-safe view of WholesalerCampaignItem.
 
+    Deliberately omits wholesaler_price_discount, wholesaler_quantity_discount,
+    retail_price_hint, and every internal cost field. Exposes only what a
+    retailer needs to decide whether to opt in:
+
+      - product title and batch (read-through on the receipt)
+      - published_unit_price    — what they pay per paid unit
+      - published_bonus_quantity — free units per block
+      - suggested_quantity      — the wholesaler's recommendation
+      - per_retailer_limit      — the per-retailer cap
+
+    The read-through fields are populated via serializer `source=` so the
+    queryset must prefetch `wholesaler_receipt__product`. Both the retailer
+    detail view and its queryset already do this.
+    """
+
+    product_title = serializers.CharField(
+        source="wholesaler_receipt.product.title",
+        read_only=True,
+    )
+    batch = serializers.CharField(
+        source="wholesaler_receipt.batch",
+        read_only=True,
+        allow_null=True,
+        allow_blank=True,
+    )
+
+    class Meta:
+        model = models.WholesalerCampaignItem
+        fields = (
+            "id",
+            "product_title",
+            "batch",
+            "published_unit_price",
+            "published_bonus_quantity",
+            "suggested_quantity",
+            "per_retailer_limit",
+        )
+        read_only_fields = fields
+        
 class WholesalerCampaignItemDetailSerializer(serializers.ModelSerializer):
     """
     Serializer for WholesalerCampaignItem — used by both the detail
