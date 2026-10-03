@@ -8,6 +8,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -1298,7 +1299,7 @@ def _delete_campaign_item(request):
 def _get_campaign_items(request):
     items = campaign_utils.get_campaign_items(request.data, request.user)
     return _paginate(
-        serializers.WholesalerCampaignItemListSerializer, items, request,
+        serializers.WholesalerCampaignItemDetailSerializer, items, request,
     )
 
 
@@ -1352,6 +1353,67 @@ def _get_my_campaigns(request):
     campaigns = campaign_utils.get_my_campaigns(request.data, request.user)
     return _paginate(
         serializers.WholesalerCampaignSerializer, campaigns, request,
+    )
+
+
+@campaign_action("GetMyCampaignDetails")
+def _get_my_campaign_details(request):
+    """
+    Retailer-facing: one campaign the caller is on the audience for,
+    with the retailer-safe item list and their own audience row.
+
+    Gated by audience membership, not campaign ownership — a retailer
+    is authorized as long as an audience row exists for their entity.
+
+    Sample request:
+        {
+            "action": "GetMyCampaignDetails",
+            "campaign_id": "5b8f1c2a-9d4e-4b7a-8c1f-3e6a9d2f7b4c"
+        }
+    """
+    try:
+        campaign, items, audience = campaign_utils.get_my_campaign_details(
+            request.data, request.user,
+        )
+    except DjangoValidationError as exc:
+        errors = (
+            exc.message_dict
+            if hasattr(exc, "message_dict")
+            else {"detail": list(exc.messages)}
+        )
+        return _fail("Campaign could not be retrieved", errors)
+
+    return Response(
+        data={
+            "response_code": 0,
+            "response_message": "Campaign retrieved",
+            "campaign": serializers.WholesalerCampaignSerializer(
+                campaign, context={"request": request},
+            ).data,
+            "items": serializers.RetailerCampaignItemSerializer(
+                items, many=True, context={"request": request},
+            ).data,
+            "my_audience": {
+                "id": str(audience.id),
+                "has_opted_in": audience.has_opted_in,
+                "opted_in_at": audience.opted_in_at,
+                "opted_out_at": audience.opted_out_at,
+                "retailer_indent": (
+                    str(audience.retailer_indent_id)
+                    if audience.retailer_indent_id else None
+                ),
+                "retailer_indent_number": (
+                    getattr(
+                        audience.retailer_indent,
+                        "indent_number",
+                        None,
+                    )
+                    if audience.retailer_indent_id else None
+                ),
+            },
+            "errors": [],
+        },
+        status=status.HTTP_200_OK,
     )
 
 
