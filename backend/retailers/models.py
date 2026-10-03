@@ -22,7 +22,7 @@ from django.core.validators import (
     MinValueValidator,
     MaxValueValidator,
 )
-from django.db import models
+from django.db import models,transaction
 from django.db.models import Q, Sum
 from django.db.models.fields.related import ManyToManyField
 from django.db.models.signals import post_save, pre_save
