@@ -948,7 +948,6 @@ class WholesalerCampaignAudience(EntityRelatedModel):
         if save:
             self.save(update_fields=["opted_out_at", "updated"])
 
-
 class CommitType(models.TextChoices):
     CASH = "CASH", _("Paid in cash")
     CREDIT = "CREDIT", _("Credit approved")
@@ -1159,6 +1158,17 @@ class RetailerOrders(EntityRelatedModel):
         return f"{self.retailer.title}-{self.id}"
 
     def recalculate(self, save=True):
+        """
+        Recompute order-level totals from the line items.
+
+        `final_price_total` is the plain sum of every item's
+        `item_price_total`. Shipping, discounts, and tax are not
+        added again here — they are already reflected per line by
+        the item serializer.
+
+        `order_discount_total` and `order_tax_total` are still kept
+        for reporting, but they no longer feed `final_price_total`.
+        """
         agg = self.retailer_order.aggregate(
             gross=Sum("item_price_total"),
             discount=Sum("item_price_discount_total"),
@@ -1168,12 +1178,9 @@ class RetailerOrders(EntityRelatedModel):
         self.order_gross_price_total = _q(agg["gross"] or 0)
         self.order_discount_total = _q(agg["discount"] or 0)
         self.order_tax_total = _q(agg["tax"] or 0)
-        self.final_price_total = _q(
-            (self.order_gross_price_total or 0)
-            - (self.order_discount_total or 0)
-            + (self.order_tax_total or 0)
-            + (self.shipping_amount or 0)
-        )
+
+        # final_price_total = sum(item_price_total)
+        self.final_price_total = self.order_gross_price_total
 
         if save:
             super().save(update_fields=[
