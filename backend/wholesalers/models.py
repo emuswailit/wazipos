@@ -1252,6 +1252,7 @@ class RetailerOrders(EntityRelatedModel):
             return max(0, (self.received_at - self.approved_at).days)
         return None
 
+# retailers/models.py (or wherever RetailerOrderItems is defined)
 
 class RetailerOrderItems(EntityRelatedModel):
     """
@@ -1429,11 +1430,59 @@ class RetailerOrderItems(EntityRelatedModel):
             - self.item_net_price_total
         )
 
+    # ------------------------------------------------------------------
+    # Persistence hooks
+    #
+    # Two orthogonal concerns:
+    #
+    #   1. `recalculate` — recompute THIS row's derived fields
+    #      (item_price_total, item_net_price_total, etc.). Only runs
+    #      when the caller explicitly asks for it, because some
+    #      writes (e.g. the batch close_retailer_indent) set those
+    #      fields directly.
+    #
+    #   2. `refresh_parent` — after we persist, ask the parent
+    #      RetailerOrders to recompute its totals from all its items.
+    #      Defaults to True so any single-item mutation keeps the
+    #      order's final_price_total in sync. Batch flows pass
+    #      `refresh_parent=False` and call `order.recalculate()`
+    #      themselves once, to avoid an aggregate query per item.
+    # ------------------------------------------------------------------
+
     def save(self, *args, **kwargs):
+        refresh_parent = kwargs.pop("refresh_parent", True)
+
         if kwargs.pop("recalculate", False):
             self.recalculate(save=False)
+
         super().save(*args, **kwargs)
 
+        if refresh_parent and self.retailer_order_id:
+            parent = (
+                RetailerOrders.objects
+                .filter(pk=self.retailer_order_id)
+                .first()
+            )
+            if parent is not None:
+                parent.recalculate(save=True)
+
+    def delete(self, *args, **kwargs):
+        # Capture the parent id BEFORE the row disappears; the FK
+        # reference goes with it.
+        parent_id = self.retailer_order_id
+
+        result = super().delete(*args, **kwargs)
+
+        if parent_id:
+            parent = (
+                RetailerOrders.objects
+                .filter(pk=parent_id)
+                .first()
+            )
+            if parent is not None:
+                parent.recalculate(save=True)
+
+        return result
 
 class RetailerOrderPayments(EntityRelatedModel):
     PAYMENT_STATUS_CHOICES = (

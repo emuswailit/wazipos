@@ -1633,9 +1633,6 @@ def close_retailer_indent(data, user):
             continue
         by_wholesaler.setdefault(wid, []).append(item)
 
-    # ---- Fail fast: no valid items to order from ----
-    # Ensure the indent is open before we bail, so a partial state can't
-    # leave it stuck closed.
     if not by_wholesaler:
         if indent.is_open != "true":
             indent.is_open = "true"
@@ -1661,6 +1658,8 @@ def close_retailer_indent(data, user):
             retailer_indent=indent,
         )
 
+        order_items_created = 0
+
         for indent_item in group:
             qd = indent_item.wholesaler_quantity_discount
             if (
@@ -1668,7 +1667,9 @@ def close_retailer_indent(data, user):
                 and (qd.limit_quantity or 0) > 0
                 and (qd.awarded_quantity or 0) > 0
             ):
-                blocks = indent_item.required_quantity // qd.limit_quantity
+                blocks = (
+                    indent_item.required_quantity // qd.limit_quantity
+                )
                 discount_quantity = blocks * qd.awarded_quantity
             else:
                 discount_quantity = 0
@@ -1702,23 +1703,21 @@ def close_retailer_indent(data, user):
                 entity=indent.entity,
                 owner=user,
             )
-            items_created += 1
+            order_items_created += 1
 
-        # Only count the order if it actually received items. An empty
-        # order is worse than no order — it shows up in the wholesaler's
-        # inbox with nothing to act on.
-        if items_created > orders_created * 0:  # see note below
-            pass  # placeholder — see the corrected block below
-
-        # Counts are tracked per iteration, so re-evaluate after inner loop.
-        # (Simplified below.)
-        if any(
-            RetailerOrderItems.objects.filter(retailer_order=order).exists()
-            for _ in (0,)
-        ):
-            orders_created += 1
-        else:
+        # Drop the order if it never received any items — an empty
+        # order in the wholesaler's inbox is noise.
+        if order_items_created == 0:
             order.delete()
+            continue
+
+        # Recompute order-level totals from the items we just wrote.
+        # Without this, final_price_total (and the other order totals)
+        # stay at their 0.00 defaults.
+        order.recalculate(save=True)
+
+        orders_created += 1
+        items_created += order_items_created
 
     # ---- Gate on actual creation ----
     if orders_created == 0 or items_created == 0:
