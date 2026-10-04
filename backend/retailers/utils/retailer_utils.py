@@ -1422,8 +1422,8 @@ def create_retailer_indent(data, user):
     the prediction run and by the post_save signal on items.
     """
     errors = []
-    order_days =30
-    lead_time=1
+    order_days =0
+    lead_time=0
 
     # ---- Required: order_days ----
     order_days = data.get("order_days")
