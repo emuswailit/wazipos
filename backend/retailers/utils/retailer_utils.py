@@ -1422,31 +1422,33 @@ def create_retailer_indent(data, user):
     the prediction run and by the post_save signal on items.
     """
     errors = []
+    order_days =30
+    lead_time=1
 
     # ---- Required: order_days ----
     order_days = data.get("order_days")
-    if order_days is None:
-        errors.append(
-            "Number of days the order inventory is projected "
-            "to last is required"
-        )
-        return errors, None
+    # if order_days is None:
+    #     errors.append(
+    #         "Number of days the order inventory is projected "
+    #         "to last is required"
+    #     )
+    #     return errors, None
 
-    try:
-        order_days = int(order_days)
-    except (TypeError, ValueError):
-        errors.append("order_days must be an integer")
-        return errors, None
+    # try:
+    #     order_days = int(order_days)
+    # except (TypeError, ValueError):
+    #     errors.append("order_days must be an integer")
+    #     return errors, None
 
-    if order_days <= 0:
-        errors.append("order_days must be greater than zero")
-        return errors, None
+    # if order_days <= 0:
+    #     errors.append("order_days must be greater than zero")
+    #     return errors, None
 
     # ---- Required: lead_time ----
     lead_time = data.get("lead_time")
-    if lead_time is None:
-        errors.append("Lead time is required")
-        return errors, None
+    # if lead_time is None:
+    #     errors.append("Lead time is required")
+    #     return errors, None
 
     try:
         lead_time = int(lead_time)
