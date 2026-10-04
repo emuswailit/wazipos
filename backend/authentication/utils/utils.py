@@ -3174,8 +3174,15 @@ def get_cluster_details(data):
 
 
 # Counties
+# utils.py
+
 def get_counties():
-    return models.Counties.objects.all()
+    return (
+        models.Counties.objects
+        .select_related("country")
+        .prefetch_related("sub_counties")
+        .order_by("title")
+    )
 
 def get_sub_counties(data):
     return models.SubCounties.objects.filter(county_id=data['county'])

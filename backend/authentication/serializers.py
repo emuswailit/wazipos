@@ -396,8 +396,6 @@ class PostalOfficesSerializer(serializers.ModelSerializer):
         read_only_fields = ("id",)   
 
 
-# serializers.py
-
 class SubCountiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.SubCounties
@@ -406,8 +404,7 @@ class SubCountiesSerializer(serializers.ModelSerializer):
 
 
 class CountiesSerializer(serializers.ModelSerializer):
-    # Nested — this pulls every SubCounties row whose FK points at
-    # this county. `many=True` because it's a reverse relation.
+    # Reverse FK → only the sub-counties whose `county` = this county
     sub_counties = SubCountiesSerializer(many=True, read_only=True)
 
     class Meta:
@@ -421,6 +418,7 @@ class CountiesSerializer(serializers.ModelSerializer):
             "sub_counties",
         )
         read_only_fields = ("id",)
+        
 
 class TownsSerializer(serializers.ModelSerializer):
     class Meta:

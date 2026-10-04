@@ -447,7 +447,11 @@ class SubCounties(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sub_county_code = models.CharField(max_length=10, null=True, blank=True)
     county = models.ForeignKey(
-        Counties, on_delete=models.CASCADE, null=True, blank=True
+        Counties,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="sub_counties",   # ← this unlocks county.sub_counties
     )
     title = models.CharField(max_length=256, null=True, blank=True)
     description = models.TextField(max_length=300, null=True, blank=True)
