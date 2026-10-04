@@ -99,6 +99,7 @@ class UnitOfIssue(models.TextChoices):
 
 
 class IndentItemSource(models.TextChoices):
+    MANUAL = "MANUAL", "Manually added by the retailer"
     PREDICTION = "PREDICTION", "Auto-suggested by the prediction engine"
     PREDICTION_EDITED = "PREDICTION_EDITED", "Auto-suggested, then adjusted by the retailer"
     USER_ADDED = "USER_ADDED", "Manually added by the retailer"
