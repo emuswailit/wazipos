@@ -864,6 +864,7 @@ def opt_in_campaign(data: Dict, user):
         created_lines = []
         for item, quantity in resolved:
             line = RetailerIndentItem(
+                entity=retailer_entity,
                 retailer_indent=indent,
                 wholesale_receipt=item.wholesaler_receipt,
                 wholesaler_price_discount=item.wholesaler_price_discount,

@@ -914,7 +914,13 @@ class WholesalerReceiptsWithAnalyticsSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = models.RetailerOrders
 #         fields = "__all__"
+from rest_framework import serializers
+from django.db.models import Sum
+from decimal import Decimal
+from . import models  # Assuming models are in the same directory
+
 class RetailerOrdersSerializer(serializers.ModelSerializer):
+    # Existing Display Fields
     telco = serializers.SerializerMethodField(read_only=True)
     description = serializers.SerializerMethodField(read_only=True)
     provider_reference_number = serializers.SerializerMethodField(read_only=True)
@@ -942,134 +948,82 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
     actual_lead_time_days = serializers.SerializerMethodField(read_only=True)
     payment_summary = serializers.SerializerMethodField(read_only=True)
 
-    # ---- NEW: commit display helpers ----
     commit_type_display = serializers.SerializerMethodField(read_only=True)
     committed_by_title = serializers.SerializerMethodField(read_only=True)
-
-    # ---- NEW: indent attribution ----
-    # `retailer_indent` is the FK id (read-only — set by the
-    # close_retailer_indent service, not by clients).
-    # `retailer_indent_number` is the human-readable indent number,
-    # exposed separately so the frontend can render "from IND-ABC123"
-    # without an extra fetch.
     retailer_indent_number = serializers.SerializerMethodField(read_only=True)
+
+    # ---- DYNAMIC TOTAL FIELDS ----
+    order_gross_price_total = serializers.SerializerMethodField(read_only=True)
+    order_discount_total = serializers.SerializerMethodField(read_only=True)
+    order_tax_total = serializers.SerializerMethodField(read_only=True)
+    final_price = serializers.SerializerMethodField(read_only=True)
+    final_price_total = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.RetailerOrders
         fields = (
-            "id",
-            "wholesaler",
-            "title",
-            "payment_method",
-            "document_number",
-            "document_number_display",
-            "retailer",
-            "retailer_title",
-            "wholesaler_title",
-            "order_origin",
-            "payment_method_title",
-            "employee",
-            "draft_id",
-            "status",
-            "reference_number",
-
-            # ---- NEW: indent attribution ----
-            "retailer_indent",
-            "retailer_indent_number",
-
-            "shipping_amount",
-            "order_discount_total",
-            "order_gross_price_total",
-            "order_tax_total",
-            "order_terms",
-            "final_price",
-            "final_price_total",
-
-            "is_paid",
-            "paid_at",
-            "is_delivered",
-            "delivered_at",
-            "delivered_by",
-            "is_processed",
-            "processed_at",
-            "processed_by",
-            "is_packed",
-            "packed_at",
-            "packed_by",
-            "is_received",
-            "received_at",
-            "received_by",
-            "is_approved",
-            "approved_at",
-            "approved_by",
-            "is_dispatched",
-            "dispatched_at",
-            "dispatched_by",
-            "delivery_method",
-            "actual_lead_time_days",
-            "payment_summary",
-
-            # ---- commit fields ----
-            "is_committed",
-            "commit_type",
-            "commit_type_display",
-            "committed_at",
-            "committed_by_entity",
-            "committed_by_title",
-            "committed_by_user",
-            "commit_note",
-            "cancelled_at",
-
-            "created",
-            "updated",
-            "order_items",
-            "owner_title",
-
-            "retailer_postal_town",
-            "retailer_postal_code",
-            "retailer_postal_address",
-            "retailer_phone",
-            "retailer_email",
-            "wholesaler_postal_town",
-            "wholesaler_postal_code",
-            "wholesaler_postal_address",
-            "wholesaler_phone",
-            "wholesaler_email",
-
-            "provider_reference_number",
-            "psp_reference_number",
-            "telco",
-            "description",
-            "owner",
+            "id", "wholesaler", "title", "payment_method", "document_number",
+            "document_number_display", "retailer", "retailer_title", "wholesaler_title",
+            "order_origin", "payment_method_title", "employee", "draft_id", "status",
+            "reference_number", "retailer_indent", "retailer_indent_number",
+            "shipping_amount", "order_discount_total", "order_gross_price_total",
+            "order_tax_total", "order_terms", "final_price", "final_price_total",
+            "is_paid", "paid_at", "is_delivered", "delivered_at", "delivered_by",
+            "is_processed", "processed_at", "processed_by", "is_packed", "packed_at",
+            "packed_by", "is_received", "received_at", "received_by", "is_approved",
+            "approved_at", "approved_by", "is_dispatched", "dispatched_at",
+            "dispatched_by", "delivery_method", "actual_lead_time_days", "payment_summary",
+            "is_committed", "commit_type", "commit_type_display", "committed_at",
+            "committed_by_entity", "committed_by_title", "committed_by_user",
+            "commit_note", "cancelled_at", "created", "updated", "order_items",
+            "owner_title", "retailer_postal_town", "retailer_postal_code",
+            "retailer_postal_address", "retailer_phone", "retailer_email",
+            "wholesaler_postal_town", "wholesaler_postal_code", "wholesaler_postal_address",
+            "wholesaler_phone", "wholesaler_email", "provider_reference_number",
+            "psp_reference_number", "telco", "description", "owner",
         )
         read_only_fields = (
-            "id",
-            "created",
-            "updated",
-            "owner",
-            "entity",
-            # Derived / computed fields — set by model recalculate()
-            "order_gross_price_total",
-            "order_discount_total",
-            "order_tax_total",
-            "final_price_total",
-            "actual_lead_time_days",
-            "payment_summary",
-            # Event-driven flags
-            "is_paid",
-            "is_delivered",
-            # ---- commit fields, all read-only ----
-            "is_committed",
-            "commit_type",
-            "committed_at",
-            "committed_by_entity",
-            "committed_by_user",
-            "commit_note",
-            "cancelled_at",
-            # ---- NEW: indent attribution ----
-            "retailer_indent",
+            "id", "created", "updated", "owner", "entity", "order_gross_price_total",
+            "order_discount_total", "order_tax_total", "final_price_total",
+            "actual_lead_time_days", "payment_summary", "is_paid", "is_delivered",
+            "is_committed", "commit_type", "committed_at", "committed_by_entity",
+            "committed_by_user", "commit_note", "cancelled_at", "retailer_indent",
             "retailer_indent_number",
         )
+
+    # ------------------------------------------------------------------
+    # Calculation Logic
+    # ------------------------------------------------------------------
+
+    def _get_aggregated_totals(self, obj):
+        """Helper to fetch all sums in a single query per order object"""
+        if not hasattr(obj, "_cached_totals"):
+            obj._cached_totals = obj.retailer_order.aggregate(
+                gross=Sum("item_price_total"),
+                discount=Sum("item_price_discount_total"),
+                tax=Sum("item_tax_total"),
+                final=Sum("item_final_price_total")
+            )
+        return obj._cached_totals
+
+    def get_order_gross_price_total(self, obj):
+        total = self._get_aggregated_totals(obj)["gross"]
+        return "{:.2f}".format(total or 0.00)
+
+    def get_order_discount_total(self, obj):
+        total = self._get_aggregated_totals(obj)["discount"]
+        return "{:.2f}".format(total or 0.00)
+
+    def get_order_tax_total(self, obj):
+        total = self._get_aggregated_totals(obj)["tax"]
+        return "{:.2f}".format(total or 0.00)
+
+    def get_final_price_total(self, obj):
+        total = self._get_aggregated_totals(obj)["final"]
+        return "{:.2f}".format(total or 0.00)
+
+    def get_final_price(self, obj):
+        return self.get_final_price_total(obj)
 
     # ------------------------------------------------------------------
     # Nested items
@@ -1079,9 +1033,9 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
         items = obj.retailer_order.all()
         if not items.exists():
             return []
-        return RetailerOrderItemsSerializer(
-            items, context=self.context, many=True,
-        ).data
+        # Ensure RetailerOrderItemsSerializer is imported or defined
+        from .serializers import RetailerOrderItemsSerializer 
+        return RetailerOrderItemsSerializer(items, context=self.context, many=True).data
 
     # ------------------------------------------------------------------
     # Titles and display helpers
@@ -1092,13 +1046,10 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
         return f"{doc} - {obj.wholesaler.title}"
 
     def get_document_number_display(self, obj):
-        if obj.document_number:
-            return obj.document_number.document_number
-        return "N/A"
+        return obj.document_number.document_number if obj.document_number else "N/A"
 
     def get_owner_title(self, obj):
-        if not obj.owner:
-            return ""
+        if not obj.owner: return ""
         return f"{obj.owner.first_name} {obj.owner.last_name} - {obj.owner.phone}"
 
     def get_retailer_title(self, obj):
@@ -1110,27 +1061,13 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
     def get_actual_lead_time_days(self, obj):
         return obj.actual_lead_time_days
 
-    # ---- commit display resolvers ----
     def get_commit_type_display(self, obj):
-        if not obj.commit_type:
-            return None
-        return obj.get_commit_type_display()
+        return obj.get_commit_type_display() if obj.commit_type else None
 
     def get_committed_by_title(self, obj):
-        if obj.committed_by_entity:
-            return obj.committed_by_entity.title
-        return None
+        return obj.committed_by_entity.title if obj.committed_by_entity else None
 
-    # ---- NEW: indent display resolver ----
     def get_retailer_indent_number(self, obj):
-        """
-        Human-readable indent number for orders generated from an
-        indent. Returns "" when the order wasn't seeded by an indent
-        (staff-created orders, direct retailer drafts).
-
-        `select_related("retailer_indent")` on the queryset avoids
-        an N+1 here. Without it, this fires one query per order.
-        """
         indent = getattr(obj, "retailer_indent", None)
         return indent.indent_number if indent else ""
 
@@ -1138,84 +1075,16 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
     # Addresses and contact details
     # ------------------------------------------------------------------
 
-    def get_retailer_postal_address(self, obj):
-        return obj.retailer.postal_address if obj.retailer else None
-
-    def get_retailer_postal_code(self, obj):
-        return obj.retailer.postal_code if obj.retailer else None
-
-    def get_retailer_postal_town(self, obj):
-        return obj.retailer.postal_town if obj.retailer else None
-
-    def get_retailer_email(self, obj):
-        return obj.retailer.email if obj.retailer else None
-
-    def get_retailer_phone(self, obj):
-        return obj.retailer.phone if obj.retailer else None
-
-    def get_wholesaler_postal_address(self, obj):
-        return obj.wholesaler.postal_address if obj.wholesaler else None
-
-    def get_wholesaler_postal_code(self, obj):
-        return obj.wholesaler.postal_code if obj.wholesaler else None
-
-    def get_wholesaler_postal_town(self, obj):
-        return obj.wholesaler.postal_town if obj.wholesaler else None
-
-    def get_wholesaler_email(self, obj):
-        return obj.wholesaler.email if obj.wholesaler else None
-
-    def get_wholesaler_phone(self, obj):
-        return obj.wholesaler.phone if obj.wholesaler else None
-
-    # ------------------------------------------------------------------
-    # Payment-related display (delegated to RetailerOrderPayments)
-    # ------------------------------------------------------------------
-
-    def _successful_payment(self, obj):
-        return (
-            models.RetailerOrderPayments.objects
-            .filter(retailer_order=obj, status="SUCCESS")
-            .select_related("payment_method")
-            .first()
-        )
-
-    def get_description(self, obj):
-        payment = self._successful_payment(obj)
-        return payment.description if payment else "N/A"
-
-    def get_provider_reference_number(self, obj):
-        payment = self._successful_payment(obj)
-        return payment.provider_reference_number if payment else "N/A"
-
-    def get_telco(self, obj):
-        payment = self._successful_payment(obj)
-        return payment.telco if payment else "N/A"
-
-    def get_psp_reference_number(self, obj):
-        payment = self._successful_payment(obj)
-        return payment.psp_reference_number if payment else "N/A"
-
-    def get_payment_method_title(self, obj):
-        payment = self._successful_payment(obj)
-        if payment and payment.payment_method:
-            return payment.payment_method.title
-        return "N/A"
-
-    def get_payment_summary(self, obj):
-        agg = (
-            models.RetailerOrderPayments.objects
-            .filter(retailer_order=obj, status="SUCCESS")
-            .aggregate(total=Sum("amount"))
-        )
-        paid = float(agg["total"] or 0)
-        owed = float(obj.final_price_total or 0)
-        return {
-            "paid_total": round(paid, 2),
-            "balance_due": round(max(0.0, owed - paid), 2),
-            "is_paid": paid >= owed if owed else False,
-        }
-
+    def get_retailer_postal_address(self, obj): return obj.retailer.postal_address if obj.retailer else None
+    def get_retailer_postal_code(self, obj): return obj.retailer.postal_code if obj.retailer else None
+    def get_retailer_postal_town(self, obj): return obj.retailer.postal_town if obj.retailer else None
+    def get_retailer_email(self, obj): return obj.retailer.email if obj.retailer else None
+    def get_retailer_phone(self, obj): return obj.retailer.phone if obj.retailer else None
+    def get_wholesaler_postal_address(self, obj): return obj.wholesaler.postal_address if obj.wholesaler else None
+    def get_wholesaler_postal_code(self, obj): return obj.wholesaler.postal_code if obj.wholesaler else None
+    def get_wholesaler_postal_town(self, obj): return obj.wholesaler.postal_town if obj.wholesaler else None
+    def get_wholesaler_email(self, obj): return obj.wholesaler.email if obj.wholesaler else None
+    def get_wholesaler_phone(self, obj): return obj.wholesaler.phone if obj.wholesaler else None
 
 class WholesalerPriceDiscountBannersSerializer(serializers.ModelSerializer):
     class Meta:
