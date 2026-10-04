@@ -29,11 +29,13 @@ import {
 const FORECAST_SYNCED_AT_KEY =
     'wazipos_async_retailer_forecasts_synced_at';
 const FORECAST_SCHEMA_KEY = 'wazipos_forecast_cache_schema';
-const FORECAST_SCHEMA_VERSION = 1;
+const FORECAST_SCHEMA_VERSION = 2;
 const DRAFTS_STORAGE_KEY = 'wazipos_retailer_request_drafts';
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000;
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+/** Suppress a poll if a fetch completed this recently. */
+const MIN_POLL_GAP_MS = 60 * 1000;
 
 /* =========================================================
  * Public types
@@ -220,6 +222,27 @@ function areForecastsEqual(
     return true;
 }
 
+/**
+ * Product ids present locally but absent from the incoming set.
+ *
+ * `remote_id` on a forecast is the product_id, so this is the
+ * forecast analogue of `findLocalOnlyIndents` in the indents
+ * context.
+ */
+function findLocalOnlyForecasts(
+    local: RetailerForecastNormalized[],
+    incoming: RetailerForecastNormalized[]
+): RetailerForecastNormalized[] {
+    if (incoming.length === 0) return [];
+
+    const incomingIds = new Set(
+        incoming.map((f) => f.remote_id).filter(Boolean)
+    );
+    return local.filter(
+        (f) => f.remote_id && !incomingIds.has(f.remote_id)
+    );
+}
+
 /* =========================================================
  * Forecast storage
  * ======================================================= */
@@ -383,6 +406,12 @@ export function ForecastProvider({
     }>({ needed: false, silent: true });
     const prevOnlineRef = useRef<boolean>(isOnline);
 
+    /**
+     * Timestamp of the last *successful* fetch. Used by the poller
+     * to skip a tick if a fetch landed recently.
+     */
+    const lastFetchCompletedAtRef = useRef<number>(0);
+
     useEffect(() => {
         forecastsRef.current = forecasts;
     }, [forecasts]);
@@ -409,8 +438,18 @@ export function ForecastProvider({
         ].join('|');
     }, []);
 
-    /* ---------------- Forecast fetch ---------------- */
-
+    /* =========================================================
+     * Forecast fetch
+     *
+     * The `silent` flag has EXACTLY ONE purpose: to gate the
+     * loading spinner. Every other line of this function —
+     * response parsing, empty-response guard, pruning, state
+     * update, persistent cache write — runs identically for
+     * polled (silent) and manual (non-silent) calls.
+     *
+     * Do not gate reconciliation on `!silent`. A silent poll is
+     * authoritative, the same as a manual refresh.
+     * ========================================================= */
     const fetchForecasts = useCallback(
         async (opts?: { silent?: boolean }) => {
             const silent = opts?.silent ?? false;
@@ -428,7 +467,7 @@ export function ForecastProvider({
             }
 
             isFetchingRef.current = true;
-            if (!silent) setIsLoading(true);
+            if (!silent) setIsLoading(true);          // ← silent-gated
             setErrorMessage(null);
 
             const f = filtersRef.current;
@@ -448,6 +487,11 @@ export function ForecastProvider({
                             f.minAvgDailyDemand ?? 0,
                     });
 
+                log(
+                    `forecasts response (${silent ? 'silent' : 'active'})`,
+                    res
+                );
+
                 if (!res?.ok) {
                     throw new Error(
                         res?.problem || 'Request failed'
@@ -461,6 +505,60 @@ export function ForecastProvider({
                     normalizeForecast(p, body.run_date ?? '')
                 );
 
+                const incomingCount = items.length;
+                const localCount = forecastsRef.current.length;
+
+                // -------------------------------------------------
+                // Empty-response guard.
+                //
+                // Applies to BOTH silent and active fetches. A
+                // server that returns 0 products is far more
+                // likely to be a transient condition than a
+                // genuine "no forecasts exist", and blanking the
+                // cache on that basis would destroy the offline
+                // snapshot. Keep local state; only update the
+                // sync marker.
+                // -------------------------------------------------
+                if (incomingCount === 0 && localCount > 0) {
+                    warn(
+                        'empty forecast response — keeping local state',
+                        { silent, localCount }
+                    );
+                    lastFetchCompletedAtRef.current = Date.now();
+                    return;
+                }
+
+                // -------------------------------------------------
+                // Pruning.
+                //
+                // The server is authoritative for the products it
+                // returned. Any local entry whose remote_id is
+                // absent from the incoming set was dropped
+                // server-side (e.g. the product is now on an
+                // unreceived order, and the backend excludes it).
+                //
+                // Runs for silent and active fetches alike.
+                //
+                // The list replacement below already drops the
+                // missing entries from state, and
+                // writeForecastsToStorage overwrites the cache
+                // with the shorter list — we compute the diff
+                // purely so the prune is observable in the logs.
+                // -------------------------------------------------
+                if (incomingCount < localCount) {
+                    const removed = findLocalOnlyForecasts(
+                        forecastsRef.current,
+                        items
+                    );
+                    if (removed.length > 0) {
+                        log(
+                            `incoming (${incomingCount}) < local (${localCount}) — ` +
+                            `pruning ${removed.length} local-only forecast(s) [${silent ? 'silent' : 'active'}]:`,
+                            removed.map((r) => r.remote_id)
+                        );
+                    }
+                }
+
                 const syncedAt = new Date().toISOString();
 
                 forecastsRef.current = items;
@@ -473,6 +571,8 @@ export function ForecastProvider({
                 setDataSource('server');
 
                 await writeForecastsToStorage(items);
+
+                lastFetchCompletedAtRef.current = Date.now();
 
                 log(
                     `Fetched ${items.length} forecasts (${silent ? 'silent' : 'active'
@@ -509,7 +609,7 @@ export function ForecastProvider({
                     return;
                 }
 
-                if (!silent) setIsLoading(false);
+                if (!silent) setIsLoading(false);     // ← silent-gated
             }
         },
         [filtersKey]
@@ -579,17 +679,38 @@ export function ForecastProvider({
         []
     );
 
-    /* ---------------- Poller ---------------- */
+    /* ---------------- Poller ----------------
+     * Routed through a ref so the interval isn't tied to
+     * fetchForecasts's identity. Without this, an unstable
+     * fetchForecasts would clear-and-restart the interval on
+     * every provider re-render, and the timer would never elapse.
+     *
+     * The poll is also skipped if a fetch completed within the
+     * last MIN_POLL_GAP_MS — avoids a duplicate right after a
+     * manual refresh.
+     */
+
+    const fetchRef = useRef(fetchForecasts);
+    useEffect(() => {
+        fetchRef.current = fetchForecasts;
+    });
 
     useEffect(() => {
         if (!isOnline) return;
 
         const id = setInterval(() => {
-            void fetchForecasts({ silent: true });
+            const elapsed =
+                Date.now() - lastFetchCompletedAtRef.current;
+            if (elapsed < MIN_POLL_GAP_MS) {
+                log('poll skipped — recent fetch');
+                return;
+            }
+            void fetchRef.current({ silent: true });
+            log('Polling forecasts .........');
         }, POLL_INTERVAL_MS);
 
         return () => clearInterval(id);
-    }, [isOnline, fetchForecasts]);
+    }, [isOnline]);
 
     /* ---------------- Filter-driven refetch ---------------- */
 

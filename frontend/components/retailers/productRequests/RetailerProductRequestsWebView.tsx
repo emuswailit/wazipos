@@ -1,14 +1,13 @@
-// app/(admin)/body-systems/AdminBodySystemsWebView.tsx
+// components/retailers/productRequests/RetailerProductRequestsWebView.tsx
 //
-// Web table view for the admin body systems list.
+// Web table view for the retailer's product requests list.
 //
-// Visually mirrors the retailer product-requests web view so the
-// admin and retailer tables share one layout language: same header
-// block, same source pill, same New / Refresh buttons, same search
-// input, same bordered column header row, same row shell.
+// Filter strip uses the shared StatusFilterPill from
+// statusPrimitives so the web header and the mobile strip render
+// the same set of pills with the same counts.
 //
-// Also exports the local `StatusPill` used by both this view and
-// the mobile view.
+// Also exports the local `StatusPill` component used by both this
+// view and the mobile view for row/card status badges.
 
 import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
@@ -22,52 +21,70 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import type { BodySystemItem } from './AdminBodySystemsList';
+import type { PageSize } from './RetailerProductRequestsList';
+import { ProductRequestSummary } from './RetailerProductRequestsList';
+import {
+    StatusFilterPill,
+    type RequestStatusOption,
+} from './statusPrimitives';
 
 const TABLE_MAX_WIDTH = 1600;
 
 const COLUMNS: { label: string; flex: number }[] = [
-    { label: 'System', flex: 2.4 },
-    { label: 'State', flex: 1.0 },
-    { label: 'Description', flex: 2.5 },
+    { label: 'Request', flex: 2.4 },
+    { label: 'Status', flex: 1.0 },
+    { label: 'Urgency', flex: 0.9 },
+    { label: 'Lines', flex: 0.7 },
+    { label: 'Fulfilled', flex: 0.9 },
+    { label: 'Expires', flex: 1.0 },
     { label: 'Created', flex: 1.0 },
-    { label: 'Updated', flex: 1.0 },
     { label: 'Actions', flex: 1.0 },
 ];
 
 interface Props {
     query: string;
     setQuery: (v: string) => void;
+    statusFilter: string | null;
+    setStatusFilter: (v: string | null) => void;
+    statusOptions: RequestStatusOption[];
+    statusCounts: Record<string, number>;
     onRefresh: () => void;
     refreshing: boolean;
     sourceLabel: string;
     sourceTone: 'server' | 'cache' | 'none';
     lastSyncedTime: string;
-    items: BodySystemItem[];
+    items: ProductRequestSummary[];
     emptyComponent?: React.ReactNode;
     onOpenCreate: () => void;
-    onPressItem: (item: BodySystemItem) => void;
-    onEditItem: (item: BodySystemItem) => void;
-    formatDateHandler: (dateString: string) => string;
+    onPressRequest: (item: ProductRequestSummary) => void;
     page: number;
-    pageSize: number;
+    pageSize: PageSize;
     totalItems: number;
     totalPages: number;
     pageStart: number;
     pageEnd: number;
     onPrev: () => void;
     onNext: () => void;
-    onPageSizeChange: (size: any) => void;
+    onPageSizeChange: (size: PageSize) => void;
 }
 
 /* Stable key regardless of sync state. */
-function rowKey(item: BodySystemItem): string {
-    return item.id || String(Math.random());
+function rowKey(item: ProductRequestSummary): string {
+    return (
+        item.remote_id ??
+        item.draft_id ??
+        item.request_number ??
+        String(Math.random())
+    );
 }
 
-export function AdminBodySystemsWebView({
+export function RetailerProductRequestsWebView({
     query,
     setQuery,
+    statusFilter,
+    setStatusFilter,
+    statusOptions,
+    statusCounts,
     onRefresh,
     refreshing,
     sourceLabel,
@@ -76,9 +93,7 @@ export function AdminBodySystemsWebView({
     items,
     emptyComponent,
     onOpenCreate,
-    onPressItem,
-    onEditItem,
-    formatDateHandler,
+    onPressRequest,
     page,
     pageSize,
     totalItems,
@@ -132,7 +147,7 @@ export function AdminBodySystemsWebView({
                                     fontSize: theme.fontSize.lg,
                                 }}
                             >
-                                Body Systems
+                                Product Requests
                             </Text>
                             <View className="flex-row items-center gap-2 mt-1">
                                 <View
@@ -154,8 +169,10 @@ export function AdminBodySystemsWebView({
                                     <Text
                                         style={{
                                             color: theme.textDark,
-                                            fontFamily: theme.font.medium,
-                                            fontSize: theme.fontSize.xs,
+                                            fontFamily:
+                                                theme.font.medium,
+                                            fontSize:
+                                                theme.fontSize.xs,
                                         }}
                                     >
                                         Synced {lastSyncedTime}
@@ -190,7 +207,7 @@ export function AdminBodySystemsWebView({
                                         fontSize: theme.fontSize.xs,
                                     }}
                                 >
-                                    New system
+                                    New request
                                 </Text>
                             </Pressable>
 
@@ -212,8 +229,10 @@ export function AdminBodySystemsWebView({
                                     <Text
                                         className="uppercase tracking-widest text-white"
                                         style={{
-                                            fontFamily: theme.font.bold,
-                                            fontSize: theme.fontSize.xs,
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize:
+                                                theme.fontSize.xs,
                                         }}
                                     >
                                         Refresh
@@ -223,10 +242,37 @@ export function AdminBodySystemsWebView({
                         </View>
                     </View>
 
+                    {/* Filter strip — shared StatusFilterPill */}
+                    <View className="flex-row flex-wrap gap-1.5 mb-2">
+                        {statusOptions.map((s) => {
+                            const isActive =
+                                s.value === 'ALL'
+                                    ? statusFilter === null
+                                    : statusFilter === s.value;
+                            return (
+                                <StatusFilterPill
+                                    key={s.value}
+                                    option={s}
+                                    active={isActive}
+                                    count={
+                                        statusCounts[s.value] ?? 0
+                                    }
+                                    onPress={() =>
+                                        setStatusFilter(
+                                            s.value === 'ALL'
+                                                ? null
+                                                : s.value
+                                        )
+                                    }
+                                />
+                            );
+                        })}
+                    </View>
+
                     <TextInput
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Search body systems..."
+                        placeholder="Search by product, reference, or wholesaler..."
                         placeholderTextColor="#94a3b8"
                         autoCorrect={false}
                         autoCapitalize="none"
@@ -296,7 +342,7 @@ export function AdminBodySystemsWebView({
                                         fontSize: theme.fontSize.sm,
                                     }}
                                 >
-                                    No body systems match the filters.
+                                    No requests match the filters.
                                 </Text>
                             </View>
                         )
@@ -305,9 +351,7 @@ export function AdminBodySystemsWebView({
                             <TableRow
                                 key={rowKey(item)}
                                 item={item}
-                                onPress={() => onPressItem(item)}
-                                onEdit={() => onEditItem(item)}
-                                formatDateHandler={formatDateHandler}
+                                onPress={() => onPressRequest(item)}
                             />
                         ))
                     )}
@@ -330,24 +374,57 @@ export function AdminBodySystemsWebView({
 }
 
 /* =========================================================
+ * Row label helpers
+ * ======================================================= */
+
+function referenceLabel(item: ProductRequestSummary): string {
+    return item.request_number || '—';
+}
+
+function productsLabel(item: ProductRequestSummary): string {
+    const preview = item.items ?? [];
+    if (preview.length === 0) return 'No products yet';
+
+    const first = preview[0];
+    const title = first.product_title?.trim() || first.product_id;
+    const extra = preview.length - 1;
+    return extra > 0 ? `${title} +${extra} more` : title;
+}
+
+function wholesalersLabel(
+    item: ProductRequestSummary
+): string | null {
+    const preview = item.items ?? [];
+    const all: string[] = [];
+    for (const p of preview) {
+        const targets = p.target_wholesalers ?? [];
+        for (const w of targets) {
+            const t = w?.title;
+            if (t && !all.includes(t)) all.push(t);
+        }
+    }
+    if (all.length === 0) return null;
+    const shown = all.slice(0, 2).join(', ');
+    const rest = all.length - 2;
+    return rest > 0 ? `${shown} +${rest}` : shown;
+}
+
+/* =========================================================
  * Table row
  * ======================================================= */
 function TableRow({
     item,
     onPress,
-    onEdit,
-    formatDateHandler,
 }: {
-    item: BodySystemItem;
+    item: ProductRequestSummary;
     onPress: () => void;
-    onEdit: () => void;
-    formatDateHandler: (dateString: string) => string;
 }) {
     const { theme, isDarkMode } = useAuth();
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
 
-    const isModified =
-        !!item.updated && item.updated !== item.created;
+    const reference = referenceLabel(item);
+    const products = productsLabel(item);
+    const wholesalers = wholesalersLabel(item);
 
     return (
         <Pressable
@@ -355,7 +432,7 @@ function TableRow({
             className="flex-row items-center rounded-xl border px-3 py-3 mt-2"
             style={{ backgroundColor: theme.panel, borderColor }}
         >
-            {/* System — title + short id (mirrors Request column) */}
+            {/* Reference — request number + products + wholesalers */}
             <View style={{ flex: 2.4, paddingRight: 8 }}>
                 <Text
                     className="text-[13px]"
@@ -365,43 +442,71 @@ function TableRow({
                     }}
                     numberOfLines={1}
                 >
-                    {item.title || '—'}
+                    {reference}
                 </Text>
                 <Text
-                    className="text-[11px] mt-0.5"
+                    className="text-[12px] mt-0.5"
                     style={{
-                        color: theme.primary,
-                        fontFamily: theme.font.semibold,
+                        color: theme.text,
+                        fontFamily: theme.font.medium,
                     }}
                     numberOfLines={1}
                 >
-                    ID {item.id.slice(0, 8) || '—'}
+                    {products}
                 </Text>
+                {wholesalers ? (
+                    <Text
+                        className="text-[11px] mt-0.5"
+                        style={{
+                            color: theme.primary,
+                            fontFamily: theme.font.semibold,
+                        }}
+                        numberOfLines={1}
+                    >
+                        Sent to: {wholesalers}
+                    </Text>
+                ) : null}
             </View>
 
-            {/* State pill */}
             <View style={{ flex: 1.0 }}>
                 <StatusPill
-                    label={isModified ? 'Modified' : 'New'}
-                    tone={isModified ? 'special' : 'open'}
+                    label={item.status_display}
+                    tone={statusTone(item.status)}
                 />
             </View>
 
-            {/* Description */}
+            <View style={{ flex: 0.9 }}>
+                <StatusPill
+                    label={item.urgency_display}
+                    tone={urgencyTone(item.urgency)}
+                />
+            </View>
+
             <Text
-                className="text-[12px]"
+                className="text-[13px]"
                 style={{
-                    flex: 2.5,
+                    flex: 0.7,
                     color: theme.text,
                     fontFamily: theme.font.medium,
-                    paddingRight: 8,
                 }}
-                numberOfLines={2}
             >
-                {item.description || '—'}
+                {item.total_line_count}
             </Text>
 
-            {/* Created */}
+            <Text
+                className="text-[13px]"
+                style={{
+                    flex: 0.9,
+                    color:
+                        item.fulfilled_line_count > 0
+                            ? '#10b981'
+                            : theme.text,
+                    fontFamily: theme.font.bold,
+                }}
+            >
+                {item.fulfilled_line_count} / {item.total_line_count}
+            </Text>
+
             <Text
                 className="text-[12px]"
                 style={{
@@ -411,10 +516,9 @@ function TableRow({
                 }}
                 numberOfLines={1}
             >
-                {formatDateHandler(item.created)}
+                {item.expires_at ? formatDate(item.expires_at) : '—'}
             </Text>
 
-            {/* Updated */}
             <Text
                 className="text-[12px]"
                 style={{
@@ -424,10 +528,9 @@ function TableRow({
                 }}
                 numberOfLines={1}
             >
-                {formatDateHandler(item.updated)}
+                {formatDate(item.created)}
             </Text>
 
-            {/* Actions */}
             <View style={{ flex: 1.0 }}>
                 <Pressable
                     onPress={onPress}
@@ -498,4 +601,35 @@ export function StatusPill({
             </Text>
         </View>
     );
+}
+
+function statusTone(
+    status: string
+): 'open' | 'closed' | 'special' | 'success' | 'warning' {
+    if (status === 'FULFILLED') return 'success';
+    if (status === 'PARTIALLY_FULFILLED') return 'warning';
+    if (status === 'CANCELLED' || status === 'EXPIRED')
+        return 'closed';
+    if (status === 'PUBLISHED') return 'open';
+    if (status === 'ACKNOWLEDGED') return 'open';
+    return 'special';
+}
+
+function urgencyTone(
+    urgency: string
+): 'open' | 'closed' | 'special' | 'success' | 'warning' {
+    if (urgency === 'high') return 'warning';
+    if (urgency === 'medium') return 'special';
+    return 'closed';
+}
+
+function formatDate(raw: string): string {
+    if (!raw) return '—';
+    const d = new Date(raw.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return raw;
+    return d.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+    });
 }

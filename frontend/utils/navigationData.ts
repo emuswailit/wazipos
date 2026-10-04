@@ -125,8 +125,29 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             },
             {
                 id: 5,
-                title: "Products Requets",
+                title: "Products Requests",
                 route: "/productsRequests?tab=productsRequests",
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
+                showInSidebar: true,
+            },
+            {
+                id: 6,
+                title: "Campaigns",
+                route: "/wholesalerCampaigns?tab=wholesalerCampaigns",
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
+                showInSidebar: true,
+            },
+            {
+                id: 7,
+                title: "Price Discounts",
+                route: "/priceDiscounts?tab=priceDiscounts",
+                allowedRoles: ["GeneralWholesalerSuperAdmin"],
+                showInSidebar: true,
+            },
+            {
+                id: 8,
+                title: "Quantity Discounts",
+                route: "/quantityDiscounts?tab=quantityDiscounts",
                 allowedRoles: ["GeneralWholesalerSuperAdmin"],
                 showInSidebar: true,
             },
@@ -259,38 +280,45 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 allowedRoles: ["GeneralRetailerSuperAdmin"],
                 showInSidebar: true,
             },
+            // {
+            //     id: 8,
+            //     title: "Product Requests",
+            //     route: "/productsRequests?tab=productsRequests",
+            //     allowedRoles: ["GeneralRetailerSuperAdmin"],
+            //     showInSidebar: true,
+            // },
             {
                 id: 8,
-                title: "Product Requests",
-                route: "/productsRequests?tab=productsRequests",
-                allowedRoles: ["GeneralRetailerSuperAdmin"],
-                showInSidebar: true,
-            },
-            {
-                id: 9,
                 title: "Retailer Indents",
                 route: "/retailerIndents?tab=retailerIndents", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 10,
+                id: 9,
                 title: "Stock Outs",
                 route: "/stockOuts?tab=stockOuts", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 11,
+                id: 10,
                 title: "Wholesale Marketplace",
                 route: "/wholesaleMarketplace?tab=wholesaleMarketplace", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },
             {
-                id: 12,
+                id: 11,
                 title: "Products Requests",
                 route: "/productRequests?tab=productRequests", // Points directly to app/(admin)/
+                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+                showInSidebar: true
+            },
+            {
+                id: 12,
+                title: "Opted In Campaigns",
+                route: "/retailerCampaigns?tab=retailerCampaigns", // Points directly to app/(admin)/
                 allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
                 showInSidebar: true
             },

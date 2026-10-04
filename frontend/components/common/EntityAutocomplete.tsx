@@ -8,6 +8,7 @@
 // - Web: portal into document.body, single-tap select
 // - Native: inline dropdown
 // - NativeWind layout, useAuth() colors
+// - Schema-safe validation: never crashes on missing field paths
 
 import { useAuth } from '@/context/AuthContext';
 import type { EntityItem } from '@/databases/types';
@@ -40,6 +41,33 @@ if (Platform.OS === 'web') {
 }
 
 /* =========================================================
+ * Safe field validation
+ *
+ * Formik `validateField(name)` throws (or returns a rejecting
+ * promise) if `name` is not a path in the Yup schema. Callers
+ * frequently only declare the id field (e.g. `received_from`)
+ * and leave the display field (`received_from_title`) out of
+ * the schema. Swallow both sync and async errors so a missing
+ * path never crashes the UI.
+ * ======================================================= */
+function safeValidateField(formik: any, field: string) {
+    if (!formik?.validateField || !field) return;
+
+    // Cheap guard: skip if the field isn't even in initialValues.
+    const iv = formik.initialValues;
+    if (iv && !(field in iv)) return;
+
+    try {
+        const result = formik.validateField(field);
+        if (result && typeof (result as any).catch === 'function') {
+            (result as any).catch(() => { });
+        }
+    } catch {
+        // Synchronous throw from Yup — safe to ignore.
+    }
+}
+
+/* =========================================================
  * Types
  * ======================================================= */
 export interface EntityAutocompleteProps {
@@ -53,14 +81,10 @@ export interface EntityAutocompleteProps {
     /**
      * Convenience filter — keeps only entities whose
      * `entity_type` is in this list.
-     * Example: ['GeneralRetailer', 'PharmaceuticalRetailer']
      */
     entityTypes?: string[];
 
-    /**
-     * Arbitrary predicate filter, applied after `entityTypes`.
-     * Use for extra conditions (e.g. is_verified).
-     */
+    /** Arbitrary predicate filter, applied after `entityTypes`. */
     filter?: (e: EntityItem) => boolean;
 
     /* -------- Formik integration -------- */
@@ -180,7 +204,6 @@ export function EntityAutocomplete({
     const baseList = useMemo(() => {
         let list = entities ?? [];
 
-        // 1. Filter by entity_type if the caller supplied a list
         if (entityTypes && entityTypes.length > 0) {
             const allowed = new Set(entityTypes);
             list = list.filter((e) =>
@@ -188,19 +211,12 @@ export function EntityAutocomplete({
             );
         }
 
-        // 2. Apply the caller's custom predicate
         if (filter) list = list.filter(filter);
 
         return list;
     }, [entities, entityTypes, filter]);
 
-    /* -------- Sync input with selected --------
-     *
-     * `effectiveValue` is a short object built with `remote_id`
-     * and `title` keys. Read those exact keys, not the raw
-     * Formik field names. Deps use scalar sub-fields so the
-     * effect only re-runs when the selection actually changes.
-     */
+    /* -------- Sync input with selected -------- */
     useEffect(() => {
         if (effectiveValue) {
             setQuery(
@@ -255,8 +271,6 @@ export function EntityAutocomplete({
                 setApiError(null);
                 const res = await onSearch(query);
 
-                // Remote results still pass through entityTypes
-                // + filter so the constraint isn't bypassed.
                 let filtered = res ?? [];
                 if (entityTypes && entityTypes.length > 0) {
                     const allowed = new Set(entityTypes);
@@ -376,15 +390,28 @@ export function EntityAutocomplete({
     }, [open]);
 
     /* -------- Select -------- */
+    /* -------- Select -------- */
     const handleSelect = (e: EntityItem) => {
         if (isFormik) {
-            formik.setFieldValue(idField, e.remote_id);
+            // Some entity payloads expose the primary key as `id`
+            // rather than `remote_id`. Fall back so we never write
+            // `undefined` (Formik deletes the key when value is
+            // undefined, which then trips `.required()`).
+            const entityId =
+                (e as any).remote_id ??
+                (e as any).id ??
+                '';
+
+            formik.setFieldValue(idField, entityId);
             formik.setFieldValue(
                 titleField,
                 e.title ?? ''
             );
             formik.setFieldTouched(titleField, true, false);
-            formik.validateField(titleField);
+
+            safeValidateField(formik, idField);
+            safeValidateField(formik, titleField);
+
             onAfterSelect?.(e);
         } else {
             controlledOnSelect?.(e);

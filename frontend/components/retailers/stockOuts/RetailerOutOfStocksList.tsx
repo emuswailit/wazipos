@@ -1,4 +1,9 @@
 // components/retailers/stockOuts/RetailerOutOfStocksList.tsx
+//
+// Retailer out-of-stocks view — shell.
+//
+// Owns data + filter state, dispatches to the Web or Mobile view,
+// and mounts the offers / details / form modals.
 
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
 import { useRetailerOutOfStocksSync } from '@/context/RetailerOutOfStocksSyncContext';
@@ -14,6 +19,7 @@ import React, {
     useState,
 } from 'react';
 import { useWindowDimensions } from 'react-native';
+
 import { OutOfStockDetailsModal } from './OutOfStockDetailsModal';
 import { OutOfStockFormModal } from './OutOfStockFormModal';
 import {
@@ -21,7 +27,10 @@ import {
     OutOfStockOffersModal,
 } from './OutOfStockOffersModal';
 import { RetailerOutOfStocksMobileView } from './RetailerOutOfStocksMobileView';
-import { RetailerOutOfStocksWebView } from './RetailerOutOfStocksWebView';
+import {
+    RetailerOutOfStocksWebView,
+    type StockOutCounts,
+} from './RetailerOutOfStocksWebView';
 
 export type { AcceptedOfferPayload };
 
@@ -110,6 +119,22 @@ export default function RetailerOutOfStocksList({
             });
         });
     }, [outOfStocks, onlyPending, query]);
+
+    /* ---------------- Counts ---------------- */
+    const counts: StockOutCounts = useMemo(
+        () => ({
+            total: outOfStocks.length,
+            pending: outOfStocks.filter(
+                (i) => !i.is_ordered && !i.is_pending
+            ).length,
+            ordered: outOfStocks.filter((i) => i.is_ordered)
+                .length,
+            withOffers: outOfStocks.filter(
+                (i) => (i.wholesaler_offers?.length ?? 0) > 0
+            ).length,
+        }),
+        [outOfStocks]
+    );
 
     /* ---------------- Pagination ---------------- */
     const totalItems = filtered.length;
@@ -374,6 +399,7 @@ export default function RetailerOutOfStocksList({
                     : 'No data',
         sourceTone: dataSource,
         lastSyncedTime,
+        counts,
         items: paginated,
         emptyComponent,
         onViewOffers: openOffers,

@@ -1,18 +1,33 @@
 // components/retailers/stockOuts/OutOfStockOffersModal.tsx
+//
+// Offer picker for a product the retailer has flagged as out of stock.
+// Shows every wholesaler offer available for that product and lets the
+// user add one of them (or several, sequentially) to the current open
+// indent.
+//
+// Consumes `useIndentBridge` directly, so the same offline-first
+// semantics apply here as in the marketplace: the local row updates
+// instantly, the remote write is attempted, and a failed POST is
+// enqueued for background retry.
+//
+// The parent passes only the target out-of-stock row and an optional
+// feedback callback. No more `onSelectOffer` / `onRemoveItem` props.
+//
+// Toggle semantics (matches the pre-existing UX):
+//   - Tap an unselected offer  →  select it and save to the indent
+//   - Tap the selected offer   →  deselect it and remove from the indent
+//   - Blur the quantity field  →  update the quantity on the saved row
 
 import { useAuth } from '@/context/AuthContext';
-import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
-import {
-    RetailerIndentItem,
+import type {
     RetailerOutOfStockNormalized,
     RetailerOutOfStockWholesalerOffer,
 } from '@/databases/types';
-import React, {
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
+import { useIndentBridge } from '@/hooks/useIndentBridge';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
+    Image,
     Modal,
     Platform,
     Pressable,
@@ -23,28 +38,32 @@ import {
 } from 'react-native';
 
 /* ------------------------------------------------------------------ */
-/* Types                                                               */
+/* Feedback shape                                                      */
 /* ------------------------------------------------------------------ */
-export interface AcceptedOfferPayload {
-    outOfStock: RetailerOutOfStockNormalized;
-    quantity: number;
-    offer: RetailerOutOfStockWholesalerOffer;
+
+export interface OutOfStockFeedback {
+    ok: boolean;
+    mode: 'remote' | 'draft' | 'failed';
+    action: 'add' | 'remove';
+    offerId: string;
+    message?: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Props                                                               */
+/* ------------------------------------------------------------------ */
 
 interface OutOfStockOffersModalProps {
     item: RetailerOutOfStockNormalized | null;
     onClose: () => void;
-    onSelectOffer: (payload: AcceptedOfferPayload) => void;
-    onRemoveItem: (
-        outOfStock: RetailerOutOfStockNormalized,
-        offer: RetailerOutOfStockWholesalerOffer,
-        existingItemId: string
-    ) => void;
+    /** Optional parent feedback hook for toasts / analytics. */
+    onFeedback?: (result: OutOfStockFeedback) => void;
 }
 
 /* ------------------------------------------------------------------ */
 /* Small helpers                                                       */
 /* ------------------------------------------------------------------ */
+
 const API_BASE_URL = 'https://api.wazipos.co.ke';
 
 const resolveImage = (raw: any): string | null => {
@@ -60,11 +79,11 @@ const resolveImage = (raw: any): string | null => {
 };
 
 const formatMoney = (
-    v: string | number | null | undefined
+    v: string | number | null | undefined,
 ): string => {
     if (v === null || v === undefined) return '—';
     const n = Number(v);
-    if (isNaN(n)) return '—';
+    if (Number.isNaN(n)) return '—';
     return n.toLocaleString(undefined, {
         maximumFractionDigits: 2,
     });
@@ -73,60 +92,53 @@ const formatMoney = (
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
+
 export function OutOfStockOffersModal({
     item,
     onClose,
-    onSelectOffer,
-    onRemoveItem,
+    onFeedback,
 }: OutOfStockOffersModalProps) {
     const { theme } = useAuth();
     const {
         currentOpenIndent,
-        openCount,
+        findItemByReceipt,
+        addToIndent,
+        removeFromIndent,
         queueRevision,
-    } = useRetailerIndentsSync();
+    } = useIndentBridge();
 
     const [quantityText, setQuantityText] = useState('');
     const [selectedOfferId, setSelectedOfferId] = useState<
         string | null
     >(null);
+    const [busy, setBusy] = useState(false);
+    const [errorText, setErrorText] = useState<string | null>(null);
 
     const offers = item?.wholesaler_offers ?? [];
 
-    /* Map of offerId -> existing RetailerIndentItem */
+    /* Map of offerId → existing RetailerIndentItem. Delegated to
+       the bridge, but recomputed whenever the target list changes. */
     const savedItemsByOfferId = useMemo(() => {
-        const map: Record<string, RetailerIndentItem> = {};
-        if (!currentOpenIndent) return map;
-
-        const savedItems =
-            currentOpenIndent.retailer_indent_items ?? [];
-
+        const map: Record<string, any> = {};
         for (const offer of offers) {
-            const match = savedItems.find(
-                (it) => it.wholesale_receipt === offer.id
-            );
+            const match = findItemByReceipt(offer.id);
             if (match) map[offer.id] = match;
         }
         return map;
-    }, [currentOpenIndent, offers]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [offers, findItemByReceipt, queueRevision]);
 
-    /* Seed form whenever the target changes */
+    /* Seed form whenever the target or indent state changes. */
     useEffect(() => {
         if (!item) return;
 
-        const savedMap: Record<string, RetailerIndentItem> = {};
-        const savedItems =
-            currentOpenIndent?.retailer_indent_items ?? [];
-        for (const offer of item.wholesaler_offers ?? []) {
-            const match = savedItems.find(
-                (it) => it.wholesale_receipt === offer.id
-            );
-            if (match) savedMap[offer.id] = match;
-        }
+        const savedIds = (item.wholesaler_offers ?? [])
+            .map((o) => o.id)
+            .filter((id) => !!findItemByReceipt(id));
 
-        const preSelectedId = Object.keys(savedMap)[0] ?? null;
+        const preSelectedId = savedIds[0] ?? null;
         const preItem = preSelectedId
-            ? savedMap[preSelectedId]
+            ? findItemByReceipt(preSelectedId)
             : null;
 
         setSelectedOfferId(preSelectedId);
@@ -134,27 +146,26 @@ export function OutOfStockOffersModal({
             String(
                 preItem?.required_quantity ??
                 item.required_quantity ??
-                0
-            )
+                0,
+            ),
         );
+        setErrorText(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        item,
-        currentOpenIndent?.remote_id,
-        queueRevision,
-    ]);
+    }, [item, currentOpenIndent?.remote_id, queueRevision]);
 
-    /* Web: ESC closes the modal */
+    /* Web: ESC closes the modal (skipped while a mutation is busy). */
     useEffect(() => {
         if (Platform.OS !== 'web') return;
         if (!item) return;
         const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
+            if (e.key === 'Escape' && !busy) onClose();
         };
         window.addEventListener('keydown', handler);
         return () =>
             window.removeEventListener('keydown', handler);
-    }, [item, onClose]);
+    }, [item, onClose, busy]);
+
+    /* ── Derived ───────────────────────────────────────────── */
 
     const parsedQuantity = useMemo(() => {
         const n = Number(quantityText);
@@ -167,80 +178,148 @@ export function OutOfStockOffersModal({
         () =>
             offers.find((o) => o.id === selectedOfferId) ??
             null,
-        [offers, selectedOfferId]
+        [offers, selectedOfferId],
     );
 
     const selectionIsSaved = !!(
-        selectedOfferId &&
-        savedItemsByOfferId[selectedOfferId]
+        selectedOfferId && savedItemsByOfferId[selectedOfferId]
     );
 
-    const handleToggle = (
-        offer: RetailerOutOfStockWholesalerOffer
+    const borderColor = theme.isDarkMode ? '#334155' : '#e2e8f0';
+
+    /* ── Mutations ─────────────────────────────────────────── */
+
+    const commitAdd = async (
+        offer: RetailerOutOfStockWholesalerOffer,
+        qty: number,
     ) => {
-        if (!item) return;
+        if (!item || qty <= 0) return;
+
+        setBusy(true);
+        setErrorText(null);
+
+        const res = await addToIndent({
+            wholesaleReceipt: offer.id,
+            quantity: qty,
+            meta: {
+                wholesaleReceiptTitle:
+                    offer.title ||
+                    offer.product_title ||
+                    item.product_title,
+                wholesaler: offer.received_from ?? null,
+                wholesalerTitle:
+                    offer.received_from_details?.title ?? '',
+                unitOfReceipt: offer.unit_of_receipt,
+                unitSellingPrice: offer.unit_selling_price,
+                finalUnitSellingPrice:
+                    offer.final_unit_selling_price,
+                images: Array.isArray(offer.images)
+                    ? offer.images
+                    : [],
+            },
+        });
+
+        setBusy(false);
+
+        if (!res.ok) {
+            setErrorText(
+                res.message ?? 'Could not add to indent.',
+            );
+        }
+
+        onFeedback?.({
+            ok: res.ok,
+            mode: res.mode,
+            action: 'add',
+            offerId: offer.id,
+            message: res.message,
+        });
+    };
+
+    const commitRemove = async (
+        offer: RetailerOutOfStockWholesalerOffer,
+    ) => {
+        const existing = savedItemsByOfferId[offer.id];
+        if (!existing) return;
+
+        setBusy(true);
+        setErrorText(null);
+
+        const res = await removeFromIndent(existing.id);
+
+        setBusy(false);
+
+        if (!res.ok) {
+            setErrorText(
+                res.message ?? 'Could not remove from indent.',
+            );
+        }
+
+        onFeedback?.({
+            ok: res.ok,
+            mode: res.mode,
+            action: 'remove',
+            offerId: offer.id,
+            message: res.message,
+        });
+    };
+
+    const handleToggle = async (
+        offer: RetailerOutOfStockWholesalerOffer,
+    ) => {
+        if (!item || busy) return;
 
         const isCurrentlySelected =
             selectedOfferId === offer.id;
 
         if (isCurrentlySelected) {
             setSelectedOfferId(null);
-            const existing =
-                savedItemsByOfferId[offer.id];
-            if (existing) {
-                onRemoveItem(item, offer, existing.id);
-            }
+            await commitRemove(offer);
             return;
         }
 
         setSelectedOfferId(offer.id);
         const existing = savedItemsByOfferId[offer.id];
-        setQuantityText(
-            String(
-                existing?.required_quantity ??
-                item.required_quantity ??
-                0
-            )
+        const qty = Number(
+            existing?.required_quantity ??
+            item.required_quantity ??
+            0,
         );
+        setQuantityText(String(qty));
+
+        // Auto-commit the new selection immediately (matches the
+        // existing stock-outs UX — tap once to add).
+        if (!existing && qty > 0) {
+            await commitAdd(offer, qty);
+        }
     };
 
-    const handleQuantityBlur = () => {
-        if (!item || !selectedOffer) return;
+    const handleQuantityBlur = async () => {
+        if (!item || !selectedOffer || busy) return;
         if (!selectionIsSaved) return;
         if (parsedQuantity <= 0) return;
 
-        onSelectOffer({
-            outOfStock: item,
-            quantity: parsedQuantity,
-            offer: selectedOffer,
-        });
-    };
+        // Only re-commit if the value actually changed.
+        const existing =
+            savedItemsByOfferId[selectedOffer.id];
+        if (
+            existing?.required_quantity === parsedQuantity
+        )
+            return;
 
-    const handleSave = () => {
-        if (!item) return;
-        if (!selectedOffer) return;
-        if (parsedQuantity <= 0) return;
-        if (selectionIsSaved) return;
-
-        onSelectOffer({
-            outOfStock: item,
-            quantity: parsedQuantity,
-            offer: selectedOffer,
-        });
+        await commitAdd(selectedOffer, parsedQuantity);
     };
 
     if (!item) return null;
 
-    const borderColor = theme.isDarkMode
-        ? '#334155'
-        : '#e2e8f0';
+    /* ── Render ────────────────────────────────────────────── */
 
     return (
         <Modal
             visible={!!item}
             transparent
             animationType="fade"
-            onRequestClose={onClose}
+            onRequestClose={busy ? undefined : onClose}
         >
             <View
                 className="flex-1 items-center justify-center p-4"
@@ -252,7 +331,7 @@ export function OutOfStockOffersModal({
             >
                 <Pressable
                     className="absolute inset-0"
-                    onPress={onClose}
+                    onPress={busy ? undefined : onClose}
                 />
 
                 <View
@@ -263,7 +342,7 @@ export function OutOfStockOffersModal({
                         borderColor,
                     }}
                 >
-                    {/* Header */}
+                    {/* ── Header ───────────────────────────── */}
                     <View className="flex-row items-start mb-4">
                         <View className="flex-1">
                             <Text
@@ -323,19 +402,31 @@ export function OutOfStockOffersModal({
                                             theme.fontSize.xs,
                                     }}
                                 >
-                                    No open indent available
+                                    A new indent will be created
+                                    when you save.
                                 </Text>
                             )}
                         </View>
+
+                        {busy && (
+                            <ActivityIndicator
+                                size="small"
+                                color={theme.primary}
+                                style={{ marginRight: 8 }}
+                            />
+                        )}
+
                         <Pressable
-                            onPress={onClose}
+                            onPress={busy ? undefined : onClose}
                             className="p-1.5"
                             hitSlop={10}
+                            disabled={busy}
                         >
                             <Text
                                 style={{
                                     color: theme.textDark,
                                     fontSize: 16,
+                                    opacity: busy ? 0.4 : 1,
                                 }}
                             >
                                 ✕
@@ -343,13 +434,42 @@ export function OutOfStockOffersModal({
                         </Pressable>
                     </View>
 
+                    {/* ── Error banner ─────────────────────── */}
+                    {errorText ? (
+                        <View
+                            style={{
+                                backgroundColor:
+                                    'rgba(220,38,38,0.1)',
+                                borderColor:
+                                    'rgba(220,38,38,0.35)',
+                                borderWidth: 1,
+                                borderRadius: 8,
+                                paddingHorizontal: 10,
+                                paddingVertical: 8,
+                                marginBottom: 12,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: '#dc2626',
+                                    fontFamily:
+                                        theme.font.medium,
+                                    fontSize:
+                                        theme.fontSize.xs,
+                                }}
+                            >
+                                {errorText}
+                            </Text>
+                        </View>
+                    ) : null}
+
                     <ScrollView
                         style={{ maxHeight: 460 }}
                         contentContainerStyle={{
                             paddingBottom: 8,
                         }}
                     >
-                        {/* Quantity */}
+                        {/* ── Quantity ─────────────────────── */}
                         <View className="mb-1">
                             <Text
                                 className="uppercase tracking-widest mb-2"
@@ -368,8 +488,8 @@ export function OutOfStockOffersModal({
                                     setQuantityText(
                                         t.replace(
                                             /[^0-9]/g,
-                                            ''
-                                        )
+                                            '',
+                                        ),
                                     )
                                 }
                                 onBlur={handleQuantityBlur}
@@ -377,6 +497,7 @@ export function OutOfStockOffersModal({
                                 inputMode="numeric"
                                 placeholder="0"
                                 placeholderTextColor="#94a3b8"
+                                editable={!busy}
                                 className="h-11 rounded-xl border px-3.5"
                                 style={{
                                     borderColor,
@@ -406,7 +527,7 @@ export function OutOfStockOffersModal({
                             </Text>
                         </View>
 
-                        {/* Offers — single select */}
+                        {/* ── Offers ───────────────────────── */}
                         <View className="mt-5">
                             <Text
                                 className="uppercase tracking-widest mb-2"
@@ -448,20 +569,17 @@ export function OutOfStockOffersModal({
                                             o.id
                                             ]
                                         }
-                                        onSelect={() => {
-                                            handleToggle(o);
-                                            setTimeout(
-                                                handleSave,
-                                                0
-                                            );
-                                        }}
+                                        busy={busy}
+                                        onSelect={() =>
+                                            handleToggle(o)
+                                        }
                                     />
                                 ))
                             )}
                         </View>
                     </ScrollView>
 
-                    {/* Footer */}
+                    {/* ── Footer ───────────────────────────── */}
                     <View
                         className="flex-row items-center justify-between mt-4 pt-4 border-t gap-3"
                         style={{ borderColor }}
@@ -475,19 +593,24 @@ export function OutOfStockOffersModal({
                             }}
                         >
                             {selectionIsSaved
-                                ? `Saved • Qty ${parsedQuantity || 0}`
+                                ? `Saved • Qty ${parsedQuantity || 0
+                                }`
                                 : selectedOffer
-                                    ? `Selected • Qty ${parsedQuantity || 0}`
-                                    : `No offer selected • Qty ${parsedQuantity || 0}`}
+                                    ? `Selected • Qty ${parsedQuantity || 0
+                                    }`
+                                    : `No offer selected • Qty ${parsedQuantity || 0
+                                    }`}
                         </Text>
                         <View className="flex-row gap-2">
                             <Pressable
                                 onPress={onClose}
+                                disabled={busy}
                                 className="px-3.5 py-2.5 rounded-xl border"
                                 style={{
                                     borderColor,
                                     backgroundColor:
                                         'transparent',
+                                    opacity: busy ? 0.5 : 1,
                                 }}
                             >
                                 <Text
@@ -513,15 +636,18 @@ export function OutOfStockOffersModal({
 /* ------------------------------------------------------------------ */
 /* Offer row                                                           */
 /* ------------------------------------------------------------------ */
+
 function OfferRow({
     offer,
     selected,
     saved,
+    busy,
     onSelect,
 }: {
     offer: RetailerOutOfStockWholesalerOffer;
     selected: boolean;
     saved: boolean;
+    busy: boolean;
     onSelect: () => void;
 }) {
     const { theme } = useAuth();
@@ -540,6 +666,7 @@ function OfferRow({
     return (
         <Pressable
             onPress={onSelect}
+            disabled={busy}
             className="flex-row items-center gap-3 p-3 rounded-xl border mb-2"
             style={{
                 backgroundColor: selected
@@ -552,6 +679,7 @@ function OfferRow({
                 borderColor: selected
                     ? theme.primary
                     : borderColor,
+                opacity: busy ? 0.7 : 1,
             }}
         >
             {/* Radio */}
@@ -592,17 +720,12 @@ function OfferRow({
                     overflow: 'hidden',
                 }}
             >
-                {thumbnail ? (
-                    <Text
-                        style={{
-                            fontSize: 12,
-                            color: theme.textDark,
-                            opacity: 0.4,
-                        }}
-                    >
-                        📦
-                    </Text>
-                ) : null}
+                <ImageWithFallback
+                    uri={thumbnail}
+                    width={40}
+                    height={40}
+                    fallback="📦"
+                />
             </View>
 
             {/* Details */}
@@ -681,7 +804,7 @@ function OfferRow({
                     KES{' '}
                     {formatMoney(
                         offer.final_unit_selling_price ??
-                        offer.unit_selling_price
+                        offer.unit_selling_price,
                     )}
                 </Text>
                 {hasDiscount ? (
@@ -697,11 +820,46 @@ function OfferRow({
                     >
                         KES{' '}
                         {formatMoney(
-                            offer.unit_selling_price
+                            offer.unit_selling_price,
                         )}
                     </Text>
                 ) : null}
             </View>
         </Pressable>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/* Image with fallback                                                 */
+/* ------------------------------------------------------------------ */
+
+function ImageWithFallback({
+    uri,
+    width,
+    height,
+    fallback,
+}: {
+    uri: string | null;
+    width: number;
+    height: number;
+    fallback: string;
+}) {
+    const [errored, setErrored] = useState(false);
+
+    if (!uri || errored) {
+        return (
+            <Text style={{ fontSize: 16, opacity: 0.4 }}>
+                {fallback}
+            </Text>
+        );
+    }
+
+    return (
+        <Image
+            source={{ uri }}
+            style={{ width, height }}
+            resizeMode="cover"
+            onError={() => setErrored(true)}
+        />
     );
 }

@@ -1,11 +1,9 @@
 // context/RetailerOrdersSyncContext.tsx
 
-import wholesalersApi from '@/api/wholesalersApi';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, UserProfile } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { dbInstance } from '@/databases/db';
 import { RetailerOrder } from '@/databases/types';
-import { useApi } from '@/hooks/useApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
     createContext,
@@ -16,7 +14,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 /* =========================================================
  * Types
@@ -25,15 +23,9 @@ import { Alert, Platform } from 'react-native';
 export interface SyncUiState {
     syncing: boolean;
     offline: boolean;
-    hasPending: boolean;
-    pendingCount: number;
-    showOfflineWarning: boolean;
-    showPendingChip: boolean;
-    showSyncing: boolean;
     lastSyncedTime: string;
     syncStatus:
     | 'idle'
-    | 'pushing'
     | 'live'
     | 'offline'
     | 'error';
@@ -43,24 +35,14 @@ interface RetailerOrdersSyncContextType {
     isSyncing: boolean;
     isManualRefreshing: boolean;
     isLiveConnected: boolean;
-    isPushSyncing: boolean;
-    pendingCount: number;
     syncStatus:
     | 'idle'
-    | 'pushing'
     | 'live'
     | 'offline'
     | 'error';
     forceManualRefresh: () => Promise<void>;
-    pushPending: () => Promise<void>;
     lastSyncedTime: string;
     retailerOrders: RetailerOrder[];
-    addLocalOrder: (
-        order: RetailerOrder
-    ) => Promise<RetailerOrder>;
-    updateLocalOrder: (
-        order: RetailerOrder
-    ) => Promise<void>;
     syncUiState: SyncUiState;
 }
 
@@ -78,14 +60,53 @@ const NATIVE_RETAILER_ORDERS_KEY =
 const RETAILER_ORDERS_SYNCED_AT =
     'wazipos_async_retailer_orders_synced_at';
 
-const WS_URL =
-    'wss://api.wazipos.co.ke/ws/wholesalers/orders/list/';
+const DEXIE_META_SYNCED_AT_KEY = 'synced_at';
+
+const WS_URL_FOR_RETAILER_ROLE =
+    'wss://api.wazipos.co.ke/ws/requisitions/retailers/';
+
+const WS_URL_FOR_WHOLESALER_ROLE =
+    'wss://api.wazipos.co.ke/ws/requisitions/wholesalers/';
+
+const RETAILER_ROLE_VALUE = 'GeneralRetailerSuperAdmin';
+const WHOLESALER_ROLE_VALUE = 'GeneralWholesalerSuperAdmin';
 
 const WS_RECONNECT_BASE_MS = 3000;
 const WS_RECONNECT_MAX_MS = 60000;
 
-/** Push pending orders every 2 minutes. */
-const PENDING_PUSH_INTERVAL_MS = 2 * 60 * 1000;
+/* =========================================================
+ * Role → WS URL resolution
+ * ======================================================= */
+
+function resolveWsUrl(
+    user: UserProfile | null | undefined
+): string | null {
+    const roles = user?.roles;
+
+    if (!Array.isArray(roles) || roles.length === 0) {
+        return null;
+    }
+
+    for (const role of roles) {
+        const value = role?.value;
+
+        if (value === RETAILER_ROLE_VALUE) {
+            return WS_URL_FOR_RETAILER_ROLE;
+        }
+        if (value === WHOLESALER_ROLE_VALUE) {
+            return WS_URL_FOR_WHOLESALER_ROLE;
+        }
+    }
+
+    return null;
+}
+
+function endpointTag(url: string | null): string {
+    if (!url) return 'none';
+    if (url === WS_URL_FOR_RETAILER_ROLE) return 'retailers';
+    if (url === WS_URL_FOR_WHOLESALER_ROLE) return 'wholesalers';
+    return 'unknown';
+}
 
 /* =========================================================
  * Logging
@@ -100,64 +121,20 @@ const warn = (...args: any[]) => {
         console.warn('[RetailerOrdersSync]', ...args);
 };
 
-/* =========================================================
- * Queue predicate
- *
- * A row is eligible for remote push ONLY when ALL are true:
- *   - it has a non-empty draft_id, AND
- *   - synced === false, AND
- *   - it has no remote_id
- *
- * A non-empty remote_id is authoritative — the server
- * already knows about this row, so we never re-push it,
- * even if `synced` was somehow reset.
- * ======================================================= */
-
-const hasDraftId = (
-    record: Partial<RetailerOrder> | null | undefined
-): boolean =>
-    typeof record?.draft_id === 'string' &&
-    (record.draft_id as string).trim() !== '';
-
-const hasRemoteId = (
-    record: Partial<RetailerOrder> | null | undefined
-): boolean =>
-    typeof record?.remote_id === 'string' &&
-    (record.remote_id as string).trim() !== '';
-
-const isSyncedFlag = (
-    record: Partial<RetailerOrder> | null | undefined
-): boolean =>
-    record?.synced === true ||
-    (record?.synced as any) === 'true';
-
-const needsRemotePush = (
-    record: RetailerOrder
-): boolean => {
-    if (!hasDraftId(record)) return false;
-    if (isSyncedFlag(record)) return false;
-    if (hasRemoteId(record)) return false;
-    return true;
+const wsLog = (tag: string, ...args: any[]) => {
+    if (__DEV__)
+        console.log(
+            `[RetailerOrdersSync][WS:${tag}]`,
+            ...args
+        );
 };
-
-/* =========================================================
- * Draft id builder
- *
- * Format: "<user_id>:<entity_id>:<timestamp_ms>"
- * ======================================================= */
-
-export function buildDraftId(
-    userId: string | number | undefined,
-    entityId: string | number | undefined
-): string {
-    const uid = userId != null ? String(userId) : 'anon';
-    const eid =
-        entityId != null && String(entityId).trim() !== ''
-            ? String(entityId)
-            : 'noentity';
-    const ts = String(Date.now());
-    return `${uid}:${eid}:${ts}`;
-}
+const wsWarn = (tag: string, ...args: any[]) => {
+    if (__DEV__)
+        console.warn(
+            `[RetailerOrdersSync][WS:${tag}]`,
+            ...args
+        );
+};
 
 /* =========================================================
  * Helpers
@@ -165,20 +142,6 @@ export function buildDraftId(
 
 const firstDefined = (...vals: any[]) =>
     vals.find((v) => v !== undefined && v !== null);
-
-function notify(title: string, message: string) {
-    if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') {
-            window.alert(`${title}\n\n${message}`);
-        } else {
-            console.log(`[NOTIFY] ${title} — ${message}`);
-        }
-        return;
-    }
-    Alert.alert(title, message, [{ text: 'OK' }], {
-        cancelable: true,
-    });
-}
 
 function formatSyncTime() {
     return new Date().toLocaleString([], {
@@ -188,6 +151,194 @@ function formatSyncTime() {
         hour: '2-digit',
         minute: '2-digit',
     });
+}
+
+/* =========================================================
+ * Frame extraction
+ *
+ * Server may emit any of:
+ *   { "retailer-requisitions": [...] }        ← current shape
+ *   { "retailer_orders": [...] }
+ *   { "orders": [...] }
+ *   { "results": [...] }
+ *   { "data": [...] }
+ *   { "data": { "retailer-requisitions": [...] } }
+ *   [...]
+ * ======================================================= */
+
+const FRAME_KEYS = [
+    'retailer-requisitions',
+    'retailer_requisitions',
+    'retailer-orders',
+    'retailer_orders',
+    'retailerOrders',
+    'requisitions',
+    'orders',
+    'results',
+    'items',
+    'data',
+];
+
+function extractOrdersFromFrame(parsed: any): any[] | null {
+    if (!parsed) return null;
+
+    // Top-level array
+    if (Array.isArray(parsed)) return parsed;
+
+    if (typeof parsed !== 'object') return null;
+
+    // Direct known keys
+    for (const k of FRAME_KEYS) {
+        const v = (parsed as any)[k];
+        if (Array.isArray(v)) return v;
+    }
+
+    // One level of wrapping
+    for (const wrapper of ['data', 'payload', 'body']) {
+        const w = (parsed as any)[wrapper];
+        if (w && typeof w === 'object' && !Array.isArray(w)) {
+            for (const k of FRAME_KEYS) {
+                const v = (w as any)[k];
+                if (Array.isArray(v)) return v;
+            }
+        }
+    }
+
+    // Last resort: first array-valued property
+    for (const v of Object.values(parsed)) {
+        if (Array.isArray(v)) return v;
+    }
+
+    return null;
+}
+
+/* =========================================================
+ * Wire-field change detection
+ * ======================================================= */
+
+function orderWireFieldsChanged(
+    a: RetailerOrder,
+    b: RetailerOrder
+): boolean {
+    if (
+        a.remote_id !== b.remote_id ||
+        a.draft_id !== b.draft_id ||
+        a.wholesaler !== b.wholesaler ||
+        a.wholesaler_title !== b.wholesaler_title ||
+        a.retailer !== b.retailer ||
+        a.retailer_title !== b.retailer_title ||
+        a.owner !== b.owner ||
+        a.owner_title !== b.owner_title ||
+        a.employee !== b.employee ||
+        a.title !== b.title ||
+        a.payment_method !== b.payment_method ||
+        a.payment_method_title !== b.payment_method_title ||
+        a.order_origin !== b.order_origin ||
+        a.order_terms !== b.order_terms ||
+        a.document_number !== b.document_number ||
+        a.document_number_display !== b.document_number_display ||
+        a.reference_number !== b.reference_number ||
+        a.provider_reference_number !== b.provider_reference_number ||
+        a.psp_reference_number !== b.psp_reference_number ||
+        a.telco !== b.telco ||
+        a.status !== b.status ||
+        a.shipping_amount !== b.shipping_amount ||
+        a.order_discount_total !== b.order_discount_total ||
+        a.order_gross_price_total !== b.order_gross_price_total ||
+        a.order_tax_total !== b.order_tax_total ||
+        a.final_price !== b.final_price ||
+        a.final_price_total !== b.final_price_total ||
+        a.is_paid !== b.is_paid ||
+        a.is_delivered !== b.is_delivered ||
+        a.is_processed !== b.is_processed ||
+        a.is_packed !== b.is_packed ||
+        a.is_received !== b.is_received ||
+        a.is_approved !== b.is_approved ||
+        a.is_dispatched !== b.is_dispatched ||
+        a.is_committed !== b.is_committed ||
+        a.paid_at !== b.paid_at ||
+        a.delivered_at !== b.delivered_at ||
+        a.delivered_by !== b.delivered_by ||
+        a.processed_at !== b.processed_at ||
+        a.processed_by !== b.processed_by ||
+        a.packed_at !== b.packed_at ||
+        a.packed_by !== b.packed_by ||
+        a.received_at !== b.received_at ||
+        a.received_by !== b.received_by ||
+        a.approved_at !== b.approved_at ||
+        a.approved_by !== b.approved_by ||
+        a.dispatched_at !== b.dispatched_at ||
+        a.dispatched_by !== b.dispatched_by ||
+        a.committed_at !== b.committed_at ||
+        a.cancelled_at !== b.cancelled_at ||
+        a.commit_type !== b.commit_type ||
+        a.commit_type_display !== b.commit_type_display ||
+        a.committed_by_entity !== b.committed_by_entity ||
+        a.committed_by_title !== b.committed_by_title ||
+        a.committed_by_user !== b.committed_by_user ||
+        a.commit_note !== b.commit_note ||
+        a.delivery_method !== b.delivery_method ||
+        a.actual_lead_time_days !== b.actual_lead_time_days ||
+        a.description !== b.description ||
+        a.retailer_postal_town !== b.retailer_postal_town ||
+        a.retailer_postal_code !== b.retailer_postal_code ||
+        a.retailer_postal_address !== b.retailer_postal_address ||
+        a.retailer_phone !== b.retailer_phone ||
+        a.retailer_email !== b.retailer_email ||
+        a.wholesaler_postal_town !== b.wholesaler_postal_town ||
+        a.wholesaler_postal_code !== b.wholesaler_postal_code ||
+        a.wholesaler_postal_address !== b.wholesaler_postal_address ||
+        a.wholesaler_phone !== b.wholesaler_phone ||
+        a.wholesaler_email !== b.wholesaler_email ||
+        a.created !== b.created ||
+        a.updated !== b.updated
+    ) {
+        return true;
+    }
+
+    const pa = a.payment_summary ?? {
+        paid_total: 0,
+        balance_due: 0,
+        is_paid: false,
+    };
+    const pb = b.payment_summary ?? {
+        paid_total: 0,
+        balance_due: 0,
+        is_paid: false,
+    };
+    if (
+        pa.paid_total !== pb.paid_total ||
+        pa.balance_due !== pb.balance_due ||
+        pa.is_paid !== pb.is_paid
+    ) {
+        return true;
+    }
+
+    const ia = a.order_items ?? [];
+    const ib = b.order_items ?? [];
+    if (ia.length !== ib.length) return true;
+
+    for (let i = 0; i < ia.length; i++) {
+        const x = ia[i];
+        const y = ib[i];
+        if (
+            x.remote_id !== y.remote_id ||
+            x.updated !== y.updated ||
+            x.purchased_quantity !== y.purchased_quantity ||
+            x.discount_quantity !== y.discount_quantity ||
+            x.total_quantity !== y.total_quantity ||
+            x.unit_quantity !== y.unit_quantity ||
+            x.item_price !== y.item_price ||
+            x.item_price_total !== y.item_price_total ||
+            x.item_net_price !== y.item_net_price ||
+            x.is_received !== y.is_received ||
+            x.is_issued !== y.is_issued
+        ) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /* =========================================================
@@ -202,7 +353,7 @@ function normalizeOrder(
         remote_id: String(
             firstDefined(raw.id, raw.key, '')
         ),
-        draft_id: String(raw.draft_id ?? ''),
+        draft_id: raw.draft_id ?? null,
 
         wholesaler: raw.wholesaler ?? null,
         wholesaler_title: raw.wholesaler_title ?? null,
@@ -210,7 +361,7 @@ function normalizeOrder(
         retailer_title: String(raw.retailer_title ?? ''),
         owner: String(raw.owner ?? ''),
         owner_title: String(raw.owner_title ?? ''),
-        employee: String(raw.employee ?? ''),
+        employee: raw.employee ?? null,
 
         title: String(raw.title ?? ''),
 
@@ -226,9 +377,7 @@ function normalizeOrder(
         document_number_display: String(
             raw.document_number_display ?? 'N/A'
         ),
-        reference_number: String(
-            raw.reference_number ?? ''
-        ),
+        reference_number: raw.reference_number ?? null,
         provider_reference_number:
             raw.provider_reference_number ?? null,
         psp_reference_number: String(
@@ -343,65 +492,6 @@ function normalizeOrder(
         updated: String(firstDefined(raw.updated, ts)),
 
         cached_at: ts,
-        synced: true,
-        sync_error: null,
-    };
-}
-
-/* =========================================================
- * Payload builder — matches CreateStaffRetailerOrder
- * ======================================================= */
-
-function buildOrderPayload(
-    record: RetailerOrder,
-    fallbackDraftId: string
-) {
-    const draftId =
-        record.draft_id || fallbackDraftId;
-
-    return {
-        action: 'CreateStaffRetailerOrder' as const,
-        retailer_order_details: {
-            retailer_id: record.retailer,
-            draft_id: draftId,
-            order_terms: record.order_terms || 'CASH',
-            order_type: 'NORMAL',
-            payment_method_id: record.payment_method,
-            mobile_money_phone:
-                record.payment_method_title ===
-                    'MOBILE MONEY'
-                    ? (record as any).mobile_money_phone ??
-                    null
-                    : null,
-            final_price_total: Number(
-                record.final_price_total ?? 0
-            ),
-            order_items: (record.order_items ?? []).map(
-                (item) => ({
-                    wholesaler_receipt:
-                        item.wholesaler_receipt,
-                    purchased_quantity: String(
-                        item.purchased_quantity
-                    ),
-                    discount_quantity: String(
-                        item.discount_quantity ?? 0
-                    ),
-                    total_quantity: item.total_quantity,
-                    unit_of_issue: 'LoosePackUnits',
-                    loose_pack_unit: 'Piece',
-                    item_price: Number(item.item_price),
-                    item_net_price: Number(
-                        item.item_net_price
-                    ),
-                    item_price_discount: Number(
-                        item.item_price_discount ?? 0
-                    ),
-                    item_price_total: Number(
-                        item.item_price_total
-                    ),
-                })
-            ),
-        },
     };
 }
 
@@ -424,7 +514,6 @@ function areOrdersEqual(
             x.draft_id !== y.draft_id ||
             x.status !== y.status ||
             x.final_price_total !== y.final_price_total ||
-            x.synced !== y.synced ||
             x.updated !== y.updated
         ) {
             return false;
@@ -442,19 +531,29 @@ export const RetailerOrdersSyncProvider: React.FC<{
 }> = ({ children }) => {
     const { token, user } = useAuth();
 
-    const currentUserId = String(user?.id ?? '');
-
-    /**
-     * The user's entity id — resolves through every plausible
-     * field so the generated draft_id always has three parts.
-     */
-    const currentEntityId = String(
-        (user as any)?.entity ??
-        (user as any)?.entity_id ??
-        (user as any)?.owner ??
-        (user as any)?.roles?.[0]?.entity ??
-        ''
+    const wsUrl = useMemo(
+        () => resolveWsUrl(user),
+        [user]
     );
+
+    const wsTag = useMemo(
+        () => endpointTag(wsUrl),
+        [wsUrl]
+    );
+
+    const matchedRoleValue = useMemo(() => {
+        const roles = user?.roles;
+        if (!Array.isArray(roles)) return null;
+        for (const role of roles) {
+            if (
+                role?.value === RETAILER_ROLE_VALUE ||
+                role?.value === WHOLESALER_ROLE_VALUE
+            ) {
+                return role.value;
+            }
+        }
+        return null;
+    }, [user]);
 
     const { isOnline } = useNetworkStatus();
 
@@ -465,15 +564,10 @@ export const RetailerOrdersSyncProvider: React.FC<{
     const [isManualRefreshing, setIsManualRefreshing] =
         useState(false);
     const [isLiveConnected, setIsLiveConnected] = useState(false);
-    const [isPushSyncing, setIsPushSyncing] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncStatus, setSyncStatus] = useState<
-        'idle' | 'pushing' | 'live' | 'offline' | 'error'
+        'idle' | 'live' | 'offline' | 'error'
     >('idle');
-
-    const createOrderApi = useApi(
-        wholesalersApi.wholesaleRetailerOrdersStaffAction
-    );
 
     const wsRef = useRef<WebSocket | null>(null);
     const ordersStateRef = useRef<RetailerOrder[]>([]);
@@ -482,22 +576,34 @@ export const RetailerOrdersSyncProvider: React.FC<{
     );
     const reconnectAttemptRef = useRef(0);
     const wsGenerationRef = useRef(0);
-    const pushGuardRef = useRef(false);
-    const pushIntervalRef =
-        useRef<ReturnType<typeof setInterval> | null>(null);
 
-    /* -------- Diagnostics -------- */
+    /* ---------------------------------------------------------
+     * Diagnostics
+     * ------------------------------------------------------- */
     useEffect(() => {
-        if (__DEV__) {
-            console.log(
-                '[RetailerOrdersSync] currentUser',
-                {
-                    id: currentUserId,
-                    entity: currentEntityId,
-                }
-            );
-        }
-    }, [currentUserId, currentEntityId]);
+        console.log(
+            '[RetailerOrdersSync] currentUser (raw) →',
+            user
+        );
+
+        console.log(
+            '[RetailerOrdersSync] currentUser.roles →',
+            user?.roles ?? '(none)'
+        );
+
+        console.log(
+            '[RetailerOrdersSync] resolved identifiers →',
+            {
+                matchedRoleValue,
+                wsTag,
+                wsUrl,
+                storage:
+                    Platform.OS === 'web'
+                        ? 'Dexie (IndexedDB)'
+                        : 'AsyncStorage',
+            }
+        );
+    }, [user, matchedRoleValue, wsTag, wsUrl]);
 
     const isOnlineRef = useRef(isOnline);
     useEffect(() => {
@@ -509,151 +615,217 @@ export const RetailerOrdersSyncProvider: React.FC<{
     }, [retailerOrders]);
 
     /* ---------------------------------------------------------
-     * Storage commit / read
+     * Storage commit
+     *
+     *   Web    → Dexie (IndexedDB) only.
+     *   Native → AsyncStorage only.
      * ------------------------------------------------------- */
     const commitToStorage = useCallback(
         async (data: RetailerOrder[]) => {
-            const tasks: Promise<any>[] = [];
+            const nowIso = new Date().toISOString();
 
-            tasks.push(
-                AsyncStorage.setItem(
-                    NATIVE_RETAILER_ORDERS_KEY,
-                    JSON.stringify(data)
-                ).catch((err) =>
-                    warn('AsyncStorage write failed:', err)
-                )
-            );
-
-            tasks.push(
-                AsyncStorage.setItem(
-                    RETAILER_ORDERS_SYNCED_AT,
-                    new Date().toISOString()
-                ).catch(() => null)
-            );
-
-            if (
-                Platform.OS === 'web' &&
-                typeof window !== 'undefined'
-            ) {
-                try {
-                    window.localStorage.setItem(
-                        NATIVE_RETAILER_ORDERS_KEY,
-                        JSON.stringify(data)
-                    );
-                    window.localStorage.setItem(
-                        RETAILER_ORDERS_SYNCED_AT,
-                        new Date().toISOString()
-                    );
-                } catch (err) {
-                    warn('localStorage write failed:', err);
+            console.log(
+                '[RetailerOrdersSync][STORAGE:WRITE] →',
+                {
+                    platform: Platform.OS,
+                    target:
+                        Platform.OS === 'web'
+                            ? 'Dexie'
+                            : 'AsyncStorage',
+                    count: data.length,
+                    sampleRemoteIds: data
+                        .slice(0, 3)
+                        .map((o) => o.remote_id),
+                    timestamp: nowIso,
                 }
-            }
+            );
 
-            if (dbInstance?.retailerOrders) {
-                tasks.push(
-                    (async () => {
-                        try {
-                            await dbInstance.transaction(
-                                'rw',
-                                dbInstance.retailerOrders,
-                                async () => {
-                                    await dbInstance.retailerOrders.clear();
-                                    if (data.length === 0) return;
+            /* ==================== WEB ==================== */
+            if (Platform.OS === 'web') {
+                if (!dbInstance?.retailerOrders) {
+                    console.warn(
+                        '[RetailerOrdersSync][STORAGE:WRITE] Dexie table missing'
+                    );
+                    return;
+                }
 
-                                    const rows = data.map(
-                                        (row) => {
-                                            if (
-                                                row.id ===
-                                                undefined ||
-                                                row.id === null
-                                            ) {
-                                                const {
-                                                    id,
-                                                    ...rest
-                                                } = row;
-                                                return rest;
-                                            }
-                                            return row;
+                try {
+                    await dbInstance.transaction(
+                        'rw',
+                        dbInstance.retailerOrders,
+                        dbInstance.retailerOrdersMeta,
+                        async () => {
+                            await dbInstance.retailerOrders.clear();
+
+                            if (data.length > 0) {
+                                const rows = data.map(
+                                    (row) => {
+                                        if (
+                                            row.id ===
+                                            undefined ||
+                                            row.id === null
+                                        ) {
+                                            const {
+                                                id,
+                                                ...rest
+                                            } = row;
+                                            return rest;
                                         }
-                                    );
+                                        return row;
+                                    }
+                                );
 
-                                    await dbInstance.retailerOrders.bulkPut(
-                                        rows
-                                    );
+                                await dbInstance.retailerOrders.bulkPut(
+                                    rows
+                                );
+                            }
+
+                            await dbInstance.retailerOrdersMeta.put(
+                                {
+                                    key: DEXIE_META_SYNCED_AT_KEY,
+                                    value: nowIso,
                                 }
                             );
-                        } catch (err) {
-                            warn('Dexie write failed:', err);
                         }
-                    })()
-                );
+                    );
+
+                    // Read back to confirm
+                    const verify =
+                        await dbInstance.retailerOrders.count();
+
+                    console.log(
+                        '[RetailerOrdersSync][STORAGE:WRITE] ✓ Dexie committed',
+                        {
+                            written: data.length,
+                            rowsInTable: verify,
+                        }
+                    );
+                } catch (err) {
+                    console.warn(
+                        '[RetailerOrdersSync][STORAGE:WRITE] ✗ Dexie failed:',
+                        err
+                    );
+                }
+                return;
             }
 
-            await Promise.allSettled(tasks);
+            /* =================== NATIVE =================== */
+            try {
+                await AsyncStorage.setItem(
+                    NATIVE_RETAILER_ORDERS_KEY,
+                    JSON.stringify(data)
+                );
+                await AsyncStorage.setItem(
+                    RETAILER_ORDERS_SYNCED_AT,
+                    nowIso
+                );
+
+                console.log(
+                    '[RetailerOrdersSync][STORAGE:WRITE] ✓ AsyncStorage committed',
+                    {
+                        key: NATIVE_RETAILER_ORDERS_KEY,
+                        written: data.length,
+                    }
+                );
+            } catch (err) {
+                console.warn(
+                    '[RetailerOrdersSync][STORAGE:WRITE] ✗ AsyncStorage failed:',
+                    err
+                );
+            }
         },
         []
     );
 
+    /* ---------------------------------------------------------
+     * Storage read
+     *
+     *   Web    → Dexie only.
+     *   Native → AsyncStorage only.
+     * ------------------------------------------------------- */
     const readLocalRecords = useCallback(
         async (): Promise<RetailerOrder[]> => {
-            const [asyncData, dexieData] = await Promise.all(
-                [
-                    AsyncStorage.getItem(
-                        NATIVE_RETAILER_ORDERS_KEY
-                    )
-                        .then((raw) =>
-                            raw ? JSON.parse(raw) : []
-                        )
-                        .catch(() => []),
-                    (async () => {
-                        try {
-                            if (
-                                dbInstance?.retailerOrders
-                            ) {
-                                return await dbInstance.retailerOrders.toArray();
-                            }
-                        } catch { }
-                        return [];
-                    })(),
-                ]
-            );
-
-            let webData: RetailerOrder[] = [];
-            if (
-                Platform.OS === 'web' &&
-                typeof window !== 'undefined'
-            ) {
+            /* ==================== WEB ==================== */
+            if (Platform.OS === 'web') {
                 try {
-                    const raw =
-                        window.localStorage.getItem(
-                            NATIVE_RETAILER_ORDERS_KEY
+                    if (dbInstance?.retailerOrders) {
+                        const rows =
+                            await dbInstance.retailerOrders.toArray();
+
+                        console.log(
+                            '[RetailerOrdersSync][STORAGE:READ] ← Dexie',
+                            {
+                                count: rows.length,
+                                sampleRemoteIds: rows
+                                    .slice(0, 3)
+                                    .map(
+                                        (o: any) =>
+                                            o.remote_id
+                                    ),
+                            }
                         );
-                    webData = raw ? JSON.parse(raw) : [];
-                } catch { }
+
+                        return rows;
+                    }
+                } catch (err) {
+                    console.warn(
+                        '[RetailerOrdersSync][STORAGE:READ] ✗ Dexie failed:',
+                        err
+                    );
+                }
+                return [];
             }
 
-            const candidates = [
-                { name: 'async', rows: asyncData },
-                { name: 'web', rows: webData },
-                { name: 'dexie', rows: dexieData },
-            ];
+            /* =================== NATIVE =================== */
+            try {
+                const raw = await AsyncStorage.getItem(
+                    NATIVE_RETAILER_ORDERS_KEY
+                );
+                const parsed = raw ? JSON.parse(raw) : [];
 
-            const chosen = candidates.reduce((best, current) =>
-                current.rows.length > best.rows.length ||
-                    (current.rows.length === best.rows.length &&
-                        current.name === 'dexie')
-                    ? current
-                    : best
-            );
+                console.log(
+                    '[RetailerOrdersSync][STORAGE:READ] ← AsyncStorage',
+                    {
+                        key: NATIVE_RETAILER_ORDERS_KEY,
+                        count: Array.isArray(parsed)
+                            ? parsed.length
+                            : 0,
+                        sampleRemoteIds: Array.isArray(parsed)
+                            ? parsed
+                                .slice(0, 3)
+                                .map(
+                                    (o: any) =>
+                                        o.remote_id
+                                )
+                            : [],
+                    }
+                );
 
-            return chosen.rows;
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (err) {
+                console.warn(
+                    '[RetailerOrdersSync][STORAGE:READ] ✗ AsyncStorage failed:',
+                    err
+                );
+                return [];
+            }
         },
         []
     );
 
     const hydrateFromLocalDB = useCallback(async () => {
+        console.log(
+            '[RetailerOrdersSync][HYDRATE] start'
+        );
         try {
             const cached = await readLocalRecords();
+
+            console.log(
+                '[RetailerOrdersSync][HYDRATE] result',
+                {
+                    count: cached?.length ?? 0,
+                }
+            );
 
             if (cached?.length > 0) {
                 ordersStateRef.current = cached;
@@ -673,23 +845,30 @@ export const RetailerOrdersSyncProvider: React.FC<{
 
     const hydrateSyncedAt = useCallback(async () => {
         try {
-            let raw: string | null = null;
-            if (
-                Platform.OS === 'web' &&
-                typeof window !== 'undefined'
-            ) {
-                raw = window.localStorage.getItem(
+            let iso: string | null = null;
+
+            if (Platform.OS === 'web') {
+                if (dbInstance?.retailerOrdersMeta) {
+                    const row =
+                        await dbInstance.retailerOrdersMeta.get(
+                            DEXIE_META_SYNCED_AT_KEY
+                        );
+                    iso = row?.value ?? null;
+                }
+            } else {
+                iso = await AsyncStorage.getItem(
                     RETAILER_ORDERS_SYNCED_AT
                 );
             }
-            if (!raw) {
-                raw = await AsyncStorage.getItem(
-                    RETAILER_ORDERS_SYNCED_AT
-                );
-            }
-            if (raw) {
+
+            console.log(
+                '[RetailerOrdersSync][HYDRATE] synced-at',
+                { iso }
+            );
+
+            if (iso) {
                 setLastSyncedTime(
-                    new Date(raw).toLocaleString([], {
+                    new Date(iso).toLocaleString([], {
                         year: 'numeric',
                         month: 'short',
                         day: '2-digit',
@@ -702,396 +881,12 @@ export const RetailerOrdersSyncProvider: React.FC<{
     }, []);
 
     /* ---------------------------------------------------------
-     * Local mutations
-     * ------------------------------------------------------- */
-    const addLocalOrder = useCallback(
-        async (
-            order: RetailerOrder
-        ): Promise<RetailerOrder> => {
-            const nowIso = new Date().toISOString();
-
-            const row: RetailerOrder = {
-                ...order,
-                cached_at: order.cached_at ?? nowIso,
-                synced: false,
-                sync_error: null,
-            };
-
-            const next = [row, ...ordersStateRef.current];
-
-            await commitToStorage(next);
-            ordersStateRef.current = next;
-            setRetailerOrders((prev) =>
-                areOrdersEqual(prev, next) ? prev : next
-            );
-            setLastSyncedTime(formatSyncTime());
-
-            return row;
-        },
-        [commitToStorage]
-    );
-
-    const updateLocalOrder = useCallback(
-        async (order: RetailerOrder): Promise<void> => {
-            const nowIso = new Date().toISOString();
-            const idx = ordersStateRef.current.findIndex(
-                (r) =>
-                    (order.remote_id &&
-                        r.remote_id === order.remote_id) ||
-                    (order.draft_id &&
-                        r.draft_id === order.draft_id)
-            );
-            if (idx < 0) {
-                warn(
-                    'updateLocalOrder: no matching row',
-                    order.remote_id,
-                    order.draft_id
-                );
-                return;
-            }
-
-            const existing = ordersStateRef.current[idx];
-
-            const next = [...ordersStateRef.current];
-            next[idx] = {
-                ...existing,
-                ...order,
-                id: existing.id,
-                cached_at: nowIso,
-                synced: false,
-                sync_error: null,
-            };
-
-            await commitToStorage(next);
-            ordersStateRef.current = next;
-            setRetailerOrders((prev) =>
-                areOrdersEqual(prev, next) ? prev : next
-            );
-            setLastSyncedTime(formatSyncTime());
-        },
-        [commitToStorage]
-    );
-
-    /* ---------------------------------------------------------
-     * Push pending → remote
-     * ------------------------------------------------------- */
-    const pushPending = useCallback(async () => {
-        if (!token) return;
-        if (!isOnlineRef.current) return;
-        if (pushGuardRef.current) return;
-
-        pushGuardRef.current = true;
-        setIsPushSyncing(true);
-        setIsSyncing(true);
-        setSyncStatus('pushing');
-
-        let succeeded = 0;
-        let failed = 0;
-        let firstFailure: any = null;
-        let firstSuccess: any = null;
-
-        try {
-            const all = await readLocalRecords();
-            const pending = all.filter(needsRemotePush);
-
-            log('pushPending — candidates', {
-                total: all.length,
-                pending: pending.length,
-                skipped: all
-                    .filter((r) => !needsRemotePush(r))
-                    .map((r) => ({
-                        draft_id: r.draft_id,
-                        remote_id: r.remote_id,
-                        synced: r.synced,
-                        title: r.retailer_title,
-                    })),
-            });
-
-            if (pending.length === 0) return;
-
-            let madeAChange = false;
-
-            for (const record of pending) {
-                if (!isOnlineRef.current) break;
-
-                const fallbackDraftId = buildDraftId(
-                    currentUserId,
-                    currentEntityId
-                );
-                const draftId =
-                    record.draft_id || fallbackDraftId;
-
-                const body = buildOrderPayload(
-                    record,
-                    fallbackDraftId
-                );
-
-                console.log(
-                    '================================================'
-                );
-                console.log(
-                    '[RetailerOrdersSync] → REQUEST',
-                    {
-                        draft_id: draftId,
-                        retailer_title:
-                            record.retailer_title,
-                        item_count:
-                            record.order_items?.length ??
-                            0,
-                    }
-                );
-                console.log(
-                    '[RetailerOrdersSync] → REQUEST BODY',
-                    body
-                );
-                console.log(
-                    '================================================'
-                );
-
-                let result: any = null;
-                const startedAt = Date.now();
-                try {
-                    result =
-                        await createOrderApi.request(body);
-                } catch (e: any) {
-                    result = {
-                        status: 'error',
-                        problem: 'exception',
-                        data: {
-                            message:
-                                e?.message ||
-                                'Request threw',
-                        },
-                    };
-                }
-                const elapsed = Date.now() - startedAt;
-
-                console.log(
-                    '================================================'
-                );
-                console.log(
-                    '[RetailerOrdersSync] ← RESPONSE',
-                    result
-                );
-                console.log(
-                    '[RetailerOrdersSync] ← META',
-                    {
-                        draft_id: draftId,
-                        elapsed_ms: elapsed,
-                        status: result?.status,
-                        ok: result?.ok,
-                        problem: result?.problem,
-                        response_code:
-                            result?.data?.response_code,
-                        response_message:
-                            result?.data?.response_message,
-                    }
-                );
-                console.log(
-                    '================================================'
-                );
-
-                const isOk =
-                    result?.ok &&
-                    String(
-                        result?.data?.response_code ?? ''
-                    ) === '0';
-
-                if (isOk) {
-                    succeeded++;
-                    madeAChange = true;
-
-                    if (!firstSuccess) {
-                        firstSuccess = {
-                            draft_id: draftId,
-                            response_message:
-                                result?.data
-                                    ?.response_message,
-                            response: result,
-                        };
-                    }
-
-                    const createdOrder =
-                        result?.data?.retailer_order ??
-                        result?.data?.data
-                            ?.retailer_order ??
-                        result?.data?.order ??
-                        null;
-
-                    const serverRemoteId =
-                        createdOrder?.id != null
-                            ? String(createdOrder.id)
-                            : '';
-
-                    if (!serverRemoteId) {
-                        warn(
-                            'success response has no retailer_order.id',
-                            {
-                                draft_id: draftId,
-                                response_data:
-                                    result?.data,
-                            }
-                        );
-                    }
-
-                    const idx = all.findIndex(
-                        (r) => r.draft_id === draftId
-                    );
-
-                    if (idx >= 0) {
-                        const nowIso =
-                            new Date().toISOString();
-                        const finalRemoteId =
-                            serverRemoteId ||
-                            all[idx].remote_id ||
-                            '';
-
-                        all[idx] = {
-                            ...all[idx],
-                            remote_id: finalRemoteId,
-                            draft_id: draftId,
-                            synced: true,
-                            sync_error: null,
-                            updated: nowIso,
-                            cached_at: nowIso,
-                        };
-
-                        console.log(
-                            '[RetailerOrdersSync] local row updated',
-                            {
-                                draft_id: draftId,
-                                remote_id: finalRemoteId,
-                                synced: true,
-                                reference_number:
-                                    all[idx]
-                                        .reference_number,
-                            }
-                        );
-                    } else {
-                        warn(
-                            'pushPending — no local row for draft_id',
-                            draftId
-                        );
-                    }
-                } else {
-                    failed++;
-                    madeAChange = true;
-
-                    const failureMessage =
-                        result?.data?.response_message ||
-                        result?.data?.message ||
-                        result?.problem ||
-                        `Server rejected (response_code=${result?.data?.response_code})`;
-
-                    if (!firstFailure) {
-                        firstFailure = {
-                            draft_id: draftId,
-                            response_message:
-                                result?.data
-                                    ?.response_message,
-                            response: result,
-                        };
-                    }
-
-                    const idx = all.findIndex(
-                        (r) => r.draft_id === draftId
-                    );
-
-                    if (idx >= 0) {
-                        all[idx] = {
-                            ...all[idx],
-                            draft_id: draftId,
-                            sync_error: failureMessage,
-                        };
-                    }
-                }
-            }
-
-            if (madeAChange) {
-                await commitToStorage(all);
-                const verify = await readLocalRecords();
-                ordersStateRef.current = verify;
-                setRetailerOrders((prev) =>
-                    areOrdersEqual(prev, verify)
-                        ? prev
-                        : verify
-                );
-                setLastSyncedTime(formatSyncTime());
-            }
-
-            const successMessage =
-                firstSuccess?.response_message;
-            const failureMessageAlert =
-                firstFailure?.response_message;
-
-            if (succeeded > 0 && failed === 0) {
-                notify(
-                    'Orders Synced',
-                    successMessage ||
-                    `${succeeded} order${succeeded === 1 ? '' : 's'
-                    } synced to server.`
-                );
-            } else if (succeeded > 0 && failed > 0) {
-                notify(
-                    'Orders Partial Sync',
-                    `${succeeded} succeeded · ${failed} failed.\n\n` +
-                    (failureMessageAlert
-                        ? `Last error: ${failureMessageAlert}\n\n`
-                        : '') +
-                    JSON.stringify(
-                        firstFailure?.response?.data ??
-                        firstFailure?.response,
-                        null,
-                        2
-                    ).slice(0, 800)
-                );
-            } else if (failed > 0) {
-                notify(
-                    'Orders Sync Failed',
-                    failureMessageAlert ||
-                    `${failed} order${failed === 1 ? '' : 's'
-                    } could not be synced.\n\nServer response:\n${JSON.stringify(
-                        firstFailure?.response?.data ??
-                        firstFailure?.response,
-                        null,
-                        2
-                    ).slice(0, 800)}`
-                );
-            }
-        } catch (err: any) {
-            warn('pushPending outer error:', err);
-            notify(
-                'Sync Error',
-                err?.message ||
-                'Unexpected error during order sync.'
-            );
-        } finally {
-            pushGuardRef.current = false;
-            setIsPushSyncing(false);
-            setIsSyncing(false);
-            setSyncStatus(
-                isOnlineRef.current
-                    ? isLiveConnected
-                        ? 'live'
-                        : 'idle'
-                    : 'offline'
-            );
-        }
-    }, [
-        token,
-        createOrderApi,
-        commitToStorage,
-        readLocalRecords,
-        currentUserId,
-        currentEntityId,
-        isLiveConnected,
-    ]);
-
-    /* ---------------------------------------------------------
-     * WebSocket
+     * WebSocket — read-only mirror of the server's feed.
      * ------------------------------------------------------- */
     const establishLiveWebSocketSync = useCallback(
         (currentToken: string) => {
+            const tag = wsTag;
+
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
                 reconnectTimeoutRef.current = null;
@@ -1112,15 +907,43 @@ export const RetailerOrdersSyncProvider: React.FC<{
                         ? 'idle'
                         : 'offline'
                 );
+                wsLog(
+                    tag,
+                    'skip connect — token or online missing',
+                    {
+                        hasToken: !!currentToken,
+                        isOnline: isOnlineRef.current,
+                    }
+                );
+                return;
+            }
+
+            if (!wsUrl) {
+                wsWarn(
+                    tag,
+                    'no role-matched endpoint; skipping connect',
+                    {
+                        roles: user?.roles?.map(
+                            (r) => r?.value
+                        ),
+                    }
+                );
+                setIsLiveConnected(false);
+                setSyncStatus('idle');
                 return;
             }
 
             const generation = ++wsGenerationRef.current;
 
             try {
-                const url = `${WS_URL}?token=${encodeURIComponent(
+                const url = `${wsUrl}?token=${encodeURIComponent(
                     currentToken
                 )}`;
+                wsLog(tag, 'connecting', {
+                    url: wsUrl,
+                    matchedRoleValue,
+                });
+
                 const ws = new WebSocket(url);
                 wsRef.current = ws;
 
@@ -1133,7 +956,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     setIsLiveConnected(true);
                     setSyncStatus('live');
                     reconnectAttemptRef.current = 0;
-                    log('WebSocket — connected');
+                    wsLog(tag, 'connected', wsUrl);
                 };
 
                 ws.onmessage = async (event) => {
@@ -1148,21 +971,47 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             event.data
                         );
 
+                        wsLog(tag, 'RAW →', parsed);
+
+                        wsLog(tag, 'envelope keys →', {
+                            keys: parsed &&
+                                typeof parsed === 'object'
+                                ? Object.keys(parsed)
+                                : typeof parsed,
+                            frame_size:
+                                typeof event.data ===
+                                    'string'
+                                    ? event.data.length
+                                    : '(non-string)',
+                        });
+
                         const incoming =
-                            parsed?.retailer_orders ??
-                            parsed?.orders ??
-                            parsed?.results ??
-                            parsed?.data;
+                            extractOrdersFromFrame(parsed);
 
                         if (
-                            !Array.isArray(incoming) ||
+                            !incoming ||
                             incoming.length === 0
                         ) {
-                            log(
-                                '  frame has no orders — ignoring'
+                            wsLog(
+                                tag,
+                                'frame has no orders — ignoring',
+                                {
+                                    keys:
+                                        parsed &&
+                                            typeof parsed ===
+                                            'object'
+                                            ? Object.keys(parsed)
+                                            : typeof parsed,
+                                    isArray:
+                                        Array.isArray(parsed),
+                                }
                             );
                             return;
                         }
+
+                        wsLog(tag, 'frame resolved', {
+                            count: incoming.length,
+                        });
 
                         setIsSyncing(true);
 
@@ -1181,7 +1030,11 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             )
                         );
 
-                        incoming.forEach((raw: any) => {
+                        let inserted = 0;
+                        let updated = 0;
+                        let kept = 0;
+
+                        for (const raw of incoming) {
                             const rid = String(
                                 firstDefined(
                                     raw.id,
@@ -1189,84 +1042,87 @@ export const RetailerOrdersSyncProvider: React.FC<{
                                     ''
                                 )
                             );
-                            if (!rid) return;
+                            if (!rid) continue;
 
-                            const existing =
-                                currentMap.get(rid);
-
-                            // Never overwrite a local row still
-                            // waiting to be pushed.
-                            if (
-                                existing &&
-                                needsRemotePush(existing)
-                            ) {
-                                return;
-                            }
-
-                            const normalized =
+                            const normalizedRemote =
                                 normalizeOrder(
                                     raw,
                                     nowStr
                                 );
+                            normalizedRemote.remote_id = rid;
 
-                            normalized.id = existing?.id;
+                            const local =
+                                currentMap.get(rid);
 
-                            /**
-                             * Draft id resolution, in priority:
-                             *   1. remote row's draft_id
-                             *   2. existing local row's draft_id
-                             *   3. generate from user + entity + now
-                             *
-                             * Only generated when BOTH the remote
-                             * and the local row lack a draft id.
-                             */
-                            const wasGenerated =
-                                !normalized.draft_id &&
-                                !existing?.draft_id;
-
-                            const resolvedDraftId =
-                                normalized.draft_id ||
-                                existing?.draft_id ||
-                                buildDraftId(
-                                    currentUserId,
-                                    currentEntityId
+                            if (!local) {
+                                currentMap.set(
+                                    rid,
+                                    normalizedRemote
                                 );
-
-                            normalized.draft_id =
-                                resolvedDraftId;
-                            normalized.synced = true;
-
-                            if (wasGenerated) {
-                                log(
-                                    'generated draft_id for incoming order',
-                                    {
-                                        rid,
-                                        draft_id:
-                                            resolvedDraftId,
-                                    }
-                                );
+                                inserted++;
+                                continue;
                             }
 
-                            currentMap.set(rid, normalized);
-                        });
+                            const merged: RetailerOrder = {
+                                ...local,
+                                ...normalizedRemote,
+                                id: local.id,
+                                cached_at: nowStr,
+                            };
 
-                        const updated = Array.from(
+                            if (
+                                orderWireFieldsChanged(
+                                    local,
+                                    merged
+                                )
+                            ) {
+                                currentMap.set(rid, merged);
+                                updated++;
+                            } else {
+                                kept++;
+                            }
+                        }
+
+                        const nextList = Array.from(
                             currentMap.values()
                         );
 
-                        await commitToStorage(updated);
+                        wsLog(tag, 'frame reconciled', {
+                            incoming: incoming.length,
+                            inserted,
+                            updated,
+                            kept,
+                            total: nextList.length,
+                        });
 
-                        ordersStateRef.current = updated;
+                        if (inserted === 0 && updated === 0) {
+                            setLastSyncedTime(
+                                formatSyncTime()
+                            );
+                            return;
+                        }
+
+                        await commitToStorage(nextList);
+
+                        ordersStateRef.current = nextList;
                         setRetailerOrders((prev) =>
-                            areOrdersEqual(prev, updated)
+                            areOrdersEqual(prev, nextList)
                                 ? prev
-                                : updated
+                                : nextList
+                        );
+
+                        console.log(
+                            '[RetailerOrdersSync][STATE] setRetailerOrders →',
+                            {
+                                count: nextList.length,
+                            }
                         );
 
                         setLastSyncedTime(formatSyncTime());
                     } catch (e) {
-                        warn(
-                            'WebSocket — message parse failed:',
+                        wsWarn(
+                            tag,
+                            'message parse failed:',
                             e
                         );
                     } finally {
@@ -1274,7 +1130,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     }
                 };
 
-                ws.onclose = () => {
+                ws.onclose = (ev) => {
                     if (
                         generation !==
                         wsGenerationRef.current
@@ -1288,6 +1144,12 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             : 'offline'
                     );
 
+                    wsWarn(tag, 'closed', {
+                        code: (ev as any)?.code,
+                        reason: (ev as any)?.reason,
+                        wasClean: (ev as any)?.wasClean,
+                    });
+
                     if (
                         currentToken &&
                         isOnlineRef.current
@@ -1298,6 +1160,11 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             WS_RECONNECT_BASE_MS *
                             2 ** attempt,
                             WS_RECONNECT_MAX_MS
+                        );
+                        wsLog(
+                            tag,
+                            `reconnect scheduled in ${delay}ms (attempt ${attempt + 1
+                            })`
                         );
                         reconnectTimeoutRef.current =
                             setTimeout(
@@ -1310,18 +1177,23 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     }
                 };
 
-                ws.onerror = () => { };
+                ws.onerror = (ev) => {
+                    wsWarn(tag, 'error', ev);
+                };
             } catch (err) {
-                warn(
-                    'WebSocket — establishment threw:',
+                wsWarn(
+                    tag,
+                    'establishment threw:',
                     err
                 );
             }
         },
         [
             commitToStorage,
-            currentUserId,
-            currentEntityId,
+            wsUrl,
+            wsTag,
+            matchedRoleValue,
+            user,
         ]
     );
 
@@ -1331,7 +1203,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
     const forceManualRefresh = useCallback(async () => {
         setIsManualRefreshing(true);
         try {
-            await pushPending();
+            await hydrateFromLocalDB();
             if (token) {
                 reconnectAttemptRef.current = 0;
                 establishLiveWebSocketSync(token);
@@ -1343,7 +1215,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
         }
     }, [
         token,
-        pushPending,
+        hydrateFromLocalDB,
         establishLiveWebSocketSync,
     ]);
 
@@ -1354,7 +1226,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
         hydrateFromLocalDB,
         hydrateSyncedAt,
         establishLiveWebSocketSync,
-        pushPending,
     });
 
     useEffect(() => {
@@ -1362,7 +1233,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
             hydrateFromLocalDB,
             hydrateSyncedAt,
             establishLiveWebSocketSync,
-            pushPending,
         };
     });
 
@@ -1380,9 +1250,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
             if (cancelled) return;
 
             if (token) {
-                await actionsRef.current.pushPending();
-                if (cancelled) return;
-
                 actionsRef.current.establishLiveWebSocketSync(
                     token
                 );
@@ -1397,10 +1264,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                 clearTimeout(reconnectTimeoutRef.current);
                 reconnectTimeoutRef.current = null;
             }
-            if (pushIntervalRef.current) {
-                clearInterval(pushIntervalRef.current);
-                pushIntervalRef.current = null;
-            }
             if (wsRef.current) {
                 wsRef.current.onclose = null;
                 wsRef.current.close();
@@ -1411,18 +1274,34 @@ export const RetailerOrdersSyncProvider: React.FC<{
     }, [token]);
 
     /* ---------------------------------------------------------
+     * React to role change — reconnect on a new endpoint.
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!token) return;
+        if (!isOnline) return;
+
+        reconnectAttemptRef.current = 0;
+        actionsRef.current.establishLiveWebSocketSync(token);
+
+        return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [wsUrl, token, isOnline]);
+
+    /* ---------------------------------------------------------
      * Online / offline transitions
      * ------------------------------------------------------- */
     useEffect(() => {
         if (!token) return;
 
         if (isOnline) {
-            (async () => {
-                await actionsRef.current.pushPending();
-                actionsRef.current.establishLiveWebSocketSync(
-                    token
-                );
-            })();
+            actionsRef.current.establishLiveWebSocketSync(
+                token
+            );
         } else {
             setSyncStatus('offline');
             setIsLiveConnected(false);
@@ -1431,97 +1310,22 @@ export const RetailerOrdersSyncProvider: React.FC<{
     }, [isOnline, token]);
 
     /* ---------------------------------------------------------
-     * 2-minute poll
+     * Derived — sync UI state
      * ------------------------------------------------------- */
-    useEffect(() => {
-        if (!token) return;
-
-        if (pushIntervalRef.current) {
-            clearInterval(pushIntervalRef.current);
-            pushIntervalRef.current = null;
-        }
-
-        const tick = async () => {
-            if (!isOnlineRef.current) {
-                log('Poll tick — offline, skipping');
-                return;
-            }
-
-            const pending =
-                ordersStateRef.current.filter(
-                    needsRemotePush
-                );
-
-            if (pending.length === 0) {
-                log('Poll tick — nothing pending');
-                return;
-            }
-
-            log(
-                `Poll tick — pushing ${pending.length} pending order(s)`
-            );
-
-            try {
-                await actionsRef.current.pushPending();
-            } catch (e) {
-                warn('Poll tick — pushPending threw:', e);
-            }
-        };
-
-        log(
-            `Arming retailer-orders push poll every ${PENDING_PUSH_INTERVAL_MS / 1000
-            }s`
-        );
-        pushIntervalRef.current = setInterval(
-            tick,
-            PENDING_PUSH_INTERVAL_MS
-        );
-
-        return () => {
-            if (pushIntervalRef.current) {
-                clearInterval(pushIntervalRef.current);
-                pushIntervalRef.current = null;
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token]);
-
-    /* ---------------------------------------------------------
-     * Derived — pending count + sync UI state
-     * ------------------------------------------------------- */
-    const pendingCount = useMemo(
-        () =>
-            retailerOrders.filter(needsRemotePush).length,
-        [retailerOrders]
-    );
-
     const syncUiState: SyncUiState = useMemo(() => {
-        const syncing =
-            isSyncing ||
-            isPushSyncing ||
-            isManualRefreshing;
-
+        const syncing = isSyncing || isManualRefreshing;
         const offline = !isOnline;
-        const hasPending = pendingCount > 0;
 
         return {
             syncing,
             offline,
-            hasPending,
-            pendingCount,
-            showOfflineWarning: offline && hasPending,
-            showPendingChip:
-                !offline && hasPending && !syncing,
-            showSyncing: syncing,
             lastSyncedTime,
             syncStatus,
         };
     }, [
         isSyncing,
-        isPushSyncing,
         isManualRefreshing,
         isOnline,
-        pendingCount,
         lastSyncedTime,
         syncStatus,
     ]);
@@ -1534,30 +1338,20 @@ export const RetailerOrdersSyncProvider: React.FC<{
             isSyncing,
             isManualRefreshing,
             isLiveConnected,
-            isPushSyncing,
-            pendingCount,
             syncStatus,
             forceManualRefresh,
-            pushPending,
             lastSyncedTime,
             retailerOrders,
-            addLocalOrder,
-            updateLocalOrder,
             syncUiState,
         }),
         [
             isSyncing,
             isManualRefreshing,
             isLiveConnected,
-            isPushSyncing,
-            pendingCount,
             syncStatus,
             forceManualRefresh,
-            pushPending,
             lastSyncedTime,
             retailerOrders,
-            addLocalOrder,
-            updateLocalOrder,
             syncUiState,
         ]
     );

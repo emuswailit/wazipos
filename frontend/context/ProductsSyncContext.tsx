@@ -42,6 +42,11 @@ const IMAGE_BASE_URL = 'https://api.wazipos.co.ke';
 
 /* ---------------------------------------------------------
  * Logging
+ *
+ * `log` / `warn` are gated by __DEV__ (they're noisy).
+ * `always` is NOT gated — it's used to trace the fetch
+ * lifecycle during debugging. Remove or re-gate when you're
+ * done with this investigation.
  * ------------------------------------------------------- */
 
 const log = (...args: any[]) => {
@@ -49,6 +54,11 @@ const log = (...args: any[]) => {
 };
 const warn = (...args: any[]) => {
     if (__DEV__) console.warn('[ProductsSync]', ...args);
+};
+const always = (...args: any[]) => {
+    // Intentionally not gated by __DEV__ — used during the
+    // catalog-empty investigation.
+    console.log('[ProductsSync][TRACE]', ...args);
 };
 
 /* ---------------------------------------------------------
@@ -91,10 +101,6 @@ function resolveImageUrl(rawPath: any): string | null {
         .join('/')}`;
 }
 
-/* ---------------------------------------------------------
- * normalizeProductImage — wire image → ProductImage
- * ------------------------------------------------------- */
-
 function normalizeProductImage(raw: any): ProductImage {
     const rawImage =
         typeof raw === 'string'
@@ -117,10 +123,6 @@ function normalizeProductImage(raw: any): ProductImage {
         updated: String(raw?.updated ?? ''),
     };
 }
-
-/* ---------------------------------------------------------
- * normalizeCategoryDetails — wire category → ProductCategoryDetails
- * ------------------------------------------------------- */
 
 function normalizeCategoryDetails(
     raw: any
@@ -154,14 +156,6 @@ function normalizeCategoryDetails(
     };
 }
 
-/* ---------------------------------------------------------
- * normalizeProduct — wire product → ProductItem
- *
- * RULE: the server's `id` (or `key`) goes into `remote_id`.
- * The local Dexie `id` (a `++id` integer) is NEVER set here —
- * Dexie assigns it on insert.
- * ------------------------------------------------------- */
-
 function normalizeProduct(i: any): ProductItem {
     const remoteId = String(firstDefined(i.id, i.key, ''));
     const remoteKey = i.key ? String(i.key) : undefined;
@@ -179,7 +173,6 @@ function normalizeProduct(i: any): ProductItem {
     );
 
     return {
-        // `id` intentionally left undefined so Dexie assigns `++id`.
         cached_at: new Date().toISOString(),
 
         remote_id: remoteId,
@@ -234,17 +227,6 @@ function normalizeProduct(i: any): ProductItem {
     };
 }
 
-/* ---------------------------------------------------------
- * Merge helpers
- *
- * `mergeProduct` diffs an incoming (remote) product against the
- * existing local row and returns a merged row that:
- *   - preserves the local Dexie `id`
- *   - takes the incoming value for every field that changed
- *   - returns the SAME reference if nothing changed, so React
- *     and Dexie can skip the update entirely
- * ------------------------------------------------------- */
-
 function shallowEqual(a: any, b: any): boolean {
     if (a === b) return true;
     if (a === null || b === null) return false;
@@ -260,7 +242,6 @@ function shallowEqual(a: any, b: any): boolean {
         return true;
     }
 
-    // Nested objects (category_details, etc.) — JSON compare
     try {
         return JSON.stringify(a) === JSON.stringify(b);
     } catch {
@@ -276,7 +257,6 @@ function mergeProduct(
     let changed = false;
 
     for (const k of Object.keys(incoming) as (keyof ProductItem)[]) {
-        // Never overwrite the local Dexie primary key.
         if (k === 'id') continue;
 
         const a = (local as any)[k];
@@ -288,15 +268,11 @@ function mergeProduct(
         }
     }
 
-    if (!changed) return local; // reference-stable
+    if (!changed) return local;
 
     next.cached_at = new Date().toISOString();
     return next as ProductItem;
 }
-
-/* ---------------------------------------------------------
- * Unwrap response shapes
- * ------------------------------------------------------- */
 
 function resolveProductArray(raw: any): any[] {
     if (Array.isArray(raw)) return raw;
@@ -319,10 +295,6 @@ function resolveProductArray(raw: any): any[] {
     return [];
 }
 
-/* ---------------------------------------------------------
- * Debug — dump raw response (capped)
- * ------------------------------------------------------- */
-
 function summarize(payload: any): string {
     if (payload === undefined) return 'undefined';
     if (payload === null) return 'null';
@@ -341,53 +313,67 @@ function summarize(payload: any): string {
     return typeof payload;
 }
 
+/**
+ * Dumps a summary of the raw response. Uses `always` (not
+ * `__DEV__`-gated) so you can verify the fetch on any build.
+ */
 function logRawResponse(res: any, label: string) {
-    if (!__DEV__) return;
-
-    log(`=== ${label} ===`);
-    log('  ok:', res?.ok);
-    log('  status:', res?.status);
-    log('  problem:', res?.problem ?? '(none)');
+    always(`=== ${label} ===`);
+    always('  ok:', res?.ok);
+    always('  status:', res?.status);
+    always('  problem:', res?.problem ?? '(none)');
 
     const payload = res?.data;
 
     if (payload === undefined || payload === null) {
-        warn('  data: (empty)');
+        always('  data: (empty)');
         return;
     }
 
     if (Array.isArray(payload)) {
-        log(`  data: array (${payload.length} items)`);
+        always(`  data: array (${payload.length} items)`);
         if (payload.length > 0) {
             const first = payload[0];
-            log('  data[0] sample:', {
+            always('  data[0] sample:', {
                 id: first?.id,
                 key: first?.key,
                 title: first?.title,
+                bar_code: first?.bar_code,
             });
         }
         return;
     }
 
-    // Cap the key dump so a malformed 26K-key response can't lock
-    // up DevTools.
-    log('  data:', summarize(payload));
+    always('  data:', summarize(payload));
     if (Array.isArray(payload.results))
-        log(`  results: array (${payload.results.length})`);
+        always(`  results: array (${payload.results.length})`);
     if (Array.isArray(payload.data))
-        log(`  data.data: array (${payload.data.length})`);
+        always(`  data.data: array (${payload.data.length})`);
     if (Array.isArray(payload.products))
-        log(`  products: array (${payload.products.length})`);
+        always(`  products: array (${payload.products.length})`);
 
     if (payload.data && typeof payload.data === 'object') {
         if (Array.isArray(payload.data.results))
-            log(
+            always(
                 `  data.data.results: array (${payload.data.results.length})`
             );
         if (Array.isArray(payload.data.products))
-            log(
+            always(
                 `  data.data.products: array (${payload.data.products.length})`
             );
+    }
+
+    // If it's an error envelope, print it in full so nothing
+    // important is hidden behind the summary.
+    if (res?.ok === false) {
+        try {
+            always(
+                '  full error body:',
+                JSON.stringify(payload, null, 2).slice(0, 2000)
+            );
+        } catch {
+            always('  (could not stringify error body)');
+        }
     }
 }
 
@@ -412,28 +398,15 @@ export const ProductsSyncProvider: React.FC<{
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const isOnlineRef = useRef(isOnline);
     const inFlightRef = useRef(false);
+    const bootstrapCountRef = useRef(0);
 
     useEffect(() => {
         isOnlineRef.current = isOnline;
     }, [isOnline]);
 
-    /* ---------------------------------------------------------
-     * Persist — upsert merge, dedupe
-     *
-     *   1. Load existing local rows.
-     *   2. Collapse duplicates sharing a remote_id into one.
-     *   3. For each incoming remote product:
-     *        - if a local row exists, merge field-level changes;
-     *        - otherwise, insert it (Dexie assigns `id`).
-     *      This ensures a fresh install / wiped cache repopulates
-     *      from the server rather than staying empty.
-     *   4. Persist the merged set. Unchanged rows keep their
-     *      original reference so both Dexie and React skip work.
-     * ------------------------------------------------------- */
     const persistProducts = useCallback(
         async (incoming: ProductItem[]) => {
             try {
-                /* -------- 1. Load existing local rows -------- */
                 let existing: ProductItem[] = [];
                 if (isWeb && dbInstance?.products) {
                     existing = await dbInstance.products.toArray();
@@ -441,15 +414,12 @@ export const ProductsSyncProvider: React.FC<{
                     existing = await db.getProducts();
                 }
 
-                /* -------- 2. Dedupe existing by remote_id -------- */
                 const byRemoteId = new Map<string, ProductItem>();
                 const orphans: ProductItem[] = [];
 
                 for (const row of existing) {
                     const key = row.remote_id;
                     if (!key) {
-                        // Local drafts and rows without a server id
-                        // are preserved untouched.
                         orphans.push(row);
                         continue;
                     }
@@ -461,14 +431,10 @@ export const ProductsSyncProvider: React.FC<{
                         kept.id === undefined &&
                         row.id !== undefined
                     ) {
-                        // Prefer the duplicate that already has a
-                        // local Dexie id so updates land in place.
                         byRemoteId.set(key, row);
                     }
-                    // otherwise: drop the duplicate
                 }
 
-                /* -------- 3. Merge (upsert) -------- */
                 let matched = 0;
                 let updated = 0;
                 let inserted = 0;
@@ -483,8 +449,6 @@ export const ProductsSyncProvider: React.FC<{
                         if (merged !== local) updated += 1;
                         byRemoteId.set(inc.remote_id, merged);
                     } else {
-                        // Fresh product from the server. `id` is
-                        // undefined, so Dexie assigns it on write.
                         byRemoteId.set(inc.remote_id, inc);
                         inserted += 1;
                     }
@@ -495,7 +459,6 @@ export const ProductsSyncProvider: React.FC<{
                     ...orphans,
                 ];
 
-                /* -------- 4. Persist -------- */
                 if (isWeb && dbInstance?.products) {
                     await dbInstance.transaction(
                         'rw',
@@ -513,7 +476,6 @@ export const ProductsSyncProvider: React.FC<{
                     await db.saveProducts(mergedList);
                 }
 
-                /* -------- 5. Update React state -------- */
                 setProductsList((prev) => {
                     if (prev.length === mergedList.length) {
                         const same = prev.every(
@@ -524,7 +486,6 @@ export const ProductsSyncProvider: React.FC<{
                     return mergedList;
                 });
 
-                /* -------- 6. Timestamp -------- */
                 const nowStr = String(Date.now());
                 if (isWeb) {
                     localStorage.setItem(
@@ -538,7 +499,7 @@ export const ProductsSyncProvider: React.FC<{
                     );
                 }
 
-                log(
+                always(
                     `Persisted — total ${mergedList.length}, ` +
                     `matched ${matched}, updated ${updated}, ` +
                     `inserted ${inserted}, ` +
@@ -546,29 +507,26 @@ export const ProductsSyncProvider: React.FC<{
                     `incoming ${incoming.length}`
                 );
             } catch (e) {
-                warn('Persist failed:', e);
+                always('Persist failed:', e);
             }
         },
         []
     );
 
-    /* ---------------------------------------------------------
-     * Remote fetch
-     * ------------------------------------------------------- */
     const runRemoteProductsSynchronizer = useCallback(
         async () => {
-            log('Fetch starting…');
+            always('Fetch starting…');
 
             if (!token) {
-                warn('No token yet — skipping');
+                always('No token yet — skipping');
                 return;
             }
             if (!isOnlineRef.current) {
-                warn('Offline — skipping');
+                always('Offline — skipping');
                 return;
             }
             if (inFlightRef.current) {
-                warn('Fetch already in flight — skipping');
+                always('Fetch already in flight — skipping');
                 return;
             }
 
@@ -576,6 +534,8 @@ export const ProductsSyncProvider: React.FC<{
             const startedAt = Date.now();
 
             try {
+                always('→ POST GetAllProducts');
+
                 const res = await getProductsApi.request({
                     action: 'GetAllProducts',
                 });
@@ -583,7 +543,7 @@ export const ProductsSyncProvider: React.FC<{
                 logRawResponse(res, 'Raw response');
 
                 if (!res?.ok) {
-                    warn(
+                    always(
                         'Fetch failed:',
                         res?.problem ||
                         res?.status ||
@@ -593,10 +553,10 @@ export const ProductsSyncProvider: React.FC<{
                 }
 
                 const list = resolveProductArray(res?.data);
-                log(`Resolved ${list.length} raw items`);
+                always(`Resolved ${list.length} raw items`);
 
                 if (list.length === 0) {
-                    warn(
+                    always(
                         'Fetch returned 0 products — skipping persist'
                     );
                     return;
@@ -610,13 +570,13 @@ export const ProductsSyncProvider: React.FC<{
                     (p) => !p.remote_id
                 ).length;
                 if (missingRemote > 0) {
-                    warn(
+                    always(
                         `${missingRemote}/${normalized.length} normalized products have no remote_id`
                     );
                 }
 
-                log(`Normalized ${normalized.length} products`);
-                log(
+                always(`Normalized ${normalized.length} products`);
+                always(
                     'Sample normalized:',
                     normalized[0]
                         ? {
@@ -632,11 +592,11 @@ export const ProductsSyncProvider: React.FC<{
 
                 await persistProducts(normalized);
 
-                log(
+                always(
                     `Fetch complete in ${Date.now() - startedAt}ms`
                 );
             } catch (e) {
-                warn('Request threw:', e);
+                always('Request threw:', e);
             } finally {
                 inFlightRef.current = false;
             }
@@ -644,27 +604,18 @@ export const ProductsSyncProvider: React.FC<{
         [token, getProductsApi, persistProducts]
     );
 
-    /* ---------------------------------------------------------
-     * Force refresh
-     *
-     * Same merge logic as the automatic sync — just triggered by
-     * the user. We no longer wipe the cache first; the merge
-     * below handles updates, inserts, and dedupe.
-     * ------------------------------------------------------- */
     const forceProductsRefresh = useCallback(async () => {
+        always('Manual refresh triggered');
         setIsProductsRefreshing(true);
         try {
             await runRemoteProductsSynchronizer();
         } catch (e) {
-            warn('Force refresh failed:', e);
+            always('Force refresh failed:', e);
         } finally {
             setIsProductsRefreshing(false);
         }
     }, [runRemoteProductsSynchronizer]);
 
-    /* ---------------------------------------------------------
-     * Stable refs
-     * ------------------------------------------------------- */
     const actionsRef = useRef({
         runRemoteProductsSynchronizer,
     });
@@ -676,13 +627,21 @@ export const ProductsSyncProvider: React.FC<{
     });
 
     /* ---------------------------------------------------------
-     * Bootstrap — load cache, then fetch, then hourly
+     * Bootstrap — load cache, then fetch, then hourly.
+     *
+     * Fires on mount AND whenever `token` changes. Logs a
+     * bootstrap counter so you can see it re-firing on reload.
      * ------------------------------------------------------- */
     useEffect(() => {
         let cancelled = false;
+        bootstrapCountRef.current += 1;
+        const bootstrapId = bootstrapCountRef.current;
 
         const initSync = async () => {
-            log('Bootstrap starting…');
+            always(
+                `Bootstrap #${bootstrapId} starting… (token=${token ? 'present' : 'missing'
+                }, online=${isOnlineRef.current})`
+            );
 
             /* 1. Load cache */
             try {
@@ -696,19 +655,27 @@ export const ProductsSyncProvider: React.FC<{
 
                 if (!cancelled && cached?.length) {
                     setProductsList(cached);
-                    log(
-                        `Loaded ${cached.length} cached products`
+                    always(
+                        `Bootstrap #${bootstrapId}: loaded ${cached.length} cached products`
                     );
                 } else {
-                    log('No cached products found');
+                    always(
+                        `Bootstrap #${bootstrapId}: no cached products`
+                    );
                 }
             } catch (e) {
-                warn('Load cache failed:', e);
+                always(
+                    `Bootstrap #${bootstrapId}: load cache failed`,
+                    e
+                );
             }
 
             if (cancelled) return;
 
-            /* 2. Fetch immediately on mount */
+            /* 2. Fetch immediately */
+            always(
+                `Bootstrap #${bootstrapId}: firing remote fetch`
+            );
             await actionsRef.current.runRemoteProductsSynchronizer();
 
             if (cancelled) return;
@@ -717,11 +684,13 @@ export const ProductsSyncProvider: React.FC<{
             if (intervalRef.current)
                 clearInterval(intervalRef.current);
             intervalRef.current = setInterval(() => {
-                log('Hourly refresh tick');
+                always('Hourly refresh tick');
                 actionsRef.current.runRemoteProductsSynchronizer();
             }, ONE_HOUR_MS);
 
-            log('Bootstrap complete — hourly refresh armed');
+            always(
+                `Bootstrap #${bootstrapId} complete — hourly refresh armed`
+            );
         };
 
         initSync();
@@ -743,15 +712,12 @@ export const ProductsSyncProvider: React.FC<{
         if (!token) return;
 
         if (isOnline) {
-            log('Back online — refetching');
+            always('Back online — refetching');
             actionsRef.current.runRemoteProductsSynchronizer();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOnline, token]);
 
-    /* ---------------------------------------------------------
-     * Memoized value
-     * ------------------------------------------------------- */
     const value = useMemo<ProductsContextType>(
         () => ({
             productsList,

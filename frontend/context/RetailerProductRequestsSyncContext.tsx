@@ -1173,7 +1173,7 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                         const list =
                             extractRequestsArray(parsed);
 
-                        console.log("Retailer view..", list)
+                        console.log("Retailer view of Product Requests..", list)
                         if (Array.isArray(list)) {
                             await commitSnapshot(
                                 list,

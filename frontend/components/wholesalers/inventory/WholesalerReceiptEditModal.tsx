@@ -16,7 +16,12 @@ import {
 } from '@/context/WholesalerReceiptsSyncContext';
 import type { WholesalerReceipt } from '@/databases/types';
 import { Formik } from 'formik';
-import React, { useMemo, useState } from 'react';
+import React, {
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import {
     ActivityIndicator,
     Modal,
@@ -49,9 +54,12 @@ interface Props {
     onClose: () => void;
     onSave: (
         payload: WholesalerReceiptDraft,
-        mode: 'create' | 'edit'
+        mode: 'create' | 'edit',
+        saved: WholesalerReceipt,
     ) => Promise<void> | void;
     onSearchProduct?: (query: string) => Promise<any[]>;
+    initialProductId?: number | string | null;
+    initialQuantity?: number;
 }
 
 export interface WholesalerReceiptDraft {
@@ -133,9 +141,56 @@ const schema = Yup.object({
 /* =========================================================
  * Helpers
  * ======================================================= */
+
+function pickThumb(p: any): string | undefined {
+    const first = p?.images?.[0];
+    if (!first) return undefined;
+    if (typeof first === 'string') return first;
+    return first?.thumbnail || first?.image || undefined;
+}
+
+function findProduct(
+    products: any[] | undefined,
+    productId: string | number | null | undefined
+): any | undefined {
+    if (!products || products.length === 0) return undefined;
+    if (productId == null || productId === '') return undefined;
+
+    const target = String(productId).trim();
+    if (!target) return undefined;
+
+    let hit = products.find(
+        (p) =>
+            String((p as any).remote_id ?? '') === target ||
+            String((p as any).id ?? '') === target
+    );
+    if (hit) return hit;
+
+    const targetNum = Number(target);
+    if (Number.isFinite(targetNum) && targetNum !== 0) {
+        hit = products.find((p) => {
+            const rid = Number(
+                (p as any).remote_id ?? (p as any).id
+            );
+            return Number.isFinite(rid) && rid === targetNum;
+        });
+        if (hit) return hit;
+    }
+
+    const lower = target.toLowerCase();
+    return products.find((p) => {
+        const rid = String(
+            (p as any).remote_id ?? (p as any).id ?? ''
+        ).toLowerCase();
+        return rid === lower;
+    });
+}
+
 function toDraft(
     receipt: WholesalerReceipt | null,
-    userId?: string | number
+    userId: string | number | undefined,
+    initialProductId: number | string | null | undefined,
+    initialQuantity: number | undefined
 ): WholesalerReceiptDraft {
     const existing = (receipt as any)?.draft_id as
         | string
@@ -143,7 +198,19 @@ function toDraft(
 
     const productId =
         (receipt as any)?.product_id ??
-        (receipt as any)?.product;
+        (receipt as any)?.product ??
+        initialProductId ??
+        undefined;
+
+    const receiptQty =
+        (receipt as any)?.received_unit_quantity ??
+        receipt?.current_unit_quantity;
+    const seededQty =
+        receiptQty != null
+            ? receiptQty
+            : initialQuantity != null
+                ? initialQuantity
+                : 0;
 
     return {
         id: receipt?.id,
@@ -151,9 +218,7 @@ function toDraft(
             receipt?.remote_id != null
                 ? String(receipt.remote_id)
                 : undefined,
-        draft_id:
-            existing ??
-            buildDraftId(userId, productId),
+        draft_id: existing ?? buildDraftId(userId),
         product_id: productId,
         product: productId,
         title: receipt?.title ?? '',
@@ -161,12 +226,7 @@ function toDraft(
         thumbnail_url: receipt?.thumbnail_url ?? undefined,
         batch: receipt?.batch ? String(receipt.batch) : '',
         unit_of_receipt: receipt?.unit_of_receipt ?? '',
-        received_unit_quantity:
-            Number(
-                (receipt as any)?.received_unit_quantity ??
-                receipt?.current_unit_quantity ??
-                0
-            ) || 0,
+        received_unit_quantity: Number(seededQty) || 0,
         unit_buying_price:
             Number(
                 (receipt as any)?.unit_buying_price ?? 0
@@ -181,13 +241,6 @@ function toDraft(
             (receipt as any)?.manufacture_date ?? '',
         expiry_date: receipt?.expiry_date ?? '',
     };
-}
-
-function pickThumb(p: any): string | undefined {
-    const first = p?.images?.[0];
-    if (!first) return undefined;
-    if (typeof first === 'string') return first;
-    return first?.thumbnail || first?.image || undefined;
 }
 
 function toNum(raw: string): number {
@@ -238,8 +291,7 @@ function buildReceiptFromDraft(
     })();
 
     const draftId =
-        values.draft_id ||
-        buildDraftId(userId, values.product_id);
+        values.draft_id || buildDraftId(userId);
 
     const sellingPrice = String(
         values.final_unit_selling_price ?? 0
@@ -275,6 +327,7 @@ function buildReceiptFromDraft(
         long_title: values.title.trim(),
         product_title: values.title.trim(),
         product: String(values.product_id ?? ''),
+        product_id: String(values.product_id ?? ''),
         entity: existing?.entity ?? '',
         entity_title: existing?.entity_title ?? '',
         draft_id: draftId,
@@ -371,9 +424,15 @@ export function WholesalerReceiptEditModal({
     onClose,
     onSave,
     onSearchProduct,
+    initialProductId,
+    initialQuantity,
 }: Props) {
     const { theme, isDarkMode, user } = useAuth();
-    const { productsList, isProductsSyncing } = useProductsSync();
+    const {
+        productsList,
+        isProductsSyncing,
+        triggerProductsFetch,
+    } = useProductsSync();
     const { addLocalReceipt, updateLocalReceipt } =
         useWholesalerReceiptsSync();
     const { width: vw } = useWindowDimensions();
@@ -397,6 +456,8 @@ export function WholesalerReceiptEditModal({
         null
     );
 
+    const formikRef = useRef<any>(null);
+
     const pickerProducts = useMemo(
         () =>
             (productsList ?? []).map((p: any) => ({
@@ -407,9 +468,141 @@ export function WholesalerReceiptEditModal({
     );
 
     const initialValues = useMemo(
-        () => toDraft(receipt, (user as any)?.id),
-        [receipt, (user as any)?.id]
+        () =>
+            toDraft(
+                receipt,
+                (user as any)?.id,
+                initialProductId,
+                initialQuantity
+            ),
+        [
+            receipt,
+            (user as any)?.id,
+            initialProductId,
+            initialQuantity,
+        ]
     );
+
+    const seededProductId =
+        (receipt as any)?.product_id ??
+        (receipt as any)?.product ??
+        initialProductId;
+
+    /* ---------------------------------------------------------
+     * Nudge the products context to fetch when the modal opens
+     * and the catalog is empty. Guards against the bootstrap
+     * having already run (or failed) without populating the
+     * in-memory list.
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!visible) return;
+        if (productsList.length > 0) return;
+        if (isProductsSyncing) return;
+
+        console.log(
+            '[WholesalerReceiptEditModal] catalog empty — triggering fetch'
+        );
+        void triggerProductsFetch();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [visible]);
+
+    /* ---------------------------------------------------------
+     * Diagnostic: what state does the modal actually see?
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!visible) return;
+
+        console.log(
+            '[WholesalerReceiptEditModal] state',
+            {
+                productsLength: productsList.length,
+                pickerProductsLength: pickerProducts.length,
+                isProductsSyncing,
+                seededProductId: String(
+                    seededProductId ?? ''
+                ),
+                initialTitle: initialValues.title,
+                formikTitle:
+                    formikRef.current?.values?.title ?? null,
+            }
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        visible,
+        productsList.length,
+        isProductsSyncing,
+        initialValues.title,
+    ]);
+
+    /* ---------------------------------------------------------
+     * Patch the seeded product into the form once the catalog
+     * arrives.
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!visible) return;
+
+        const formik = formikRef.current;
+        if (!formik) return;
+
+        if (formik.values?.title) return;
+        if (
+            seededProductId == null ||
+            seededProductId === ''
+        )
+            return;
+        if (!pickerProducts || pickerProducts.length === 0)
+            return;
+
+        const match = findProduct(
+            pickerProducts,
+            seededProductId
+        );
+
+        if (!match) {
+            console.warn(
+                '[WholesalerReceiptEditModal] product lookup miss',
+                {
+                    target: String(seededProductId),
+                    productsLength: pickerProducts.length,
+                    sampleRemoteIds: pickerProducts
+                        .slice(0, 5)
+                        .map((p: any) => ({
+                            remote_id: p?.remote_id,
+                            id: p?.id,
+                            title: p?.title,
+                        })),
+                }
+            );
+            return;
+        }
+
+        console.log(
+            '[WholesalerReceiptEditModal] product matched — patching form',
+            {
+                target: String(seededProductId),
+                matchTitle: match.title,
+                matchRemoteId: (match as any).remote_id,
+            }
+        );
+
+        formik.setFieldValue(
+            'title',
+            match.title ??
+            (match as any).long_title ??
+            (match as any).product_name ??
+            ''
+        );
+        formik.setFieldValue(
+            'bar_code',
+            match.bar_code ?? ''
+        );
+        formik.setFieldValue(
+            'thumbnail_url',
+            pickThumb(match) ??
+            (match as any).thumbnail_url ??
+            undefined
+        );
+    }, [visible, pickerProducts, seededProductId]);
 
     if (!visible) return null;
 
@@ -429,6 +622,7 @@ export function WholesalerReceiptEditModal({
                 style={{ padding: isSmall ? 0 : 16 }}
             >
                 <Formik<WholesalerReceiptDraft>
+                    innerRef={formikRef}
                     initialValues={initialValues}
                     validationSchema={schema}
                     enableReinitialize
@@ -441,15 +635,9 @@ export function WholesalerReceiptEditModal({
 
                         const resolvedDraftId =
                             mode === 'create'
-                                ? buildDraftId(
-                                    userId,
-                                    values.product_id
-                                )
+                                ? buildDraftId(userId)
                                 : values.draft_id ||
-                                buildDraftId(
-                                    userId,
-                                    values.product_id
-                                );
+                                buildDraftId(userId);
 
                         const valuesWithDraft = {
                             ...values,
@@ -463,51 +651,32 @@ export function WholesalerReceiptEditModal({
                                 receipt
                             );
 
-                        console.log(
-                            '[WholesalerReceiptEditModal] About to persist:',
-                            JSON.stringify(
-                                localReceipt,
-                                null,
-                                2
-                            )
-                        );
-
                         try {
                             setSaving(true);
 
+                            let persisted: WholesalerReceipt;
+
                             if (mode === 'create') {
-                                const created =
+                                persisted =
                                     await addLocalReceipt(
                                         localReceipt
                                     );
-                                console.log(
-                                    '[WholesalerReceiptEditModal] Local insert ok',
-                                    {
-                                        draft_id:
-                                            created?.draft_id,
-                                    }
-                                );
                             } else {
                                 await updateLocalReceipt(
                                     localReceipt
                                 );
-                                console.log(
-                                    '[WholesalerReceiptEditModal] Local update ok',
-                                    {
-                                        remote_id:
-                                            localReceipt.remote_id,
-                                    }
-                                );
+                                persisted = localReceipt;
                             }
 
                             try {
                                 await onSave(
                                     valuesWithDraft,
-                                    mode
+                                    mode,
+                                    persisted
                                 );
                             } catch (parentErr: any) {
                                 console.warn(
-                                    '[WholesalerReceiptEditModal] Parent onSave threw (non-fatal):',
+                                    '[WholesalerReceiptEditModal] onSave threw (non-fatal):',
                                     parentErr
                                 );
                             }
@@ -531,7 +700,6 @@ export function WholesalerReceiptEditModal({
                     {(formik) => {
                         const {
                             values,
-                            errors,
                             isSubmitting,
                             setFieldValue,
                             setTouched,
@@ -720,8 +888,7 @@ export function WholesalerReceiptEditModal({
                                                         'draft_id',
                                                         buildDraftId(
                                                             (user as any)
-                                                                ?.id,
-                                                            nextId
+                                                                ?.id
                                                         )
                                                     );
                                                 }
@@ -900,8 +1067,8 @@ export function WholesalerReceiptEditModal({
                                 {/* -------- Footer -------- */}
                                 <View
                                     className={`border-t ${isSm
-                                            ? 'flex-col-reverse gap-3'
-                                            : 'flex-row justify-end gap-2'
+                                        ? 'flex-col-reverse gap-3'
+                                        : 'flex-row justify-end gap-2'
                                         }`}
                                     style={{
                                         borderTopColor: dividerColor,
@@ -916,8 +1083,8 @@ export function WholesalerReceiptEditModal({
                                         disabled={saving}
                                         hitSlop={6}
                                         className={`rounded-xl border items-center justify-center ${isSm
-                                                ? 'w-full py-3.5'
-                                                : 'px-4 py-3'
+                                            ? 'w-full py-3.5'
+                                            : 'px-4 py-3'
                                             }`}
                                         style={{
                                             borderColor,
@@ -939,26 +1106,14 @@ export function WholesalerReceiptEditModal({
                                     </Pressable>
 
                                     <Pressable
-                                        onPress={() => {
-                                            console.log(
-                                                '[WholesalerReceiptEditModal] Save button pressed',
-                                                {
-                                                    mode,
-                                                    saving,
-                                                    isSubmitting,
-                                                    values,
-                                                    errors,
-                                                }
-                                            );
-                                            handleSavePress();
-                                        }}
+                                        onPress={handleSavePress}
                                         disabled={
                                             saving || isSubmitting
                                         }
                                         hitSlop={6}
                                         className={`rounded-xl flex-row items-center justify-center gap-2 ${isSm
-                                                ? 'w-full py-3.5'
-                                                : 'px-6 py-3'
+                                            ? 'w-full py-3.5'
+                                            : 'px-6 py-3'
                                             }`}
                                         style={{
                                             backgroundColor:

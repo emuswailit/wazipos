@@ -31,10 +31,16 @@ interface InventorySyncContextType {
     isManualRefreshing: boolean;
     isLiveConnected: boolean;
     isPushSyncing: boolean;
+    isOnline: boolean;
     pendingCount: number;
     triggerManualFetch: () => Promise<void>;
     forceManualRefresh: () => Promise<void>;
     pushPending: () => Promise<void>;
+    refreshLocal: () => Promise<void>;
+    applyServerReceipt: (
+        serverRecord: any,
+        draftId?: string
+    ) => Promise<void>;
     lastSyncedTime: string;
     retailerReceipts: RetailerReceipt[];
 }
@@ -50,10 +56,12 @@ const InventorySyncContext = createContext<
 const NATIVE_INVENTORY_KEY =
     'wazipos_async_inventory_registry';
 
-const IMAGE_BASE_URL = 'https://api.wazipos.co.ke';
-
-const WS_RECONNECT_DELAY_MS = 5 * 60 * 1000;
+const WS_RECONNECT_BASE_MS = 3000;
+const WS_RECONNECT_MAX_MS = 60000;
 const INVENTORY_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+const WS_URL =
+    'wss://api.wazipos.co.ke/ws/retailers/inventory/';
 
 /* =========================================================
  * Logging
@@ -73,10 +81,6 @@ const warn = (...args: any[]) => {
 const firstDefined = (...vals: any[]) =>
     vals.find((v) => v !== undefined && v !== null);
 
-/**
- * Normalizes the `synced` flag which may appear as:
- *   false (boolean), 'false' (string), 'FALSE' (string), 0
- */
 const isPendingSync = (raw: any): boolean =>
     raw === false ||
     raw === 'false' ||
@@ -84,10 +88,18 @@ const isPendingSync = (raw: any): boolean =>
     raw === 0 ||
     raw === '0';
 
+function isServerAssignedId(raw: any): boolean {
+    if (raw === undefined || raw === null) return false;
+    const s = String(raw).trim();
+    if (!s) return false;
+    if (s.startsWith('local-')) return false;
+    if (s.startsWith('temp-')) return false;
+    return true;
+}
+
 function notify(title: string, message: string) {
     if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') {
-            /* eslint-disable-next-line no-alert */
             window.alert(`${title}\n\n${message}`);
         } else {
             console.log(`[NOTIFY] ${title} — ${message}`);
@@ -191,17 +203,55 @@ function resolveImageUrl(rawPath: any): string | null {
         ? trimmed.substring(1)
         : trimmed;
 
-    return `${IMAGE_BASE_URL}/${cleanPath
+    return `https://api.wazipos.co.ke/${cleanPath
         .split('/')
         .map((seg) => encodeURIComponent(seg))
         .join('/')}`;
 }
 
 /* =========================================================
- * normalizeItem — wire receipt → RetailerReceipt
- *
- * RULE: the server's `id` (or `key`) goes into `remote_id`.
- * `id` is left undefined so Dexie assigns `++id`.
+ * WS frame extraction
+ * ======================================================= */
+
+const FRAME_KEYS = [
+    'inventory',
+    'retailer_receipts',
+    'receipts',
+    'results',
+    'items',
+    'data',
+];
+
+function extractInventoryFromFrame(
+    parsed: any
+): any[] | null {
+    if (!parsed) return null;
+    if (Array.isArray(parsed)) return parsed;
+    if (typeof parsed !== 'object') return null;
+
+    for (const k of FRAME_KEYS) {
+        const v = (parsed as any)[k];
+        if (Array.isArray(v)) return v;
+    }
+
+    for (const wrapper of ['data', 'payload', 'body']) {
+        const w = (parsed as any)[wrapper];
+        if (
+            w &&
+            typeof w === 'object' &&
+            !Array.isArray(w)
+        ) {
+            for (const k of FRAME_KEYS) {
+                const v = (w as any)[k];
+                if (Array.isArray(v)) return v;
+            }
+        }
+    }
+    return null;
+}
+
+/* =========================================================
+ * normalizeItem
  * ======================================================= */
 
 function normalizeItem(
@@ -209,7 +259,11 @@ function normalizeItem(
     ts: string
 ): RetailerReceipt {
     const uPrice = String(
-        firstDefined(item.unit_selling_price, item.price, '0.00')
+        firstDefined(
+            item.unit_selling_price,
+            item.price,
+            '0.00'
+        )
     );
 
     const resolvedUrl = resolveImageUrl(item.images);
@@ -223,7 +277,9 @@ function normalizeItem(
     );
 
     return {
-        cached_at: String(firstDefined(item.cached_at, ts)),
+        cached_at: String(
+            firstDefined(item.cached_at, ts)
+        ),
 
         remote_id: remoteId,
         remote_key: item.key ? String(item.key) : undefined,
@@ -238,7 +294,11 @@ function normalizeItem(
             firstDefined(item.title, item.product_title, '')
         ),
         long_title: String(
-            firstDefined(item.long_title, item.product_title, '')
+            firstDefined(
+                item.long_title,
+                item.product_title,
+                ''
+            )
         ),
         product_title: String(
             firstDefined(item.product_title, item.title, '')
@@ -247,8 +307,12 @@ function normalizeItem(
         entity: String(item.entity ?? ''),
         entity_title: String(item.entity_title ?? ''),
         draft_id: item.draft_id ?? null,
-        preparation_title: String(item.preparation_title ?? ''),
-        formulation_title: String(item.formulation_title ?? ''),
+        preparation_title: String(
+            item.preparation_title ?? ''
+        ),
+        formulation_title: String(
+            item.formulation_title ?? ''
+        ),
         received_from: item.received_from ?? null,
         received_from_title: String(
             item.received_from_title ?? ''
@@ -272,7 +336,10 @@ function normalizeItem(
             : null,
         unit_selling_price: uPrice,
         final_unit_selling_price: String(
-            firstDefined(item.final_unit_selling_price, uPrice)
+            firstDefined(
+                item.final_unit_selling_price,
+                uPrice
+            )
         ),
         unit_price_discount: String(
             item.unit_price_discount ?? '0.00'
@@ -304,7 +371,9 @@ function normalizeItem(
         ),
 
         manufacturer: String(item.manufacturer ?? ''),
-        manufacturer_title: String(item.manufacturer_title ?? ''),
+        manufacturer_title: String(
+            item.manufacturer_title ?? ''
+        ),
 
         packaging: String(item.packaging ?? ''),
         units_per_pack: Number(
@@ -334,11 +403,12 @@ function areReceiptsEqual(
     for (let i = 0; i < a.length; i++) {
         const x = a[i];
         const y = b[i];
-
         if (
             x.remote_id !== y.remote_id ||
-            x.current_unit_quantity !== y.current_unit_quantity ||
-            x.received_unit_quantity !== y.received_unit_quantity ||
+            x.current_unit_quantity !==
+            y.current_unit_quantity ||
+            x.received_unit_quantity !==
+            y.received_unit_quantity ||
             x.unit_selling_price !== y.unit_selling_price ||
             x.final_unit_selling_price !==
             y.final_unit_selling_price ||
@@ -354,7 +424,6 @@ function areReceiptsEqual(
             return false;
         }
     }
-
     return true;
 }
 
@@ -388,14 +457,16 @@ export const InventorySyncProvider: React.FC<{
 
     const wsRef = useRef<WebSocket | null>(null);
     const receiptsStateRef = useRef<RetailerReceipt[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(
+        null
+    );
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const pushGuardRef = useRef(false);
+    const reconnectAttemptRef = useRef(0);
 
     const isOnlineRef = useRef(isOnline);
     useEffect(() => {
         isOnlineRef.current = isOnline;
-        log('Network state changed — isOnline:', isOnline);
     }, [isOnline]);
 
     useEffect(() => {
@@ -403,110 +474,117 @@ export const InventorySyncProvider: React.FC<{
     }, [retailerReceipts]);
 
     /* ---------------------------------------------------------
-     * Storage — writes to BOTH stores
+     * Storage
      * ------------------------------------------------------- */
     const commitToStorage = useCallback(
         async (data: RetailerReceipt[]) => {
-            log(`commitToStorage — ${data.length} rows`);
-
-            const tasks: Promise<any>[] = [];
-
-            tasks.push(
-                AsyncStorage.setItem(
-                    NATIVE_INVENTORY_KEY,
-                    JSON.stringify(data)
-                ).catch((err) =>
-                    warn('AsyncStorage write failed:', err)
-                )
-            );
-
-            if (dbInstance?.retailerReceipts) {
-                tasks.push(
-                    (async () => {
-                        try {
-                            await dbInstance.transaction(
-                                'rw',
-                                dbInstance.retailerReceipts,
-                                async () => {
-                                    await dbInstance.retailerReceipts.clear();
-                                    await dbInstance.retailerReceipts.bulkPut(
-                                        data
-                                    );
-                                }
-                            );
-                        } catch (err) {
-                            warn('Dexie write failed:', err);
+            if (Platform.OS === 'web') {
+                if (!dbInstance?.retailerReceipts) return;
+                try {
+                    await dbInstance.transaction(
+                        'rw',
+                        dbInstance.retailerReceipts,
+                        async () => {
+                            await dbInstance.retailerReceipts.clear();
+                            if (data.length > 0) {
+                                await dbInstance.retailerReceipts.bulkPut(
+                                    data
+                                );
+                            }
                         }
-                    })()
-                );
+                    );
+                } catch (err) {
+                    warn('Dexie write failed:', err);
+                }
+                return;
             }
 
-            await Promise.allSettled(tasks);
-            log('commitToStorage done');
+            try {
+                await AsyncStorage.setItem(
+                    NATIVE_INVENTORY_KEY,
+                    JSON.stringify(data)
+                );
+            } catch (err) {
+                warn('AsyncStorage write failed:', err);
+            }
         },
         []
     );
 
     const readLocalRecords = useCallback(
         async (): Promise<RetailerReceipt[]> => {
-            const [asyncData, dexieData] = await Promise.all([
-                AsyncStorage.getItem(NATIVE_INVENTORY_KEY)
-                    .then((raw) => (raw ? JSON.parse(raw) : []))
-                    .catch(() => []),
-                (async () => {
-                    try {
-                        if (dbInstance?.retailerReceipts) {
-                            return await dbInstance.retailerReceipts.toArray();
-                        }
-                    } catch { }
-                    return [];
-                })(),
-            ]);
+            if (Platform.OS === 'web') {
+                try {
+                    if (dbInstance?.retailerReceipts) {
+                        return await dbInstance.retailerReceipts.toArray();
+                    }
+                } catch (err) {
+                    warn('Dexie read failed:', err);
+                }
+                return [];
+            }
 
-            const chosen =
-                asyncData.length >= dexieData.length
-                    ? asyncData
-                    : dexieData;
-
-            log(
-                `readLocalRecords — async: ${asyncData.length}, dexie: ${dexieData.length}, using: ${chosen.length}`
-            );
-            return chosen;
+            try {
+                const raw = await AsyncStorage.getItem(
+                    NATIVE_INVENTORY_KEY
+                );
+                return raw ? JSON.parse(raw) : [];
+            } catch (err) {
+                warn('AsyncStorage read failed:', err);
+                return [];
+            }
         },
         []
     );
 
+    const refreshLocal = useCallback(async () => {
+        try {
+            const records = await readLocalRecords();
+            if (!records || records.length === 0) return;
+
+            const refreshed = records.map((r) => {
+                const days = computeDaysToExpiry(r.expiry_date);
+                return {
+                    ...r,
+                    days_to_expiry: days,
+                    expiry_status: computeExpiryStatus(days),
+                };
+            });
+
+            setRetailerReceipts((prev) =>
+                areReceiptsEqual(prev, refreshed)
+                    ? prev
+                    : refreshed
+            );
+        } catch (e) {
+            warn('refreshLocal threw:', e);
+        }
+    }, [readLocalRecords]);
+
     const hydrateFromLocalDB = useCallback(async () => {
         try {
-            log('hydrateFromLocalDB — starting');
             const cached = await readLocalRecords();
 
             if (cached?.length > 0) {
-                const refreshed = cached.map(
-                    (r: RetailerReceipt) => {
-                        const days = computeDaysToExpiry(
-                            r.expiry_date
-                        );
-                        return {
-                            ...r,
-                            days_to_expiry: days,
-                            expiry_status:
-                                computeExpiryStatus(days),
-                        };
-                    }
-                );
+                const refreshed = cached.map((r) => {
+                    const days = computeDaysToExpiry(
+                        r.expiry_date
+                    );
+                    return {
+                        ...r,
+                        days_to_expiry: days,
+                        expiry_status:
+                            computeExpiryStatus(days),
+                    };
+                });
 
                 setRetailerReceipts((prev) =>
                     areReceiptsEqual(prev, refreshed)
                         ? prev
                         : refreshed
                 );
-
-                log(`hydrateFromLocalDB — loaded ${refreshed.length}`);
                 return refreshed;
             }
-
-            log('hydrateFromLocalDB — no cached rows');
             return cached;
         } catch (e) {
             warn('hydrateFromLocalDB threw:', e);
@@ -515,94 +593,145 @@ export const InventorySyncProvider: React.FC<{
     }, [readLocalRecords]);
 
     /* ---------------------------------------------------------
-     * Local migration
+     * Migration
      * ------------------------------------------------------- */
     const runLocalMigration = useCallback(async () => {
-        if (!currentUserId) {
-            log('runLocalMigration — skipped (no userId)');
-            return;
-        }
+        if (!currentUserId) return;
         try {
-            log('runLocalMigration — running');
             await backfillDraftIds(currentUserId);
-            log('runLocalMigration — done');
         } catch (e) {
             warn('runLocalMigration threw:', e);
         }
     }, [currentUserId]);
 
     /* ---------------------------------------------------------
-     * Pull — remote GET
+     * Apply server response
+     *
+     * Called by the modal after a successful Create/Update.
+     * Matches an existing local row by draft_id (preferred) or
+     * remote_id, merges the server values in, and commits to
+     * storage. Keeps the local numeric Dexie PK so the row
+     * updates in place instead of inserting a duplicate.
+     *
+     * The WS broadcast that arrives later is idempotent — it
+     * replaces the row with identical values.
+     * ------------------------------------------------------- */
+    const applyServerReceipt = useCallback(
+        async (serverRecord: any, draftId?: string) => {
+            if (!serverRecord) return;
+
+            const now = new Date().toISOString();
+            const normalized = normalizeItem(serverRecord, now);
+
+            const effectiveDraftId =
+                normalized.draft_id ?? draftId ?? null;
+
+            const existing = receiptsStateRef.current;
+
+            const idx = existing.findIndex((r) => {
+                if (
+                    effectiveDraftId &&
+                    (r as any).draft_id === effectiveDraftId
+                ) {
+                    return true;
+                }
+                if (
+                    normalized.remote_id &&
+                    r.remote_id === normalized.remote_id
+                ) {
+                    return true;
+                }
+                return false;
+            });
+
+            let merged: RetailerReceipt[];
+
+            if (idx >= 0) {
+                const current = existing[idx];
+                merged = [...existing];
+                merged[idx] = {
+                    ...current,
+                    ...normalized,
+                    // Preserve local numeric Dexie PK.
+                    id: (current as any).id,
+                    draft_id:
+                        effectiveDraftId ??
+                        (current as any).draft_id,
+                    synced: true,
+                    sync_error: null,
+                    cached_at: now,
+                };
+                log(
+                    'applied server receipt (update)',
+                    normalized.remote_id
+                );
+            } else {
+                merged = [
+                    ...existing,
+                    {
+                        ...normalized,
+                        draft_id: effectiveDraftId,
+                        synced: true,
+                        sync_error: null,
+                        cached_at: now,
+                    } as RetailerReceipt,
+                ];
+                log(
+                    'applied server receipt (create)',
+                    normalized.remote_id
+                );
+            }
+
+            await commitToStorage(merged);
+            setRetailerReceipts((prev) =>
+                areReceiptsEqual(prev, merged)
+                    ? prev
+                    : merged
+            );
+            setLastSyncedTime(
+                new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                })
+            );
+        },
+        [commitToStorage]
+    );
+
+    /* ---------------------------------------------------------
+     * Pull
      * ------------------------------------------------------- */
     const runRemoteInventorySynchronizer = useCallback(
         async () => {
-            log('=== Pull starting ===');
-            log('  token:', !!token);
-            log('  isOnline:', isOnlineRef.current);
-
-            if (!token) {
-                warn('  pull skipped — no token');
-                return;
-            }
-            if (!isOnlineRef.current) {
-                warn('  pull skipped — offline');
-                return;
-            }
+            if (!token || !isOnlineRef.current) return;
 
             try {
-                const res = await getInventoryReadApi
-                    .request({ action: 'GetRetailerReceipts' })
-                    .catch((e) => {
-                        warn('  request threw:', e);
-                        return null;
-                    });
-
-                log('  response ok:', res?.ok);
-                log('  response status:', res?.status);
-                log('  response problem:', res?.problem);
-                log(
-                    '  response data type:',
-                    Array.isArray(res?.data)
-                        ? 'array'
-                        : typeof res?.data
-                );
+                const res =
+                    await getInventoryReadApi
+                        .request({
+                            action: 'GetRetailerReceipts',
+                        })
+                        .catch((e) => {
+                            warn('pull request threw:', e);
+                            return null;
+                        });
 
                 const raw = res?.data;
                 const data = raw?.results || raw;
-                log(
-                    '  resolved item count:',
-                    Array.isArray(data) ? data.length : 0
-                );
 
                 if (res?.ok && Array.isArray(data)) {
                     const nowStr = new Date().toISOString();
-
                     const normalized = data.map((item: any) =>
                         normalizeItem(item, nowStr)
-                    );
-
-                    log('  normalized count:', normalized.length);
-                    log(
-                        '  first normalized:',
-                        normalized[0]
-                            ? {
-                                remote_id: normalized[0].remote_id,
-                                title: normalized[0].title,
-                                qty: normalized[0]
-                                    .current_unit_quantity,
-                            }
-                            : null
                     );
 
                     const existing = receiptsStateRef.current;
                     const pendingLocal = existing.filter((r) =>
                         isPendingSync(r.synced)
                     );
-
                     const serverIds = new Set(
                         normalized.map((r) => r.remote_id)
                     );
-
                     const localById = new Map(
                         existing.map((r) => [r.remote_id, r])
                     );
@@ -615,18 +744,51 @@ export const InventorySyncProvider: React.FC<{
                             const localRec = localById.get(
                                 serverRec.remote_id
                             );
+
+                            if (!localRec) {
+                                return { ...serverRec, synced: true };
+                            }
+
+                            const localEditedAt = Date.parse(
+                                String(
+                                    (localRec as any).cached_at ??
+                                    (localRec as any).updated ??
+                                    ''
+                                )
+                            );
+                            const serverUpdatedAt = Date.parse(
+                                String(
+                                    (serverRec as any).updated ??
+                                    (serverRec as any).cached_at ??
+                                    ''
+                                )
+                            );
+                            const localIsNewer =
+                                Number.isFinite(localEditedAt) &&
+                                Number.isFinite(serverUpdatedAt) &&
+                                localEditedAt > serverUpdatedAt;
+
+                            if (
+                                isPendingSync(localRec.synced) ||
+                                localIsNewer
+                            ) {
+                                return {
+                                    ...serverRec,
+                                    ...localRec,
+                                    synced: localRec.synced,
+                                };
+                            }
+
                             return {
                                 ...serverRec,
-                                id: localRec?.id,
+                                id: (localRec as any).id,
                                 draft_id:
-                                    localRec?.draft_id ??
+                                    localRec.draft_id ??
                                     serverRec.draft_id,
                                 synced: true,
                             };
                         }),
                     ];
-
-                    log(`  merged count: ${merged.length}`);
 
                     await commitToStorage(merged);
                     setRetailerReceipts((prev) =>
@@ -634,59 +796,33 @@ export const InventorySyncProvider: React.FC<{
                             ? prev
                             : merged
                     );
-
                     setLastSyncedTime(
                         new Date().toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
                         })
                     );
-
-                    log('Pull complete');
-                } else {
-                    warn(
-                        '  pull aborted — response not ok or data not array'
-                    );
                 }
             } catch (e) {
                 warn('runRemoteInventorySynchronizer threw:', e);
             }
         },
-        [
-            token,
-            getInventoryReadApi,
-            commitToStorage,
-        ]
+        [token, getInventoryReadApi, commitToStorage]
     );
 
     /* ---------------------------------------------------------
-     * Push — local → remote
+     * Push (legacy pending records only)
      * ------------------------------------------------------- */
     const pushPending = useCallback(async () => {
-        log('=== Push starting ===');
-        log('  token:', !!token);
-        log('  isOnline:', isOnlineRef.current);
-        log('  pushGuard:', pushGuardRef.current);
-
-        if (!token) {
-            warn('  push skipped — no token');
-            return;
-        }
-        if (!isOnlineRef.current) {
-            warn('  push skipped — offline');
-            return;
-        }
-        if (pushGuardRef.current) {
-            warn('  push skipped — already in flight');
-            return;
-        }
+        if (!token) return;
+        if (!isOnlineRef.current) return;
+        if (pushGuardRef.current) return;
 
         pushGuardRef.current = true;
         setIsPushSyncing(true);
 
         let succeeded = 0;
         let failed = 0;
-        let firstFailure: any = null;
 
         try {
             const all = await readLocalRecords();
@@ -694,33 +830,12 @@ export const InventorySyncProvider: React.FC<{
                 isPendingSync(r.synced)
             );
 
-            log(
-                `  local rows: ${all.length}, pending: ${pending.length}`
-            );
-
-            if (pending.length > 0) {
-                log(
-                    '  pending synced values:',
-                    pending.map((p) => ({
-                        draft_id: p.draft_id,
-                        synced: p.synced,
-                        type: typeof p.synced,
-                    }))
-                );
-            }
-
-            if (pending.length === 0) {
-                log('  nothing to push');
-                return;
-            }
+            if (pending.length === 0) return;
 
             let madeAChange = false;
 
             for (const record of pending) {
-                if (!isOnlineRef.current) {
-                    warn('  went offline mid-loop — stopping');
-                    break;
-                }
+                if (!isOnlineRef.current) break;
 
                 const draftId =
                     record.draft_id ||
@@ -729,6 +844,10 @@ export const InventorySyncProvider: React.FC<{
                         record.product || '',
                         null
                     );
+
+                const isUpdate = isServerAssignedId(
+                    record.remote_id
+                );
 
                 const details = {
                     bar_code: record.bar_code || '',
@@ -743,7 +862,8 @@ export const InventorySyncProvider: React.FC<{
                     product: record.product || '',
                     quantity_discount: '',
                     supplier_invoice: '',
-                    received_from: record.received_from || '',
+                    received_from:
+                        record.received_from || '',
                     unit_of_receipt: String(
                         record.unit_of_receipt || ''
                     ),
@@ -756,22 +876,32 @@ export const InventorySyncProvider: React.FC<{
                     unit_selling_price: String(
                         record.unit_selling_price || ''
                     ),
+                    unit_price_discount: String(
+                        (record as any).unit_price_discount ??
+                        '0.00'
+                    ),
                     draft_id: draftId,
                 };
 
-                const body = {
-                    action: 'CreateRetailerReceipt',
+                const body: any = {
+                    action: isUpdate
+                        ? 'UpdateRetailerReceipt'
+                        : 'CreateRetailerReceipt',
                     user_id: currentUserId,
                     retailer_receipt_details: details,
                 };
 
-                log(`  → pushing draft=${draftId}`);
+                if (isUpdate) {
+                    body.retailer_receipt_id = String(
+                        record.remote_id
+                    );
+                }
 
                 let res: any = null;
                 try {
-                    res = await getInventoryWriteApi.request(body);
+                    res =
+                        await getInventoryWriteApi.request(body);
                 } catch (e: any) {
-                    warn('  request threw:', e);
                     res = {
                         ok: false,
                         problem: 'exception',
@@ -782,12 +912,11 @@ export const InventorySyncProvider: React.FC<{
                     };
                 }
 
-                log(
-                    `  ← response ok=${res?.ok} status=${res?.status}`
-                );
-
                 const idx = all.findIndex(
-                    (r) => r.remote_id === record.remote_id
+                    (r) =>
+                        (r as any).id === (record as any).id ||
+                        (r as any).draft_id ===
+                        (record as any).draft_id
                 );
 
                 if (res?.ok) {
@@ -796,10 +925,6 @@ export const InventorySyncProvider: React.FC<{
 
                     const serverRecord =
                         res?.data?.retailer_receipt;
-
-                    log(
-                        `  ✓ ${draftId} → server id: ${serverRecord?.id}`
-                    );
 
                     if (idx >= 0) {
                         all[idx] = {
@@ -818,20 +943,6 @@ export const InventorySyncProvider: React.FC<{
                 } else {
                     failed++;
                     madeAChange = true;
-
-                    if (!firstFailure) {
-                        firstFailure = {
-                            id: record.remote_id,
-                            response: res,
-                        };
-                    }
-
-                    warn(
-                        `  ✗ ${draftId} — ${res?.data?.message ||
-                        res?.problem ||
-                        'unknown'
-                        }`
-                    );
 
                     if (idx >= 0) {
                         all[idx] = {
@@ -854,12 +965,7 @@ export const InventorySyncProvider: React.FC<{
                         ? prev
                         : verify
                 );
-                log('  queue updated after push');
             }
-
-            log(
-                `Push complete — ${succeeded} ok, ${failed} failed`
-            );
 
             if (succeeded > 0 && failed === 0) {
                 notify(
@@ -870,31 +976,17 @@ export const InventorySyncProvider: React.FC<{
             } else if (succeeded > 0 && failed > 0) {
                 notify(
                     'Sync Partial',
-                    `${succeeded} succeeded · ${failed} failed.\n\nLast error:\n${JSON.stringify(
-                        firstFailure?.response?.data ??
-                        firstFailure?.response,
-                        null,
-                        2
-                    ).slice(0, 800)}`
+                    `${succeeded} succeeded · ${failed} failed.`
                 );
             } else if (failed > 0) {
                 notify(
                     'Sync Failed',
                     `${failed} item${failed === 1 ? '' : 's'
-                    } could not be synced.\n\nServer response:\n${JSON.stringify(
-                        firstFailure?.response?.data ??
-                        firstFailure?.response,
-                        null,
-                        2
-                    ).slice(0, 800)}`
+                    } could not be synced.`
                 );
             }
         } catch (err: any) {
             warn('pushPending outer error:', err);
-            notify(
-                'Sync Error',
-                err?.message || 'Unexpected error during sync.'
-            );
         } finally {
             pushGuardRef.current = false;
             setIsPushSyncing(false);
@@ -912,10 +1004,10 @@ export const InventorySyncProvider: React.FC<{
      * ------------------------------------------------------- */
     const establishLiveWebSocketSync = useCallback(
         (currentToken: string) => {
-            log('WebSocket — establishing');
-
-            if (reconnectTimeoutRef.current)
+            if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+            }
 
             if (wsRef.current) {
                 try {
@@ -926,63 +1018,93 @@ export const InventorySyncProvider: React.FC<{
             }
 
             if (!currentToken || !isOnlineRef.current) {
-                warn('WebSocket — skipped (no token or offline)');
                 setIsLiveConnected(false);
                 return;
             }
 
             try {
-                const url = `wss://api.wazipos.co.ke/ws/retailers/inventory/?token=${currentToken}`;
-                log('WebSocket — connecting to', url.slice(0, 80) + '…');
-
+                const url = `${WS_URL}?token=${encodeURIComponent(
+                    currentToken
+                )}`;
                 const ws = new WebSocket(url);
                 wsRef.current = ws;
 
                 ws.onopen = () => {
-                    log('WebSocket — connected');
                     setIsLiveConnected(true);
+                    reconnectAttemptRef.current = 0;
+                    log('WebSocket — connected');
                 };
 
                 ws.onmessage = async (event) => {
-                    log('WebSocket — message received');
                     try {
                         const parsed = JSON.parse(event.data);
-                        const incoming = parsed?.inventory;
-                        log(
-                            '  incoming inventory count:',
-                            Array.isArray(incoming)
-                                ? incoming.length
-                                : 0
-                        );
+                        const incoming =
+                            extractInventoryFromFrame(parsed);
 
-                        if (
-                            !incoming ||
-                            !Array.isArray(incoming)
-                        )
+                        if (!incoming || incoming.length === 0) {
                             return;
+                        }
 
-                        const nowStr = new Date().toISOString();
+                        const nowStr =
+                            new Date().toISOString();
                         const currentMap = new Map<
                             string,
                             RetailerReceipt
                         >(
                             receiptsStateRef.current.map(
-                                (item) => [item.remote_id, item]
+                                (item) => [
+                                    item.remote_id,
+                                    item,
+                                ]
                             )
                         );
 
                         incoming.forEach((raw: any) => {
                             const rid = String(
-                                firstDefined(raw.id, raw.key, '')
+                                firstDefined(
+                                    raw.id,
+                                    raw.key,
+                                    ''
+                                )
                             );
                             if (!rid) return;
 
-                            const existing = currentMap.get(rid);
-                            if (
-                                existing &&
-                                isPendingSync(existing.synced)
-                            ) {
-                                return;
+                            const existing =
+                                currentMap.get(rid);
+
+                            if (existing) {
+                                const localEditedAt = Date.parse(
+                                    String(
+                                        (existing as any).cached_at ??
+                                        (existing as any).updated ??
+                                        ''
+                                    )
+                                );
+                                const incomingUpdatedAt = Date.parse(
+                                    String(
+                                        raw?.updated ??
+                                        raw?.cached_at ??
+                                        ''
+                                    )
+                                );
+                                const localIsNewer =
+                                    Number.isFinite(
+                                        localEditedAt
+                                    ) &&
+                                    Number.isFinite(
+                                        incomingUpdatedAt
+                                    ) &&
+                                    localEditedAt >
+                                    incomingUpdatedAt;
+
+                                if (
+                                    isPendingSync(
+                                        existing.synced
+                                    ) ||
+                                    localIsNewer
+                                ) {
+                                    return;
+                                }
                             }
 
                             const normalized = normalizeItem(
@@ -1004,23 +1126,27 @@ export const InventorySyncProvider: React.FC<{
                             currentMap.values()
                         );
 
+                        await commitToStorage(updated);
                         setRetailerReceipts((prev) =>
                             areReceiptsEqual(prev, updated)
                                 ? prev
                                 : updated
                         );
-
-                        await commitToStorage(updated);
-                        log(
-                            `WebSocket — merged, total now ${updated.length}`
+                        setLastSyncedTime(
+                            new Date().toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                            })
                         );
                     } catch (e) {
-                        warn('WebSocket — message parse failed:', e);
+                        warn(
+                            'WebSocket — message parse failed:',
+                            e
+                        );
                     }
                 };
 
                 ws.onclose = () => {
-                    log('WebSocket — closed');
                     setIsLiveConnected(false);
                     wsRef.current = null;
 
@@ -1028,16 +1154,21 @@ export const InventorySyncProvider: React.FC<{
                         currentToken &&
                         isOnlineRef.current
                     ) {
-                        log(
-                            `WebSocket — reconnecting in ${WS_RECONNECT_DELAY_MS}ms`
+                        const attempt =
+                            reconnectAttemptRef.current++;
+                        const delay = Math.min(
+                            WS_RECONNECT_BASE_MS *
+                            2 ** attempt,
+                            WS_RECONNECT_MAX_MS
                         );
-                        reconnectTimeoutRef.current = setTimeout(
-                            () =>
-                                establishLiveWebSocketSync(
-                                    currentToken
-                                ),
-                            WS_RECONNECT_DELAY_MS
-                        );
+                        reconnectTimeoutRef.current =
+                            setTimeout(
+                                () =>
+                                    establishLiveWebSocketSync(
+                                        currentToken
+                                    ),
+                                delay
+                            );
                     }
                 };
 
@@ -1052,24 +1183,27 @@ export const InventorySyncProvider: React.FC<{
     );
 
     /* ---------------------------------------------------------
-     * Manual refresh
+     * Manual refresh — push + pull
      * ------------------------------------------------------- */
     const forceManualRefresh = useCallback(async () => {
-        log('=== Manual refresh ===');
         setIsManualRefreshing(true);
         try {
+            await refreshLocal();
             await pushPending();
             await runRemoteInventorySynchronizer();
         } catch (e) {
             warn('Manual refresh threw:', e);
         } finally {
             setIsManualRefreshing(false);
-            log('Manual refresh done');
         }
-    }, [runRemoteInventorySynchronizer, pushPending]);
+    }, [
+        refreshLocal,
+        runRemoteInventorySynchronizer,
+        pushPending,
+    ]);
 
     /* ---------------------------------------------------------
-     * Stable refs
+     * Stable refs for bootstrap
      * ------------------------------------------------------- */
     const actionsRef = useRef({
         hydrateFromLocalDB,
@@ -1096,12 +1230,6 @@ export const InventorySyncProvider: React.FC<{
         let cancelled = false;
 
         const init = async () => {
-            log('=== Bootstrap ===');
-            log('  token present:', !!token);
-            log('  token length:', token ? String(token).length : 0);
-            log('  platform:', Platform.OS);
-            log('  userId:', currentUserId || '(empty)');
-
             await actionsRef.current.hydrateFromLocalDB();
             if (cancelled) return;
 
@@ -1109,33 +1237,22 @@ export const InventorySyncProvider: React.FC<{
             if (cancelled) return;
 
             if (token) {
-                log('Bootstrap — pushing pending');
                 await actionsRef.current.pushPending();
                 if (cancelled) return;
 
-                log('Bootstrap — pulling remote');
                 await actionsRef.current.runRemoteInventorySynchronizer();
                 if (cancelled) return;
 
-                log('Bootstrap — opening WebSocket');
-                actionsRef.current.establishLiveWebSocketSync(token);
-
-                log(
-                    `Bootstrap — arming poll every ${INVENTORY_POLL_INTERVAL_MS}ms`
+                actionsRef.current.establishLiveWebSocketSync(
+                    token
                 );
+
                 if (pollIntervalRef.current)
                     clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = setInterval(() => {
-                    log('Poll tick');
                     actionsRef.current.pushPending();
                     actionsRef.current.runRemoteInventorySynchronizer();
                 }, INVENTORY_POLL_INTERVAL_MS);
-
-                log('Bootstrap complete');
-            } else {
-                warn(
-                    'Bootstrap — no token yet, waiting for auth to hydrate'
-                );
             }
         };
 
@@ -1143,7 +1260,6 @@ export const InventorySyncProvider: React.FC<{
 
         return () => {
             cancelled = true;
-            log('Bootstrap cleanup — closing ws + poll');
             if (reconnectTimeoutRef.current)
                 clearTimeout(reconnectTimeoutRef.current);
             if (pollIntervalRef.current)
@@ -1157,20 +1273,22 @@ export const InventorySyncProvider: React.FC<{
     }, [token]);
 
     /* ---------------------------------------------------------
-     * Online/offline transition
+     * Online / offline transitions
      * ------------------------------------------------------- */
     useEffect(() => {
         if (!token) return;
 
         if (isOnline) {
-            log('Back online — running full sync');
+            reconnectAttemptRef.current = 0;
             (async () => {
                 await actionsRef.current.pushPending();
                 await actionsRef.current.runRemoteInventorySynchronizer();
-                actionsRef.current.establishLiveWebSocketSync(token);
+                actionsRef.current.establishLiveWebSocketSync(
+                    token
+                );
             })();
         } else {
-            log('Went offline — pausing');
+            setIsLiveConnected(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOnline, token]);
@@ -1192,10 +1310,13 @@ export const InventorySyncProvider: React.FC<{
             isManualRefreshing,
             isLiveConnected,
             isPushSyncing,
+            isOnline,
             pendingCount,
             triggerManualFetch: runRemoteInventorySynchronizer,
             forceManualRefresh,
             pushPending,
+            refreshLocal,
+            applyServerReceipt,
             lastSyncedTime,
             retailerReceipts,
         }),
@@ -1204,10 +1325,13 @@ export const InventorySyncProvider: React.FC<{
             isManualRefreshing,
             isLiveConnected,
             isPushSyncing,
+            isOnline,
             pendingCount,
             runRemoteInventorySynchronizer,
             forceManualRefresh,
             pushPending,
+            refreshLocal,
+            applyServerReceipt,
             lastSyncedTime,
             retailerReceipts,
         ]
@@ -1223,8 +1347,6 @@ export const InventorySyncProvider: React.FC<{
 export const useInventorySync = () => {
     const context = useContext(InventorySyncContext);
     if (!context)
-        throw new Error(
-            'useInventorySync missing Provider'
-        );
+        throw new Error('useInventorySync missing Provider');
     return context;
 };

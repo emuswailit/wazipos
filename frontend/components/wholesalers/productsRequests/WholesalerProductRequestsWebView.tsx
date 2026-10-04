@@ -1,12 +1,13 @@
 // components/wholesalers/productsRequests/WholesalerProductRequestsWebView.tsx
 //
 // Web table view. Also exports shared filter primitives used by
-// the mobile view.
+// the mobile view (STATUS_OPTIONS, StatusPill, EntityChip,
+// isPublishedStatus).
 //
-// Every row now has two actions:
-//   - "View"       — always available, opens the read-only details
-//                    modal
-//   - "Make Offer" — only for PUBLISHED requests
+// Wholesale inventory for offer responses is sourced inside
+// MakeOfferModal via WholesaleInventoryPicker, which reads
+// useWholesalerReceiptsSync() directly. This view does not pass
+// receipts down.
 
 import React, { useState } from 'react';
 import {
@@ -24,12 +25,16 @@ import type { ProductRequestSummary } from '@/databases/types';
 
 import type { RespondPayload } from './MakeOfferModal';
 import MakeOfferModal from './MakeOfferModal';
-import ViewRequestDetailsModal from './ViewRequestDetailsModal';
 
 /* =========================================================
  * Shared helpers
  * ======================================================= */
 
+/**
+ * Case-insensitive PUBLISHED check. The wire value may arrive as
+ * "PUBLISHED", "Published", "published", or with stray whitespace.
+ * Never compare with `=== 'PUBLISHED'` directly.
+ */
 export function isPublishedStatus(
     status?: string | null
 ): boolean {
@@ -202,19 +207,19 @@ export function EntityChip({
 }
 
 /* =========================================================
- * Column widths — Actions widened to hold two buttons
+ * Column widths
  * ======================================================= */
 
 const COLS = {
     request: '10%',
-    retailer: '16%',
+    retailer: '18%',
     status: '13%',
     urgency: '9%',
     lines: '6%',
     fulfilled: '8%',
-    expires: '10%',
-    created: '10%',
-    actions: '18%',
+    expires: '11%',
+    created: '11%',
+    actions: '14%',
 } as const;
 
 /* =========================================================
@@ -287,9 +292,6 @@ export function WholesalerProductRequestsWebView({
     const [offerRequest, setOfferRequest] =
         useState<ProductRequestSummary | null>(null);
 
-    const [detailsRequest, setDetailsRequest] =
-        useState<ProductRequestSummary | null>(null);
-
     const sourceColor =
         sourceTone === 'server'
             ? '#10b981'
@@ -348,8 +350,10 @@ export function WholesalerProductRequestsWebView({
                                 <Text
                                     style={{
                                         color: theme.textDark,
-                                        fontFamily: theme.font.medium,
-                                        fontSize: theme.fontSize.xs,
+                                        fontFamily:
+                                            theme.font.medium,
+                                        fontSize:
+                                            theme.fontSize.xs,
                                     }}
                                 >
                                     Last synced {lastSyncedTime}
@@ -366,7 +370,9 @@ export function WholesalerProductRequestsWebView({
                             className="px-4 py-2.5 rounded-full items-center justify-center"
                             style={{
                                 backgroundColor: theme.primary,
-                                opacity: isManualRefreshing ? 0.6 : 1,
+                                opacity: isManualRefreshing
+                                    ? 0.6
+                                    : 1,
                                 minHeight: 40,
                                 minWidth: 40,
                             }}
@@ -391,6 +397,7 @@ export function WholesalerProductRequestsWebView({
                     </View>
                 </View>
 
+                {/* status pills */}
                 <View className="flex-row flex-wrap gap-1.5 mb-2">
                     {STATUS_OPTIONS.map((s) => (
                         <StatusPill
@@ -398,11 +405,14 @@ export function WholesalerProductRequestsWebView({
                             option={s}
                             active={statusFilter === s.value}
                             count={statusCounts[s.value] ?? 0}
-                            onPress={() => setStatusFilter(s.value)}
+                            onPress={() =>
+                                setStatusFilter(s.value)
+                            }
                         />
                     ))}
                 </View>
 
+                {/* entity chips */}
                 {entityOptions.length > 0 && (
                     <View className="flex-row flex-wrap gap-1.5 mb-2">
                         <EntityChip
@@ -570,9 +580,6 @@ export function WholesalerProductRequestsWebView({
                     renderItem={({ item }) => (
                         <Row
                             request={item}
-                            onView={() =>
-                                setDetailsRequest(item)
-                            }
                             onMakeOffer={() =>
                                 setOfferRequest(item)
                             }
@@ -582,7 +589,7 @@ export function WholesalerProductRequestsWebView({
                 />
             </View>
 
-            {/* ============ Offer modal ============ */}
+            {/* ============ Modal ============ */}
             <MakeOfferModal
                 visible={!!offerRequest}
                 request={offerRequest}
@@ -595,13 +602,6 @@ export function WholesalerProductRequestsWebView({
                     setOfferRequest(null);
                 }}
             />
-
-            {/* ============ Details modal ============ */}
-            <ViewRequestDetailsModal
-                visible={!!detailsRequest}
-                request={detailsRequest}
-                onClose={() => setDetailsRequest(null)}
-            />
         </View>
     );
 }
@@ -612,11 +612,9 @@ export function WholesalerProductRequestsWebView({
 
 function Row({
     request,
-    onView,
     onMakeOffer,
 }: {
     request: ProductRequestSummary;
-    onView: () => void;
     onMakeOffer: () => void;
 }) {
     const { theme, isDarkMode } = useAuth();
@@ -723,33 +721,9 @@ function Row({
             <View
                 style={{
                     width: COLS.actions,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: 6,
+                    alignItems: 'flex-end',
                 }}
             >
-                <Pressable
-                    onPress={onView}
-                    hitSlop={6}
-                    className="px-2.5 py-1.5 rounded-lg border"
-                    style={{
-                        borderColor,
-                        minHeight: 32,
-                    }}
-                >
-                    <Text
-                        className="uppercase tracking-wide"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                            fontSize: 10,
-                        }}
-                    >
-                        View
-                    </Text>
-                </Pressable>
-
                 {canOffer ? (
                     <Pressable
                         onPress={onMakeOffer}
@@ -770,7 +744,17 @@ function Row({
                             Make Offer
                         </Text>
                     </Pressable>
-                ) : null}
+                ) : (
+                    <Text
+                        style={{
+                            color: theme.textDark,
+                            fontFamily: theme.font.regular,
+                            fontSize: 11,
+                        }}
+                    >
+                        —
+                    </Text>
+                )}
             </View>
         </View>
     );

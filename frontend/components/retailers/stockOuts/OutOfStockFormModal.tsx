@@ -1,6 +1,6 @@
 // components/retailers/stockOuts/OutOfStockFormModal.tsx
 
-import ProductAutocomplete from '@/components/retailers/retailerInventory/ProductAutocomplete';
+import { ProductPickerAutocomplete } from '@/components/common/ProductPickerAutocomplete';
 import { useAuth } from '@/context/AuthContext';
 import { useProductsSync } from '@/context/ProductsSyncContext';
 import {
@@ -166,17 +166,60 @@ export function OutOfStockFormModal({
         []
     );
 
+    /* -------- Selected product for the picker --------
+     * The picker's controlled mode expects a full Product object
+     * (for the title + thumbnail). Form state only holds id/title,
+     * so look the product up in the synced list. Fall back to a
+     * minimal shape if the product isn't in the current page.
+     */
+    const selectedProduct = useMemo(() => {
+        if (!form.productId) return null;
+
+        const found = (productsList ?? []).find(
+            (p: any) =>
+                p?.remote_id === form.productId ||
+                p?.id === form.productId
+        );
+        if (found) return found;
+
+        // Minimal fallback — keeps the input text populated
+        // even if the product isn't in the current sync page.
+        return {
+            remote_id: form.productId,
+            id: form.productId,
+            title: form.productTitle,
+        } as any;
+    }, [form.productId, form.productTitle, productsList]);
+
     const handleSelectProduct = useCallback(
-        (remoteId: string, title: string) => {
+        (product: any) => {
+            const remoteId = String(
+                product?.remote_id ?? product?.id ?? ''
+            );
+            const title = String(
+                product?.title ??
+                product?.product_title ??
+                ''
+            );
             setForm((prev) => ({
                 ...prev,
-                productId: remoteId,
+                productId: remoteId || null,
                 productTitle: title,
             }));
-            rememberProductTitle(remoteId, title);
+            if (remoteId) {
+                rememberProductTitle(remoteId, title);
+            }
         },
         []
     );
+
+    const handleClearProduct = useCallback(() => {
+        setForm((prev) => ({
+            ...prev,
+            productId: null,
+            productTitle: '',
+        }));
+    }, []);
 
     const handleSubmit = useCallback(async () => {
         if (!canSubmit) return;
@@ -268,7 +311,16 @@ export function OutOfStockFormModal({
                         ? 'padding'
                         : undefined
                 }
+                keyboardVerticalOffset={
+                    Platform.OS === 'ios' ? 40 : 0
+                }
             >
+                {/* Backdrop dismiss target — sits behind the card */}
+                <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={saving ? undefined : onClose}
+                />
+
                 <View
                     className="w-full max-w-[560px] rounded-2xl border overflow-hidden"
                     style={{
@@ -352,20 +404,19 @@ export function OutOfStockFormModal({
                         {/* Product — create only, using shared picker */}
                         {!isEdit ? (
                             <View style={{ zIndex: 1000 }}>
-                                <ProductAutocomplete
-                                    theme={theme}
-                                    isDarkMode={isDarkMode}
+                                <ProductPickerAutocomplete
                                     products={productsList}
-                                    selectedValue={
-                                        form.productId ?? ''
-                                    }
-                                    initialTitle={
-                                        form.productTitle
-                                    }
-                                    onSelect={
-                                        handleSelectProduct
-                                    }
-                                    zIndexValue={1000}
+                                    value={selectedProduct}
+                                    onSelect={handleSelectProduct}
+                                    onClear={handleClearProduct}
+                                    imageKey="images"
+                                    label="Product"
+                                    required
+                                    placeholder="Search products…"
+                                    debounceMs={250}
+                                    maxDropdownHeight={320}
+                                    disabled={saving}
+                                    testID="out-of-stock.product"
                                 />
 
                                 {isProductsSyncing &&
@@ -548,6 +599,11 @@ export function OutOfStockFormModal({
                                         : '#cbd5e1',
                                     true: theme.primary,
                                 }}
+                                thumbColor={
+                                    isDarkMode
+                                        ? '#e2e8f0'
+                                        : '#ffffff'
+                                }
                             />
                         </View>
                     </ScrollView>

@@ -6,6 +6,9 @@
 // - Opaque dropdown
 // - Web: rendered via ReactDOM portal into document.body
 // - Single-tap select (no blur race) on both web and native
+// - Tolerant image resolution (string | string[] | object[] | object)
+// - Web rows are plain DOM <div> so click always fires inside the portal
+// - Schema-safe validation: never crashes on missing field paths
 
 import { useAuth } from '@/context/AuthContext';
 import { Product } from '@/databases/types';
@@ -35,6 +38,91 @@ if (Platform.OS === 'web') {
         ReactDOM = require('react-dom');
     } catch {
         ReactDOM = null;
+    }
+}
+
+/* =========================================================
+ * Image URL resolution
+ * ======================================================= */
+const IMAGE_KEY_CANDIDATES = [
+    'thumbnail_url',
+    'thumbnail',
+    'image_url',
+    'image',
+    'images',
+    'photos',
+    'media',
+    'picture',
+];
+
+function tryExtractImage(raw: any): string | undefined {
+    if (!raw) return undefined;
+
+    if (typeof raw === 'string') return raw || undefined;
+
+    if (Array.isArray(raw)) {
+        const first = raw[0];
+        if (!first) return undefined;
+        if (typeof first === 'string') return first || undefined;
+        return (
+            (first?.thumbnail as string) ||
+            (first?.image as string) ||
+            (first?.url as string) ||
+            undefined
+        );
+    }
+
+    if (typeof raw === 'object') {
+        return (
+            (raw.thumbnail as string) ||
+            (raw.image as string) ||
+            (raw.url as string) ||
+            undefined
+        );
+    }
+
+    return undefined;
+}
+
+export function resolveImageUri(
+    source: any,
+    key: string = 'thumbnail_url'
+): string | undefined {
+    if (!source) return undefined;
+    const ordered = [
+        key,
+        ...IMAGE_KEY_CANDIDATES.filter((k) => k !== key),
+    ];
+    for (const k of ordered) {
+        const result = tryExtractImage(source[k]);
+        if (result) return result;
+    }
+    return undefined;
+}
+
+/* =========================================================
+ * Safe field validation
+ *
+ * Formik `validateField(name)` throws (or returns a rejecting
+ * promise) if `name` is not a path in the Yup schema. Callers
+ * frequently don't declare the *display* field (e.g.
+ * `product_title`) in their schema — only the id. Swallow both
+ * sync and async errors so a missing path never crashes the UI.
+ * ======================================================= */
+function safeValidateField(formik: any, field: string) {
+    if (!formik?.validateField || !field) return;
+
+    // Cheap guard: skip if the field isn't even in initialValues.
+    const iv = formik.initialValues;
+    if (iv && !(field in iv)) return;
+
+    try {
+        const result = formik.validateField(field);
+        if (result && typeof (result as any).catch === 'function') {
+            (result as any).catch(() => { });
+        }
+    } catch {
+        // Synchronous throw from Yup — safe to ignore.
     }
 }
 
@@ -106,6 +194,19 @@ export function ProductPickerAutocomplete({
     const formik = useFormikContext<any>();
     const isFormik = !!name && !!formik;
 
+    /* ---- Dev diagnostic: no FormikProvider wrapping the tree ---- */
+    const warnedRef = useRef(false);
+    useEffect(() => {
+        if (__DEV__ && name && !formik && !warnedRef.current) {
+            warnedRef.current = true;
+            console.warn(
+                '[ProductPicker] `name` was provided but no Formik context was found. ' +
+                'Wrap the tree in <FormikProvider value={formik}> or drop `name` ' +
+                'and use the controlled `value` / `onSelect` props instead.'
+            );
+        }
+    }, [name, formik]);
+
     const fm = fieldMap ?? {};
     const idField = fm.id ?? 'product_id';
     const titleField = fm.title ?? 'title';
@@ -119,10 +220,15 @@ export function ProductPickerAutocomplete({
                 id: formik.values?.[idField],
                 title: formik.values?.[titleField],
                 bar_code: formik.values?.[barField],
-                thumbnail_url: formik.values?.[thumbField],
+                [thumbField]: formik.values?.[thumbField],
             }
             : null
         : controlledValue ?? null;
+
+    /* -------- Trigger image URI -------- */
+    const triggerImageUri: string | undefined = isFormik
+        ? (formik.values?.[thumbField] as string) || undefined
+        : resolveImageUri(controlledValue ?? undefined, imageKey);
 
     /* -------- Effective error -------- */
     const effectiveError: string | undefined = isFormik
@@ -189,7 +295,6 @@ export function ProductPickerAutocomplete({
         async (q: string) => {
             setApiError(null);
 
-            // Local filter fallback
             if (!onSearch) {
                 const list = products ?? [];
                 if (!q) {
@@ -214,7 +319,6 @@ export function ProductPickerAutocomplete({
                 return;
             }
 
-            // Remote search
             if (q.length < minChars) {
                 setResults(products ?? []);
                 return;
@@ -283,10 +387,6 @@ export function ProductPickerAutocomplete({
         }
     };
 
-    /**
-     * Blur → delayed close.
-     * If a row is being pressed, skip closing.
-     */
     const closeDropdown = useCallback(() => {
         if (rowPressInFlightRef.current) {
             rowPressInFlightRef.current = false;
@@ -340,6 +440,9 @@ export function ProductPickerAutocomplete({
 
     /* -------- Select -------- */
     const handleSelect = (p: Product) => {
+        const resolvedThumb =
+            resolveImageUri(p, imageKey) ?? '';
+
         if (isFormik) {
             formik.setFieldValue(
                 idField,
@@ -355,14 +458,15 @@ export function ProductPickerAutocomplete({
                 barField,
                 (p as any).bar_code ?? ''
             );
-            formik.setFieldValue(
-                thumbField,
-                (p as any).thumbnail_url ?? ''
-            );
-            // Mark touched WITHOUT validation so no stale error,
-            // then validate against the new value.
+            formik.setFieldValue(thumbField, resolvedThumb);
+
             formik.setFieldTouched(titleField, true, false);
-            formik.validateField(titleField);
+
+            // Schema-safe validation — no crash if the caller's
+            // Yup schema omits either field.
+            safeValidateField(formik, idField);
+            safeValidateField(formik, titleField);
+
             onAfterSelect?.(p);
         } else {
             controlledOnSelect?.(p);
@@ -378,7 +482,7 @@ export function ProductPickerAutocomplete({
             formik.setFieldValue(idField, undefined);
             formik.setFieldValue(titleField, '');
             formik.setFieldValue(barField, '');
-            formik.setFieldValue(thumbField, undefined);
+            formik.setFieldValue(thumbField, '');
         } else {
             controlledOnClear?.();
         }
@@ -400,7 +504,7 @@ export function ProductPickerAutocomplete({
     const showClear = !!query && !loading;
 
     /* =========================================================
-     * Menu content — shared between web portal and native inline
+     * Menu content
      * ======================================================= */
     const MenuContent = (
         <View
@@ -487,8 +591,7 @@ export function ProductPickerAutocomplete({
     );
 
     /* =========================================================
-     * Web portal — renders into document.body, escapes
-     * overflow:hidden and stacking contexts
+     * Web portal
      * ======================================================= */
     let portal: any = null;
     if (
@@ -504,13 +607,9 @@ export function ProductPickerAutocomplete({
                     menuRef.current = el;
                     if (el && !(el as any).__waziGuard) {
                         (el as any).__waziGuard = true;
-                        // preventDefault on mousedown inside the
-                        // menu so the input never blurs when a
-                        // row is clicked.
                         el.addEventListener(
                             'mousedown',
-                            (ev) => {
-                                ev.preventDefault();
+                            () => {
                                 rowPressInFlightRef.current =
                                     true;
                             },
@@ -597,18 +696,20 @@ export function ProductPickerAutocomplete({
                             backgroundColor: thumbBg,
                         }}
                     >
-                        {effectiveValue &&
-                            (effectiveValue as any)[imageKey] ? (
+                        {triggerImageUri ? (
                             <Image
-                                source={{
-                                    uri: String(
-                                        (
-                                            effectiveValue as any
-                                        )[imageKey]
-                                    ),
-                                }}
+                                source={{ uri: triggerImageUri }}
                                 className="w-full h-full"
                                 resizeMode="cover"
+                                onError={(e) =>
+                                    console.warn(
+                                        '[ProductPicker] trigger image failed',
+                                        {
+                                            uri: triggerImageUri,
+                                            error: e?.nativeEvent,
+                                        }
+                                    )
+                                }
                             />
                         ) : null}
                     </View>
@@ -750,43 +851,16 @@ function ProductRow({
     const subtitle = String(
         (product as any)[subtitleKey] ?? ''
     ).trim();
-    const imageUri = (product as any)[imageKey] as
-        | string
-        | undefined;
+
+    const imageUri = resolveImageUri(product, imageKey);
 
     const [hovered, setHovered] = useState(false);
     const [pressed, setPressed] = useState(false);
     const active = hovered || pressed;
 
-    return (
-        <Pressable
-            onPress={onPress}
-            onPressIn={() => {
-                onPressIn?.();
-                setPressed(true);
-            }}
-            onPressOut={() => setPressed(false)}
-            onHoverIn={
-                Platform.OS === 'web'
-                    ? () => setHovered(true)
-                    : undefined
-            }
-            onHoverOut={
-                Platform.OS === 'web'
-                    ? () => setHovered(false)
-                    : undefined
-            }
-            className="flex-row items-center px-3 py-2.5 border-b"
-            style={{
-                borderBottomColor: borderColor,
-                backgroundColor: selected
-                    ? selectedBg
-                    : active
-                        ? hoverBg
-                        : 'transparent',
-            }}
-        >
-            {/* Thumbnail */}
+    /* -------- Shared content -------- */
+    const content = (
+        <>
             <View
                 className="rounded-lg overflow-hidden mr-3"
                 style={{
@@ -800,11 +874,19 @@ function ProductRow({
                         source={{ uri: imageUri }}
                         className="w-full h-full"
                         resizeMode="cover"
+                        onError={(e) =>
+                            console.warn(
+                                '[ProductPicker] row image failed',
+                                {
+                                    uri: imageUri,
+                                    error: e?.nativeEvent,
+                                }
+                            )
+                        }
                     />
                 ) : null}
             </View>
 
-            {/* Text */}
             <View className="flex-1 min-w-0">
                 <Text
                     numberOfLines={1}
@@ -842,6 +924,73 @@ function ProductRow({
                     ✓
                 </Text>
             ) : null}
+        </>
+    );
+
+    /* -------- Web: plain DOM <div> -------- */
+    if (Platform.OS === 'web') {
+        return React.createElement(
+            'div',
+            {
+                onClick: (e: any) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onPress();
+                },
+                onMouseDown: (e: any) => {
+                    e.preventDefault();
+                    onPressIn?.();
+                    setPressed(true);
+                },
+                onMouseUp: () => setPressed(false),
+                onMouseEnter: () => setHovered(true),
+                onMouseLeave: () => {
+                    setHovered(false);
+                    setPressed(false);
+                },
+                style: {
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: '10px 12px',
+                    borderBottom: `1px solid ${borderColor}`,
+                    backgroundColor: selected
+                        ? selectedBg
+                        : active
+                            ? hoverBg
+                            : 'transparent',
+                    cursor: 'pointer',
+                    boxSizing: 'border-box',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
+                },
+            },
+            content
+        );
+    }
+
+    /* -------- Native: RN Pressable -------- */
+    return (
+        <Pressable
+            onPress={onPress}
+            onPressIn={() => {
+                onPressIn?.();
+                setPressed(true);
+            }}
+            onPressOut={() => setPressed(false)}
+            onHoverIn={() => setHovered(true)}
+            onHoverOut={() => setHovered(false)}
+            className="flex-row items-center px-3 py-2.5 border-b"
+            style={{
+                borderBottomColor: borderColor,
+                backgroundColor: selected
+                    ? selectedBg
+                    : active
+                        ? hoverBg
+                        : 'transparent',
+            }}
+        >
+            {content}
         </Pressable>
     );
 }

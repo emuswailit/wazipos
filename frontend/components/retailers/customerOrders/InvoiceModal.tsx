@@ -1,7 +1,11 @@
-// app/(retailers)/client/orders/InvoiceModal.tsx
+// components/retailers/customerOrders/InvoiceModal.tsx
 
+import RecordPaymentModal, {
+    CUSTOMER_PAYMENT_CONFIG,
+} from '@/components/common/RecordPaymentModal';
 import { useAuth } from '@/context/AuthContext';
 import { CustomerOrder } from '@/databases/types';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ScrollView,
@@ -9,7 +13,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import RecordCustomerPaymentModal from './RecordCustomerPaymentModal';
 
 interface InvoiceModalProps {
     order: CustomerOrder | null;
@@ -80,7 +83,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const isPaid = order.is_paid === 'true';
 
     // The server UUID is the identity the payment modal needs.
-    // `order.id` is now the local Dexie PK, so don't use it here.
     const remoteOrderId =
         order.remote_id || order.draft_id || '';
 
@@ -487,11 +489,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 </View>
             </View>
 
-            {/* Payment overlay */}
-            <RecordCustomerPaymentModal
+            {/* Payment overlay — customer config.
+                Cache mutation on success is handled by the parent
+                via onRefresh (which triggers a re-fetch), so no
+                storageService hook is needed here. */}
+            <RecordPaymentModal
                 isOpen={isPayOpen}
                 orderId={remoteOrderId}
                 orderRef={order.order_number}
+                config={CUSTOMER_PAYMENT_CONFIG}
                 onClose={() => {
                     setIsPayOpen(false);
                     onClose();

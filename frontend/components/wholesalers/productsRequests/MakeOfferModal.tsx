@@ -13,6 +13,14 @@
 //   surfaces exactly what's missing so the button's disabled state
 //   is never a mystery.
 // - Undecided lines are highlighted in the body.
+//
+// Also hosts the "Add Inventory" flow: when a product has no
+// in-stock receipts, or the selected receipt can't cover the
+// requested quantity, an inline affordance opens the receipt
+// editor scoped to that product. The editor's quantity field is
+// prefilled with the outstanding demand (full requested when no
+// stock exists, the deficit when partially covered), and the
+// newly-created receipt is auto-selected on save.
 
 import React, {
     useCallback,
@@ -31,7 +39,12 @@ import {
 } from 'react-native';
 
 import { WholesaleInventoryPicker } from '@/components/common';
+import {
+    WholesalerReceiptEditModal,
+    type WholesalerReceiptDraft,
+} from '@/components/wholesalers/inventory/WholesalerReceiptEditModal';
 import { useAuth } from '@/context/AuthContext';
+import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
 import type {
     ProductRequestSummary,
     WholesalerReceipt,
@@ -67,6 +80,12 @@ interface LineDraft {
     selected_receipt: WholesalerReceipt | null;
 }
 
+interface InventoryEditorTarget {
+    itemId: string;
+    productId: string;
+    suggestedQty: number;
+}
+
 export interface MakeOfferModalProps {
     visible: boolean;
     request: ProductRequestSummary | null;
@@ -92,6 +111,15 @@ function receiptUnitPrice(
     return Number(
         r.final_unit_selling_price ??
         r.unit_selling_price ??
+        0
+    );
+}
+
+function receiptStock(r: WholesalerReceipt | null): number {
+    if (!r) return 0;
+    return Number(
+        (r as any).current_unit_quantity ??
+        (r as any).received_unit_quantity ??
         0
     );
 }
@@ -133,6 +161,11 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
     const [drafts, setDrafts] = useState<LineDraft[]>([]);
     const [note, setNote] = useState('');
 
+    // Which line is currently creating inventory, if any.
+    // `suggestedQty` prefills the editor's quantity field.
+    const [inventoryEditorFor, setInventoryEditorFor] =
+        useState<InventoryEditorTarget | null>(null);
+
     /* ---- Merge wire data into drafts on every request update ---- */
     useEffect(() => {
         if (!visible || !request) return;
@@ -158,10 +191,6 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
                         'Untitled product';
 
                     if (existing) {
-                        // Wire-derived fields always track the
-                        // server. If the product_id changed, the
-                        // previously-selected receipt may belong
-                        // to a different product — clear it.
                         const productChanged =
                             existing.product_id !== '' &&
                             productId !== '' &&
@@ -253,6 +282,43 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
     );
 
     /* ---------------------------------------------------------
+     * Create-inventory flow
+     * ------------------------------------------------------- */
+    const openInventoryEditor = useCallback(
+        (
+            itemId: string,
+            productId: string,
+            suggestedQty: number
+        ) => {
+            if (!productId) return;
+            setInventoryEditorFor({
+                itemId,
+                productId,
+                suggestedQty,
+            });
+        },
+        []
+    );
+
+    const closeInventoryEditor = useCallback(() => {
+        setInventoryEditorFor(null);
+    }, []);
+
+    const handleInventorySaved = useCallback(
+        (
+            _draft: WholesalerReceiptDraft,
+            _mode: 'create' | 'edit',
+            saved: WholesalerReceipt
+        ) => {
+            if (inventoryEditorFor) {
+                setReceipt(inventoryEditorFor.itemId, saved);
+            }
+            setInventoryEditorFor(null);
+        },
+        [inventoryEditorFor, setReceipt]
+    );
+
+    /* ---------------------------------------------------------
      * Validation + diagnostics
      * ------------------------------------------------------- */
     const isValid = useMemo(() => {
@@ -292,11 +358,6 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
         [drafts]
     );
 
-    /**
-     * Accepted lines that are missing a receipt or a positive
-     * quantity. These block submit even when every line has a
-     * decision.
-     */
     const incompleteAcceptedCount = useMemo(
         () =>
             drafts.filter(
@@ -310,10 +371,6 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
         [drafts]
     );
 
-    /**
-     * Human-readable reason the submit button is disabled.
-     * Null when the form is submittable.
-     */
     const blockerMessage = useMemo<string | null>(() => {
         if (drafts.length === 0) {
             return 'No line items to respond to.';
@@ -387,341 +444,365 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
 
     if (!request) return null;
 
+    const editorOpen = !!inventoryEditorFor;
+
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-        >
-            <View className="flex-1 bg-black/40 items-center justify-center p-3">
-                <View
-                    className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
-                    style={{ backgroundColor: theme.panel }}
-                >
-                    {/* ============ header ============ */}
+        <>
+            <Modal
+                visible={visible && !editorOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <View className="flex-1 bg-black/40 items-center justify-center p-3">
                     <View
-                        className="px-5 pt-4 pb-3 border-b"
-                        style={{
-                            borderBottomColor:
-                                theme.textDark + '22',
-                        }}
+                        className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
+                        style={{ backgroundColor: theme.panel }}
                     >
-                        <View className="flex-row items-center">
-                            <View className="flex-1">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    {request.request_number || '—'}
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily: theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    Make an Offer
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    {request.entity_title ||
-                                        'Unknown retailer'}
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={onClose}
-                                hitSlop={12}
-                                className="w-8 h-8 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor:
-                                        theme.background,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    ✕
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </View>
-
-                    {/* ============ body ============ */}
-                    <ScrollView
-                        className="flex-1"
-                        contentContainerStyle={{ padding: 16 }}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {drafts.length === 0 ? (
-                            <View className="items-center py-8">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    No line items to respond to.
-                                </Text>
-                            </View>
-                        ) : (
-                            drafts.map((d, i) => (
-                                <LineEditor
-                                    key={d.item_id}
-                                    draft={d}
-                                    index={i}
-                                    onSetDecision={setDecision}
-                                    onSetReceipt={setReceipt}
-                                    onSetOfferedQty={
-                                        setOfferedQty
-                                    }
-                                />
-                            ))
-                        )}
-
-                        {/* note */}
-                        <View className="mt-5">
-                            <Text
-                                className="mb-1.5"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.semibold,
-                                    fontSize: theme.fontSize.xs,
-                                    letterSpacing: 0.5,
-                                }}
-                            >
-                                NOTE (OPTIONAL)
-                            </Text>
-                            <TextInput
-                                value={note}
-                                onChangeText={setNote}
-                                placeholder="Anything the retailer should know…"
-                                placeholderTextColor={
-                                    theme.textDark
-                                }
-                                multiline
-                                numberOfLines={3}
-                                textAlignVertical="top"
-                                className="px-3 py-2 rounded-lg min-h-[72px]"
-                                style={{
-                                    backgroundColor:
-                                        theme.background,
-                                    color: theme.text,
-                                    fontFamily:
-                                        theme.font.regular,
-                                    fontSize: theme.fontSize.sm,
-                                }}
-                            />
-                        </View>
-                    </ScrollView>
-
-                    {/* ============ footer ============ */}
-                    <View
-                        className="px-5 py-3 border-t"
-                        style={{
-                            borderTopColor:
-                                theme.textDark + '22',
-                        }}
-                    >
-                        {/* totals row */}
-                        <View className="flex-row items-center mb-2">
-                            <View className="flex-1">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 9,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    OFFERED
-                                </Text>
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    {totalOfferedQty} unit
-                                    {totalOfferedQty === 1
-                                        ? ''
-                                        : 's'}
-                                </Text>
-                            </View>
-
-                            <View
-                                style={{
-                                    alignItems: 'flex-end',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 9,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    TOTAL VALUE
-                                </Text>
-                                <Text
-                                    style={{
-                                        color: theme.primary,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    KES {formatMoney(grandTotal)}
-                                </Text>
-                            </View>
-                        </View>
-
-                        {/* counts row — includes undecided when non-zero */}
-                        <View className="flex-row items-center mb-2">
-                            <Text
-                                className="flex-1"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.regular,
-                                    fontSize:
-                                        theme.fontSize.xs,
-                                }}
-                            >
-                                {acceptedCount} accepted ·{' '}
-                                {rejectedCount} rejected
-                                {undecidedCount > 0
-                                    ? ` · ${undecidedCount} undecided`
-                                    : ''}{' '}
-                                · {drafts.length} total
-                            </Text>
-                        </View>
-
-                        {/* blocker banner */}
-                        {blockerMessage ? (
-                            <View
-                                className="rounded-lg px-3 py-2 mb-2"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(245,158,11,0.12)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        'rgba(245,158,11,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#b45309',
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    {blockerMessage}
-                                </Text>
-                            </View>
-                        ) : null}
-
-                        {/* actions row */}
-                        <View className="flex-row items-center">
-                            <View className="flex-1" />
-
-                            <Pressable
-                                onPress={onClose}
-                                disabled={isSubmitting}
-                                className="px-4 py-2 rounded-lg mr-2"
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    Cancel
-                                </Text>
-                            </Pressable>
-
-                            <Pressable
-                                onPress={handleSubmit}
-                                disabled={
-                                    !isValid || isSubmitting
-                                }
-                                className="px-4 py-2 rounded-lg flex-row items-center"
-                                style={{
-                                    backgroundColor:
-                                        isValid &&
-                                            !isSubmitting
-                                            ? theme.primary
-                                            : theme.primary +
-                                            '66',
-                                }}
-                            >
-                                {isSubmitting ? (
-                                    <ActivityIndicator
-                                        size="small"
-                                        color="#FFFFFF"
-                                    />
-                                ) : (
+                        {/* ============ header ============ */}
+                        <View
+                            className="px-5 pt-4 pb-3 border-b"
+                            style={{
+                                borderBottomColor:
+                                    theme.textDark + '22',
+                            }}
+                        >
+                            <View className="flex-row items-center">
+                                <View className="flex-1">
                                     <Text
                                         style={{
-                                            color: '#FFFFFF',
+                                            color: theme.textDark,
                                             fontFamily:
-                                                theme.font
-                                                    .semibold,
+                                                theme.font.semibold,
                                             fontSize:
-                                                theme.fontSize
-                                                    .sm,
+                                                theme.fontSize.xs,
+                                            letterSpacing: 0.5,
                                         }}
                                     >
-                                        Submit Response
+                                        {request.request_number || '—'}
                                     </Text>
-                                )}
-                            </Pressable>
+                                    <Text
+                                        className="mt-0.5"
+                                        style={{
+                                            color: theme.text,
+                                            fontFamily: theme.font.bold,
+                                            fontSize:
+                                                theme.fontSize.lg,
+                                        }}
+                                        numberOfLines={1}
+                                    >
+                                        Make an Offer
+                                    </Text>
+                                    <Text
+                                        className="mt-0.5"
+                                        style={{
+                                            color: theme.textDark,
+                                            fontFamily:
+                                                theme.font.regular,
+                                            fontSize:
+                                                theme.fontSize.sm,
+                                        }}
+                                        numberOfLines={1}
+                                    >
+                                        {request.entity_title ||
+                                            'Unknown retailer'}
+                                    </Text>
+                                </View>
+                                <Pressable
+                                    onPress={onClose}
+                                    hitSlop={12}
+                                    className="w-8 h-8 items-center justify-center rounded-full"
+                                    style={{
+                                        backgroundColor:
+                                            theme.background,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            color: theme.textDark,
+                                            fontFamily:
+                                                theme.font.regular,
+                                            fontSize:
+                                                theme.fontSize.lg,
+                                        }}
+                                    >
+                                        ✕
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        {/* ============ body ============ */}
+                        <ScrollView
+                            className="flex-1"
+                            contentContainerStyle={{ padding: 16 }}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            {drafts.length === 0 ? (
+                                <View className="items-center py-8">
+                                    <Text
+                                        style={{
+                                            color: theme.textDark,
+                                            fontFamily:
+                                                theme.font.regular,
+                                            fontSize:
+                                                theme.fontSize.sm,
+                                        }}
+                                    >
+                                        No line items to respond to.
+                                    </Text>
+                                </View>
+                            ) : (
+                                drafts.map((d, i) => (
+                                    <LineEditor
+                                        key={d.item_id}
+                                        draft={d}
+                                        index={i}
+                                        onSetDecision={setDecision}
+                                        onSetReceipt={setReceipt}
+                                        onSetOfferedQty={
+                                            setOfferedQty
+                                        }
+                                        onCreateInventory={
+                                            openInventoryEditor
+                                        }
+                                    />
+                                ))
+                            )}
+
+                            {/* note */}
+                            <View className="mt-5">
+                                <Text
+                                    className="mb-1.5"
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.semibold,
+                                        fontSize: theme.fontSize.xs,
+                                        letterSpacing: 0.5,
+                                    }}
+                                >
+                                    NOTE (OPTIONAL)
+                                </Text>
+                                <TextInput
+                                    value={note}
+                                    onChangeText={setNote}
+                                    placeholder="Anything the retailer should know…"
+                                    placeholderTextColor={
+                                        theme.textDark
+                                    }
+                                    multiline
+                                    numberOfLines={3}
+                                    textAlignVertical="top"
+                                    className="px-3 py-2 rounded-lg min-h-[72px]"
+                                    style={{
+                                        backgroundColor:
+                                            theme.background,
+                                        color: theme.text,
+                                        fontFamily:
+                                            theme.font.regular,
+                                        fontSize: theme.fontSize.sm,
+                                    }}
+                                />
+                            </View>
+                        </ScrollView>
+
+                        {/* ============ footer ============ */}
+                        <View
+                            className="px-5 py-3 border-t"
+                            style={{
+                                borderTopColor:
+                                    theme.textDark + '22',
+                            }}
+                        >
+                            {/* totals row */}
+                            <View className="flex-row items-center mb-2">
+                                <View className="flex-1">
+                                    <Text
+                                        style={{
+                                            color: theme.textDark,
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize: 9,
+                                            letterSpacing: 0.5,
+                                        }}
+                                    >
+                                        OFFERED
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            color: theme.text,
+                                            fontFamily:
+                                                theme.font.semibold,
+                                            fontSize:
+                                                theme.fontSize.sm,
+                                        }}
+                                    >
+                                        {totalOfferedQty} unit
+                                        {totalOfferedQty === 1
+                                            ? ''
+                                            : 's'}
+                                    </Text>
+                                </View>
+
+                                <View
+                                    style={{
+                                        alignItems: 'flex-end',
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            color: theme.textDark,
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize: 9,
+                                            letterSpacing: 0.5,
+                                        }}
+                                    >
+                                        TOTAL VALUE
+                                    </Text>
+                                    <Text
+                                        style={{
+                                            color: theme.primary,
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize:
+                                                theme.fontSize.lg,
+                                        }}
+                                    >
+                                        KES {formatMoney(grandTotal)}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* counts row */}
+                            <View className="flex-row items-center mb-2">
+                                <Text
+                                    className="flex-1"
+                                    style={{
+                                        color: theme.textDark,
+                                        fontFamily:
+                                            theme.font.regular,
+                                        fontSize:
+                                            theme.fontSize.xs,
+                                    }}
+                                >
+                                    {acceptedCount} accepted ·{' '}
+                                    {rejectedCount} rejected
+                                    {undecidedCount > 0
+                                        ? ` · ${undecidedCount} undecided`
+                                        : ''}{' '}
+                                    · {drafts.length} total
+                                </Text>
+                            </View>
+
+                            {/* blocker banner */}
+                            {blockerMessage ? (
+                                <View
+                                    className="rounded-lg px-3 py-2 mb-2"
+                                    style={{
+                                        backgroundColor:
+                                            'rgba(245,158,11,0.12)',
+                                        borderWidth: 1,
+                                        borderColor:
+                                            'rgba(245,158,11,0.35)',
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            color: '#b45309',
+                                            fontFamily:
+                                                theme.font.medium,
+                                            fontSize:
+                                                theme.fontSize.xs,
+                                        }}
+                                    >
+                                        {blockerMessage}
+                                    </Text>
+                                </View>
+                            ) : null}
+
+                            {/* actions row */}
+                            <View className="flex-row items-center">
+                                <View className="flex-1" />
+
+                                <Pressable
+                                    onPress={onClose}
+                                    disabled={isSubmitting}
+                                    className="px-4 py-2 rounded-lg mr-2"
+                                >
+                                    <Text
+                                        style={{
+                                            color: theme.text,
+                                            fontFamily:
+                                                theme.font.semibold,
+                                            fontSize:
+                                                theme.fontSize.sm,
+                                        }}
+                                    >
+                                        Cancel
+                                    </Text>
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={handleSubmit}
+                                    disabled={
+                                        !isValid || isSubmitting
+                                    }
+                                    className="px-4 py-2 rounded-lg flex-row items-center"
+                                    style={{
+                                        backgroundColor:
+                                            isValid &&
+                                                !isSubmitting
+                                                ? theme.primary
+                                                : theme.primary +
+                                                '66',
+                                    }}
+                                >
+                                    {isSubmitting ? (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color="#FFFFFF"
+                                        />
+                                    ) : (
+                                        <Text
+                                            style={{
+                                                color: '#FFFFFF',
+                                                fontFamily:
+                                                    theme.font
+                                                        .semibold,
+                                                fontSize:
+                                                    theme.fontSize
+                                                        .sm,
+                                            }}
+                                        >
+                                            Submit Response
+                                        </Text>
+                                    )}
+                                </Pressable>
+                            </View>
                         </View>
                     </View>
                 </View>
-            </View>
-        </Modal>
+            </Modal>
+
+            {/* Create-inventory editor, mounted as a sibling so iOS
+                can present it over the offer modal. The offer modal
+                is hidden while the editor is open — iOS won't
+                present two modals at once. */}
+            <WholesalerReceiptEditModal
+                visible={editorOpen}
+                receipt={null}
+                initialProductId={
+                    inventoryEditorFor?.productId ?? null
+                }
+                initialQuantity={
+                    inventoryEditorFor?.suggestedQty ?? 0
+                }
+                onClose={closeInventoryEditor}
+                onSave={handleInventorySaved}
+            />
+        </>
     );
 };
 
@@ -740,14 +821,22 @@ const LineEditor: React.FC<{
         receipt: WholesalerReceipt | null
     ) => void;
     onSetOfferedQty: (itemId: string, raw: string) => void;
+    onCreateInventory: (
+        itemId: string,
+        productId: string,
+        suggestedQty: number
+    ) => void;
 }> = ({
     draft,
     index,
     onSetDecision,
     onSetReceipt,
     onSetOfferedQty,
+    onCreateInventory,
 }) => {
         const { theme } = useAuth();
+        const { wholesalerReceipts } =
+            useWholesalerReceiptsSync();
 
         const unitPrice = receiptUnitPrice(
             draft.selected_receipt
@@ -761,6 +850,51 @@ const LineEditor: React.FC<{
         const isAccepted = draft.decision === 'accepted';
         const isRejected = draft.decision === 'rejected';
         const isUndecided = draft.decision === null;
+
+        // Receipts for the same product with positive stock —
+        // mirrors what the picker's `inStockOnly` filter shows.
+        const matchingReceipts = useMemo(() => {
+            if (!draft.product_id) return [];
+            const target = String(draft.product_id);
+            return wholesalerReceipts.filter(
+                (r) =>
+                    String(
+                        (r as any).product_id ?? ''
+                    ) === target &&
+                    receiptStock(r) > 0
+            );
+        }, [wholesalerReceipts, draft.product_id]);
+
+        const selectedAvailable = receiptStock(
+            draft.selected_receipt
+        );
+
+        const hasNoMatching =
+            isAccepted && matchingReceipts.length === 0;
+
+        const hasShortfall =
+            isAccepted &&
+            !!draft.selected_receipt &&
+            selectedAvailable < draft.requested_quantity;
+
+        const showAddInventory =
+            isAccepted && (hasNoMatching || hasShortfall);
+
+        const shortfall = Math.max(
+            0,
+            draft.requested_quantity - selectedAvailable
+        );
+
+        // Prefill target for the editor's quantity field.
+        // No stock at all → the full requested quantity.
+        // Partial stock     → the deficit.
+        const suggestedInventoryQty = hasNoMatching
+            ? draft.requested_quantity
+            : shortfall;
+
+        const shortfallMessage = hasNoMatching
+            ? `No inventory found for "${draft.product_title}".`
+            : `Only ${selectedAvailable} of ${draft.requested_quantity} requested units in stock — short by ${shortfall}.`;
 
         const stepQty = (delta: number) => {
             const next = Math.max(0, qty + delta);
@@ -1067,6 +1201,64 @@ const LineEditor: React.FC<{
                             required
                             inStockOnly
                         />
+
+                        {/* Add-inventory affordance — only shown
+                            when there's no stock or not enough.
+                            The deficit (or full request) is passed
+                            through as the editor's prefilled qty. */}
+                        {showAddInventory && (
+                            <View
+                                className="rounded-lg px-3 py-2 -mt-1"
+                                style={{
+                                    backgroundColor:
+                                        'rgba(245,158,11,0.10)',
+                                    borderWidth: 1,
+                                    borderColor:
+                                        'rgba(245,158,11,0.30)',
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        color: '#b45309',
+                                        fontFamily:
+                                            theme.font.semibold,
+                                        fontSize:
+                                            theme.fontSize.xs,
+                                    }}
+                                >
+                                    {shortfallMessage}
+                                </Text>
+
+                                <Pressable
+                                    onPress={() =>
+                                        onCreateInventory(
+                                            draft.item_id,
+                                            draft.product_id,
+                                            suggestedInventoryQty
+                                        )
+                                    }
+                                    disabled={!draft.product_id}
+                                    className="mt-1.5 self-start"
+                                    style={{
+                                        opacity: draft.product_id
+                                            ? 1
+                                            : 0.4,
+                                    }}
+                                >
+                                    <Text
+                                        className="uppercase tracking-widest"
+                                        style={{
+                                            color: theme.primary,
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize: 10,
+                                        }}
+                                    >
+                                        + Add Inventory
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        )}
 
                         {/* line total */}
                         {draft.selected_receipt && (

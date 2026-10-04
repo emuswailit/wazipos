@@ -5,6 +5,17 @@ import client from "./client";
 import clientMultipart from "./multipartClient";
 
 /* =========================================================
+ * Debug logging — remove once the campaign flow is stable.
+ * ======================================================= */
+
+const LOG = (...args: any[]) => {
+    if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log("[wholesalersApi]", ...args);
+    }
+};
+
+/* =========================================================
  * Types
  * ======================================================= */
 
@@ -31,6 +42,87 @@ export interface WholesaleOrderPayload {
         discount: number;
         price: number;
     }>;
+}
+
+/* =========================================================
+ * Wholesaler receipts dispatcher
+ * ======================================================= */
+
+export type WholesalerReceiptsAction =
+    | "GetRetailEntities"
+    | "GetInventory"
+    | "WholesalerPriceDiscounts"
+    | "WholesalerPriceDiscountDetails"
+    | "WholesalerQuantityDiscounts"
+    | "WholesalerQuantityDiscountDetails"
+    | (string & {});
+
+export interface WholesalerReceiptsDispatch {
+    action: WholesalerReceiptsAction;
+    [key: string]: any;
+}
+
+/* =========================================================
+ * Discount payload / record shapes
+ * ======================================================= */
+
+export type ImageFieldValue = string | PickedImageLike | null;
+
+export interface PickedImageLike {
+    kind: "web" | "native";
+    uri: string;
+    file: File | { uri: string; name: string; type: string };
+    name: string;
+    type: string;
+}
+
+export interface PriceDiscountPayload {
+    wholesaler_receipt: string;
+    title: string;
+    percent: string;
+    normal_price: string;
+    offer_price: string;
+    start: string;
+    end: string;
+    is_active: "true" | "false";
+    banner: ImageFieldValue;
+}
+
+export interface PriceDiscountRecord
+    extends Omit<PriceDiscountPayload, "banner"> {
+    id: string;
+    wholesaler_receipt_title?: string;
+    product_title?: string;
+    receipt_unit_selling_price?: string;
+    thumbnail_url?: string;
+    images?: any[];
+    price_discount_banners?: any[];
+}
+
+export interface QuantityDiscountPayload {
+    wholesaler_receipt: string;
+    title: string;
+    limit_quantity: number;
+    awarded_quantity: number;
+    start: string;
+    end: string;
+    is_active: "true" | "false";
+    banner: ImageFieldValue;
+}
+
+export interface QuantityDiscountRecord
+    extends Omit<QuantityDiscountPayload, "banner"> {
+    id: string;
+    wholesaler_receipt_title?: string;
+    product_title?: string;
+    thumbnail_url?: string;
+    images?: any[];
+    quantity_discount_banners?: any[];
+}
+
+export interface DiscountSubmitResult<T> {
+    errors: Record<string, string | string[]> | null;
+    result: T | null;
 }
 
 /* =========================================================
@@ -93,6 +185,10 @@ export interface WholesalerCampaign {
 
 /* =========================================================
  * Campaign payloads
+ *
+ * `wholesaler_receipt_id`, `wholesaler_price_discount_id`, and
+ * `wholesaler_quantity_discount_id` match the keys read by
+ * `services.campaigns.add_campaign_item` on the backend.
  * ======================================================= */
 
 export interface CreateCampaignPayload {
@@ -101,7 +197,6 @@ export interface CreateCampaignPayload {
     start: string;
     end: string;
     budget_cap?: string | null;
-    banner?: FormData | any;
 }
 
 export interface UpdateCampaignPayload {
@@ -111,14 +206,13 @@ export interface UpdateCampaignPayload {
     start?: string;
     end?: string;
     budget_cap?: string | null;
-    banner?: FormData | any;
 }
 
 export interface AddCampaignItemPayload {
     campaign_id: string;
-    wholesaler_receipt: string;
-    wholesaler_price_discount?: string | null;
-    wholesaler_quantity_discount?: string | null;
+    wholesaler_receipt_id: string;
+    wholesaler_price_discount_id?: string | null;
+    wholesaler_quantity_discount_id?: string | null;
     suggested_quantity: number;
     per_retailer_limit?: number | null;
     retail_price_hint?: string | null;
@@ -126,8 +220,8 @@ export interface AddCampaignItemPayload {
 
 export interface UpdateCampaignItemPayload {
     item_id: string;
-    wholesaler_price_discount?: string | null;
-    wholesaler_quantity_discount?: string | null;
+    wholesaler_price_discount_id?: string | null;
+    wholesaler_quantity_discount_id?: string | null;
     suggested_quantity?: number;
     per_retailer_limit?: number | null;
     retail_price_hint?: string | null;
@@ -135,12 +229,11 @@ export interface UpdateCampaignItemPayload {
 
 export interface AddCampaignAudiencePayload {
     campaign_id: string;
-    retailer_ids: string[];
+    retailer_id: string;
 }
 
 export interface RemoveCampaignAudiencePayload {
-    campaign_id: string;
-    retailer_ids: string[];
+    audience_id: string;
 }
 
 export interface CampaignActionPayload {
@@ -149,13 +242,14 @@ export interface CampaignActionPayload {
 
 export interface ProjectCampaignPayload {
     campaign_id: string;
-    markup_percentage?: number;
-    quantities?: Record<string, number>;
+    markup_pct?: string;
+    items: Array<{ item_id: string; quantity: number }>;
 }
 
 export interface OptInCampaignPayload {
     campaign_id: string;
-    quantities?: Record<string, number>;
+    markup_pct?: string;
+    items: Array<{ item_id: string; quantity: number }>;
 }
 
 /* =========================================================
@@ -164,14 +258,12 @@ export interface OptInCampaignPayload {
 
 export interface CampaignProjectionRow {
     item_id: string;
-    wholesaler_receipt: string;
+    receipt_id: string;
     product_title: string;
     quantity: number;
-    unit_price: string;
-    bonus_units: number;
-    total_cost: string;
-    total_revenue: string;
-    total_profit: string;
+    published_unit_price: string;
+    published_bonus_quantity: number;
+    profit_estimate: string;
 }
 
 export interface OptInResult {
@@ -182,20 +274,10 @@ export interface OptInResult {
 
 /* =========================================================
  * Product request types — wholesaler side
- *
- * Mirrors the retailer-side shapes so both files stay in sync.
- * Wire payload is defined in @/databases/types (WholesalerProductRequest).
  * ======================================================= */
 
-export type ProductRequestUrgency =
-    | "low"
-    | "medium"
-    | "high";
+export type ProductRequestUrgency = "low" | "medium" | "high";
 
-/**
- * Canonical request statuses on the server.
- * Source: WS payloads — `status` field on WholesalerProductRequest.
- */
 export type ProductRequestStatus =
     | "DRAFT"
     | "PUBLISHED"
@@ -204,11 +286,6 @@ export type ProductRequestStatus =
     | "CANCELLED"
     | "EXPIRED";
 
-/**
- * A single line on an accepted response. Send exactly one of
- * `receipt_id` (existing server receipt) or `receipt` (inline
- * payload). The backend rejects when both or neither are present.
- */
 export interface RespondAcceptedLine {
     item_id: string;
     receipt_id?: string;
@@ -224,44 +301,52 @@ export interface RespondRejectedLine {
  * ======================================================= */
 
 export interface WholesalersApiContract {
-    // existing
     getWholesaleInventoryAction: (params?: { action: string }) => Promise<ApiResponse<WholesalerReceiptItem[]>>;
     wholesaleStaffAction: (data?: Record<string, any>) => Promise<ApiResponse<WholesalerReceiptItem[]>>;
-    wholesaleReceiptsAction: (data: { action: "GetRetailEntities" } | Record<string, any>) => Promise<ApiResponse<RetailEntityItem[]>>;
+    wholesaleReceiptsAction: (data: WholesalerReceiptsDispatch) => Promise<ApiResponse<any>>;
     wholesaleRetailerOrdersAction: (data: WholesaleOrderPayload) => Promise<ApiResponse<{ success: boolean }>>;
     wholesaleRetailerOrdersStaffAction: (data: WholesaleOrderPayload) => Promise<ApiResponse<{ success: boolean }>>;
+
     priceDiscountCreateAction: (data: FormData) => Promise<ApiResponse<any>>;
     priceDiscountUpdateAction: (data: FormData, id: string) => Promise<ApiResponse<any>>;
     quantityDiscountCreateAction: (data: FormData) => Promise<ApiResponse<any>>;
     quantityDiscountUpdateAction: (data: FormData, id: string) => Promise<ApiResponse<any>>;
 
-    // campaigns
-    createCampaignAction: (data: CreateCampaignPayload) => Promise<ApiResponse<WholesalerCampaign>>;
-    updateCampaignAction: (data: UpdateCampaignPayload) => Promise<ApiResponse<WholesalerCampaign>>;
+    submitPriceDiscountAction: (
+        payload: PriceDiscountPayload,
+        id?: string
+    ) => Promise<DiscountSubmitResult<PriceDiscountRecord>>;
+    submitQuantityDiscountAction: (
+        payload: QuantityDiscountPayload,
+        id?: string
+    ) => Promise<DiscountSubmitResult<QuantityDiscountRecord>>;
+
+    createCampaignAction: (
+        data: CreateCampaignPayload | FormData
+    ) => Promise<ApiResponse<WholesalerCampaign>>;
+    updateCampaignAction: (
+        data: UpdateCampaignPayload | FormData
+    ) => Promise<ApiResponse<WholesalerCampaign>>;
     deleteCampaignAction: (data: CampaignActionPayload) => Promise<ApiResponse<{ success: boolean }>>;
     publishCampaignAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaign>>;
     closeCampaignAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaign>>;
     getEntityCampaignsAction: (data?: { status?: CampaignStatus; search?: string }) => Promise<ApiResponse<WholesalerCampaign[]>>;
     getCampaignDetailsAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaign>>;
 
-    // campaign items
     addCampaignItemAction: (data: AddCampaignItemPayload) => Promise<ApiResponse<WholesalerCampaignItem>>;
     updateCampaignItemAction: (data: UpdateCampaignItemPayload) => Promise<ApiResponse<WholesalerCampaignItem>>;
     deleteCampaignItemAction: (data: { item_id: string }) => Promise<ApiResponse<{ success: boolean }>>;
     getCampaignItemsAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaignItem[]>>;
 
-    // campaign audience
-    addCampaignAudienceAction: (data: AddCampaignAudiencePayload) => Promise<ApiResponse<WholesalerCampaignAudience[]>>;
+    addCampaignAudienceAction: (data: AddCampaignAudiencePayload) => Promise<ApiResponse<WholesalerCampaignAudience>>;
     removeCampaignAudienceAction: (data: RemoveCampaignAudiencePayload) => Promise<ApiResponse<{ success: boolean }>>;
     getCampaignAudienceAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaignAudience[]>>;
 
-    // retailer-facing campaigns
     getMyCampaignsAction: (data?: { status?: CampaignStatus }) => Promise<ApiResponse<WholesalerCampaign[]>>;
     projectCampaignAction: (data: ProjectCampaignPayload) => Promise<ApiResponse<CampaignProjectionRow[]>>;
     optInCampaignAction: (data: OptInCampaignPayload) => Promise<ApiResponse<OptInResult>>;
     optOutCampaignAction: (data: CampaignActionPayload) => Promise<ApiResponse<WholesalerCampaignAudience>>;
 
-    // product requests
     wholesalerProductRequestsAction: (data: { action: string;[key: string]: any }) => Promise<ApiResponse<any>>;
     getWholesalerTaggedRequestsAction: (data?: { status?: ProductRequestStatus; urgency?: ProductRequestUrgency; page?: number; page_size?: number }) => Promise<ApiResponse<any>>;
     getWholesalerRequestDetailsAction: (data: { request_id: string }) => Promise<ApiResponse<any>>;
@@ -290,9 +375,15 @@ const wholesaleRetailerOrdersStaffAction = (data: WholesaleOrderPayload): Promis
     return client.post("/wholesalers/retailers/orders/staff", data);
 };
 
-const wholesaleReceiptsAction = (data: { action: "GetRetailEntities" } | Record<string, any>): Promise<ApiResponse<any>> => {
+const wholesaleReceiptsAction = (
+    data: WholesalerReceiptsDispatch
+): Promise<ApiResponse<any>> => {
     return client.post("/wholesalers/receipts", data);
 };
+
+/* =========================================================
+ * Raw upload actions
+ * ======================================================= */
 
 const priceDiscountCreateAction = (data: FormData): Promise<ApiResponse<any>> => {
     return clientMultipart.post("/wholesalers/discounts/price/create", data);
@@ -311,27 +402,295 @@ const quantityDiscountUpdateAction = (data: FormData, id: string): Promise<ApiRe
 };
 
 /* =========================================================
- * Campaign actions — unified dispatcher
+ * Discount submit — helpers
  * ======================================================= */
+
+const PRICE_DISCOUNT_FILE_FIELD = "price_discount_banners";
+const QUANTITY_DISCOUNT_FILE_FIELD = "quantity_discount_banners";
+
+function isPendingUpload(banner: ImageFieldValue): banner is PickedImageLike {
+    return (
+        typeof banner === "object" &&
+        banner !== null &&
+        "kind" in banner &&
+        ((banner as PickedImageLike).kind === "web" ||
+            (banner as PickedImageLike).kind === "native")
+    );
+}
+
+function appendImageToFormData(
+    fd: FormData,
+    field: string,
+    img: PickedImageLike
+): void {
+    fd.append(field, img.file as any);
+}
+
+function normaliseDiscountErrors(
+    raw: any
+): Record<string, string | string[]> {
+    if (!raw) return { detail: "Request failed." };
+
+    if (Array.isArray(raw)) {
+        const out: Record<string, string> = {};
+        raw.forEach((line: any) => {
+            const s = String(line ?? "");
+            const idx = s.indexOf(": ");
+            if (idx > 0) {
+                const key = s.slice(0, idx).trim();
+                const msg = s.slice(idx + 2).trim();
+                out[key] = out[key] ? `${out[key]}; ${msg}` : msg;
+            } else if (s) {
+                out.detail = out.detail ? `${out.detail}; ${s}` : s;
+            }
+        });
+        return out;
+    }
+
+    if (typeof raw === "object") return raw as Record<string, string>;
+
+    return { detail: String(raw) };
+}
+
+/* =========================================================
+ * Discount submit — price
+ * ======================================================= */
+
+const submitPriceDiscountAction = async (
+    payload: PriceDiscountPayload,
+    id?: string
+): Promise<DiscountSubmitResult<PriceDiscountRecord>> => {
+    const { banner, ...fields } = payload;
+
+    LOG("submitPriceDiscount request", { id: id ?? "(create)", payload: { ...fields, banner: banner ? "<file>" : null } });
+
+    const fd = new FormData();
+    fd.append("wholesaler_receipt", String(fields.wholesaler_receipt));
+    fd.append("title", String(fields.title));
+    fd.append("percent", String(fields.percent));
+    fd.append("start", String(fields.start));
+    fd.append("end", String(fields.end));
+    fd.append("is_active", String(fields.is_active));
+    fd.append("normal_price", String(fields.normal_price));
+    fd.append("offer_price", String(fields.offer_price));
+
+    if (isPendingUpload(banner)) {
+        appendImageToFormData(fd, PRICE_DISCOUNT_FILE_FIELD, banner);
+    }
+
+    const res = id
+        ? await priceDiscountUpdateAction(fd, id)
+        : await priceDiscountCreateAction(fd);
+
+    LOG("submitPriceDiscount response", {
+        ok: res.ok,
+        status: res.status,
+        problem: res.problem,
+        data: res.data,
+    });
+
+    if (!res.ok) {
+        return {
+            errors: {
+                detail:
+                    (res.data as any)?.response_message ??
+                    (res.problem as any) ??
+                    "Request failed.",
+            },
+            result: null,
+        };
+    }
+
+    const data = (res.data ?? {}) as any;
+
+    if (typeof data.response_code === "number") {
+        if (data.response_code !== 0) {
+            return {
+                errors: normaliseDiscountErrors(data.errors),
+                result: null,
+            };
+        }
+        const record: PriceDiscountRecord | null =
+            data.wholesale_price_discount ?? null;
+        if (!record) {
+            return {
+                errors: { detail: "Server did not return the saved discount." },
+                result: null,
+            };
+        }
+        return { errors: null, result: record };
+    }
+
+    if (id && data && typeof data === "object" && data.id) {
+        return { errors: null, result: data as PriceDiscountRecord };
+    }
+
+    return {
+        errors: { detail: "Unexpected response shape from server." },
+        result: null,
+    };
+};
+
+/* =========================================================
+ * Discount submit — quantity
+ * ======================================================= */
+
+const submitQuantityDiscountAction = async (
+    payload: QuantityDiscountPayload,
+    id?: string
+): Promise<DiscountSubmitResult<QuantityDiscountRecord>> => {
+    const { banner, ...fields } = payload;
+
+    LOG("submitQuantityDiscount request", { id: id ?? "(create)", payload: { ...fields, banner: banner ? "<file>" : null } });
+
+    const fd = new FormData();
+    fd.append("wholesaler_receipt", String(fields.wholesaler_receipt));
+    fd.append("title", String(fields.title));
+    fd.append("limit_quantity", String(fields.limit_quantity));
+    fd.append("awarded_quantity", String(fields.awarded_quantity));
+    fd.append("start", String(fields.start));
+    fd.append("end", String(fields.end));
+    fd.append("is_active", String(fields.is_active));
+
+    if (isPendingUpload(banner)) {
+        appendImageToFormData(fd, QUANTITY_DISCOUNT_FILE_FIELD, banner);
+    }
+
+    const res = id
+        ? await quantityDiscountUpdateAction(fd, id)
+        : await quantityDiscountCreateAction(fd);
+
+    LOG("submitQuantityDiscount response", {
+        ok: res.ok,
+        status: res.status,
+        problem: res.problem,
+        data: res.data,
+    });
+
+    if (!res.ok) {
+        return {
+            errors: {
+                detail:
+                    (res.data as any)?.response_message ??
+                    (res.problem as any) ??
+                    "Request failed.",
+            },
+            result: null,
+        };
+    }
+
+    const data = (res.data ?? {}) as any;
+
+    if (typeof data.response_code === "number") {
+        if (data.response_code !== 0) {
+            return {
+                errors: normaliseDiscountErrors(data.errors),
+                result: null,
+            };
+        }
+        const record: QuantityDiscountRecord | null =
+            data.wholesaler_quantity_discount ?? null;
+        if (!record) {
+            return {
+                errors: { detail: "Server did not return the saved discount." },
+                result: null,
+            };
+        }
+        return { errors: null, result: record };
+    }
+
+    if (id && data && typeof data === "object" && data.id) {
+        return { errors: null, result: data as QuantityDiscountRecord };
+    }
+
+    return {
+        errors: { detail: "Unexpected response shape from server." },
+        result: null,
+    };
+};
+
+/* =========================================================
+ * Campaign dispatcher
+ * ======================================================= */
+
+const CAMPAIGNS_ENDPOINT = "/wholesalers/campaigns";
+
+function isFormDataInstance(value: unknown): value is FormData {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as any).append === "function" &&
+        typeof (value as any).getAll === "function" &&
+        typeof (value as any).entries === "function"
+    );
+}
 
 const campaignsAction = (data: {
     action: string;
     [key: string]: any;
 }): Promise<ApiResponse<any>> => {
-    return client.post("/wholesalers/campaigns", data);
+    LOG("campaignsAction →", { action: data.action, payload: data });
+
+    return client.post(CAMPAIGNS_ENDPOINT, data).then((res) => {
+        LOG("campaignsAction ←", {
+            action: data.action,
+            ok: res.ok,
+            status: res.status,
+            response_code: (res.data as any)?.response_code,
+            response_message: (res.data as any)?.response_message,
+            errors: (res.data as any)?.errors,
+            data: res.data,
+        });
+        return res;
+    });
+};
+
+const campaignsMultipartAction = (
+    action: string,
+    formData: FormData
+): Promise<ApiResponse<any>> => {
+    formData.append("action", action);
+
+    LOG("campaignsMultipartAction →", {
+        action,
+        fields: Array.from((formData as any).keys?.() ?? []),
+    });
+
+    return clientMultipart
+        .post(CAMPAIGNS_ENDPOINT, formData)
+        .then((res) => {
+            LOG("campaignsMultipartAction ←", {
+                action,
+                ok: res.ok,
+                status: res.status,
+                response_code: (res.data as any)?.response_code,
+                response_message: (res.data as any)?.response_message,
+                errors: (res.data as any)?.errors,
+                data: res.data,
+            });
+            return res;
+        });
 };
 
 /* ---- Campaign lifecycle ---- */
 
 const createCampaignAction = (
-    data: CreateCampaignPayload
-): Promise<ApiResponse<any>> =>
-    campaignsAction({ action: "CreateCampaign", ...data });
+    data: CreateCampaignPayload | FormData
+): Promise<ApiResponse<any>> => {
+    if (isFormDataInstance(data)) {
+        return campaignsMultipartAction("CreateCampaign", data);
+    }
+    return campaignsAction({ action: "CreateCampaign", ...data });
+};
 
 const updateCampaignAction = (
-    data: UpdateCampaignPayload
-): Promise<ApiResponse<any>> =>
-    campaignsAction({ action: "UpdateCampaign", ...data });
+    data: UpdateCampaignPayload | FormData
+): Promise<ApiResponse<any>> => {
+    if (isFormDataInstance(data)) {
+        return campaignsMultipartAction("UpdateCampaign", data);
+    }
+    return campaignsAction({ action: "UpdateCampaign", ...data });
+};
 
 const deleteCampaignAction = (
     data: CampaignActionPayload
@@ -421,35 +780,13 @@ const optOutCampaignAction = (
 
 /* =========================================================
  * Product request actions — wholesaler side
- *
- * All actions POST to the same endpoint and dispatch by `action`.
- * Handler map (matches retailers/services/product_requests.py):
- *
- *   GetWholesalerTaggedRequests — wholesaler fetches requests
- *                                 targeting their entity
- *   GetRequestDetails           — either side fetches one request
- *   CreateOffer                 — wholesaler submits an offer
- *   WithdrawOffer               — wholesaler retracts a submitted offer
- *   Respond                     — wholesaler accepts / rejects lines
- *
- * Retailer-only actions (CreateRequest, GetMyRequests, ConfirmOffers,
- * CancelRequest, CancelRequestItem) live in retailersApi.ts.
  * ======================================================= */
 
-/**
- * Raw dispatcher call. Every helper below funnels through this, so
- * the endpoint URL is defined once.
- */
 const wholesalerProductRequestsAction = (
     data: { action: string;[key: string]: any }
 ): Promise<ApiResponse<any>> => {
-    return client.post(
-        "/retailers/product-requests",
-        data
-    );
+    return client.post("/retailers/product-requests", data);
 };
-
-/* -------------------- GetWholesalerTaggedRequests -------------------- */
 
 export interface GetWholesalerTaggedRequestsPayload {
     status?: ProductRequestStatus;
@@ -458,15 +795,6 @@ export interface GetWholesalerTaggedRequestsPayload {
     page_size?: number;
 }
 
-/**
- * POST { action: "GetWholesalerTaggedRequests", ...filters }
- *
- * Success envelope (payload_key = "requests"):
- *   { response_code: 0, message, requests: [ ...WholesalerProductRequest... ] }
- *
- * The sync context also consumes a WS push on the same shape, wrapped
- * in `{ wholesaler_product_requests: [...] }`.
- */
 const getWholesalerTaggedRequestsAction = (
     data?: GetWholesalerTaggedRequestsPayload
 ): Promise<ApiResponse<any>> =>
@@ -475,18 +803,10 @@ const getWholesalerTaggedRequestsAction = (
         ...(data ?? {}),
     });
 
-/* -------------------- GetRequestDetails -------------------- */
-
 export interface GetWholesalerRequestDetailsPayload {
     request_id: string;
 }
 
-/**
- * POST { action: "GetRequestDetails", request_id }
- *
- * Success envelope (payload_key = "request"):
- *   { response_code: 0, message, request: { ...full request... } }
- */
 const getWholesalerRequestDetailsAction = (
     data: GetWholesalerRequestDetailsPayload
 ): Promise<ApiResponse<any>> =>
@@ -494,8 +814,6 @@ const getWholesalerRequestDetailsAction = (
         action: "GetRequestDetails",
         ...data,
     });
-
-/* -------------------- CreateOffer -------------------- */
 
 export interface CreateWholesalerOfferPayload {
     request_id: string;
@@ -505,12 +823,6 @@ export interface CreateWholesalerOfferPayload {
     note?: string;
 }
 
-/**
- * POST { action: "CreateOffer", ...payload }
- *
- * Success envelope (payload_key = "offer"):
- *   { response_code: 0, message, offer: { offer_id, status } }
- */
 const createWholesalerOfferAction = (
     data: CreateWholesalerOfferPayload
 ): Promise<ApiResponse<any>> =>
@@ -519,18 +831,10 @@ const createWholesalerOfferAction = (
         ...data,
     });
 
-/* -------------------- WithdrawOffer -------------------- */
-
 export interface WithdrawWholesalerOfferPayload {
     offer_id: string;
 }
 
-/**
- * POST { action: "WithdrawOffer", offer_id }
- *
- * Success envelope (payload_key = "offer"):
- *   { response_code: 0, message, offer: { offer_id, status: "WITHDRAWN" } }
- */
 const withdrawWholesalerOfferAction = (
     data: WithdrawWholesalerOfferPayload
 ): Promise<ApiResponse<any>> =>
@@ -539,46 +843,13 @@ const withdrawWholesalerOfferAction = (
         ...data,
     });
 
-/* -------------------- Respond -------------------- */
-
 export interface RespondToProductRequestPayload {
     request_id: string;
-    /**
-     * Accepted lines. Each entry requires exactly one of `receipt_id`
-     * or `receipt` (never both — the backend rejects that).
-     */
     accepted_lines: RespondAcceptedLine[];
     rejected_lines: RespondRejectedLine[];
     note?: string;
 }
 
-/**
- * POST { action: "Respond", ...payload }
- *
- * Business rules enforced by the backend:
- *   - at least one line must be accepted or rejected
- *   - each accepted line: exactly one of receipt_id / receipt
- *   - every item_id must belong to this request
- *   - no line in both accepted_lines and rejected_lines
- *
- * Success envelope (payload_key = "response"):
- *   {
- *     response_code: 0,
- *     message: "Response recorded",
- *     response: {
- *       response_id: "…",
- *       offered_line_count: 1,
- *       rejected_line_count: 0
- *     }
- *   }
- *
- * Error envelope:
- *   {
- *     response_code: 1,
- *     message: "Invalid accepted line",
- *     errors: { accepted_lines: "Each line requires item_id." }
- *   }
- */
 const respondToProductRequestAction = (
     data: RespondToProductRequestPayload
 ): Promise<ApiResponse<any>> =>
@@ -592,18 +863,18 @@ const respondToProductRequestAction = (
  * ======================================================= */
 
 const apiExportInstance: WholesalersApiContract = {
-    // existing
     getWholesaleInventoryAction,
     priceDiscountUpdateAction,
     priceDiscountCreateAction,
     quantityDiscountUpdateAction,
     quantityDiscountCreateAction,
+    submitPriceDiscountAction,
+    submitQuantityDiscountAction,
     wholesaleStaffAction,
     wholesaleReceiptsAction,
     wholesaleRetailerOrdersAction,
     wholesaleRetailerOrdersStaffAction,
 
-    // campaigns
     createCampaignAction,
     updateCampaignAction,
     deleteCampaignAction,
@@ -612,24 +883,20 @@ const apiExportInstance: WholesalersApiContract = {
     getEntityCampaignsAction,
     getCampaignDetailsAction,
 
-    // campaign items
     addCampaignItemAction,
     updateCampaignItemAction,
     deleteCampaignItemAction,
     getCampaignItemsAction,
 
-    // campaign audience
     addCampaignAudienceAction,
     removeCampaignAudienceAction,
     getCampaignAudienceAction,
 
-    // retailer-facing campaigns
     getMyCampaignsAction,
     projectCampaignAction,
     optInCampaignAction,
     optOutCampaignAction,
 
-    // product requests
     wholesalerProductRequestsAction,
     getWholesalerTaggedRequestsAction,
     getWholesalerRequestDetailsAction,

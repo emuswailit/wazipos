@@ -1,11 +1,14 @@
 // components/admin/products/AdminProductsList.tsx
 //
 // Admin products list shell.
+//
+// Reads come exclusively from ProductsSyncContext — this screen
+// no longer calls GetAllProducts itself. Mutations (Create /
+// Update) still go through useApi locally, then trigger a context
+// refresh so the shared cache picks up the change.
 
-import drugsApi, {
-    type ProductDetails,
-} from "@/api/drugsApi";
 import { useAuth } from "@/context/AuthContext";
+import { useProductsSync } from "@/context/ProductsSyncContext";
 import useApi from "@/hooks/useApi";
 import { Stack } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -19,6 +22,8 @@ import {
     View,
 } from "react-native";
 
+import drugsApi from "@/api/drugs/productsApi";
+import { ProductDetails } from "@/api/productsApi";
 import AdminProductDetailsModal from "./AdminProductDetailsModal";
 import AdminProductEditModal from "./AdminProductEditModal";
 import AdminProductsMobileView from "./AdminProductsMobileView";
@@ -80,6 +85,14 @@ export default function AdminProductsList() {
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768;
 
+    // ---- Read side: ProductsSyncContext is the single source ----
+    const {
+        productsList,
+        isProductsSyncing,
+        isProductsRefreshing,
+        forceProductsRefresh,
+    } = useProductsSync();
+
     const [selectedItem, setSelectedItem] =
         useState<ProductItem | null>(null);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -92,9 +105,7 @@ export default function AdminProductsList() {
         PAGE_SIZE_OPTIONS[0]
     );
 
-    const getProductsApi = useApi<any>(async (payload: any) =>
-        drugsApi.productsAction(payload)
-    );
+    // ---- Write side: mutations only ----
     const addProductApi = useApi<any>(async (payload: any) =>
         drugsApi.productsAction(payload)
     );
@@ -102,73 +113,52 @@ export default function AdminProductsList() {
         drugsApi.productsAction(payload)
     );
 
-    const fetchProducts = () => {
-        getProductsApi.request({ action: "GetAllProducts" });
-    };
-
-    useEffect(() => {
-        fetchProducts();
-    }, []);
-
+    // Map the context's normalized ProductItem into the admin
+    // list's local shape. The context already resolved image URLs
+    // and nested objects; we just present them here.
     const products: ProductItem[] = useMemo(() => {
-        if (
-            getProductsApi.data &&
-            Array.isArray(getProductsApi.data)
-        ) {
-            return getProductsApi.data.map((item: any) => {
-                const f = item.fields ?? item;
-                return {
-                    id:
-                        item.pk ||
-                        item.id ||
-                        item.key ||
-                        Math.random().toString(),
-                    title: f?.title || "UNSPECIFIED",
-                    description: f?.description || "",
-                    long_title: f?.long_title || "",
-                    product_name: f?.product_name || "",
-                    preparation: f?.preparation || "",
-                    preparation_title:
-                        f?.preparation_title || "—",
-                    long_preparation_title:
-                        f?.long_preparation_title || "—",
-                    formulation_title:
-                        f?.formulation_title || "—",
-                    manufacturer: f?.manufacturer || "",
-                    manufacturer_title:
-                        f?.manufacturer_title || "—",
-                    country_of_origin:
-                        f?.country_of_origin || "—",
-                    category: f?.category || "",
-                    category_title:
-                        f?.category_title || "—",
-                    units_per_pack: Number(
-                        f?.units_per_pack
-                    ) || 0,
-                    pack_tag: f?.pack_tag || "",
-                    bar_code: f?.bar_code || "",
-                    is_vatable: f?.is_vatable
-                        ? String(f.is_vatable)
-                        : "false",
-                    allowed_entities: Array.isArray(
-                        f?.allowed_entities
-                    )
-                        ? f.allowed_entities
-                        : [],
-                    allowed_entities_titles: Array.isArray(
-                        f?.allowed_entities_titles
-                    )
-                        ? f.allowed_entities_titles
-                        : [],
-                    active: !!f?.active,
-                    images: parseImages(f?.images),
-                    created: f?.created || "",
-                    updated: f?.updated || "",
-                };
-            });
+        if (!Array.isArray(productsList) || productsList.length === 0) {
+            return [];
         }
-        return [];
-    }, [getProductsApi.data]);
+
+        return productsList.map((item: any) => ({
+            id: String(item.remote_id ?? item.id ?? ""),
+            title: item.title || "UNSPECIFIED",
+            description: item.description || "",
+            long_title: item.long_title || "",
+            product_name: item.product_name || "",
+            preparation: item.preparation || "",
+            preparation_title: item.preparation_title || "—",
+            long_preparation_title:
+                item.long_preparation_title || "—",
+            formulation_title: item.formulation_title || "—",
+            manufacturer: item.manufacturer || "",
+            manufacturer_title: item.manufacturer_title || "—",
+            country_of_origin: item.country_of_origin || "—",
+            category: item.category || "",
+            category_title: item.category_title || "—",
+            units_per_pack: Number(item.units_per_pack) || 0,
+            pack_tag: item.pack_tag || "",
+            bar_code: item.bar_code || "",
+            is_vatable: item.is_vatable
+                ? String(item.is_vatable)
+                : "false",
+            allowed_entities: Array.isArray(
+                item.allowed_entities
+            )
+                ? item.allowed_entities
+                : [],
+            allowed_entities_titles: Array.isArray(
+                item.allowed_entities_titles
+            )
+                ? item.allowed_entities_titles
+                : [],
+            active: !!item.active,
+            images: parseImages(item.images),
+            created: item.created || "",
+            updated: item.updated || "",
+        }));
+    }, [productsList]);
 
     const filteredProducts = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -209,6 +199,13 @@ export default function AdminProductsList() {
         () => filteredProducts.slice(pageStart, pageEnd),
         [filteredProducts, pageStart, pageEnd]
     );
+
+    // After a successful mutation, ask the context to refetch.
+    // The context updates productsList, and `products` above
+    // recomputes automatically.
+    const refreshFromContext = () => {
+        void forceProductsRefresh();
+    };
 
     const handleFormSubmit = async (
         values: any,
@@ -306,7 +303,7 @@ export default function AdminProductsList() {
             resetForm();
             setIsFormModalOpen(false);
             setEditingItem(null);
-            fetchProducts();
+            refreshFromContext();
         } catch (err) {
             console.error(
                 "Admin form workflow operation error:",
@@ -351,7 +348,8 @@ export default function AdminProductsList() {
         setPage(1);
     };
 
-    if (getProductsApi.loading && products.length === 0) {
+    // Loading state derives from the context, not a local API.
+    if (isProductsSyncing && products.length === 0) {
         return (
             <View
                 style={{ backgroundColor: theme.background }}
@@ -387,8 +385,8 @@ export default function AdminProductsList() {
     const sharedProps: AdminProductsSharedProps = {
         query,
         setQuery,
-        onRefresh: fetchProducts,
-        refreshing: getProductsApi.loading,
+        onRefresh: refreshFromContext,
+        refreshing: isProductsRefreshing || isProductsSyncing,
         sourceLabel,
         sourceTone,
         lastSyncedTime: "",

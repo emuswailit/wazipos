@@ -9,26 +9,27 @@
 // - Native: inline dropdown
 // - NativeWind layout, useAuth() colors
 //
-// Filtering model:
-//   - `productId` (optional) always scopes the list to receipts
-//     whose `product_id` matches. No escape hatch.
-//   - `filter` (optional) is an additional predicate.
-//   - Text search narrows within the scoped list.
-//   - On focus with no query: shows the scoped list (or a
-//     "no match" message).
-//   - On typing: filters the scoped list further.
+// Thumbnails come from a tolerant resolver (`receiptThumb`) that checks
+// `thumbnail_url`, then `images[0].thumbnail`, then `images[0].image`.
+// The API response for a receipt can carry any of those shapes.
+//
+// NOTE: `react-dom` is imported statically. Earlier versions used a
+// top-level conditional `require('react-dom')`, which broke Metro's
+// module graph and caused every downstream barrel export to resolve
+// to `undefined`. Do not reintroduce that pattern.
 
-import { useAuth } from '@/context/AuthContext';
-import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
-import { WholesalerReceipt } from '@/databases/types';
-import { useFormikContext } from 'formik';
+import { useAuth } from "@/context/AuthContext";
+import { useWholesalerReceiptsSync } from "@/context/WholesalerReceiptsSyncContext";
+import { WholesalerReceipt } from "@/databases/types";
+import { useFormikContext } from "formik";
 import React, {
     useCallback,
     useEffect,
     useMemo,
     useRef,
     useState,
-} from 'react';
+} from "react";
+import * as ReactDOM from "react-dom";
 import {
     ActivityIndicator,
     FlatList,
@@ -38,23 +39,13 @@ import {
     Text,
     TextInput,
     View,
-} from 'react-native';
-
-/* ---- Web-only portal ---- */
-let ReactDOM: any = null;
-if (Platform.OS === 'web') {
-    try {
-        ReactDOM = require('react-dom');
-    } catch {
-        ReactDOM = null;
-    }
-}
+} from "react-native";
 
 /* =========================================================
  * Logging
  * ======================================================= */
 
-const LOG_TAG = '[WholesaleInventoryPicker]';
+const LOG_TAG = "[WholesaleInventoryPicker]";
 const log = (...args: any[]) => {
     if (__DEV__) console.log(LOG_TAG, ...args);
 };
@@ -62,6 +53,7 @@ const log = (...args: any[]) => {
 /* =========================================================
  * Types
  * ======================================================= */
+
 export interface WholesaleInventoryFieldMap {
     id?: string;
     title?: string;
@@ -96,9 +88,7 @@ export interface WholesaleInventoryPickerProps {
     disabled?: boolean;
     label?: string;
     required?: boolean;
-    onSearch?: (
-        query: string
-    ) => Promise<WholesalerReceipt[]>;
+    onSearch?: (query: string) => Promise<WholesalerReceipt[]>;
 
     /**
      * Scope the list to receipts whose `product_id` matches.
@@ -124,12 +114,33 @@ export interface WholesaleInventoryPickerProps {
 function receiptProductId(
     r: WholesalerReceipt | null | undefined
 ): string {
-    return r?.product_id ?? '';
+    return r?.product_id ?? "";
+}
+
+/**
+ * Resolve a display thumbnail from any shape a receipt may carry.
+ * Priority:
+ *   1. flat `thumbnail_url` (some endpoints project it)
+ *   2. `images[0].thumbnail` (the canonical shape)
+ *   3. `images[0].image` (fallback when no thumbnail was generated)
+ */
+function receiptThumb(
+    r: WholesalerReceipt | null | undefined
+): string | null {
+    if (!r) return null;
+    if ((r as any).thumbnail_url) {
+        return String((r as any).thumbnail_url);
+    }
+    const imgs: any[] = (r as any).images ?? [];
+    if (imgs[0]?.thumbnail) return String(imgs[0].thumbnail);
+    if (imgs[0]?.image) return String(imgs[0].image);
+    return null;
 }
 
 /* =========================================================
  * Public component
  * ======================================================= */
+
 export function WholesaleInventoryPicker(
     props: WholesaleInventoryPickerProps
 ) {
@@ -142,83 +153,55 @@ export function WholesaleInventoryPicker(
 /* =========================================================
  * Formik wrapper
  * ======================================================= */
-function FormikPicker(
-    props: WholesaleInventoryPickerProps
-) {
+
+function FormikPicker(props: WholesaleInventoryPickerProps) {
     const formik = useFormikContext<any>();
 
     const fm = props.fieldMap ?? {};
-    const idField = fm.id ?? 'remote_id';
-    const titleField = fm.title ?? 'title';
-    const barField = fm.bar_code ?? 'bar_code';
-    const batchField = fm.batch ?? 'batch';
-    const thumbField = fm.thumbnail_url ?? 'thumbnail_url';
-    const unitField =
-        fm.unit_of_receipt ?? 'unit_of_receipt';
+    const idField = fm.id ?? "remote_id";
+    const titleField = fm.title ?? "title";
+    const barField = fm.bar_code ?? "bar_code";
+    const batchField = fm.batch ?? "batch";
+    const thumbField = fm.thumbnail_url ?? "thumbnail_url";
+    const unitField = fm.unit_of_receipt ?? "unit_of_receipt";
     const qtyField =
-        fm.received_unit_quantity ??
-        'received_unit_quantity';
-    const buyField =
-        fm.unit_buying_price ?? 'unit_buying_price';
+        fm.received_unit_quantity ?? "received_unit_quantity";
+    const buyField = fm.unit_buying_price ?? "unit_buying_price";
     const sellField =
-        fm.final_unit_selling_price ??
-        'final_unit_selling_price';
-    const mfgField =
-        fm.manufacture_date ?? 'manufacture_date';
-    const expField = fm.expiry_date ?? 'expiry_date';
-    const productField = fm.product ?? 'product_id';
+        fm.final_unit_selling_price ?? "final_unit_selling_price";
+    const mfgField = fm.manufacture_date ?? "manufacture_date";
+    const expField = fm.expiry_date ?? "expiry_date";
+    const productField = fm.product ?? "product_id";
 
-    const value: WholesalerReceipt | null = formik.values?.[
-        titleField
-    ]
+    const value: WholesalerReceipt | null = formik.values?.[titleField]
         ? ({
-            remote_id: String(
-                formik.values?.[idField] ?? ''
-            ),
-            title: String(
-                formik.values?.[titleField] ?? ''
-            ),
-            bar_code: String(
-                formik.values?.[barField] ?? ''
-            ),
+            remote_id: String(formik.values?.[idField] ?? ""),
+            title: String(formik.values?.[titleField] ?? ""),
+            bar_code: String(formik.values?.[barField] ?? ""),
             batch: formik.values?.[batchField] ?? null,
-            thumbnail_url:
-                formik.values?.[thumbField] ?? null,
+            thumbnail_url: formik.values?.[thumbField] ?? null,
         } as any)
         : null;
 
     const error: string | undefined =
-        formik.touched?.[titleField] &&
-            formik.errors?.[titleField]
+        formik.touched?.[titleField] && formik.errors?.[titleField]
             ? String(formik.errors[titleField])
             : undefined;
 
     const handleSelect = useCallback(
         (r: WholesalerReceipt) => {
-            formik.setFieldValue(
-                idField,
-                r.remote_id ?? r.id
-            );
+            formik.setFieldValue(idField, r.remote_id ?? r.id);
             formik.setFieldValue(
                 titleField,
-                r.title ?? r.product_title ?? ''
+                r.title ?? r.product_title ?? ""
             );
-            formik.setFieldValue(
-                barField,
-                r.bar_code ?? ''
-            );
-            formik.setFieldValue(
-                batchField,
-                r.batch ?? ''
-            );
+            formik.setFieldValue(barField, r.bar_code ?? "");
+            formik.setFieldValue(batchField, r.batch ?? "");
             formik.setFieldValue(
                 thumbField,
-                r.thumbnail_url ?? ''
+                receiptThumb(r) ?? ""
             );
-            formik.setFieldValue(
-                unitField,
-                r.unit_of_receipt ?? ''
-            );
+            formik.setFieldValue(unitField, r.unit_of_receipt ?? "");
             formik.setFieldValue(
                 qtyField,
                 Number(r.received_unit_quantity ?? 0)
@@ -235,17 +218,11 @@ function FormikPicker(
                     0
                 )
             );
-            formik.setFieldValue(
-                mfgField,
-                r.manufacture_date ?? ''
-            );
-            formik.setFieldValue(
-                expField,
-                r.expiry_date ?? ''
-            );
+            formik.setFieldValue(mfgField, r.manufacture_date ?? "");
+            formik.setFieldValue(expField, r.expiry_date ?? "");
             formik.setFieldValue(
                 productField,
-                String(r.product_id ?? r.remote_id ?? '')
+                String(r.product_id ?? r.remote_id ?? "")
             );
 
             formik.setFieldTouched(titleField, true, false);
@@ -258,11 +235,11 @@ function FormikPicker(
     );
 
     const handleClear = useCallback(() => {
-        formik.setFieldValue(idField, '');
-        formik.setFieldValue(titleField, '');
-        formik.setFieldValue(barField, '');
-        formik.setFieldValue(batchField, '');
-        formik.setFieldValue(thumbField, '');
+        formik.setFieldValue(idField, "");
+        formik.setFieldValue(titleField, "");
+        formik.setFieldValue(barField, "");
+        formik.setFieldValue(batchField, "");
+        formik.setFieldValue(thumbField, "");
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formik]);
 
@@ -280,9 +257,8 @@ function FormikPicker(
 /* =========================================================
  * Controlled wrapper
  * ======================================================= */
-function ControlledPicker(
-    props: WholesaleInventoryPickerProps
-) {
+
+function ControlledPicker(props: WholesaleInventoryPickerProps) {
     return (
         <PickerInner
             {...props}
@@ -297,8 +273,8 @@ function ControlledPicker(
 /* =========================================================
  * Inner
  * ======================================================= */
-interface PickerInnerProps
-    extends WholesaleInventoryPickerProps {
+
+interface PickerInnerProps extends WholesaleInventoryPickerProps {
     value: WholesalerReceipt | null;
     error: string | undefined;
     onSelect: (r: WholesalerReceipt) => void;
@@ -316,7 +292,7 @@ function PickerInner({
     filter,
     inStockOnly = false,
 
-    placeholder = 'Search inventory…',
+    placeholder = "Search inventory…",
     maxDropdownHeight = 360,
     disabled,
     label,
@@ -324,47 +300,36 @@ function PickerInner({
     testID,
 }: PickerInnerProps) {
     const { theme, isDarkMode } = useAuth();
-    const { wholesalerReceipts, isSyncing } =
-        useWholesalerReceiptsSync();
+    const { wholesalerReceipts, isSyncing } = useWholesalerReceiptsSync();
 
     const contextCount = wholesalerReceipts?.length ?? 0;
 
     /* -------- Theme -------- */
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
-    const thumbBg = isDarkMode ? '#1e293b' : '#e2e8f0';
-    const dropdownBg = isDarkMode ? '#0f172a' : '#ffffff';
-    const dropdownBorder = isDarkMode
-        ? '#334155'
-        : '#cbd5e1';
-    const hoverBg = isDarkMode ? '#1e293b' : '#f1f5f9';
-    const placeholderColor = '#94a3b8';
-    const danger = '#ef4444';
+    const borderColor = isDarkMode ? "#334155" : "#e2e8f0";
+    const inputBg = isDarkMode ? "#0f172a" : "#f1f5f9";
+    const thumbBg = isDarkMode ? "#1e293b" : "#e2e8f0";
+    const dropdownBg = isDarkMode ? "#0f172a" : "#ffffff";
+    const dropdownBorder = isDarkMode ? "#334155" : "#cbd5e1";
+    const hoverBg = isDarkMode ? "#1e293b" : "#f1f5f9";
+    const placeholderColor = "#94a3b8";
+    const danger = "#ef4444";
 
     /* -------- State -------- */
-    const [query, setQuery] = useState('');
+    const [query, setQuery] = useState("");
     const [open, setOpen] = useState(false);
     const [focused, setFocused] = useState(false);
-    const [anchor, setAnchor] = useState({
-        x: 0,
-        y: 0,
-        width: 0,
-    });
+    const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0 });
     const [remoteResults, setRemoteResults] = useState<
         WholesalerReceipt[] | null
     >(null);
     const [loading, setLoading] = useState(false);
-    const [apiError, setApiError] = useState<string | null>(
-        null
-    );
+    const [apiError, setApiError] = useState<string | null>(null);
 
     /* -------- Refs -------- */
     const inputRef = useRef<TextInput>(null);
     const triggerRef = useRef<View>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
-    const debounceRef = useRef<ReturnType<
-        typeof setTimeout
-    > | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const rowPressInFlightRef = useRef(false);
 
     /* ---------------------------------------------------------
@@ -377,16 +342,13 @@ function PickerInner({
 
         if (productId) {
             const target = String(productId).trim();
-            list = list.filter(
-                (r) => receiptProductId(r) === target
-            );
+            list = list.filter((r) => receiptProductId(r) === target);
         }
         const afterProduct = list.length;
 
         if (inStockOnly) {
             list = list.filter(
-                (r) =>
-                    Number(r.current_unit_quantity ?? 0) > 0
+                (r) => Number(r.current_unit_quantity ?? 0) > 0
             );
         }
         const afterStock = list.length;
@@ -396,8 +358,8 @@ function PickerInner({
         }
 
         if (__DEV__) {
-            log('baseList computed', {
-                productId: productId ?? '(none)',
+            log("baseList computed", {
+                productId: productId ?? "(none)",
                 contextTotal,
                 afterProduct,
                 afterStock,
@@ -406,19 +368,14 @@ function PickerInner({
         }
 
         return list;
-    }, [
-        wholesalerReceipts,
-        productId,
-        inStockOnly,
-        filter,
-    ]);
+    }, [wholesalerReceipts, productId, inStockOnly, filter]);
 
     /* -------- Sync input with selected value -------- */
     useEffect(() => {
         if (value) {
-            setQuery(String(value.title ?? ''));
+            setQuery(String(value.title ?? ""));
         } else if (!open) {
-            setQuery('');
+            setQuery("");
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value]);
@@ -429,13 +386,9 @@ function PickerInner({
             if (!q) return baseList;
             const needle = q.toLowerCase();
             return baseList.filter((r) => {
-                const t = String(r.title ?? '').toLowerCase();
-                const b = String(
-                    r.bar_code ?? ''
-                ).toLowerCase();
-                const bt = String(
-                    r.batch ?? ''
-                ).toLowerCase();
+                const t = String(r.title ?? "").toLowerCase();
+                const b = String(r.bar_code ?? "").toLowerCase();
+                const bt = String(r.batch ?? "").toLowerCase();
                 return (
                     t.includes(needle) ||
                     b.includes(needle) ||
@@ -449,8 +402,7 @@ function PickerInner({
     /* -------- Debounced remote search -------- */
     useEffect(() => {
         if (!open) return;
-        if (debounceRef.current)
-            clearTimeout(debounceRef.current);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
 
         debounceRef.current = setTimeout(async () => {
             if (!onSearch) {
@@ -464,8 +416,7 @@ function PickerInner({
                 setRemoteResults(res);
             } catch (e: any) {
                 setApiError(
-                    e?.message ??
-                    'Failed to search inventory.'
+                    e?.message ?? "Failed to search inventory."
                 );
             } finally {
                 setLoading(false);
@@ -473,8 +424,7 @@ function PickerInner({
         }, 250);
 
         return () => {
-            if (debounceRef.current)
-                clearTimeout(debounceRef.current);
+            if (debounceRef.current) clearTimeout(debounceRef.current);
         };
     }, [query, open, onSearch]);
 
@@ -491,11 +441,11 @@ function PickerInner({
         if (!open) return;
         const all = wholesalerReceipts ?? [];
         const sample = all[0];
-        log('dropdown opened', {
+        log("dropdown opened", {
             contextTotal: all.length,
             baseList: baseList.length,
             results: results.length,
-            productId: productId ?? '(none)',
+            productId: productId ?? "(none)",
             inStockOnly,
             isSyncing,
             sample: sample
@@ -505,15 +455,16 @@ function PickerInner({
                     product_title: sample.product_title,
                     title: sample.title,
                     qty: sample.current_unit_quantity,
+                    thumb: receiptThumb(sample),
                 }
-                : '(empty)',
+                : "(empty)",
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     useEffect(() => {
         if (!__DEV__ || !open) return;
-        log('filter tick', {
+        log("filter tick", {
             query,
             contextTotal: contextCount,
             baseList: baseList.length,
@@ -530,35 +481,30 @@ function PickerInner({
 
     /* -------- Measure trigger (web) -------- */
     const measure = useCallback(() => {
-        if (Platform.OS !== 'web') return;
+        if (Platform.OS !== "web") return;
         const node: any = triggerRef.current;
         if (!node) return;
 
         const el: HTMLElement | null =
-            (typeof node.getScrollableNode === 'function'
+            (typeof node.getScrollableNode === "function"
                 ? node.getScrollableNode()
                 : null) ??
-            (typeof node.getNode === 'function'
+            (typeof node.getNode === "function"
                 ? node.getNode()
                 : null) ??
             (node instanceof HTMLElement ? node : null);
 
-        if (!el || typeof el.getBoundingClientRect !== 'function')
-            return;
+        if (!el || typeof el.getBoundingClientRect !== "function") return;
 
         const r = el.getBoundingClientRect();
-        setAnchor({
-            x: r.left,
-            y: r.bottom,
-            width: r.width,
-        });
+        setAnchor({ x: r.left, y: r.bottom, width: r.width });
     }, []);
 
     const openDropdown = () => {
         if (disabled) return;
         measure();
         setOpen(true);
-        if (Platform.OS === 'web') {
+        if (Platform.OS === "web") {
             requestAnimationFrame(measure);
         }
     };
@@ -577,28 +523,28 @@ function PickerInner({
 
     /* -------- Re-measure on scroll / resize -------- */
     useEffect(() => {
-        if (Platform.OS !== 'web' || !open) return;
+        if (Platform.OS !== "web" || !open) return;
         const handler = () => measure();
-        window.addEventListener('scroll', handler, true);
-        window.addEventListener('resize', handler);
+        window.addEventListener("scroll", handler, true);
+        window.addEventListener("resize", handler);
         return () => {
-            window.removeEventListener('scroll', handler, true);
-            window.removeEventListener('resize', handler);
+            window.removeEventListener("scroll", handler, true);
+            window.removeEventListener("resize", handler);
         };
     }, [open, measure]);
 
     /* -------- Click outside closes (web) -------- */
     useEffect(() => {
-        if (Platform.OS !== 'web' || !open) return;
-        if (typeof document === 'undefined') return;
+        if (Platform.OS !== "web" || !open) return;
+        if (typeof document === "undefined") return;
 
         const onDown = (ev: MouseEvent) => {
             const node: any = triggerRef.current;
             const triggerEl: HTMLElement | null =
-                (typeof node?.getScrollableNode === 'function'
+                (typeof node?.getScrollableNode === "function"
                     ? node.getScrollableNode()
                     : null) ??
-                (typeof node?.getNode === 'function'
+                (typeof node?.getNode === "function"
                     ? node.getNode()
                     : null);
             const target = ev.target as Node;
@@ -609,9 +555,9 @@ function PickerInner({
                 setFocused(false);
             }
         };
-        document.addEventListener('mousedown', onDown);
+        document.addEventListener("mousedown", onDown);
         return () =>
-            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener("mousedown", onDown);
     }, [open]);
 
     /* -------- Handlers -------- */
@@ -625,22 +571,18 @@ function PickerInner({
 
     const handleClearInternal = () => {
         onClear();
-        setQuery('');
+        setQuery("");
         setRemoteResults(null);
         inputRef.current?.focus?.();
     };
 
     const handleClearSearch = useCallback(() => {
-        setQuery('');
+        setQuery("");
         inputRef.current?.focus?.();
     }, []);
 
     /* ---------------------------------------------------------
      * Empty state
-     *
-     *   No query + empty base list  → "no match for product"
-     *   No query + non-empty base   → (never reached; rows show)
-     *   Query + empty results       → search miss + Clear search
      * ------------------------------------------------------- */
     const emptyState = useMemo(() => {
         if (loading || apiError) return null;
@@ -651,36 +593,30 @@ function PickerInner({
         if (!hasQuery) {
             if (isSyncing && contextCount === 0) {
                 return {
-                    message: 'Loading inventory…',
+                    message: "Loading inventory…",
                     showClear: false,
                 };
             }
             if (contextCount === 0) {
                 return {
-                    message: 'No inventory available',
+                    message: "No inventory available",
                     showClear: false,
                 };
             }
             if (productId && baseList.length === 0) {
                 return {
-                    message:
-                        'No matching inventory for this product.',
+                    message: "No matching inventory for this product.",
                     showClear: false,
                 };
             }
-            return {
-                message: 'Nothing in stock.',
-                showClear: false,
-            };
+            return { message: "Nothing in stock.", showClear: false };
         }
 
-        // Search mode — results are empty
         if (baseList.length === 0) {
             return {
-                message:
-                    productId
-                        ? 'No matching inventory for this product.'
-                        : 'No inventory in stock.',
+                message: productId
+                    ? "No matching inventory for this product."
+                    : "No inventory in stock.",
                 showClear: false,
             };
         }
@@ -688,7 +624,7 @@ function PickerInner({
         return {
             message:
                 `No matches for "${query.trim()}" — ` +
-                `${baseList.length} item${baseList.length === 1 ? '' : 's'
+                `${baseList.length} item${baseList.length === 1 ? "" : "s"
                 } available.`,
             showClear: true,
         };
@@ -716,20 +652,17 @@ function PickerInner({
                 maxHeight: maxDropdownHeight,
                 backgroundColor: dropdownBg,
                 borderColor: dropdownBorder,
-                ...(Platform.OS === 'web'
+                ...(Platform.OS === "web"
                     ? ({
                         boxShadow:
-                            '0 12px 32px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.1)',
+                            "0 12px 32px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.1)",
                     } as any)
                     : {
                         elevation: 24,
-                        shadowColor: '#000',
+                        shadowColor: "#000",
                         shadowOpacity: 0.25,
                         shadowRadius: 16,
-                        shadowOffset: {
-                            width: 0,
-                            height: 8,
-                        },
+                        shadowOffset: { width: 0, height: 8 },
                     }),
             }}
         >
@@ -739,8 +672,8 @@ function PickerInner({
                     style={{
                         borderBottomColor: borderColor,
                         backgroundColor: isDarkMode
-                            ? 'rgba(99,102,241,0.1)'
-                            : 'rgba(99,102,241,0.06)',
+                            ? "rgba(99,102,241,0.1)"
+                            : "rgba(99,102,241,0.06)",
                     }}
                 >
                     <Text
@@ -759,15 +692,10 @@ function PickerInner({
             <FlatList
                 data={results}
                 keyExtractor={(r, i) =>
-                    String(
-                        r.remote_id ?? r.draft_id ?? i
-                    )
+                    String(r.remote_id ?? r.draft_id ?? i)
                 }
                 keyboardShouldPersistTaps="handled"
-                style={{
-                    flexGrow: 0,
-                    backgroundColor: dropdownBg,
-                }}
+                style={{ flexGrow: 0, backgroundColor: dropdownBg }}
                 initialNumToRender={12}
                 maxToRenderPerBatch={12}
                 windowSize={5}
@@ -786,9 +714,7 @@ function PickerInner({
                         onPressIn={() => {
                             rowPressInFlightRef.current = true;
                         }}
-                        onPress={() =>
-                            handleSelectInternal(item)
-                        }
+                        onPress={() => handleSelectInternal(item)}
                     />
                 )}
                 ListEmptyComponent={
@@ -798,10 +724,8 @@ function PickerInner({
                                 className="text-center"
                                 style={{
                                     color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.sm,
+                                    fontFamily: theme.font.medium,
+                                    fontSize: theme.fontSize.sm,
                                 }}
                             >
                                 {emptyState.message}
@@ -810,16 +734,12 @@ function PickerInner({
                                 <Pressable
                                     onPress={handleClearSearch}
                                     className="mt-3 px-4 py-2 rounded-lg"
-                                    style={{
-                                        backgroundColor:
-                                            theme.primary,
-                                    }}
+                                    style={{ backgroundColor: theme.primary }}
                                 >
                                     <Text
                                         className="uppercase tracking-widest text-white"
                                         style={{
-                                            fontFamily:
-                                                theme.font.bold,
+                                            fontFamily: theme.font.bold,
                                             fontSize: 10,
                                         }}
                                     >
@@ -839,10 +759,9 @@ function PickerInner({
      * ======================================================= */
     let portal: any = null;
     if (
-        Platform.OS === 'web' &&
+        Platform.OS === "web" &&
         showDropdown &&
-        ReactDOM &&
-        typeof document !== 'undefined' &&
+        typeof document !== "undefined" &&
         anchor.width > 0
     ) {
         portal = ReactDOM.createPortal(
@@ -852,23 +771,22 @@ function PickerInner({
                     if (el && !(el as any).__waziGuard) {
                         (el as any).__waziGuard = true;
                         el.addEventListener(
-                            'mousedown',
+                            "mousedown",
                             (ev) => {
                                 ev.preventDefault();
-                                rowPressInFlightRef.current =
-                                    true;
+                                rowPressInFlightRef.current = true;
                             },
                             true
                         );
                     }
                 }}
                 style={{
-                    position: 'fixed',
+                    position: "fixed",
                     top: anchor.y + 4,
                     left: anchor.x,
                     width: anchor.width,
                     zIndex: 2147483647,
-                    isolation: 'isolate',
+                    isolation: "isolate",
                 }}
             >
                 {MenuContent}
@@ -880,13 +798,15 @@ function PickerInner({
     /* =========================================================
      * Render
      * ======================================================= */
+    const triggerThumb = receiptThumb(value);
+
     return (
         <>
             <View
                 testID={testID}
                 className="w-full relative"
                 style={
-                    Platform.OS === 'web'
+                    Platform.OS === "web"
                         ? ({ zIndex: open ? 9999 : 1 } as any)
                         : { zIndex: open ? 9999 : 1 }
                 }
@@ -907,8 +827,7 @@ function PickerInner({
                                 className="text-[10px] ml-1"
                                 style={{
                                     color: danger,
-                                    fontFamily:
-                                        theme.font.bold,
+                                    fontFamily: theme.font.bold,
                                 }}
                             >
                                 *
@@ -919,9 +838,7 @@ function PickerInner({
 
                 <Pressable
                     ref={triggerRef as any}
-                    onPress={() =>
-                        inputRef.current?.focus?.()
-                    }
+                    onPress={() => inputRef.current?.focus?.()}
                     className="flex-row items-center rounded-xl border px-3"
                     style={{
                         borderColor: error
@@ -942,13 +859,9 @@ function PickerInner({
                             backgroundColor: thumbBg,
                         }}
                     >
-                        {value?.thumbnail_url ? (
+                        {triggerThumb ? (
                             <Image
-                                source={{
-                                    uri: String(
-                                        value.thumbnail_url
-                                    ),
-                                }}
+                                source={{ uri: triggerThumb }}
                                 className="w-full h-full"
                                 resizeMode="cover"
                             />
@@ -977,10 +890,8 @@ function PickerInner({
                             color: theme.text,
                             fontFamily: theme.font.medium,
                             fontSize: theme.fontSize.sm,
-                            ...(Platform.OS === 'web'
-                                ? ({
-                                    outlineStyle: 'none',
-                                } as any)
+                            ...(Platform.OS === "web"
+                                ? ({ outlineStyle: "none" } as any)
                                 : null),
                         }}
                     />
@@ -1029,13 +940,10 @@ function PickerInner({
                     </Text>
                 ) : null}
 
-                {Platform.OS !== 'web' && showDropdown ? (
+                {Platform.OS !== "web" && showDropdown ? (
                     <View
                         className="absolute left-0 right-0 rounded-xl"
-                        style={{
-                            top: 68,
-                            zIndex: 9999,
-                        }}
+                        style={{ top: 68, zIndex: 9999 }}
                     >
                         {MenuContent}
                     </View>
@@ -1050,6 +958,7 @@ function PickerInner({
 /* =========================================================
  * Row
  * ======================================================= */
+
 function InventoryRow({
     receipt,
     borderColor,
@@ -1075,19 +984,17 @@ function InventoryRow({
     onPress: () => void;
     onPressIn?: () => void;
 }) {
-    const title = String(receipt.title ?? '—');
-    const barCode = String(receipt.bar_code ?? '').trim();
-    const batch = receipt.batch ? String(receipt.batch) : '';
+    const title = String(receipt.title ?? "—");
+    const barCode = String(receipt.bar_code ?? "").trim();
+    const batch = receipt.batch ? String(receipt.batch) : "";
     const qty = Number(receipt.current_unit_quantity ?? 0);
-    const unit = String(receipt.unit_of_receipt ?? '');
+    const unit = String(receipt.unit_of_receipt ?? "");
     const price = Number(
         receipt.final_unit_selling_price ??
         receipt.unit_selling_price ??
         0
     );
-    const imageUri = receipt.thumbnail_url as
-        | string
-        | undefined;
+    const imageUri = receiptThumb(receipt);
 
     const [hovered, setHovered] = useState(false);
     const [pressed, setPressed] = useState(false);
@@ -1105,19 +1012,19 @@ function InventoryRow({
             }}
             onPressOut={() => setPressed(false)}
             onHoverIn={
-                Platform.OS === 'web'
+                Platform.OS === "web"
                     ? () => setHovered(true)
                     : undefined
             }
             onHoverOut={
-                Platform.OS === 'web'
+                Platform.OS === "web"
                     ? () => setHovered(false)
                     : undefined
             }
             className="flex-row items-center px-3 py-2.5 border-b"
             style={{
                 borderBottomColor: borderColor,
-                backgroundColor: active ? hoverBg : 'transparent',
+                backgroundColor: active ? hoverBg : "transparent",
             }}
         >
             <View
@@ -1180,24 +1087,24 @@ function InventoryRow({
                         className="px-1.5 py-[1px] rounded"
                         style={{
                             backgroundColor: outOfStock
-                                ? 'rgba(239,68,68,0.15)'
+                                ? "rgba(239,68,68,0.15)"
                                 : lowStock
-                                    ? 'rgba(251,191,36,0.18)'
-                                    : 'rgba(16,185,129,0.15)',
+                                    ? "rgba(251,191,36,0.18)"
+                                    : "rgba(16,185,129,0.15)",
                         }}
                     >
                         <Text
                             style={{
                                 color: outOfStock
-                                    ? '#ef4444'
+                                    ? "#ef4444"
                                     : lowStock
-                                        ? '#f59e0b'
-                                        : '#10b981',
+                                        ? "#f59e0b"
+                                        : "#10b981",
                                 fontFamily: boldFont,
                                 fontSize: 10,
                             }}
                         >
-                            {qty} {unit || 'u'}
+                            {qty} {unit || "u"}
                         </Text>
                     </View>
 

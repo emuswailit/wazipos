@@ -19,6 +19,7 @@ import { RetailerIndentsSyncProvider } from '@/context/RetailerIndentsSyncContex
 import { RetailerOrdersSyncProvider } from '@/context/RetailerOrdersSyncContext';
 import { RetailerOutOfStocksSyncProvider } from '@/context/RetailerOutOfStocksSyncContext';
 
+import { AlertProvider } from '@/components/common/AlertProvider';
 import { RetailerProductRequestsSyncProvider } from '@/context/RetailerProductRequestsSyncContext';
 import { WholesalerReceiptsSyncProvider } from '@/context/WholesalerReceiptsSyncContext';
 import SidebarNavigationList from '@/utils/SidebarNavigationList';
@@ -384,7 +385,9 @@ export default function RootLayout() {
                             <RetailerOrdersSyncProvider>
                               <ForecastProvider>
                                 <SafeAreaProvider>
-                                  <GlobalAppShellLayout />
+                                  <AlertProvider>
+                                    <GlobalAppShellLayout />
+                                  </AlertProvider>
                                 </SafeAreaProvider>
                               </ForecastProvider>
                             </RetailerOrdersSyncProvider>

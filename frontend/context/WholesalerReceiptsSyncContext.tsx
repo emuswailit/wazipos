@@ -84,13 +84,19 @@ const WHOLESALER_RECEIPTS_SYNCED_AT =
 const IMAGE_BASE_URL = 'https://api.wazipos.co.ke';
 
 const WS_URL =
-    'wss://api.wazipos.co.ke/ws/wholesalers/inventory/';
+    'wss://api.wazipos.co.ke/ws/inventory/wholesalers/';
 
 const WS_RECONNECT_BASE_MS = 3000;
 const WS_RECONNECT_MAX_MS = 60000;
 
 /** Push pending receipts every 2 minutes. */
 const PENDING_PUSH_INTERVAL_MS = 2 * 60 * 1000;
+
+/**
+ * Action string the server expects when the client wants a full
+ * inventory snapshot over the socket.
+ */
+const WS_SNAPSHOT_ACTION = 'GetWholesalerReceipts';
 
 /* =========================================================
  * Logging
@@ -107,15 +113,6 @@ const warn = (...args: any[]) => {
 
 /* =========================================================
  * Queue predicate
- *
- * A row is eligible for remote push ONLY when ALL are true:
- *   - it has a non-empty draft_id, AND
- *   - synced === false, AND
- *   - it has no remote_id
- *
- * A non-empty remote_id is authoritative — the server
- * already knows about this row, so we never re-push it,
- * even if `synced` was somehow reset.
  * ======================================================= */
 
 const hasDraftId = (
@@ -147,7 +144,6 @@ const needsRemotePush = (
 
 /* =========================================================
  * Draft id builder
- * Format: "<user_id>:<timestamp_ms>"
  * ======================================================= */
 
 export function buildDraftId(
@@ -172,10 +168,6 @@ const isPendingSync = (raw: any): boolean =>
     raw === 0 ||
     raw === '0';
 
-/**
- * Coerce a candidate to a trimmed string. Returns '' for
- * undefined / null / literal "undefined" / literal "null".
- */
 const safeStr = (v: any): string => {
     if (v === undefined || v === null) return '';
     const s = String(v).trim();
@@ -183,14 +175,6 @@ const safeStr = (v: any): string => {
     return s;
 };
 
-/**
- * Resolve the remote product UUID from a wire receipt.
- *
- * The wire uses `product`; the local type names it `product_id`
- * for consistency with the rest of the codebase. Read both,
- * plus the nested-object variant, so a future wire rename
- * doesn't silently break the picker's product-scope filter.
- */
 function resolveWireProductId(item: any): string {
     if (!item || typeof item !== 'object') return '';
 
@@ -211,9 +195,6 @@ function resolveWireProductId(item: any): string {
     return '';
 }
 
-/**
- * Resolve the human-readable product title from a wire receipt.
- */
 function resolveWireProductTitle(item: any): string {
     if (!item || typeof item !== 'object') return '';
 
@@ -344,17 +325,82 @@ function resolveImageUrl(rawImages: any): string | null {
 }
 
 /* =========================================================
+ * Discount normalizers
+ *
+ * The wire may deliver discounts under several key names depending
+ * on the serializer version. Normalise them here so downstream
+ * consumers (the campaign builder, discount pickers, etc.) always
+ * see a consistent shape:
+ *
+ *   - price_discount     → object | null
+ *   - quantity_discounts → array  | null
+ *
+ * `price_discount` shapes handled:
+ *   - { ... }                          (object from WS payload)
+ *   - [{ ... }]                        (reverse FK array)
+ *   - "uuid-string"                    (bare id)
+ *
+ * `quantity_discounts` shapes handled:
+ *   - [{ ... }, { ... }]               (canonical array)
+ *   - { ... }                          (single object)
+ *   - "uuid-string"                    (bare id)
+ *   - the same shapes under the
+ *     `wholesaler_quantity_discount_receipt` reverse-FK name
+ * ======================================================= */
+
+function normalizePriceDiscount(raw: any): any {
+    // Prefer the canonical field, fall back to the reverse FK.
+    let candidate = raw?.price_discount;
+    if (candidate === undefined) {
+        candidate = raw?.wholesaler_price_discount_receipt;
+    }
+
+    if (candidate === undefined || candidate === null) return null;
+
+    // Reverse FK is a list — take the most recent (first item if the
+    // serializer orders by -created, otherwise just the first).
+    if (Array.isArray(candidate)) {
+        return candidate.length > 0 ? candidate[0] : null;
+    }
+
+    // Bare id string — wrap so callers always get an object.
+    if (typeof candidate === 'string') {
+        const s = candidate.trim();
+        return s ? { id: s } : null;
+    }
+
+    if (typeof candidate === 'object') return candidate;
+
+    return null;
+}
+
+function normalizeQuantityDiscounts(raw: any): any[] | null {
+    let candidate = raw?.quantity_discounts;
+    if (candidate === undefined) {
+        candidate = raw?.wholesaler_quantity_discount_receipt;
+    }
+    if (candidate === undefined) {
+        candidate = raw?.quantity_discount;
+    }
+
+    if (candidate === undefined || candidate === null) return null;
+
+    if (Array.isArray(candidate)) {
+        return candidate.length > 0 ? candidate : null;
+    }
+
+    if (typeof candidate === 'string') {
+        const s = candidate.trim();
+        return s ? [{ id: s }] : null;
+    }
+
+    if (typeof candidate === 'object') return [candidate];
+
+    return null;
+}
+
+/* =========================================================
  * normalizeReceipt — wire → WholesalerReceipt
- *
- * Field names match the wire 1:1, with ONE exception:
- * the wire's `id` is renamed to `remote_id` so the local
- * Dexie primary key can occupy `id`.
- *
- * Product identity: the wire sends `product` and
- * `product_title`. The local type stores them as
- * `product_id` and `product_title`. `resolveWireProductId`
- * handles the read; `product_id` is written to the local
- * row so the picker's scope filter matches.
  * ======================================================= */
 
 function normalizeReceipt(
@@ -379,14 +425,12 @@ function normalizeReceipt(
     }
 
     return {
-        // -------- Local persistence --------
         cached_at: String(firstDefined(item.cached_at, ts)),
         synced: !isPendingSync(item.synced),
         sync_error: item.sync_error ?? null,
         thumbnail_url: resolvedUrl,
         image_url: resolvedUrl,
 
-        // -------- Wire (id → remote_id) --------
         remote_id: remoteId,
         remote_key: item.key ? String(item.key) : undefined,
         draft_id: item.draft_id ?? null,
@@ -483,12 +527,11 @@ function normalizeReceipt(
         is_pom: !!item.is_pom,
         supplier_invoice: item.supplier_invoice ?? null,
 
-        quantity_discounts: Array.isArray(
-            item.quantity_discounts
-        )
-            ? item.quantity_discounts
-            : null,
-        price_discount: item.price_discount ?? null,
+        // Discounts — normalised to canonical shapes so downstream
+        // consumers don't need to know about every possible key.
+        quantity_discounts: normalizeQuantityDiscounts(item),
+        price_discount: normalizePriceDiscount(item),
+
         images: Array.isArray(item.images) ? item.images : [],
 
         description: String(item.description ?? ''),
@@ -502,10 +545,6 @@ function normalizeReceipt(
 
 /* =========================================================
  * Array equality
- *
- * Includes `product_id` and `product_title` so a re-sync
- * that fixes product ids on existing rows triggers a
- * React state update.
  * ======================================================= */
 
 function areReceiptsEqual(
@@ -544,10 +583,6 @@ function areReceiptsEqual(
 
 /* =========================================================
  * Payload builder — matches CreateWholesalerReceipt
- *
- * The create endpoint expects `product:` as the payload
- * key. Read `record.product_id` from the local row and
- * send it as `product`.
  * ======================================================= */
 
 function buildReceiptDetails(
@@ -1298,6 +1333,23 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                     setSyncStatus('live');
                     reconnectAttemptRef.current = 0;
                     log('WebSocket — connected');
+
+                    try {
+                        ws.send(
+                            JSON.stringify({
+                                action: WS_SNAPSHOT_ACTION,
+                            })
+                        );
+                        log(
+                            'WebSocket — sent snapshot request',
+                            { action: WS_SNAPSHOT_ACTION }
+                        );
+                    } catch (err) {
+                        warn(
+                            'WebSocket — snapshot request failed',
+                            err
+                        );
+                    }
                 };
 
                 ws.onmessage = async (event) => {
@@ -1315,16 +1367,49 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                         const incoming =
                             parsed?.inventory ??
                             parsed?.wholesaler_receipts ??
-                            parsed?.receipts;
+                            parsed?.receipts ??
+                            parsed?.payload?.inventory ??
+                            parsed?.payload?.wholesaler_receipts ??
+                            parsed?.payload?.receipts ??
+                            parsed?.data?.inventory ??
+                            parsed?.data?.wholesaler_receipts ??
+                            parsed?.data?.receipts;
 
                         if (
                             !Array.isArray(incoming) ||
                             incoming.length === 0
                         ) {
                             log(
-                                '  frame has no receipts — ignoring'
+                                '  frame has no receipts — ignoring',
+                                {
+                                    keys: Object.keys(
+                                        parsed ?? {}
+                                    ),
+                                }
                             );
                             return;
+                        }
+
+                        // Dev-only: print the discount keys on the
+                        // first receipt so we can verify the wire
+                        // shape matches what normalizeReceipt expects.
+                        if (__DEV__ && incoming[0]) {
+                            const s = incoming[0];
+                            console.log(
+                                '[WS] sample receipt discount keys:',
+                                {
+                                    price_discount:
+                                        s.price_discount,
+                                    quantity_discounts:
+                                        s.quantity_discounts,
+                                    quantity_discount:
+                                        s.quantity_discount,
+                                    wholesaler_price_discount_receipt:
+                                        s.wholesaler_price_discount_receipt,
+                                    wholesaler_quantity_discount_receipt:
+                                        s.wholesaler_quantity_discount_receipt,
+                                }
+                            );
                         }
 
                         setIsSyncing(true);
@@ -1357,8 +1442,6 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                             const existing =
                                 currentMap.get(rid);
 
-                            // Never overwrite a local row that
-                            // still needs to be pushed.
                             if (
                                 existing &&
                                 needsRemotePush(existing)
@@ -1397,6 +1480,11 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                         );
 
                         setLastSyncedTime(formatSyncTime());
+
+                        log('WebSocket — merged frame', {
+                            incoming: incoming.length,
+                            total: updated.length,
+                        });
                     } catch (e) {
                         warn(
                             'WebSocket — message parse failed:',

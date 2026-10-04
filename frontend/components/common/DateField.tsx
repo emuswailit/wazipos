@@ -68,9 +68,26 @@ function prettyPrint(raw: string): string {
 }
 
 /* =========================================================
+ * Colour helper — hex + alpha → rgba
+ * ======================================================= */
+function alpha(hex: string, a: number): string {
+    if (!hex) return `rgba(0,0,0,${a})`;
+    const clean = hex.replace('#', '');
+    const full =
+        clean.length === 3
+            ? clean
+                .split('')
+                .map((c) => c + c)
+                .join('')
+            : clean;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${a})`;
+}
+
+/* =========================================================
  * Web-only style injection (runs once)
- * Restyles the native <input type="date"> and its popup
- * calendar chrome. No layout impact, just visual polish.
  * ======================================================= */
 function useWebDateStyles(primary: string, isDark: boolean) {
     useEffect(() => {
@@ -80,7 +97,8 @@ function useWebDateStyles(primary: string, isDark: boolean) {
         if (!doc) return;
 
         const id = 'wazi-datefield-styles';
-        if (doc.getElementById(id)) return;
+        const existing = doc.getElementById(id);
+        if (existing) existing.remove();
 
         const style = doc.createElement('style');
         style.id = id;
@@ -94,45 +112,53 @@ function useWebDateStyles(primary: string, isDark: boolean) {
                 background: transparent;
                 width: 100%;
                 font-family: inherit;
-                font-size: 13px;
+                font-size: 13.5px;
+                font-weight: 500;
                 letter-spacing: 0.2px;
                 cursor: pointer;
             }
             input.wazi-date-input::-webkit-calendar-picker-indicator {
                 cursor: pointer;
-                opacity: 0.65;
-                transition: opacity 120ms ease;
+                opacity: 0.75;
+                transition: opacity 120ms ease, transform 120ms ease;
                 filter: ${isDark
-                ? 'invert(90%) sepia(10%) saturate(200%) hue-rotate(180deg)'
-                : 'none'
-            };
+                ? 'invert(75%) sepia(60%) saturate(2500%) hue-rotate(220deg) brightness(105%)'
+                : 'invert(30%) sepia(90%) saturate(2500%) hue-rotate(220deg) brightness(95%)'};
             }
             input.wazi-date-input::-webkit-calendar-picker-indicator:hover {
                 opacity: 1;
+                transform: scale(1.08);
             }
             input.wazi-date-input::-webkit-datetime-edit-fields-wrapper {
                 padding: 0;
             }
             input.wazi-date-input::-webkit-datetime-edit-text {
-                color: ${isDark ? '#94a3b8' : '#64748b'};
-                padding: 0 2px;
+                color: ${isDark ? '#64748b' : '#94a3b8'};
+                padding: 0 3px;
+                font-weight: 400;
             }
             input.wazi-date-input::-webkit-datetime-edit-month-field,
             input.wazi-date-input::-webkit-datetime-edit-day-field,
             input.wazi-date-input::-webkit-datetime-edit-year-field {
-                color: ${isDark ? '#f8fafc' : '#0f172a'};
-                padding: 2px 4px;
-                border-radius: 4px;
+                color: ${isDark ? '#f1f5f9' : '#0f172a'};
+                padding: 3px 5px;
+                border-radius: 6px;
+                transition: background 120ms ease, color 120ms ease;
+            }
+            input.wazi-date-input::-webkit-datetime-edit-month-field:hover,
+            input.wazi-date-input::-webkit-datetime-edit-day-field:hover,
+            input.wazi-date-input::-webkit-datetime-edit-year-field:hover {
+                background: ${alpha(primary, isDark ? 0.18 : 0.10)};
             }
             input.wazi-date-input::-webkit-datetime-edit-month-field:focus,
             input.wazi-date-input::-webkit-datetime-edit-day-field:focus,
             input.wazi-date-input::-webkit-datetime-edit-year-field:focus {
-                background: ${primary}22;
+                background: ${alpha(primary, isDark ? 0.28 : 0.16)};
                 color: ${primary};
                 outline: none;
             }
             input.wazi-date-input:disabled {
-                opacity: 0.55;
+                opacity: 0.5;
                 cursor: not-allowed;
             }
         `;
@@ -188,6 +214,7 @@ export function DateField({
 
     /* -------- Local state -------- */
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [focused, setFocused] = useState(false);
     const [tempDate, setTempDate] = useState<Date>(
         () => parseDate(fieldValue) ?? new Date()
     );
@@ -196,9 +223,32 @@ export function DateField({
 
     /* -------- Theme tokens -------- */
     const baseBorder = isDarkMode ? '#334155' : '#e2e8f0';
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
+    const inputBg = isDarkMode ? '#0f172a' : '#f8fafc';
+    const filledBg = isDarkMode ? '#0b1220' : '#ffffff';
     const danger = '#ef4444';
-    const borderColor = fieldError ? danger : baseBorder;
+
+    const hasValue = !!fieldValue;
+    const borderColor = fieldError
+        ? danger
+        : focused
+            ? theme.primary
+            : hasValue
+                ? alpha(theme.primary, isDarkMode ? 0.35 : 0.25)
+                : baseBorder;
+
+    const shadowStyle =
+        Platform.OS === 'web'
+            ? focused
+                ? ({
+                    boxShadow: `0 0 0 3px ${alpha(
+                        theme.primary,
+                        0.15
+                    )}, 0 1px 2px rgba(0,0,0,0.04)`,
+                } as any)
+                : ({
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                } as any)
+            : null;
 
     /* -------- Value writer -------- */
     const setValue = (next: string) => {
@@ -218,16 +268,17 @@ export function DateField({
     };
 
     /* ========================================================
-     * Label + shell (shared between web and native renders)
+     * Label + shell
      * ====================================================== */
     const Header = label ? (
-        <View className="flex-row items-center mb-1">
+        <View className="flex-row items-center mb-1.5">
             <Text
-                className="uppercase tracking-wide"
+                className="uppercase"
                 style={{
                     color: theme.textDark,
                     fontFamily: theme.font.bold,
                     fontSize: 10,
+                    letterSpacing: 0.8,
                 }}
             >
                 {label}
@@ -247,6 +298,60 @@ export function DateField({
         </View>
     ) : null;
 
+    const CalendarBadge = (
+        <View
+            style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: alpha(
+                    theme.primary,
+                    isDarkMode ? 0.18 : 0.10
+                ),
+                marginRight: 10,
+            }}
+        >
+            <Text
+                style={{
+                    fontSize: 15,
+                    color: theme.primary,
+                }}
+            >
+                📅
+            </Text>
+        </View>
+    );
+
+    const ClearButton = hasValue && !disabled ? (
+        <Pressable
+            onPress={() => setValue('')}
+            hitSlop={8}
+            style={{
+                marginLeft: 8,
+                width: 26,
+                height: 26,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: isDarkMode
+                    ? 'rgba(148,163,184,0.12)'
+                    : 'rgba(100,116,139,0.08)',
+            }}
+        >
+            <Text
+                style={{
+                    color: theme.textDark,
+                    fontSize: 12,
+                    lineHeight: 14,
+                }}
+            >
+                ✕
+            </Text>
+        </Pressable>
+    ) : null;
+
     /* ========================================================
      * WEB
      * ====================================================== */
@@ -256,29 +361,23 @@ export function DateField({
                 {Header}
 
                 <View
-                    className="flex-row items-center rounded-xl border px-3"
+                    className="flex-row items-center rounded-xl border"
                     style={{
                         borderColor,
-                        backgroundColor: inputBg,
+                        backgroundColor: hasValue
+                            ? filledBg
+                            : inputBg,
                         opacity: disabled ? 0.55 : 1,
-                        minHeight: 44,
+                        minHeight: 46,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        transitionProperty: 'border-color, box-shadow',
+                        transitionDuration: '140ms',
+                        ...(shadowStyle as any),
                     }}
                 >
-                    {/* Leading calendar icon */}
-                    <Text
-                        style={{
-                            color: theme.primary,
-                            fontSize: 14,
-                            marginRight: 8,
-                        }}
-                    >
-                        📅
-                    </Text>
+                    {CalendarBadge}
 
-                    {/* Native HTML date input, classed for our
-                        injected stylesheet. This is the one place
-                        we use a real DOM tag — required to get the
-                        browser's date picker. */}
                     <input
                         ref={webInputRef}
                         className="wazi-date-input"
@@ -287,32 +386,18 @@ export function DateField({
                         onChange={(e) =>
                             setValue(e.target.value)
                         }
+                        onFocus={() => setFocused(true)}
+                        onBlur={() => setFocused(false)}
                         disabled={disabled}
                         placeholder={placeholder}
                     />
 
-                    {/* Clear button */}
-                    {fieldValue && !disabled ? (
-                        <Pressable
-                            onPress={() => setValue('')}
-                            hitSlop={8}
-                            className="ml-2 p-1"
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontSize: 13,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    ) : null}
+                    {ClearButton}
                 </View>
 
                 {fieldError ? (
                     <Text
-                        className="mt-1"
+                        className="mt-1.5"
                         style={{
                             color: danger,
                             fontFamily: theme.font.medium,
@@ -323,7 +408,7 @@ export function DateField({
                     </Text>
                 ) : helperText ? (
                     <Text
-                        className="mt-1"
+                        className="mt-1.5"
                         style={{
                             color: theme.textDark,
                             fontFamily: theme.font.medium,
@@ -348,57 +433,38 @@ export function DateField({
             <Pressable
                 onPress={openPicker}
                 disabled={disabled}
-                className="flex-row items-center rounded-xl border px-3"
+                className="flex-row items-center rounded-xl border"
                 style={{
                     borderColor,
-                    backgroundColor: inputBg,
+                    backgroundColor: hasValue ? filledBg : inputBg,
                     opacity: disabled ? 0.55 : 1,
-                    minHeight: 44,
+                    minHeight: 46,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
                 }}
             >
-                {/* Leading icon */}
-                <Text
-                    style={{
-                        color: theme.primary,
-                        fontSize: 14,
-                        marginRight: 8,
-                    }}
-                >
-                    📅
-                </Text>
+                {CalendarBadge}
 
                 <Text
-                    className="flex-1 py-2.5"
+                    className="flex-1 py-2"
                     style={{
-                        color: fieldValue
+                        color: hasValue
                             ? theme.text
                             : '#94a3b8',
-                        fontFamily: theme.font.medium,
+                        fontFamily: hasValue
+                            ? theme.font.bold
+                            : theme.font.medium,
                         fontSize: theme.fontSize.sm,
+                        letterSpacing: hasValue ? 0.2 : 0,
                     }}
                     numberOfLines={1}
                 >
-                    {fieldValue
+                    {hasValue
                         ? prettyPrint(fieldValue)
                         : placeholder}
                 </Text>
 
-                {fieldValue && !disabled ? (
-                    <Pressable
-                        onPress={() => setValue('')}
-                        hitSlop={8}
-                        className="p-1"
-                    >
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontSize: 13,
-                            }}
-                        >
-                            ✕
-                        </Text>
-                    </Pressable>
-                ) : null}
+                {ClearButton}
             </Pressable>
 
             {/* Android: system calendar dialog */}
@@ -504,11 +570,16 @@ export function DateField({
                                 </Pressable>
                             </View>
 
-                            {/* Preview strip */}
+                            {/* Preview band — tinted with the theme accent */}
                             <View
-                                className="px-4 pt-4"
+                                className="items-center"
                                 style={{
-                                    alignItems: 'center',
+                                    paddingTop: 18,
+                                    paddingBottom: 8,
+                                    backgroundColor: alpha(
+                                        theme.primary,
+                                        isDarkMode ? 0.10 : 0.06
+                                    ),
                                 }}
                             >
                                 <Text
@@ -516,31 +587,30 @@ export function DateField({
                                         color: theme.primary,
                                         fontFamily:
                                             theme.font.bold,
-                                        fontSize: 22,
+                                        fontSize: 34,
+                                        lineHeight: 38,
                                     }}
                                 >
-                                    {tempDate.toLocaleDateString(
-                                        undefined,
-                                        {
-                                            weekday: 'short',
-                                            day: '2-digit',
-                                        }
-                                    )}
+                                    {String(
+                                        tempDate.getDate()
+                                    ).padStart(2, '0')}
                                 </Text>
                                 <Text
                                     style={{
-                                        color: theme.textDark,
+                                        color: theme.primary,
                                         fontFamily:
-                                            theme.font.medium,
-                                        fontSize: 12,
+                                            theme.font.bold,
+                                        fontSize: 11,
+                                        letterSpacing: 1.6,
                                         marginTop: 2,
-                                        letterSpacing: 1,
+                                        opacity: 0.85,
                                     }}
                                 >
                                     {tempDate
                                         .toLocaleDateString(
                                             undefined,
                                             {
+                                                weekday: 'long',
                                                 month: 'long',
                                                 year: 'numeric',
                                             }
@@ -550,7 +620,7 @@ export function DateField({
                             </View>
 
                             {/* Picker */}
-                            <View className="px-2 pb-2">
+                            <View className="px-2 pb-2 pt-1">
                                 <DateTimePicker
                                     value={tempDate}
                                     mode="date"
@@ -576,7 +646,7 @@ export function DateField({
 
             {fieldError ? (
                 <Text
-                    className="mt-1"
+                    className="mt-1.5"
                     style={{
                         color: danger,
                         fontFamily: theme.font.medium,
@@ -587,7 +657,7 @@ export function DateField({
                 </Text>
             ) : helperText ? (
                 <Text
-                    className="mt-1"
+                    className="mt-1.5"
                     style={{
                         color: theme.textDark,
                         fontFamily: theme.font.medium,

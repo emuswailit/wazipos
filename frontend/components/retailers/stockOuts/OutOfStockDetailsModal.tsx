@@ -7,7 +7,7 @@ import {
     RetailerOutOfStockNormalized,
     RetailerOutOfStockWholesalerOffer,
 } from '@/databases/types';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     Image,
     Modal,
@@ -185,25 +185,12 @@ export function OutOfStockDetailsModal({
                                     flexShrink: 0,
                                 }}
                             >
-                                {heroThumb ? (
-                                    <Image
-                                        source={{ uri: heroThumb }}
-                                        style={{
-                                            width: 72,
-                                            height: 72,
-                                        }}
-                                        resizeMode="cover"
-                                    />
-                                ) : (
-                                    <Text
-                                        style={{
-                                            fontSize: 24,
-                                            opacity: 0.4,
-                                        }}
-                                    >
-                                        📦
-                                    </Text>
-                                )}
+                                <ImageWithFallback
+                                    uri={heroThumb}
+                                    width={72}
+                                    height={72}
+                                    fallback="📦"
+                                />
                             </View>
                             <View className="flex-1 min-w-0">
                                 <Text
@@ -260,22 +247,27 @@ export function OutOfStockDetailsModal({
                             <SummaryCell
                                 label="Customer"
                                 value={item.customer_name || '—'}
+                                flexBasis="30%"
                             />
                             <SummaryCell
                                 label="Phone"
                                 value={item.customer_phone || '—'}
+                                flexBasis="30%"
                             />
                             <SummaryCell
                                 label="Unit"
                                 value={item.unit_of_receipt || '—'}
+                                flexBasis="30%"
                             />
                             <SummaryCell
                                 label="Units / Pack"
                                 value={String(item.units_per_pack)}
+                                flexBasis="30%"
                             />
                             <SummaryCell
                                 label="Offers"
                                 value={String(offerCount)}
+                                flexBasis="30%"
                             />
                             <SummaryCell
                                 label="Status"
@@ -286,6 +278,7 @@ export function OutOfStockDetailsModal({
                                             ? 'Ordered'
                                             : 'Pending'
                                 }
+                                flexBasis="30%"
                             />
                         </View>
 
@@ -489,19 +482,12 @@ function OfferRow({
                     flexShrink: 0,
                 }}
             >
-                {thumb ? (
-                    <Image
-                        source={{ uri: thumb }}
-                        style={{ width: 52, height: 52 }}
-                        resizeMode="cover"
-                    />
-                ) : (
-                    <Text
-                        style={{ fontSize: 20, opacity: 0.4 }}
-                    >
-                        🏭
-                    </Text>
-                )}
+                <ImageWithFallback
+                    uri={thumb}
+                    width={52}
+                    height={52}
+                    fallback="🏭"
+                />
             </View>
 
             <View className="flex-1 min-w-0">
@@ -574,18 +560,54 @@ function OfferRow({
 }
 
 /* ------------------------------------------------------------------ */
+/* Image with fallback                                                 */
+/* ------------------------------------------------------------------ */
+function ImageWithFallback({
+    uri,
+    width,
+    height,
+    fallback,
+}: {
+    uri: string | null;
+    width: number;
+    height: number;
+    fallback: string;
+}) {
+    const [errored, setErrored] = useState(false);
+
+    if (!uri || errored) {
+        return (
+            <Text style={{ fontSize: 20, opacity: 0.4 }}>
+                {fallback}
+            </Text>
+        );
+    }
+
+    return (
+        <Image
+            source={{ uri }}
+            style={{ width, height }}
+            resizeMode="cover"
+            onError={() => setErrored(true)}
+        />
+    );
+}
+
+/* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 function SummaryCell({
     label,
     value,
+    flexBasis = '30%',
 }: {
     label: string;
     value: string;
+    flexBasis?: string;
 }) {
     const { theme } = useAuth();
     return (
-        <View style={{ minWidth: 100 }}>
+        <View style={{ flexGrow: 1, flexBasis }}>
             <Text
                 className="uppercase tracking-wide"
                 style={{
@@ -619,7 +641,7 @@ function MiniBadge({ label }: { label: string }) {
             style={{
                 backgroundColor: theme.isDarkMode
                     ? '#0f172a'
-                    : '#f8fafc',
+                    : '#f1f5f9',
                 borderColor: theme.isDarkMode
                     ? '#334155'
                     : '#e2e8f0',
