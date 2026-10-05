@@ -1,53 +1,133 @@
 # retailers/services/request_confirmation.py
 
 """
-Retailer confirms or declines offers.
+Retailer confirms or declines offers on a product request.
 
-Confirmed offers group by wholesaler → one RetailerOrder per wholesaler.
-Confirmed quantity per line is validated against requested_quantity.
+Commitment path
+---------------
+The indent is the sole commitment path. Confirming an offer
+produces a RetailerIndentItem on the retailer's open indent. No
+order is created here — the indent → order conversion belongs to
+the ordering flow.
+
+Offer status
+------------
+  OFFERED                → wholesaler submitted, awaiting retailer
+  CONFIRMED              → retailer confirmed; indent item exists
+  DECLINED_BY_RETAILER   → retailer declined
+  DECLINED_BY_WHOLESALER → wholesaler refused the line
+  WITHDRAWN / CANCELLED  → retired by the wholesaler or system
+  FULFILLED              → downstream order created from the indent
+
+Confirming leaves an offer at CONFIRMED. FULFILLED is set by the
+downstream flow that converts the indent into an order.
+
+Transaction shape
+-----------------
+The whole service runs in a single `transaction.atomic()` block.
+
+Validation happens in a staging pass before any write. On any
+validation failure the function raises ValueError and the
+transaction rolls back with no partial state. This replaces the
+prior implementation, which wrote a WITHDRAWN status and then
+raised inside the same transaction — silently rolling the write
+back.
 """
 
-from decimal import Decimal
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
 
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
+from authentication.models import Entities
 from retailers.models import (
-    RetailerProductRequest,
+    IndentItemSource,
+    RetailerIndent,
+    RetailerIndentItem,
     RetailerProductRequestItem,
     RetailerProductRequestOffer,
-    RetailerProductRequestResponse,
 )
-from wholesalers.models import RetailerOrders, RetailerOrderItems
+
+logger = logging.getLogger(__name__)
 
 
-URGENCY_TO_ORDER_TYPE = {
-    "high": "EMERGENCY",
-    "medium": "NORMAL",
-    "low": "NORMAL",
-}
+# ---------------------------------------------------------------------------
+# Result object
+# ---------------------------------------------------------------------------
 
-
-@transaction.atomic
-def retailer_confirm_offers(
-    request_obj,
-    confirmations: list,
-    declinations: list,
-    note: str = "",
-    by_user=None,
-):
+@dataclass
+class ConfirmationResult:
     """
-    confirmations: [{"offer_id": str, "response_note": str|None}]
-    declinations: [{"offer_id": str, "reason": str|None}]
+    Outcome of a confirm/decline batch.
 
-    Returns the list of created RetailerOrders.
+    `items_added` counts new RetailerIndentItems created by this call.
+    `items_already_present` counts offers that already had an indent
+    item (idempotent re-confirmation). `indent_id` is None when the
+    batch had no confirmations.
     """
-    now = timezone.now()
 
-    # ---- 1. Confirm offers ----
-    confirmed_offers = []
-    for payload in confirmations:
+    indent_id: str | None = None
+    created_new_indent: bool = False
+    confirmed_offer_count: int = 0
+    declined_offer_count: int = 0
+    items_added: int = 0
+    items_already_present: int = 0
+    # Diagnostic list of (offer_id, reason) pairs for offers that were
+    # staged but skipped. Currently always empty because the service
+    # is all-or-nothing; present so future partial-success behavior
+    # can populate it without changing the return shape.
+    skipped: list[tuple[str, str]] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Internals
+# ---------------------------------------------------------------------------
+
+def _lock_or_create_open_indent(entity_id, *, owner):
+    """
+    Return (indent, created) for the entity's open indent.
+
+    Concurrency: `select_for_update()` on a filter that matches zero
+    rows locks nothing, so two concurrent calls for the same entity
+    with no open indent would both create one. Locking the entity
+    row first serialises the read-then-create.
+    """
+    Entities.objects.select_for_update().filter(pk=entity_id).first()
+
+    indent = (
+        RetailerIndent.objects
+        .select_for_update()
+        .filter(entity_id=entity_id, is_open="true")
+        .order_by("-created")
+        .first()
+    )
+    if indent is not None:
+        return indent, False
+
+    return (
+        RetailerIndent.objects.create(
+            entity_id=entity_id,
+            is_open="true",
+            owner=owner,
+        ),
+        True,
+    )
+
+
+def _stage_confirmations(request_obj, confirmations, note):
+    """
+    Validate every confirmation entry against the request and return
+    a list of (offer, response_note) tuples ready to write.
+
+    Raises ValueError on any invalid entry. No DB writes.
+    """
+    staged: list[tuple[RetailerProductRequestOffer, str]] = []
+
+    for payload in confirmations or []:
         offer_id = payload.get("offer_id")
         if not offer_id:
             raise ValueError("Each confirmation requires offer_id.")
@@ -55,12 +135,13 @@ def retailer_confirm_offers(
         offer = (
             RetailerProductRequestOffer.objects
             .select_related("request_item", "wholesaler_receipt")
-            .get(id=offer_id)
+            .filter(id=offer_id)
+            .first()
         )
-
+        if offer is None:
+            raise ValueError(f"Offer {offer_id} not found.")
         if offer.request_item.request_id != request_obj.id:
             raise ValueError(f"Offer {offer.id} is not on this request.")
-
         if offer.status != RetailerProductRequestOffer.Status.OFFERED:
             raise ValueError(
                 f"Offer {offer.id} is not in OFFERED state "
@@ -71,55 +152,100 @@ def retailer_confirm_offers(
         if receipt is None:
             raise ValueError(f"Offer {offer.id} has no receipt attached.")
 
-        if (receipt.current_unit_quantity or 0) < offer.offered_quantity:
-            offer.status = RetailerProductRequestOffer.Status.WITHDRAWN
-            offer.retailer_response_note = "Stock consumed before confirmation."
-            offer.save(update_fields=[
-                "status", "retailer_response_note", "updated",
-            ])
+        qty = offer.offered_quantity or 0
+        if qty <= 0:
+            raise ValueError(
+                f"Offer {offer.id} has a non-positive quantity ({qty})."
+            )
+        if (receipt.current_unit_quantity or 0) < qty:
+            # All-or-nothing: the batch fails cleanly and can be
+            # resubmitted after the wholesaler adjusts the offer. The
+            # offer is deliberately NOT marked WITHDRAWN here — that
+            # write would be rolled back by the raise anyway, and it
+            # isn't the retailer's call to make.
             raise ValueError(
                 f"Offer {offer.id} no longer available — only "
                 f"{receipt.current_unit_quantity} units remain, "
-                f"but {offer.offered_quantity} were offered."
+                f"but {qty} were offered."
             )
 
-        offer.status = RetailerProductRequestOffer.Status.CONFIRMED
-        offer.retailer_confirmed_at = now
-        offer.retailer_response_note = payload.get("response_note", "")
-        offer.save(update_fields=[
-            "status", "retailer_confirmed_at",
-            "retailer_response_note", "updated",
-        ])
-        confirmed_offers.append(offer)
+        staged.append(
+            (offer, payload.get("response_note") or note or "")
+        )
 
-    # ---- 2. Decline offers ----
-    for payload in declinations:
+    return staged
+
+
+def _stage_declinations(request_obj, declinations, note):
+    """
+    Validate every declination entry and return a list of
+    (offer, reason) tuples ready to write. No DB writes.
+    """
+    staged: list[tuple[RetailerProductRequestOffer, str]] = []
+
+    for payload in declinations or []:
         offer_id = payload.get("offer_id")
         if not offer_id:
             raise ValueError("Each declination requires offer_id.")
 
-        offer = RetailerProductRequestOffer.objects.get(id=offer_id)
-
+        offer = (
+            RetailerProductRequestOffer.objects
+            .select_related("request_item")
+            .filter(id=offer_id)
+            .first()
+        )
+        if offer is None:
+            raise ValueError(f"Offer {offer_id} not found.")
         if offer.request_item.request_id != request_obj.id:
             raise ValueError(f"Offer {offer.id} is not on this request.")
-
         if offer.status != RetailerProductRequestOffer.Status.OFFERED:
             raise ValueError(
                 f"Offer {offer.id} is not in OFFERED state "
                 f"(currently {offer.status})."
             )
 
-        offer.status = RetailerProductRequestOffer.Status.DECLINED_BY_RETAILER
-        offer.retailer_confirmed_at = now
-        offer.retailer_response_note = payload.get("reason", "")
-        offer.save(update_fields=[
-            "status", "retailer_confirmed_at",
-            "retailer_response_note", "updated",
-        ])
+        staged.append(
+            (offer, payload.get("reason") or note or "")
+        )
 
-    # ---- 3. Guard: total confirmed per line ≤ requested ----
-    for line in request_obj.items.all():
-        confirmed_total = int(
+    return staged
+
+
+def _enforce_oversell_guard(staged_confirms):
+    """
+    Reject the batch if any line's confirmed total (existing +
+    staged) would exceed `requested_quantity`.
+
+    Scoped to touched lines only so a 100-line request does not pay
+    100 aggregates per call. Runs before any write.
+    """
+    staged_by_line: dict[str, int] = {}
+    for offer, _ in staged_confirms:
+        staged_by_line[offer.request_item_id] = (
+            staged_by_line.get(offer.request_item_id, 0)
+            + (offer.offered_quantity or 0)
+        )
+
+    if not staged_by_line:
+        return
+
+    lines_by_id = {
+        line.id: line
+        for line in (
+            RetailerProductRequestItem.objects
+            .filter(id__in=staged_by_line.keys())
+            .select_related("product")
+        )
+    }
+
+    for line_id, staged_qty in staged_by_line.items():
+        line = lines_by_id.get(line_id)
+        if line is None:
+            # Line was deleted between staging and guard. Skip; the
+            # FK write will fail naturally if anything references it.
+            continue
+
+        existing = int(
             line.offers
             .filter(status__in=[
                 RetailerProductRequestOffer.Status.CONFIRMED,
@@ -127,105 +253,183 @@ def retailer_confirm_offers(
             ])
             .aggregate(total=Sum("offered_quantity"))["total"] or 0
         )
-        if confirmed_total > line.requested_quantity:
+        projected = existing + staged_qty
+        if projected > line.requested_quantity:
             raise ValueError(
                 f"Line {line.id} ({line.product.title}): "
-                f"confirmed {confirmed_total} exceeds requested "
+                f"confirming {staged_qty} more would total "
+                f"{projected}, exceeding requested "
                 f"{line.requested_quantity}."
             )
 
-    # ---- 4. Group by wholesaler and build orders ----
-    by_wholesaler = {}
-    for offer in confirmed_offers:
-        by_wholesaler.setdefault(offer.wholesaler_id, []).append(offer)
 
-    created_orders = []
-    for wholesaler_id, offers in by_wholesaler.items():
-        order = RetailerOrders.objects.create(
-            entity=request_obj.entity,
-            retailer=request_obj.entity,
-            wholesaler_id=wholesaler_id,
-            order_terms="CONTRACT",
-            order_type=URGENCY_TO_ORDER_TYPE.get(request_obj.urgency, "NORMAL"),
-            delivery_method="COURIER",
-            order_origin="RETAILER",
-            status="SUBMITTED",
-            reference_number=request_obj.request_number,
-            owner=by_user,
-            created=now,
-            updated=now,
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
+
+@transaction.atomic
+def retailer_confirm_offers(
+    request_obj,
+    confirmations,
+    declinations,
+    note: str = "",
+    *,
+    by_user,
+):
+    """
+    Apply a retailer's confirm / decline decisions to a request.
+
+    Parameters
+    ----------
+    request_obj : RetailerProductRequest
+        The request being acted on. Must already belong to the caller's
+        entity — the caller is responsible for that ownership check.
+    confirmations : list[{"offer_id": str, "response_note": str|None}]
+    declinations : list[{"offer_id": str, "reason": str|None}]
+    note : str
+        Free-text batch note. Used as the fallback for per-entry
+        response_note / reason when those are blank.
+    by_user : Users
+        Required keyword-only. Used for `RetailerIndent.owner` and
+        `RetailerIndentItem.owner`.
+
+    Returns
+    -------
+    ConfirmationResult
+
+    Raises
+    ------
+    ValueError
+        On any validation failure. The whole service runs in a single
+        transaction, so a raise rolls back every write — no partial
+        state.
+    """
+    if by_user is None:
+        raise ValueError("by_user is required to confirm offers.")
+
+    now = timezone.now()
+
+    # ------------------------------------------------------------------
+    # 1. Stage — validate everything before touching the DB.
+    # ------------------------------------------------------------------
+    staged_confirms = _stage_confirmations(
+        request_obj, confirmations, note,
+    )
+    staged_declines = _stage_declinations(
+        request_obj, declinations, note,
+    )
+
+    # ------------------------------------------------------------------
+    # 2. Oversell guard — before any write.
+    # ------------------------------------------------------------------
+    _enforce_oversell_guard(staged_confirms)
+
+    # ------------------------------------------------------------------
+    # 3. Apply the staged decisions. Offers stay at CONFIRMED after a
+    #    confirm; FULFILLED is set later by the downstream flow that
+    #    converts the indent item into an order.
+    # ------------------------------------------------------------------
+    for offer, response_note in staged_confirms:
+        offer.status = RetailerProductRequestOffer.Status.CONFIRMED
+        offer.retailer_confirmed_at = now
+        offer.retailer_response_note = response_note
+        # refresh_parent=False so we don't recompute the item and the
+        # request once per offer; we do it once below.
+        offer.save(
+            update_fields=[
+                "status",
+                "retailer_confirmed_at",
+                "retailer_response_note",
+                "updated",
+            ],
         )
 
-        for offer in offers:
-            receipt = offer.wholesaler_receipt
-            qty = offer.offered_quantity or 0
-            unit_price = offer.offered_unit_price or receipt.final_unit_selling_price
+    for offer, reason in staged_declines:
+        offer.status = (
+            RetailerProductRequestOffer.Status.DECLINED_BY_RETAILER
+        )
+        offer.retailer_confirmed_at = now
+        offer.retailer_response_note = reason
+        offer.save(
+            update_fields=[
+                "status",
+                "retailer_confirmed_at",
+                "retailer_response_note",
+                "updated",
+            ],
+        )
 
-            order_item = RetailerOrderItems(
-                entity=request_obj.entity,
-                retailer_order=order,
-                wholesaler_receipt=receipt,
-                purchased_quantity=qty,
-                discount_quantity=0,
-                total_quantity=qty,
-                item_price=unit_price,
-                item_final_price=unit_price,
-                item_net_price=unit_price,
-                item_net_price_total=(
-                    unit_price * Decimal(str(qty))
-                ).quantize(Decimal("0.01")),
-                unit_of_issue=receipt.unit_of_receipt,
-                owner=by_user,
+    result = ConfirmationResult(
+        confirmed_offer_count=len(staged_confirms),
+        declined_offer_count=len(staged_declines),
+    )
+
+    # ------------------------------------------------------------------
+    # 4. Indent assembly — only when there is at least one
+    #    confirmation. A pure-declination batch skips this entirely.
+    # ------------------------------------------------------------------
+    if staged_confirms:
+        indent, created_new_indent = _lock_or_create_open_indent(
+            request_obj.entity_id, owner=by_user,
+        )
+        result.indent_id = str(indent.id)
+        result.created_new_indent = created_new_indent
+
+        for offer, _ in staged_confirms:
+            _, created = RetailerIndentItem.objects.get_or_create(
+                retailer_indent=indent,
+                product_request_offer=offer,
+                defaults={
+                    "entity_id": request_obj.entity_id,
+                    "source": IndentItemSource.PRODUCT_REQUEST,
+                    "product_request": request_obj,
+                    "wholesale_receipt": offer.wholesaler_receipt,
+                    "required_quantity": offer.offered_quantity,
+                    "total_quantity": offer.offered_quantity,
+                    "supplier_unit_selling_price": offer.offered_unit_price,
+                    "final_supplier_unit_selling_price": (
+                        offer.offered_unit_price
+                    ),
+                    "manufacture_date": offer.manufacture_date,
+                    "expiry_date": offer.expiry_date,
+                    "owner": by_user,
+                },
             )
-            order_item.recalculate(save=False)
-            order_item.save()
+            if created:
+                result.items_added += 1
+            else:
+                result.items_already_present += 1
 
-            offer.resulting_order_item = order_item
-            offer.status = RetailerProductRequestOffer.Status.FULFILLED
-            offer.save(update_fields=[
-                "resulting_order_item", "status", "updated",
-            ])
+        indent.recalculate(save=True)
 
-        order.recalculate(save=True)
-        created_orders.append(order)
+    # ------------------------------------------------------------------
+    # 5. Roll up touched lines, then the request.
+    #    `refresh_parent=False` on the item save keeps this to a single
+    #    aggregate query on the request rather than one per line.
+    # ------------------------------------------------------------------
+    touched_line_ids = (
+        {offer.request_item_id for offer, _ in staged_confirms}
+        | {offer.request_item_id for offer, _ in staged_declines}
+    )
+    for line in (
+        RetailerProductRequestItem.objects
+        .filter(id__in=touched_line_ids)
+    ):
+        # Item.save() with refresh_parent=False skips the per-item
+        # parent recalc. We recompute the request once below.
+        line.save(refresh_parent=False)
 
-        # Link the wholesaler's response to this order
-        response = RetailerProductRequestResponse.objects.filter(
-            request=request_obj, wholesaler_id=wholesaler_id,
-        ).first()
-        if response:
-            response.resulting_orders.add(order)
-
-            total_offered = (
-                RetailerProductRequestOffer.objects
-                .filter(
-                    request_item__request=request_obj,
-                    wholesaler_id=wholesaler_id,
-                )
-                .exclude(status__in=[
-                    RetailerProductRequestOffer.Status.CANCELLED,
-                    RetailerProductRequestOffer.Status.DECLINED_BY_RETAILER,
-                ])
-                .count()
-            )
-            fulfilled = (
-                RetailerProductRequestOffer.objects
-                .filter(
-                    request_item__request=request_obj,
-                    wholesaler_id=wholesaler_id,
-                    status=RetailerProductRequestOffer.Status.FULFILLED,
-                )
-                .count()
-            )
-            if total_offered > 0 and fulfilled == total_offered:
-                response.response_type = "FULL"
-            elif fulfilled > 0:
-                response.response_type = "PARTIAL"
-            response.save(update_fields=["response_type", "updated"])
-
-    # ---- 5. Recalculate ----
-    for line in request_obj.items.all():
-        line.recalculate(save=True)
     request_obj.recalculate(save=True)
 
-    return created_orders
+    logger.info(
+        "retailer_confirm_offers: request=%s confirmed=%s declined=%s "
+        "indent=%s items_added=%s items_existing=%s",
+        request_obj.pk,
+        result.confirmed_offer_count,
+        result.declined_offer_count,
+        result.indent_id,
+        result.items_added,
+        result.items_already_present,
+    )
+
+    return result

@@ -1,20 +1,24 @@
 # wholesalers/models.py
 
 # Standard library
-import pytz
-from decimal import Decimal, InvalidOperation
+import uuid
+from decimal import Decimal
 from io import BytesIO
-from django.db.models import Sum
-# Third-party
+from typing import Dict
+
+import pytz
 from PIL import Image
+
+# Third-party
 from django_advance_thumbnail import AdvanceThumbnailField
 
 # Django
 from django.contrib.auth import get_user_model
-from django.core.files import File
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
@@ -22,9 +26,9 @@ from django.utils.translation import gettext_lazy as _
 
 # Your apps
 from authentication.models import DocumentNumbers, Entities, Stakes, Users
+from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
 from core.models import EntityRelatedModel
 from core.utils import _q
-from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
 from distributors.models import (
     DistributorReceipts,
     WholesalerOrders,
@@ -37,6 +41,12 @@ from products.models import Products
 
 User = get_user_model()
 
+COMPRESS_THRESHOLD_BYTES = 100 * 1024
+
+
+# ---------------------------------------------------------------------------
+# Upload path helpers
+# ---------------------------------------------------------------------------
 
 def wholesaler_price_discount_image_upload_to(instance, filename):
     title = instance.wholesaler_price_discount.title
@@ -54,15 +64,59 @@ def wholesaler_quantity_discount_image_upload_to(instance, filename):
     return new_filename
 
 
+def wholesaler_campaign_image_upload_to(instance, filename):
+    """
+    Upload path for a campaign banner. Mirrors
+    `wholesaler_quantity_discount_image_upload_to` /
+    `wholesaler_price_discount_image_upload_to`.
+    """
+    title = instance.wholesaler_campaign.title
+    slug = slugify(title)
+    basename, file_extension = filename.split(".")
+    new_filename = "%s-%s.%s" % (slug, instance.id, file_extension)
+    return new_filename
+
+
+# ---------------------------------------------------------------------------
+# Legacy upload path helpers — kept so historical migrations can still import
+# them by dotted path. New code should use `wholesaler_campaign_image_upload_to`.
+# ---------------------------------------------------------------------------
+
+def wholesaler_campaign_banner_upload_to(instance, filename):
+    """Legacy helper for the removed single `banner` field."""
+    return f"campaigns/{instance.uuid}/banner/{filename}"
+
+
+# Backward-compat alias. Migration 0001_initial was generated when this
+# function was named `wholesaler_campaign_hero_upload_to`. Django stores
+# the callable path in migration state, so keep this alias so the loader
+# can still import it on a fresh DB.
+wholesaler_campaign_hero_upload_to = wholesaler_campaign_banner_upload_to
+
+
+def wholesaler_campaign_gallery_upload_to(instance, filename):
+    """Legacy helper for the removed singular `WholesalerCampaignBanner`."""
+    key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
+    return f"campaigns/{key}/gallery/{filename}"
+
+
+# ---------------------------------------------------------------------------
+# Image helper
+# ---------------------------------------------------------------------------
+
 def compress_image(image):
     im = Image.open(image)
-    if im.mode != 'RGB':
-        im = im.convert('RGB')
+    if im.mode != "RGB":
+        im = im.convert("RGB")
     im_io = BytesIO()
-    im.save(im_io, 'jpeg', quality=70, optimize=True)
+    im.save(im_io, "jpeg", quality=70, optimize=True)
     new_image = File(im_io, name=image.name)
     return new_image
 
+
+# ---------------------------------------------------------------------------
+# Wholesaler receipts & discounts
+# ---------------------------------------------------------------------------
 
 class WholesalerReceipts(EntityRelatedModel):
     """
@@ -72,6 +126,7 @@ class WholesalerReceipts(EntityRelatedModel):
     distributor. The wholesaler prices retailer indents against
     these rows.
     """
+
     draft_id = models.CharField(max_length=100, null=True, blank=True)
     product = models.ForeignKey(
         "products.Products",
@@ -229,9 +284,7 @@ class WholesalerReceipts(EntityRelatedModel):
             # Only write a change when the offer is a real reduction.
             # An expired / inactive row will fail the filter above,
             # and a zero-percent discount produces offer == list.
-            if (
-                Decimal("0.00") < offer < list_price
-            ):
+            if Decimal("0.00") < offer < list_price:
                 self.final_unit_selling_price = offer
                 self.discount_unit_selling_price = (
                     list_price - offer
@@ -369,7 +422,6 @@ class WholesalerPriceDiscounts(EntityRelatedModel):
                 )
 
         if errors:
-            from django.core.exceptions import ValidationError
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
@@ -502,66 +554,12 @@ class WholesalerQuantityDiscounts(EntityRelatedModel):
             )
 
         if errors:
-            from django.core.exceptions import ValidationError
             raise ValidationError(errors)
 
 
 # ---------------------------------------------------------------------------
 # Campaign models
 # ---------------------------------------------------------------------------
-
-import uuid
-from decimal import Decimal
-from typing import Dict
-
-from django.core.exceptions import ValidationError
-from django.db import models, transaction
-from django.db.models import F, Q
-from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
-
-COMPRESS_THRESHOLD_BYTES = 100 * 1024
-
-
-# -----------------------------------------------------------------------------
-# Upload path helpers
-# -----------------------------------------------------------------------------
-
-def wholesaler_campaign_image_upload_to(instance, filename):
-    """
-    Upload path for a campaign banner. Mirrors
-    `wholesaler_quantity_discount_image_upload_to` /
-    `wholesaler_price_discount_image_upload_to`.
-    """
-    title = instance.wholesaler_campaign.title
-    slug = slugify(title)
-    basename, file_extension = filename.split(".")
-    new_filename = "%s-%s.%s" % (slug, instance.id, file_extension)
-    return new_filename
-
-
-# -----------------------------------------------------------------------------
-# Legacy upload path helpers — kept so historical migrations can still import
-# them by dotted path. New code should use `wholesaler_campaign_image_upload_to`.
-# -----------------------------------------------------------------------------
-
-def wholesaler_campaign_banner_upload_to(instance, filename):
-    """Legacy helper for the removed single `banner` field."""
-    return f"campaigns/{instance.uuid}/banner/{filename}"
-
-
-# Backward-compat alias. Migration 0001_initial was generated when this
-# function was named `wholesaler_campaign_hero_upload_to`. Django stores
-# the callable path in migration state, so keep this alias so the loader
-# can still import it on a fresh DB.
-wholesaler_campaign_hero_upload_to = wholesaler_campaign_banner_upload_to
-
-
-def wholesaler_campaign_gallery_upload_to(instance, filename):
-    """Legacy helper for the removed singular `WholesalerCampaignBanner`."""
-    key = str(instance.campaign.uuid) if instance.campaign_id else "draft"
-    return f"campaigns/{key}/gallery/{filename}"
-
 
 class WholesalerCampaignBanners(EntityRelatedModel):
     """
@@ -948,12 +946,17 @@ class WholesalerCampaignAudience(EntityRelatedModel):
         if save:
             self.save(update_fields=["opted_out_at", "updated"])
 
+
 class CommitType(models.TextChoices):
     CASH = "CASH", _("Paid in cash")
     CREDIT = "CREDIT", _("Credit approved")
     PLACEMENT = "PLACEMENT", _("Placement approved")
     FACILITY = "FACILITY", _("Facility approved")
 
+
+# ---------------------------------------------------------------------------
+# Retailer orders
+# ---------------------------------------------------------------------------
 
 class RetailerOrders(EntityRelatedModel):
     """
@@ -1252,7 +1255,6 @@ class RetailerOrders(EntityRelatedModel):
             return max(0, (self.received_at - self.approved_at).days)
         return None
 
-# retailers/models.py (or wherever RetailerOrderItems is defined)
 
 class RetailerOrderItems(EntityRelatedModel):
     """
@@ -1484,6 +1486,7 @@ class RetailerOrderItems(EntityRelatedModel):
 
         return result
 
+
 class RetailerOrderPayments(EntityRelatedModel):
     PAYMENT_STATUS_CHOICES = (
         ("INITIATED", "INITIATED"),
@@ -1524,17 +1527,17 @@ class RetailerOrderPayments(EntityRelatedModel):
     is_paid = models.CharField(
         max_length=50,
         choices=TRUE_FALSE_OPTIONS,
-        default='true'
+        default="true",
     )
     is_settled = models.CharField(
         max_length=50,
         choices=TRUE_FALSE_OPTIONS,
-        default='true'
+        default="true",
     )
     commission_paid = models.CharField(
         max_length=50,
         choices=TRUE_FALSE_OPTIONS,
-        default='false'
+        default="false",
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -1587,13 +1590,15 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         RetailerOrders,
         related_name="wholesaler_receipt_returns",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     retailer_order_item = models.ForeignKey(
         RetailerOrderItems,
         related_name="wholesaler_receipt_returns",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     retailer_entity = models.ForeignKey(
         Entities,
@@ -1609,7 +1614,8 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         "retailers.RetailerReceipts",
         related_name="wholesaler_returns_from_receipt",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text=_(
             "The retailer's lot being returned. The paired "
             "StockAdjustment decrements this lot."
@@ -1619,13 +1625,15 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         WholesalerReceipts,
         related_name="wholesaler_receipt_returns",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     initiating_adjustment = models.OneToOneField(
         "retailers.StockAdjustments",
         related_name="generated_return",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text=_(
             "The retailer-side adjustment created alongside this "
             "return. Reverse side of StockAdjustments.linked_return."
@@ -1641,7 +1649,8 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         DocumentNumbers,
         related_name="wholesaler_receipt_return_document_number",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     reference_number = models.CharField(max_length=100, null=True, blank=True)
 
@@ -1703,25 +1712,29 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         Employees,
         related_name="employee_creating_wholesaler_return",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     confirmed_by = models.ForeignKey(
         Users,
         related_name="wholesaler_return_confirmed_by",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     settled_by = models.ForeignKey(
         Users,
         related_name="wholesaler_return_settled_by",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
     rejected_by = models.ForeignKey(
         Users,
         related_name="wholesaler_return_rejected_by",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
     )
 
     confirmed_at = models.DateTimeField(null=True, blank=True)

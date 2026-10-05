@@ -33,20 +33,24 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework.pagination import PageNumberPagination
 
 from retailers.models import (
+    RetailerIndent,
+    RetailerIndentItem,
     RetailerProductRequest,
     RetailerProductRequestItem,
     RetailerProductRequestItemWholesaler,
     RetailerProductRequestOffer,
     RetailerProductRequestResponse,
-    RetailerIndent,
-    RetailerIndentItem
 )
 from retailers.services.product_requests_respond import (
     wholesaler_respond_to_request,
+)
+from retailers.services.request_confirmation import (
+    retailer_confirm_offers,
 )
 
 logger = logging.getLogger(__name__)
@@ -175,9 +179,7 @@ def _split_role_value(raw) -> list[str]:
 
 
 def _get_user_roles(user) -> list[str]:
-    """
-    Flatten every role token the user holds into one array.
-    """
+    """Flatten every role token the user holds into one array."""
     if user is None:
         return []
 
@@ -254,14 +256,93 @@ def _status_display(obj, field="status") -> str:
     return str(getattr(obj, field, ""))
 
 
-def _serialize_item(item) -> dict:
+# =========================================================
+# Serialization helpers
+# =========================================================
+
+def _serialize_offer(offer, *, wholesaler_view: bool = False) -> dict:
+    """
+    Offer shape.
+
+    `wholesaler_view=True` returns the narrower shape a wholesaler
+    sees for their own offers — no `wholesaler` / `wholesaler_title`
+    fields (they are implicit), no retailer-only fields.
+    """
+    base = {
+        "id": str(offer.id),
+        "offered_quantity": offer.offered_quantity,
+        "offered_unit_price": (
+            str(offer.offered_unit_price)
+            if offer.offered_unit_price is not None
+            else None
+        ),
+        "batch": offer.batch,
+        "expiry_date": (
+            str(offer.expiry_date) if offer.expiry_date else None
+        ),
+        "manufacture_date": (
+            str(offer.manufacture_date)
+            if offer.manufacture_date
+            else None
+        ),
+        "is_placement": offer.is_placement,
+        "status": offer.status,
+        "status_display": _status_display(offer, "status"),
+        "response_note": offer.response_note,
+        "retailer_response_note": offer.retailer_response_note,
+        "created": str(offer.created),
+        "updated": str(offer.updated),
+    }
+    if not wholesaler_view:
+        base.update({
+            "wholesaler": str(offer.wholesaler_id),
+            "wholesaler_title": getattr(
+                getattr(offer, "wholesaler", None), "title", ""
+            ),
+            "wholesaler_receipt": (
+                str(offer.wholesaler_receipt_id)
+                if offer.wholesaler_receipt_id
+                else None
+            ),
+            "wholesaler_receipt_title": getattr(
+                getattr(offer, "wholesaler_receipt", None),
+                "title",
+                "",
+            ),
+            "retailer_confirmed_at": (
+                str(offer.retailer_confirmed_at)
+                if offer.retailer_confirmed_at
+                else None
+            ),
+        })
+    return base
+
+
+def _serialize_item(item, *, wholesaler_id=None) -> dict:
+    """
+    Item shape.
+
+    When `wholesaler_id` is given, only offers belonging to that
+    wholesaler are serialized. This is the wholesaler-tagged view:
+    a wholesaler only ever sees their own offers on the lines they
+    were targeted for.
+    """
     target_pairs = (
         item.target_pairs
         .filter(is_active=True)
         .select_related("wholesaler")
     )
     targets = list(target_pairs)
-    offers = list(item.offers.all())
+
+    if wholesaler_id is not None:
+        offers = [
+            o for o in item.offers.all()
+            if str(o.wholesaler_id) == str(wholesaler_id)
+        ]
+        offer_serializer = lambda o: _serialize_offer(o, wholesaler_view=True)
+    else:
+        offers = list(item.offers.all())
+        offer_serializer = _serialize_offer
 
     return {
         "id": str(item.id),
@@ -289,47 +370,32 @@ def _serialize_item(item) -> dict:
             }
             for p in targets
         ],
-        "offers": [
-            {
-                "id": str(o.id),
-                "wholesaler": str(o.wholesaler_id),
-                "wholesaler_title": getattr(
-                    getattr(o, "wholesaler", None), "title", ""
-                ),
-                "offered_quantity": o.offered_quantity,
-                "offered_unit_price": (
-                    str(o.offered_unit_price)
-                    if o.offered_unit_price is not None
-                    else None
-                ),
-                "status": o.status,
-                "status_display": _status_display(o, "status"),
-                "wholesaler_receipt": (
-                    str(o.wholesaler_receipt_id)
-                    if o.wholesaler_receipt_id
-                    else None
-                ),
-                "wholesaler_receipt_title": getattr(
-                    getattr(o, "wholesaler_receipt", None),
-                    "title",
-                    "",
-                ),
-                "batch": o.batch,
-                "expiry_date": (
-                    str(o.expiry_date) if o.expiry_date else None
-                ),
-                "created": str(o.created),
-                "updated": str(o.updated),
-            }
-            for o in offers
-        ],
+        "offers": [offer_serializer(o) for o in offers],
         "created": str(item.created),
         "updated": str(item.updated),
     }
 
 
-def _serialize_request(req) -> dict:
-    items = list(req.items.all())
+def _serialize_request(req, *, wholesaler_id=None) -> dict:
+    """
+    Request shape.
+
+    When `wholesaler_id` is given, only the caller's tagged items and
+    only their own offers are serialized. This is the wholesaler-
+    tagged view; the retailer view passes no filter and sees
+    everything.
+    """
+    if wholesaler_id is not None:
+        items = [
+            i for i in req.items.all()
+            if any(
+                str(p.wholesaler_id) == str(wholesaler_id)
+                and p.is_active
+                for p in i.target_pairs.all()
+            )
+        ]
+    else:
+        items = list(req.items.all())
 
     return {
         "id": str(req.id),
@@ -356,28 +422,51 @@ def _serialize_request(req) -> dict:
         ),
         "created": str(req.created),
         "updated": str(req.updated),
-        "items": [_serialize_item(i) for i in items],
+        "items": [
+            _serialize_item(i, wholesaler_id=wholesaler_id)
+            for i in items
+        ],
     }
 
 
-def _prefetch_for_list():
-    """Shared prefetch chain for request-list queries."""
-    from django.db.models import Prefetch
+def _prefetch_for_list(*, tagged_wholesaler_id=None):
+    """
+    Shared prefetch chain for request-list queries.
 
-    return Prefetch(
-        "items",
-        queryset=RetailerProductRequestItem.objects.select_related(
-            "product"
-        ).prefetch_related(
-            "offers",
-            Prefetch(
-                "target_pairs",
-                queryset=RetailerProductRequestItemWholesaler.objects.select_related(
-                    "wholesaler"
-                ).filter(is_active=True),
-            ),
-        ),
+    When `tagged_wholesaler_id` is provided, the `items` prefetch is
+    built with `to_attr="tagged_items"` containing only the items
+    that wholesaler is targeted for. `_serialize_request` and the
+    wholesaler-facing list serializer both read from that attribute
+    when it exists, so the wholesaler never accidentally sees lines
+    that were not sent to them.
+    """
+    offers_qs = RetailerProductRequestOffer.objects.select_related(
+        "wholesaler", "wholesaler_receipt",
     )
+    pairs_qs = (
+        RetailerProductRequestItemWholesaler.objects
+        .select_related("wholesaler")
+        .filter(is_active=True)
+    )
+    items_qs = (
+        RetailerProductRequestItem.objects
+        .select_related("product")
+        .prefetch_related(
+            Prefetch("offers", queryset=offers_qs),
+            Prefetch("target_pairs", queryset=pairs_qs),
+        )
+    )
+
+    if tagged_wholesaler_id is not None:
+        items_qs = items_qs.filter(
+            target_pairs__wholesaler_id=tagged_wholesaler_id,
+            target_pairs__is_active=True,
+        ).distinct()
+        return [
+            Prefetch("items", queryset=items_qs, to_attr="tagged_items"),
+        ]
+
+    return [Prefetch("items", queryset=items_qs)]
 
 
 # =========================================================
@@ -485,6 +574,12 @@ def handle_create_request(user, data, request=None):
                     owner=user,
                     entity_id=entity_id,
                     status=RetailerProductRequestItem.Status.PENDING,
+                    # Line has no offers yet; skip the derived-field
+                    # recalc on create — nothing to compute. The
+                    # default in `Item.save()` would run recalculate,
+                    # which is a no-op for a line with no offers but
+                    # still touches the parent.
+                    refresh_parent=False,
                 )
 
                 target_ids = item.get("target_wholesaler_ids") or []
@@ -493,6 +588,8 @@ def handle_create_request(user, data, request=None):
                         request_item=line,
                         wholesaler_id=wid,
                         is_active=True,
+                        owner=user,
+                        entity_id=entity_id,
                     )
 
                 line.recalculate(save=True)
@@ -559,7 +656,7 @@ def handle_get_my_requests(user, data, request=None):
     if status_filter:
         qs = qs.filter(status=str(status_filter).upper())
 
-    qs = qs.prefetch_related(_prefetch_for_list()).order_by("-created")
+    qs = qs.prefetch_related(*_prefetch_for_list()).order_by("-created")
 
     paginated = _paginate(
         qs, request, lambda rows: [_serialize_request(r) for r in rows]
@@ -572,6 +669,10 @@ def handle_get_wholesaler_tagged_requests(user, data, request=None):
     """
     Wholesaler fetches requests where their entity is a target.
 
+    Only the caller's tagged items are serialized, and on those
+    items only the caller's own offers. Lines targeted at other
+    wholesalers are not exposed.
+
     Sample request:
         {
             "action": "GetWholesalerTaggedRequests",
@@ -579,14 +680,6 @@ def handle_get_wholesaler_tagged_requests(user, data, request=None):
             "urgency": "high",
             "page": 1,
             "page_size": 20
-        }
-
-    Response (raw paginated envelope):
-        {
-            "count": 42,
-            "next": "https://.../product-requests?page=2",
-            "previous": null,
-            "results": [ ...WholesalerProductRequest shapes... ]
         }
     """
     roles = _get_user_roles(user)
@@ -618,10 +711,20 @@ def handle_get_wholesaler_tagged_requests(user, data, request=None):
     if urgency_filter:
         qs = qs.filter(urgency=str(urgency_filter).lower())
 
-    qs = qs.prefetch_related(_prefetch_for_list()).order_by("-created")
+    qs = (
+        qs
+        .prefetch_related(
+            *_prefetch_for_list(tagged_wholesaler_id=entity_id)
+        )
+        .order_by("-created")
+    )
 
     paginated = _paginate(
-        qs, request, lambda rows: [_serialize_request(r) for r in rows]
+        qs,
+        request,
+        lambda rows: [
+            _serialize_request(r, wholesaler_id=entity_id) for r in rows
+        ],
     )
 
     return ("paginated", paginated)
@@ -631,15 +734,14 @@ def handle_get_request_details(user, data, request=None):
     """
     Fetch details for a single request (either role).
 
+    A retailer sees the full request. A wholesaler sees only the
+    lines they were targeted for, and only their own offers on those
+    lines.
+
     Sample request:
         {
             "action": "GetRequestDetails",
             "request_id": "a54de545-4d19-4f7c-b796-0372a7c5bbbf"
-        }
-
-    Success payload (key "request"):
-        {
-            "request": { ...full RetailerProductRequest with items... }
         }
     """
     roles = _get_user_roles(user)
@@ -658,18 +760,29 @@ def handle_get_request_details(user, data, request=None):
             {"request_id": "This field is required."},
         )
 
-    try:
-        req = RetailerProductRequest.objects.prefetch_related(
-            _prefetch_for_list()
-        ).get(id=request_id)
-    except RetailerProductRequest.DoesNotExist:
+    entity_id = _resolve_entity_id(user)
+
+    # Wholesaler path: prefetch only the caller's tagged items.
+    if is_wholesaler and not is_retailer:
+        qs = (
+            RetailerProductRequest.objects
+            .prefetch_related(
+                *_prefetch_for_list(tagged_wholesaler_id=entity_id)
+            )
+        )
+    else:
+        qs = (
+            RetailerProductRequest.objects
+            .prefetch_related(*_prefetch_for_list())
+        )
+
+    req = qs.filter(id=request_id).first()
+    if req is None:
         return (
             "error",
             "Request not found",
             {"request_id": "Not found."},
         )
-
-    entity_id = _resolve_entity_id(user)
 
     if is_retailer:
         if str(req.entity_id) != str(entity_id):
@@ -691,10 +804,18 @@ def handle_get_request_details(user, data, request=None):
                 {"request_id": "Not found."},
             )
 
+    # A user holding both roles: default to the retailer view
+    # (they own the request scope). A pure wholesaler gets the
+    # scoped view.
+    if is_wholesaler and not is_retailer:
+        payload = _serialize_request(req, wholesaler_id=entity_id)
+    else:
+        payload = _serialize_request(req)
+
     return (
         "success",
         "Request details",
-        {"request": _serialize_request(req)},
+        {"request": payload},
         "request",
     )
 
@@ -764,20 +885,18 @@ def handle_create_offer(user, data, request=None):
             {"offered_unit_price": "Must be greater than zero."},
         )
 
-    try:
-        req = RetailerProductRequest.objects.get(id=request_id)
-    except RetailerProductRequest.DoesNotExist:
+    req = RetailerProductRequest.objects.filter(id=request_id).first()
+    if req is None:
         return (
             "error",
             "Request not found",
             {"request_id": "Not found."},
         )
 
-    try:
-        line = RetailerProductRequestItem.objects.get(
-            id=line_id, request=req
-        )
-    except RetailerProductRequestItem.DoesNotExist:
+    line = RetailerProductRequestItem.objects.filter(
+        id=line_id, request=req
+    ).first()
+    if line is None:
         return (
             "error",
             "Line not found on this request",
@@ -807,6 +926,26 @@ def handle_create_offer(user, data, request=None):
             {"request_id": f"Status is {req.status}."},
         )
 
+    # Guard against resurrecting an offer the retailer has already
+    # acted on. Same rule as the service layer enforces.
+    existing = (
+        RetailerProductRequestOffer.objects
+        .filter(request_item=line, wholesaler_id=entity_id)
+        .first()
+    )
+    if existing is not None and existing.status in (
+        RetailerProductRequestOffer.Status.CONFIRMED,
+        RetailerProductRequestOffer.Status.FULFILLED,
+        RetailerProductRequestOffer.Status.DECLINED_BY_RETAILER,
+        RetailerProductRequestOffer.Status.DECLINED_BY_WHOLESALER,
+    ):
+        return (
+            "error",
+            "This offer has already been acted on and cannot be "
+            "modified",
+            {"offer_id": str(existing.id), "status": existing.status},
+        )
+
     with transaction.atomic():
         offer, _created = (
             RetailerProductRequestOffer.objects.update_or_create(
@@ -818,12 +957,13 @@ def handle_create_offer(user, data, request=None):
                     "response_note": note,
                     "responded_by_user": user,
                     "responded_at": timezone.now(),
-                    "status": RetailerProductRequestOffer.Status.OFFERED,
+                    "status": (
+                        RetailerProductRequestOffer.Status.OFFERED
+                    ),
                 },
             )
         )
-        line.recalculate(save=True)
-        req.recalculate(save=True)
+        line.save()
 
     return (
         "success",
@@ -872,11 +1012,13 @@ def handle_withdraw_offer(user, data, request=None):
             {"offer_id": "This field is required."},
         )
 
-    try:
-        offer = RetailerProductRequestOffer.objects.select_related(
-            "request_item", "request_item__request"
-        ).get(id=offer_id)
-    except RetailerProductRequestOffer.DoesNotExist:
+    offer = (
+        RetailerProductRequestOffer.objects
+        .select_related("request_item", "request_item__request")
+        .filter(id=offer_id)
+        .first()
+    )
+    if offer is None:
         return (
             "error",
             "Offer not found",
@@ -896,18 +1038,20 @@ def handle_withdraw_offer(user, data, request=None):
     ):
         return (
             "error",
-            "This offer has already been confirmed and cannot be withdrawn",
+            "This offer has already been confirmed and cannot be "
+            "withdrawn",
             {},
         )
 
     line = offer.request_item
-    req = line.request
 
     with transaction.atomic():
         offer.status = RetailerProductRequestOffer.Status.WITHDRAWN
         offer.save(update_fields=["status", "updated"])
+        # save() on the offer bubbles to line + request automatically;
+        # keep the explicit call so the recalc is guaranteed even if
+        # a future change disables the auto-bubble.
         line.recalculate(save=True)
-        req.recalculate(save=True)
 
     return (
         "success",
@@ -924,18 +1068,9 @@ def handle_confirm_offers(user, data, request=None):
     """
     Retailer confirms / declines offers on their request.
 
-    On confirmation:
-      - Each accepted offer flips to CONFIRMED.
-      - A RetailerIndentItem is appended to the retailer's open
-        indent (creating the indent if none exists), tagged with
-        source='PRODUCT_REQUEST' and the source request + offer so
-        the trace is intact.
-      - The indent totals recompute.
-      - The request status recomputes.
-
-    Declinations alone do NOT touch the indent. Only confirmed
-    offers create indent items. A submit with zero confirmations
-    is a pure decline — the request status updates, no indent work.
+    Delegates to retailers.services.request_confirmation.
+    retailer_confirm_offers. All indent assembly lives there; this
+    handler is a thin wrapper.
 
     Sample request:
         {
@@ -955,9 +1090,10 @@ def handle_confirm_offers(user, data, request=None):
             "request_id": "a54de545-...",
             "confirmed_offer_count": 1,
             "declined_offer_count": 1,
-            "indent_id": "…",            # null when nothing confirmed
-            "created_new_indent": true,  # true if created now
+            "indent_id": "…",
+            "created_new_indent": true,
             "items_added": 1,
+            "items_already_present": 0
         }
     """
     roles = _get_user_roles(user)
@@ -986,188 +1122,22 @@ def handle_confirm_offers(user, data, request=None):
     if not confirmations and not declinations:
         return ("error", "Nothing to confirm or decline", {})
 
-    try:
-        req = RetailerProductRequest.objects.get(id=request_id)
-    except RetailerProductRequest.DoesNotExist:
+    req = RetailerProductRequest.objects.filter(id=request_id).first()
+    if req is None or str(req.entity_id) != str(entity_id):
         return (
             "error",
             "Request not found",
             {"request_id": "Not found."},
         )
 
-    if str(req.entity_id) != str(entity_id):
-        return (
-            "error",
-            "Request not found",
-            {"request_id": "Not found."},
-        )
-
-    confirmed_count = 0
-    declined_count = 0
-    touched_items = set()
-    accepted_offers = []  # collected for the indent builder below
-
-    # Indent result — populated only when confirmations exist.
-    indent_id = None
-    created_new_indent = False
-    items_added = 0
-
     try:
-        with transaction.atomic():
-            # ---------------- Confirmations ----------------
-            for entry in confirmations:
-                offer_id = entry.get("offer_id")
-                if not offer_id:
-                    raise ValueError(
-                        "Each confirmation requires offer_id."
-                    )
-
-                try:
-                    offer = RetailerProductRequestOffer.objects.select_related(
-                        "request_item"
-                    ).get(
-                        id=offer_id,
-                        request_item__request=req,
-                    )
-                except RetailerProductRequestOffer.DoesNotExist:
-                    raise ValueError(
-                        f"Offer {offer_id} does not belong to this request."
-                    )
-
-                offer.status = (
-                    RetailerProductRequestOffer.Status.CONFIRMED
-                )
-                offer.retailer_response_note = str(
-                    entry.get("response_note", "") or ""
-                )
-                offer.retailer_confirmed_at = timezone.now()
-                offer.save(
-                    update_fields=[
-                        "status",
-                        "retailer_response_note",
-                        "retailer_confirmed_at",
-                        "updated",
-                    ]
-                )
-                touched_items.add(offer.request_item_id)
-                accepted_offers.append(offer)
-                confirmed_count += 1
-
-            # ---------------- Declinations ----------------
-            for entry in declinations:
-                offer_id = entry.get("offer_id")
-                if not offer_id:
-                    raise ValueError(
-                        "Each declination requires offer_id."
-                    )
-
-                try:
-                    offer = RetailerProductRequestOffer.objects.select_related(
-                        "request_item"
-                    ).get(
-                        id=offer_id,
-                        request_item__request=req,
-                    )
-                except RetailerProductRequestOffer.DoesNotExist:
-                    raise ValueError(
-                        f"Offer {offer_id} does not belong to this request."
-                    )
-
-                offer.status = (
-                    RetailerProductRequestOffer.Status.DECLINED_BY_RETAILER
-                )
-                offer.retailer_response_note = str(
-                    entry.get("reason", "") or ""
-                )
-                offer.save(
-                    update_fields=[
-                        "status",
-                        "retailer_response_note",
-                        "updated",
-                    ]
-                )
-                touched_items.add(offer.request_item_id)
-                declined_count += 1
-
-            # ---------------- Indent construction ----------------
-            # Only touch the indent when there is at least one
-            # accepted offer. Pure-declination submits skip this
-            # block entirely.
-            if accepted_offers:
-                # Lock the indent row (or the absence of one) so
-                # concurrent ConfirmOffers calls for the same
-                # retailer serialise. NOTE: select_for_update()
-                # does not lock when no row matches. If two
-                # submits race before an indent exists, both may
-                # create one. Add a partial unique index on
-                # (entity, is_open='true') or lock the entity row
-                # itself to close this.
-                indent = (
-                    RetailerIndent.objects.select_for_update()
-                    .filter(
-                        entity=req.entity,
-                        # Adjust to is_open=True if the model uses
-                        # BooleanField instead of CharField.
-                        is_open="true",
-                    )
-                    .order_by("-created")
-                    .first()
-                )
-
-                if indent is None:
-                    indent = RetailerIndent.objects.create(
-                        entity=req.entity,
-                        is_open="true",
-                        owner=request.user
-                    )
-                    created_new_indent = True
-
-                for offer in accepted_offers:
-                    # request_item.product_id is the FK column
-                    # value (UUID). Adjust to `.product` if the
-                    # field is a plain UUIDField rather than a
-                    # ForeignKey.
-                    line_product_id = (
-                        offer.request_item.product_id
-                    )
-
-                    RetailerIndentItem.objects.create(
-                        retailer_indent=indent,
-                        source="PRODUCT_REQUEST",
-                        product_request=req,
-                        product_request_offer=offer,
-                        wholesale_receipt=offer.wholesaler_receipt,
-                        required_quantity=offer.offered_quantity,
-                        total_quantity=offer.offered_quantity,
-                        final_supplier_unit_selling_price=offer.offered_unit_price,
-                        supplier_unit_selling_price=(
-                            offer.offered_unit_price
-                        ),
-                        manufacture_date=offer.manufacture_date,
-                        expiry_date=offer.expiry_date,
-                    )
-                    items_added += 1
-
-                # Recompute derived totals (total_cost, profit,
-                # over_budget, active_item_count, has_items).
-                if hasattr(indent, "recompute_totals"):
-                    indent.recompute_totals()
-                    indent.save()
-
-                indent_id = str(indent.id)
-
-            # ---------------- Recounts ----------------
-            for item_id in touched_items:
-                try:
-                    item = RetailerProductRequestItem.objects.get(
-                        id=item_id
-                    )
-                    item.recalculate(save=True)
-                except RetailerProductRequestItem.DoesNotExist:
-                    pass
-
-            req.recalculate(save=True)
-
+        result = retailer_confirm_offers(
+            request_obj=req,
+            confirmations=confirmations,
+            declinations=declinations,
+            note=str(data.get("note", "") or ""),
+            by_user=user,
+        )
     except ValueError as e:
         return (
             "error",
@@ -1180,11 +1150,12 @@ def handle_confirm_offers(user, data, request=None):
         "Offers processed",
         {
             "request_id": str(req.id),
-            "confirmed_offer_count": confirmed_count,
-            "declined_offer_count": declined_count,
-            "indent_id": indent_id,
-            "created_new_indent": created_new_indent,
-            "items_added": items_added,
+            "confirmed_offer_count": result.confirmed_offer_count,
+            "declined_offer_count": result.declined_offer_count,
+            "indent_id": result.indent_id,
+            "created_new_indent": result.created_new_indent,
+            "items_added": result.items_added,
+            "items_already_present": result.items_already_present,
         },
         "request",
     )
@@ -1227,16 +1198,8 @@ def handle_cancel_request(user, data, request=None):
             {"request_id": "This field is required."},
         )
 
-    try:
-        req = RetailerProductRequest.objects.get(id=request_id)
-    except RetailerProductRequest.DoesNotExist:
-        return (
-            "error",
-            "Request not found",
-            {"request_id": "Not found."},
-        )
-
-    if str(req.entity_id) != str(entity_id):
+    req = RetailerProductRequest.objects.filter(id=request_id).first()
+    if req is None or str(req.entity_id) != str(entity_id):
         return (
             "error",
             "Request not found",
@@ -1330,27 +1293,18 @@ def handle_cancel_request_item(user, data, request=None):
             },
         )
 
-    try:
-        req = RetailerProductRequest.objects.get(id=request_id)
-    except RetailerProductRequest.DoesNotExist:
+    req = RetailerProductRequest.objects.filter(id=request_id).first()
+    if req is None or str(req.entity_id) != str(entity_id):
         return (
             "error",
             "Request not found",
             {"request_id": "Not found."},
         )
 
-    if str(req.entity_id) != str(entity_id):
-        return (
-            "error",
-            "Request not found",
-            {"request_id": "Not found."},
-        )
-
-    try:
-        line = RetailerProductRequestItem.objects.get(
-            id=item_id, request=req
-        )
-    except RetailerProductRequestItem.DoesNotExist:
+    line = RetailerProductRequestItem.objects.filter(
+        id=item_id, request=req
+    ).first()
+    if line is None:
         return (
             "error",
             "Line not found",
@@ -1363,7 +1317,6 @@ def handle_cancel_request_item(user, data, request=None):
     with transaction.atomic():
         line.status = RetailerProductRequestItem.Status.CANCELLED
         line.save(update_fields=["status", "updated"])
-        req.recalculate(save=True)
 
     return (
         "success",
@@ -1403,7 +1356,8 @@ def handle_respond(user, data, request=None):
             "rejected_line_count": 1
         }
 
-    Rules enforced by the backend:
+    Rules enforced here (payload shape) and in the service
+    (business rules):
         - at least one line must be accepted or rejected
         - every accepted line requires exactly one of
           `receipt_id` or `receipt` (not both)
@@ -1418,6 +1372,14 @@ def handle_respond(user, data, request=None):
             {},
         )
 
+    entity_id = _resolve_entity_id(user)
+    if not entity_id:
+        return (
+            "error",
+            "No wholesaler entity attached to this account",
+            {},
+        )
+
     request_id = data.get("request_id")
     if not request_id:
         return (
@@ -1426,9 +1388,8 @@ def handle_respond(user, data, request=None):
             {"request_id": "This field is required."},
         )
 
-    try:
-        req = RetailerProductRequest.objects.get(id=request_id)
-    except RetailerProductRequest.DoesNotExist:
+    req = RetailerProductRequest.objects.filter(id=request_id).first()
+    if req is None:
         return (
             "error",
             "Request not found",
@@ -1503,7 +1464,8 @@ def handle_respond(user, data, request=None):
                 "Line not found on this request",
                 {
                     "rejected_lines": (
-                        f"Item {payload['item_id']} does not belong to this request."
+                        f"Item {payload['item_id']} does not belong to "
+                        f"this request."
                     )
                 },
             )
@@ -1518,11 +1480,25 @@ def handle_respond(user, data, request=None):
             {"overlap": list(overlap)},
         )
 
+    # Resolve the wholesaler entity for both the service call and the
+    # downstream notification. Previously `user.entity_id` was used,
+    # which for a multi-role user could be the wrong entity.
+    wholesaler_entity = None
+    for attr in ("entity", "entity_id"):
+        v = getattr(user, attr, None)
+        if v:
+            wholesaler_entity = v
+            break
+    if wholesaler_entity is None:
+        # Fall back to the resolved id, wrapped so the service can
+        # still extract `.pk` (via `_get_entity_id`).
+        wholesaler_entity = entity_id
+
     try:
         response_obj, offered_count, rejected_count = (
             wholesaler_respond_to_request(
                 request_obj=req,
-                wholesaler_entity=user.entity,
+                wholesaler_entity=wholesaler_entity,
                 accepted_lines=accepted_lines,
                 rejected_lines=rejected_lines,
                 response_note=note,
@@ -1536,6 +1512,7 @@ def handle_respond(user, data, request=None):
             {"detail": str(e)},
         )
 
+    # ---- Realtime push (best-effort) ----
     try:
         from analytics.realtime import push_request_response
 
@@ -1544,8 +1521,10 @@ def handle_respond(user, data, request=None):
             {
                 "request_id": str(req.id),
                 "request_number": req.request_number,
-                "wholesaler_id": str(user.entity_id),
-                "wholesaler_title": user.entity.title,
+                "wholesaler_id": str(entity_id),
+                "wholesaler_title": getattr(
+                    getattr(user, "entity", None), "title", ""
+                ),
                 "offered_line_count": offered_count,
                 "rejected_line_count": rejected_count,
                 "note": note,

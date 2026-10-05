@@ -1,84 +1,152 @@
-from rest_framework.pagination import PageNumberPagination
-from rest_framework import generics, permissions, response, status, exceptions
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.parsers import MultiPartParser, FormParser
+# retailers/views.py
+
+# ---------- Standard library ----------
+import datetime
+from datetime import timedelta
+from decimal import Decimal
+
+# ---------- Third-party ----------
 from django.contrib.gis.geos import fromstr
-from core.responses import custom_error_response, custom_json_response, custom_success_message,custom_errors_response
-from . import retail_permissions
-from . import serializers
-from . import models
-from .utils import retailer_utils
-from authentication.validators import authentication_models_validators
+from django.db import IntegrityError, transaction
+from django.db.models import Prefetch, Q
+from django.shortcuts import get_object_or_404
+from rest_framework import (
+    exceptions,
+    generics,
+    permissions,
+    serializers,
+    status,
+)
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.validators import UniqueTogetherValidator
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+
+# ---------- Local apps ----------
+from authentication.models import Entities
 from authentication.serializers import CategoriesSerializer
-from authentication.validators.authentication_models_validators import validate_entity
-from products.models import Products,Entities
-from wholesalers.serializers import RetailerOrdersSerializer,RetailerOrderItemsSerializer
+from authentication.validators import authentication_models_validators
+from authentication.validators.authentication_models_validators import (
+    validate_entity,
+)
+from core import app_permissions
+from core.responses import (
+    custom_error_response,
+    custom_errors_response,
+    custom_json_response,
+    custom_success_message,
+)
+from core.views import EntitySafeViewMixin
+from products.models import Entities, Products
+from retailers.models import (
+    IndentItemSource,
+    RetailerIndent,
+    RetailerIndentItem,
+    RetailerProductRequest,
+    RetailerProductRequestItem,
+    RetailerProductRequestItemWholesaler,
+    RetailerProductRequestOffer,
+    RetailerReceipts,
+)
+from retailers.retail_permissions import EntitySubscriptionPermission
 from retailers.serializers import RetailerReceiptsSerializer
 from utils.logging import create_log
-import datetime
+from wholesalers.models import (
+    RetailerOrderItems,
+    RetailerOrders,
+    WholesalerReceipts,
+)
+from wholesalers.serializers import (
+    RetailerOrderItemsSerializer,
+    RetailerOrdersSerializer,
+)
 
-
-from core import app_permissions
-
-# RetailVariations Views
-
-from rest_framework.validators import UniqueTogetherValidator
-from rest_framework import serializers
-from django.db import IntegrityError
-from django.shortcuts import render, get_object_or_404
-from rest_framework import generics, exceptions, permissions, status
-from core.views import EntitySafeViewMixin
-from . import serializers, models
+from . import (
+    customer_order_responses,
+    models,
+    retail_permissions,
+    serializers,
+)
+from .serializers import (
+    InventoryPredictionQuerySerializer,
+    RetailerIndentItemEditSerializer,
+    RetailerIndentItemParamsUpdateSerializer,
+    RetailerIndentItemsSerializer,
+    RetailerIndentParamsSerializer,
+    RetailerIndentSerializer,
+    RetailerProductRequestListSerializer,
+    RetailerProductRequestSerializer,
+)
+from .services.product_requests import product_requests_dispatch
+from .services.request_confirmation import retailer_confirm_offers
 from .utils import (
-
+    retail_prescriptions_utils,
+    retailer_utils,
     retailers_shipping_rates_utils,
     wholesaler_invoice_utils,
-    retail_prescriptions_utils
 )
-from . import customer_order_responses
 
-# Create your views here.
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+REQUEST_EXPIRY_DAYS = 14
+WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
+
+
+# ===========================================================================
+# Super admin
+# ===========================================================================
+
 @api_view(["POST"])
-@permission_classes(
-    [
-        permissions.IsAdminUser,
-    ]
-)
+@permission_classes([permissions.IsAdminUser])
 def retailerReceiptsSuperAdminAPIView(request):
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
     if request.data["action"] == "UpdateInventoryBarCodes":
-        inventories=[]
+        inventories = []
         products = Products.objects.all()
         for product in products:
             if product.bar_code:
-                if models.RetailerReceipts.objects.filter(product=product, bar_code="").exists():
-                    inventories = models.RetailerReceipts.objects.filter(product=product, bar_code="").all()
+                if models.RetailerReceipts.objects.filter(
+                    product=product, bar_code=""
+                ).exists():
+                    inventories = models.RetailerReceipts.objects.filter(
+                        product=product, bar_code=""
+                    ).all()
                     for inventory in inventories:
-                        inventory.bar_code=product.bar_code
+                        inventory.bar_code = product.bar_code
                         inventory.save()
 
-        return custom_json_response(0, "Update done successfully","updated_items",len(inventories))
-
-                
+        return custom_json_response(
+            0, "Update done successfully", "updated_items", len(inventories)
+        )
     else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
 
 
+# ===========================================================================
+# Retail admin — receipts / returns / stock adjustments
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes(
     [
         retail_permissions.RetailEmployeePermission,
-        retail_permissions.EntitySubscriptionPermission
+        retail_permissions.EntitySubscriptionPermission,
     ]
 )
 def retailerReceiptsAdminAPIView(request):
-    # TODO: code reference: implementing apiview with only post method: single url for all requests supplying only an action parameter
-
+    # TODO: code reference: implementing apiview with only post method:
+    # single url for all requests supplying only an action parameter
     try:
         action = request.data["action"]
     except KeyError:
@@ -87,7 +155,7 @@ def retailerReceiptsAdminAPIView(request):
     if request.data["action"] == "CreateRetailerReceipt":
         # retailer_utils.validate_retailer_receipt_data(request.data, request.user)
 
-        errors,retailer_receipt = retailer_utils.create_retailer_receipt_directly(
+        errors, retailer_receipt = retailer_utils.create_retailer_receipt_directly(
             request.data, request.user
         )
         if retailer_receipt:
@@ -100,14 +168,14 @@ def retailerReceiptsAdminAPIView(request):
                 serializer.data,
                 "retailer_receipt",
             )
-
         else:
             return custom_errors_response(
-                1, "Retailer inventory receipt could not be created",errors
+                1, "Retailer inventory receipt could not be created", errors
             )
+
     elif request.data["action"] == "GetRetailerReceipts":
         """Get retailer orders list for both wholesaler and retailer admins"""
- 
+
         retailer_receipts = retailer_utils.get_retailer_receipts(request.user)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_receipts, request)
@@ -115,16 +183,20 @@ def retailerReceiptsAdminAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetProductMovement":
         """Get product movement"""
- 
-        retailer_receipts = retailer_utils.get_product_movement(request.data,request.user)
+
+        retailer_receipts = retailer_utils.get_product_movement(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_receipts, request)
         serializer = serializers.ProductMovementSerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetailerReceiptsByCategory":
         """Get retailer orders list for both wholesaler and retailer admins"""
 
@@ -137,6 +209,7 @@ def retailerReceiptsAdminAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "UpdateRetailerReceipt":
         # utils.validate_retailer_receipt_update_data(request.data)
 
@@ -153,18 +226,16 @@ def retailerReceiptsAdminAPIView(request):
                 serializer.data,
                 "retailer_receipt",
             )
-
         else:
             return custom_errors_response(
-                1, "Retailer inventory receipt could not be updated",errors
+                1, "Retailer inventory receipt could not be updated", errors
             )
-    elif request.data["action"] == "CreatePurchasesReturn":
 
+    elif request.data["action"] == "CreatePurchasesReturn":
         errors, purchases_return = retailer_utils.create_purchases_return(
             request.data, request.user
         )
-        create_log("info",purchases_return)
-       
+        create_log("info", purchases_return)
 
         if purchases_return:
             serializer = serializers.PurchasesReturnsSerializer(
@@ -176,28 +247,32 @@ def retailerReceiptsAdminAPIView(request):
                 serializer.data,
                 "purchases_return",
             )
-
         else:
-            if len(errors)>0:
-                return custom_errors_response(1,"Purchases return not created",errors)
-            
+            if len(errors) > 0:
+                return custom_errors_response(
+                    1, "Purchases return not created", errors
+                )
+
     elif request.data["action"] == "GetPurchasesReturns":
         """Get purchases returns"""
 
-        purchases_returns = models.PurchasesReturns.objects.filter(entity=request.user.entity)
-       
+        purchases_returns = models.PurchasesReturns.objects.filter(
+            entity=request.user.entity
+        )
+
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(purchases_returns, request)
         serializer = serializers.PurchasesReturnsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
-    elif request.data["action"] == "CreateSalesReturn":
 
+    elif request.data["action"] == "CreateSalesReturn":
         errors, sales_return = retailer_utils.create_sales_return(
             request.data, request.user
         )
-       
 
         if sales_return:
             serializer = serializers.SalesReturnsSerializer(
@@ -209,28 +284,32 @@ def retailerReceiptsAdminAPIView(request):
                 serializer.data,
                 "sales_return",
             )
-
         else:
-            if len(errors)>0:
-                return custom_errors_response(1,"Sales return not created",errors)
-            
+            if len(errors) > 0:
+                return custom_errors_response(
+                    1, "Sales return not created", errors
+                )
+
     elif request.data["action"] == "GetSalesReturns":
         """Get sales returns"""
 
-        sales_returns = models.SalesReturns.objects.filter(entity=request.user.entity)
-       
+        sales_returns = models.SalesReturns.objects.filter(
+            entity=request.user.entity
+        )
+
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(sales_returns, request)
         serializer = serializers.SalesReturnsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
-    elif request.data["action"] == "CreateStockAdjustment":
 
+    elif request.data["action"] == "CreateStockAdjustment":
         errors, stock_adjustment = retailer_utils.create_stock_adjustment(
             request.data, request.user
         )
-       
 
         if stock_adjustment:
             serializer = serializers.StockAdjustmentsSerializer(
@@ -242,35 +321,41 @@ def retailerReceiptsAdminAPIView(request):
                 serializer.data,
                 "stock_adjustment",
             )
-
         else:
-            if len(errors)>0:
-                return custom_errors_response(1,"Stock adjusttment not created",errors)
-            
+            if len(errors) > 0:
+                return custom_errors_response(
+                    1, "Stock adjusttment not created", errors
+                )
+
     elif request.data["action"] == "GetStockAdjustments":
         """Get sales returns"""
 
-        stock_adjustments = models.StockAdjustments.objects.filter(entity=request.user.entity)
-       
+        stock_adjustments = models.StockAdjustments.objects.filter(
+            entity=request.user.entity
+        )
+
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(stock_adjustments, request)
         serializer = serializers.StockAdjustmentsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
-    else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
 
+    else:
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
+
+
+# ===========================================================================
+# Client orders (customer-facing)
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes(
-    [
-        permissions.IsAuthenticated,
-       
-    ]
-)
+@permission_classes([permissions.IsAuthenticated])
 def clientOrdersAPIView(request):
-   
     try:
         action = request.data["action"]
     except KeyError:
@@ -309,39 +394,53 @@ def clientOrdersAPIView(request):
                 "customer_order",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Customer order not created",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Customer order not created", errors
+            )
+
     elif request.data["action"] == "RetrieveOwnOrders":
         """Get entity orders"""
-        own_orders = retailer_utils.get_own_orders(request.data, request.user)
+
+        own_orders = retailer_utils.get_own_orders(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(own_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data)    
-    else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        return paginator.get_paginated_response(serializer.data)
 
+    else:
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
+
+
+# ===========================================================================
+# Joint retailer / wholesaler receipts
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes(
-    [
-        permissions.IsAuthenticated,
-          retail_permissions.EntitySubscriptionPermission
-    ]
+    [permissions.IsAuthenticated, retail_permissions.EntitySubscriptionPermission]
 )
 def retailerReceiptsJointAPIView(request):
     def get_category(retailer_receipt):
         return retailer_receipt.product.category
 
     def get_receipts_for_category(retailer_receipts_list, category):
-        retailer_receipts = retailer_receipts_list.filter(product__category=category)
+        retailer_receipts = retailer_receipts_list.filter(
+            product__category=category
+        )
         print("retailer_receipts hre", retailer_receipts)
         return retailer_receipts
 
-    # TODO: code reference: implementing apiview with only post method: single url for all requests supplying only an action parameter
-
+    # TODO: code reference: implementing apiview with only post method:
+    # single url for all requests supplying only an action parameter
     try:
         action = request.data["action"]
     except KeyError:
@@ -357,6 +456,7 @@ def retailerReceiptsJointAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     if request.data["action"] == "RetailerReceiptsByCategory":
         """Get retailer orders list for both wholesaler and retailer admins"""
 
@@ -369,6 +469,7 @@ def retailerReceiptsJointAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetRetailerReceiptsForEntity":
         """Get retailer receipts for an entity"""
 
@@ -390,6 +491,7 @@ def retailerReceiptsJointAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetRetailerReceiptDetails":
         # check_user_is_wholesale_admin(request.data, request.user)
 
@@ -401,77 +503,125 @@ def retailerReceiptsJointAPIView(request):
                 retailer_receipt, many=False, context={"request": request}
             )
             return custom_success_message(
-                0, "Receipt sucessfuly retrieved", serializer.data, "retailer_receipt"
+                0,
+                "Receipt sucessfuly retrieved",
+                serializer.data,
+                "retailer_receipt",
             )
-
         else:
             return custom_error_response(1, "Order not retrieved")
+
     elif request.data["action"] == "CheckItemStock":
         # Check inventory item availability
-        retailer_receipt=None
-        if "retailer_receipt_id" in request.data and not request.data["retailer_receipt_id"]=="":
-            retailer_receipt_id= request.data["retailer_receipt_id"]
-            if models.RetailerReceipts.objects.filter(id=retailer_receipt_id).exists():
-                retailer_receipt=models.RetailerReceipts.objects.filter(id=retailer_receipt_id).first()
-                return custom_json_response(0,"Product succesfully retrieved","retailer_receipt",{
-                    "id":retailer_receipt.id,
-                    "title":retailer_receipt.product.title,
-                    "pack_quantity": int(retailer_receipt.pack_quantity),
-                    "current_unit_quantity":int(retailer_receipt.current_unit_quantity),
-                    "unit_selling_price":float(retailer_receipt.unit_selling_price)
-                })
-
+        retailer_receipt = None
+        if (
+            "retailer_receipt_id" in request.data
+            and not request.data["retailer_receipt_id"] == ""
+        ):
+            retailer_receipt_id = request.data["retailer_receipt_id"]
+            if models.RetailerReceipts.objects.filter(
+                id=retailer_receipt_id
+            ).exists():
+                retailer_receipt = models.RetailerReceipts.objects.filter(
+                    id=retailer_receipt_id
+                ).first()
+                return custom_json_response(
+                    0,
+                    "Product succesfully retrieved",
+                    "retailer_receipt",
+                    {
+                        "id": retailer_receipt.id,
+                        "title": retailer_receipt.product.title,
+                        "pack_quantity": int(retailer_receipt.pack_quantity),
+                        "current_unit_quantity": int(
+                            retailer_receipt.current_unit_quantity
+                        ),
+                        "unit_selling_price": float(
+                            retailer_receipt.unit_selling_price
+                        ),
+                    },
+                )
             else:
-                 return custom_error_response(1, "No product for provided ID")
+                return custom_error_response(
+                    1, "No product for provided ID"
+                )
+
     elif request.data["action"] == "CheckStockStatusBatch":
         # Check inventory item availability
-        retailer_receipt=None
-        retailer_receipts_list=[]
-        if "retailer_receipt_items" in request.data and not request.data["retailer_receipt_items"]=="":
-            items= request.data["retailer_receipt_items"]
+        retailer_receipt = None
+        retailer_receipts_list = []
+        if (
+            "retailer_receipt_items" in request.data
+            and not request.data["retailer_receipt_items"] == ""
+        ):
+            items = request.data["retailer_receipt_items"]
             for item in items:
-                retailer_receipt_json={}
+                retailer_receipt_json = {}
                 if models.RetailerReceipts.objects.filter(id=item).exists():
-                    retailer_receipt=models.RetailerReceipts.objects.filter(id=item).first()
-                    retailer_receipt_json={
-                        "id":retailer_receipt.id,
-                        "title":retailer_receipt.product.title,
+                    retailer_receipt = models.RetailerReceipts.objects.filter(
+                        id=item
+                    ).first()
+                    retailer_receipt_json = {
+                        "id": retailer_receipt.id,
+                        "title": retailer_receipt.product.title,
                         "pack_quantity": int(retailer_receipt.pack_quantity),
-                        "unit_quantity":int(retailer_receipt.unit_quantity),
-                        "loose_units_quantity":int(retailer_receipt.unit_quantity -(retailer_receipt.pack_quantity * retailer_receipt.product.units_per_pack)),
-                        "pack_selling_price": float(retailer_receipt.pack_selling_price),
-                        "unit_selling_price":float(retailer_receipt.unit_selling_price)
+                        "unit_quantity": int(retailer_receipt.unit_quantity),
+                        "loose_units_quantity": int(
+                            retailer_receipt.unit_quantity
+                            - (
+                                retailer_receipt.pack_quantity
+                                * retailer_receipt.product.units_per_pack
+                            )
+                        ),
+                        "pack_selling_price": float(
+                            retailer_receipt.pack_selling_price
+                        ),
+                        "unit_selling_price": float(
+                            retailer_receipt.unit_selling_price
+                        ),
                     }
                     retailer_receipts_list.append(retailer_receipt_json)
                 else:
                     pass
-        if len(retailer_receipts_list)>0:
-            return custom_json_response(0,"Stock status succesfully retrieved","retailer_receipts",retailer_receipts_list)
-
+        if len(retailer_receipts_list) > 0:
+            return custom_json_response(
+                0,
+                "Stock status succesfully retrieved",
+                "retailer_receipts",
+                retailer_receipts_list,
+            )
         else:
             return custom_error_response(1, "Stock status not retrieved")
+
     elif request.data["action"] == "SearchRetailerReceipts":
         """Get retailer orders list for both wholesaler and retailer admins"""
 
-        retailer_receipts = retailer_utils.search_receipts(request.data, request.user)
+        retailer_receipts = retailer_utils.search_receipts(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_receipts, request)
         serializer = serializers.RetailerReceiptsSerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "SearchRetailerReceiptsByCustomer":
         """Search for retailer receipts accross vendors by customer"""
 
-        retailer_receipts = retailer_utils.search_receipts_by_customer(request.data, request.user)
+        retailer_receipts = retailer_utils.search_receipts_by_customer(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_receipts, request)
         serializer = serializers.RetailerReceiptsSerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetRetailerAllowedCategories":
         """Get retailer allowed categories"""
+
         allowed_categories = []
         entity = None
         if "entity" in request.data and not request.data["entity"] == "":
@@ -484,26 +634,34 @@ def retailerReceiptsJointAPIView(request):
                 allowed_categories, many=True, context={"request": request}
             )
             return customer_order_responses.custom_success_message(
-                0, "Categories retrieved successfully", serializer.data, "categories"
+                0,
+                "Categories retrieved successfully",
+                serializer.data,
+                "categories",
             )
         else:
             raise exceptions.ValidationError("gxv ")
 
     else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
 
+
+# ===========================================================================
+# Staff — indents / orders / prescriptions
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes([  retail_permissions.EntitySubscriptionPermission,
-                    ])
+@permission_classes([retail_permissions.EntitySubscriptionPermission])
 def customerOrdersStaffAPIView(request):
     customer_orders = []
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
     if request.data["action"] == "CreateRetailerIndent":
-     
         errors, retailer_indent = retailer_utils.create_retailer_indent(
             request.data, request.user
         )
@@ -518,10 +676,12 @@ def customerOrdersStaffAPIView(request):
                 "retailer_indent",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Customer order not created",errors)
-    elif request.data["action"] == "CreateEstimateIndent":
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Customer order not created", errors
+            )
 
+    elif request.data["action"] == "CreateEstimateIndent":
         errors, retailer_indent = retailer_utils.create_estimate_indent(
             request.data, request.user
         )
@@ -536,11 +696,12 @@ def customerOrdersStaffAPIView(request):
                 "retailer_indent",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Customer order not created",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Customer order not created", errors
+            )
 
     elif request.data["action"] == "CloseRetailerIndent":
-     
         errors, retailer_indent = retailer_utils.close_retailer_indent(
             request.data, request.user
         )
@@ -555,44 +716,61 @@ def customerOrdersStaffAPIView(request):
                 "retailer_indent",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Retailerindent not closed",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Retailerindent not closed", errors
+            )
+
     # elif request.data["action"] == "RetrieveRetailerIndentItems":
     #     """Retrieve retailer indents"""
-
+    #
     #     retailer_indents = retailer_utils.retrieve_retailer_indent_items( request.data)
     #     paginator = PageNumberPagination()
     #     page = paginator.paginate_queryset(retailer_indents, request)
     #     serializer = serializers.RetailerIndentItemsSerializer(
     #         page, many=True, context={"request": request, "user": request.user}
     #     )
-    #     return paginator.get_paginated_response(serializer.data) 
+    #     return paginator.get_paginated_response(serializer.data)
 
     elif request.data["action"] == "RetrieveRetailerIndentItems":
         """Retrieve retailer indents"""
 
-        retailer_indent_items = retailer_utils.retrieve_retailer_indent_items( request.data)
+        retailer_indent_items = retailer_utils.retrieve_retailer_indent_items(
+            request.data
+        )
 
         if retailer_indent_items:
-            return custom_json_response(0,"Items succesfully retrieved","data", retailer_indent_items)
-        else:    
+            return custom_json_response(
+                0,
+                "Items succesfully retrieved",
+                "data",
+                retailer_indent_items,
+            )
+        else:
             return customer_order_responses.custom_error_response(
-                    1, "Estimtes not retrieved"
-                )
-        
+                1, "Estimtes not retrieved"
+            )
+
     elif request.data["action"] == "RetrieveRetailerIndents":
         """Retrieve retailer indents"""
 
-        retailer_indents = retailer_utils.retrieve_retailer_indents( request.user)
+        retailer_indents = retailer_utils.retrieve_retailer_indents(
+            request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_indents, request)
         serializer = serializers.RetailerIndentSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "CreateRetailerIndentItem":
-        errors, retailer_indent_item = retailer_utils.create_retailer_indent_item(
-            request.data, request.user
+        errors, retailer_indent_item = (
+            retailer_utils.create_retailer_indent_item(
+                request.data, request.user
+            )
         )
         if retailer_indent_item:
             serializer = serializers.RetailerIndentItemsSerializer(
@@ -605,11 +783,16 @@ def customerOrdersStaffAPIView(request):
                 "retailer_indent_item",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Indent item not created",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Indent item not created", errors
+            )
+
     elif request.data["action"] == "UpdateRetailerIndentItem":
-        errors, retailer_indent_item = retailer_utils.update_retailer_indent_item(
-            request.data, request.user
+        errors, retailer_indent_item = (
+            retailer_utils.update_retailer_indent_item(
+                request.data, request.user
+            )
         )
         if retailer_indent_item:
             serializer = serializers.RetailerIndentItemsSerializer(
@@ -626,13 +809,14 @@ def customerOrdersStaffAPIView(request):
 
         if len(errors) > 0:
             return custom_errors_response(
-                1,
-                "Indent item not updated",
-                errors,
+                1, "Indent item not updated", errors
             )
+
     elif request.data["action"] == "RemoveRetailerIndentItem":
-        errors, retailer_indent_items = retailer_utils.remove_retailer_indent_item(
-            request.data, request.user
+        errors, retailer_indent_items = (
+            retailer_utils.remove_retailer_indent_item(
+                request.data, request.user
+            )
         )
         if retailer_indent_items:
             serializer = serializers.RetailerIndentItemsSerializer(
@@ -645,10 +829,12 @@ def customerOrdersStaffAPIView(request):
                 "indent_items",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Indent item not deleted",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Indent item not deleted", errors
+            )
+
     elif request.data["action"] == "CreateOutOfStockItem":
-    
         errors, out_of_stock_item = retailer_utils.create_out_of_stock_item(
             request.data, request.user
         )
@@ -663,13 +849,15 @@ def customerOrdersStaffAPIView(request):
                 "out_of_stock_item",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Out of stock item not created",errors)
-    
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Out of stock item not created", errors
+            )
+
     elif request.data["action"] == "RetrieveCurrentOpenIndent":
         """Retrieve currently open indent"""
 
-        errors,open_indent = retailer_utils.retrieve_open_indent( request.user)
+        errors, open_indent = retailer_utils.retrieve_open_indent(request.user)
 
         if open_indent:
             serializer = serializers.RetailerIndentSerializer(
@@ -682,11 +870,10 @@ def customerOrdersStaffAPIView(request):
                 "indent",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"No open indent",errors)
-        
+        if len(errors) > 0:
+            return custom_errors_response(1, "No open indent", errors)
+
     elif request.data["action"] == "CloseIndent":
-    
         errors, retailer_orders = retailer_utils.close_indent(
             request.data, request.user
         )
@@ -701,10 +888,12 @@ def customerOrdersStaffAPIView(request):
                 "retailer_orders",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Retailer indent not closed",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Retailer indent not closed", errors
+            )
+
     elif request.data["action"] == "UpdateOutOfStockItem":
-    
         errors, out_of_stock_item = retailer_utils.update_out_of_stock_item(
             request.data, request.user
         )
@@ -719,15 +908,17 @@ def customerOrdersStaffAPIView(request):
                 "out_of_stock_item",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Out of stock item not updated",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Out of stock item not updated", errors
+            )
+
     elif request.data["action"] == "MakeRetailerOrderPayment":
-    
         errors, retailer_order = retailer_utils.make_retailer_order_payment(
             request.data, request.user
         )
         if retailer_order:
-            serializer =RetailerOrdersSerializer(
+            serializer = RetailerOrdersSerializer(
                 retailer_order, many=False, context={"request": request}
             )
             return custom_success_message(
@@ -737,40 +928,60 @@ def customerOrdersStaffAPIView(request):
                 "retailer_order",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Retailer order payment process failed",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Retailer order payment process failed", errors
+            )
+
     elif request.data["action"] == "RetrieveOutOfStockItems":
         """Retrieve list of all out of stock items"""
 
-        retailer_orders = retailer_utils.retrieve_out_of_stock_items( request.user)
+        retailer_orders = retailer_utils.retrieve_out_of_stock_items(
+            request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_orders, request)
         serializer = serializers.OutOfStocksSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveRetailerOrders":
         """Retrieve list of retailer orders"""
 
-        retailer_orders = retailer_utils.retrieve_retailer_orders( request.user)
+        retailer_orders = retailer_utils.retrieve_retailer_orders(
+            request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_orders, request)
-        serializer =RetailerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+        serializer = RetailerOrdersSerializer(
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetRetailerOrderDetails":
         """Retrieve list of retailer orders"""
 
-        retailer_order_items = retailer_utils.retrieve_retailer_order_items( request.data)
+        retailer_order_items = retailer_utils.retrieve_retailer_order_items(
+            request.data
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_order_items, request)
-        serializer =RetailerOrdersSerializer(
-            page, many=False, context={"request": request, "user": request.user}
+        serializer = RetailerOrdersSerializer(
+            page,
+            many=False,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "CreateCustomerOrder":
-        retailer_utils.validate_customer_order_data(request.data, request.user)
+        retailer_utils.validate_customer_order_data(
+            request.data, request.user
+        )
 
         errors, customer_order = retailer_utils.create_customer_order(
             request.data, request.user
@@ -787,16 +998,18 @@ def customerOrdersStaffAPIView(request):
                 serializer.data,
                 "customer_order",
             )
-
         else:
-            if len(errors)>0:
-                return custom_errors_response(1,"Customer order not created",errors)
-    elif request.data["action"] == "CreateExpressCustomerOrder":
+            if len(errors) > 0:
+                return custom_errors_response(
+                    1, "Customer order not created", errors
+                )
 
-        errors, customer_order = retailer_utils.create_express_customer_order_data(
-            request.data, request.user
+    elif request.data["action"] == "CreateExpressCustomerOrder":
+        errors, customer_order = (
+            retailer_utils.create_express_customer_order_data(
+                request.data, request.user
+            )
         )
-       
 
         if customer_order:
             serializer = serializers.CustomerOrdersSerializer(
@@ -808,10 +1021,12 @@ def customerOrdersStaffAPIView(request):
                 serializer.data,
                 "customer_order",
             )
-
         else:
-            if len(errors)>0:
-                return custom_errors_response(1,"Customer order not created",errors)
+            if len(errors) > 0:
+                return custom_errors_response(
+                    1, "Customer order not created", errors
+                )
+
     elif request.data["action"] == "UpdateCustomerOrder":
         # retailer_utils.validate_customer_order_data(request.data, request.user)
 
@@ -830,39 +1045,54 @@ def customerOrdersStaffAPIView(request):
                 "customer_order",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Customer order not updated",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Customer order not updated", errors
+            )
+
     elif request.data["action"] == "RetrieveEmployeeOrders":
         """Get entity orders"""
 
-        employee_orders = retailer_utils.get_employee_orders(request.data, request.user)
+        employee_orders = retailer_utils.get_employee_orders(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(employee_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "SearchCustomerOrders":
         """Search retailer orders """
 
         retailer_orders = retailer_utils.search_customer_orders(
-            request.data, request.user)
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveOwnOrders":
         """Get own orders orders"""
 
-        employee_orders = retailer_utils.get_own_orders(request.data, request.user)
+        employee_orders = retailer_utils.get_own_orders(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(employee_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "ChangeOrderPaymentMethod":
         # utils.validate_order_payment_method_data(request.data)
         customer_order = retailer_utils.update_customer_order(
@@ -882,11 +1112,14 @@ def customerOrdersStaffAPIView(request):
             return customer_order_responses.custom_error_response(
                 1, "Customer order could not be updated"
             )
+
     elif request.data["action"] == "CustomerOrderDetails":
         customer_order = None
         try:
             customer_order_id = request.data["customer_order"]
-            if models.CustomerOrders.objects.filter(id=customer_order_id).exists():
+            if models.CustomerOrders.objects.filter(
+                id=customer_order_id
+            ).exists():
                 customer_order = models.CustomerOrders.objects.filter(
                     id=customer_order_id
                 ).first()
@@ -905,47 +1138,65 @@ def customerOrdersStaffAPIView(request):
                 )
 
         except KeyError:
-            raise exceptions.ValidationError("Customer order ID are required")
+            raise exceptions.ValidationError(
+                "Customer order ID are required"
+            )
+
     elif request.data["action"] == "GenerateOrderItemEstimates":
-        order_estimates =  retailer_utils.generate_order_estimates(
+        order_estimates = retailer_utils.generate_order_estimates(
             request.data, request.user, request
         )
-      
+
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(order_estimates, request)
         serializer = serializers.OrderEstimateSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveProductWholesaleOffers":
-        errors, offers =  retailer_utils.retrieve_product_wholesale_offers(
+        errors, offers = retailer_utils.retrieve_product_wholesale_offers(
             request.data, request.user
         )
         if offers:
             paginator = PageNumberPagination()
             page = paginator.paginate_queryset(offers, request)
             serializer = serializers.WholesalerReceiptsDisplaySerializer(
-                page, many=True, context={"request": request, "user": request.user}
+                page,
+                many=True,
+                context={"request": request, "user": request.user},
             )
             return paginator.get_paginated_response(serializer.data)
-        else:    
+        else:
             return custom_errors_response(
-                    1, "Wholesale offers not retrieved",errors
-                )
-    
-    
-    else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+                1, "Wholesale offers not retrieved", errors
+            )
 
+    else:
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
+
+
+# ===========================================================================
+# Wholesaler invoices
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes([retail_permissions.RetailEmployeePermission,
-                       retail_permissions.EntitySubscriptionPermission])
+@permission_classes(
+    [
+        retail_permissions.RetailEmployeePermission,
+        retail_permissions.EntitySubscriptionPermission,
+    ]
+)
 def retailerInvoicesAPIView(request):
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
     if request.data["action"] == "CreateWholesalerInvoice":
         invoice = wholesaler_invoice_utils.create_wholesaler_invoice(
             request.data, request.user
@@ -960,16 +1211,27 @@ def retailerInvoicesAPIView(request):
                 serializer.data,
                 "invoice",
             )
-
         else:
-            return custom_error_response(1, "Wholesaler invoice could not be created")
+            return custom_error_response(
+                1, "Wholesaler invoice could not be created"
+            )
     else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
 
+
+# ===========================================================================
+# Admin — customer orders
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes([retail_permissions.RetailAdminPermission,  
-                     retail_permissions.EntitySubscriptionPermission])
+@permission_classes(
+    [
+        retail_permissions.RetailAdminPermission,
+        retail_permissions.EntitySubscriptionPermission,
+    ]
+)
 def customerOrdersAdminAPIView(request):
     customer_orders = []
     try:
@@ -980,63 +1242,95 @@ def customerOrdersAdminAPIView(request):
     if request.data["action"] == "RetrieveEmployeeOrders":
         """Get entity orders"""
 
-        employee_orders = retailer_utils.get_employee_orders(request.data, request.user)
+        employee_orders = retailer_utils.get_employee_orders(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(employee_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveEntityOrders":
         """Get employee's orders"""
-        customer_orders = retailer_utils.get_entity_orders(request.user, request.data)
+
+        customer_orders = retailer_utils.get_entity_orders(
+            request.user, request.data
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveCustomerOrderPayments":
         """Get customer orders"""
 
-        customer_order_payments = retailer_utils.get_customer_order_payments(request.data, request.user)
+        customer_order_payments = retailer_utils.get_customer_order_payments(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_order_payments, request)
         serializer = serializers.CustomerOrderPaymentsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveCustomerOrderSettlements":
         """Get customer orders"""
 
-        customer_order_settlements = retailer_utils.get_customer_order_settlements(request.data, request.user)
+        customer_order_settlements = (
+            retailer_utils.get_customer_order_settlements(
+                request.data, request.user
+            )
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_order_settlements, request)
         serializer = serializers.CustomerOrderSettlementSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveCustomerOrders":
         """Get customer orders"""
 
-        customer_orders = retailer_utils.get_customer_orders(request.data, request.user)
+        customer_orders = retailer_utils.get_customer_orders(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
 
     elif request.data["action"] == "GetBodabodaDeliveries":
         """Get customer orders"""
 
-        bodaboda_deliveries = retailer_utils.get_bodaboda_deliveries(request.data, request.user)
+        bodaboda_deliveries = retailer_utils.get_bodaboda_deliveries(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(bodaboda_deliveries, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveCustomerOrderItems":
         """Get customer order items"""
 
@@ -1047,7 +1341,9 @@ def customerOrdersAdminAPIView(request):
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_order_items, request)
         serializer = serializers.CustomerOrderItemsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
 
@@ -1055,7 +1351,9 @@ def customerOrdersAdminAPIView(request):
         customer_order = None
         try:
             customer_order_id = request.data["customer_order"]
-            if models.CustomerOrders.objects.filter(id=customer_order_id).exists():
+            if models.CustomerOrders.objects.filter(
+                id=customer_order_id
+            ).exists():
                 customer_order = models.CustomerOrders.objects.filter(
                     id=customer_order_id
                 ).first()
@@ -1074,7 +1372,10 @@ def customerOrdersAdminAPIView(request):
                 )
 
         except KeyError:
-            raise exceptions.ValidationError("Customer order ID are required")
+            raise exceptions.ValidationError(
+                "Customer order ID are required"
+            )
+
     elif request.data["action"] == "AddShippingCostByDistance":
         errors = []
         entity_id = None
@@ -1102,7 +1403,10 @@ def customerOrdersAdminAPIView(request):
             distance_in_km_to = request.data["distance_in_km_to"]
         else:
             errors.append("Maximum distance is required")
-        if "shipping_cost" in request.data and not request.data["shipping_cost"] == "":
+        if (
+            "shipping_cost" in request.data
+            and not request.data["shipping_cost"] == ""
+        ):
             shipping_cost = request.data["shipping_cost"]
         else:
             errors.append("Shipping cost is required")
@@ -1134,15 +1438,27 @@ def customerOrdersAdminAPIView(request):
                     )
 
             except Exception as e:
-                raise exceptions.ValidationError(f"Could not create shipping cost: {e}")
+                raise exceptions.ValidationError(
+                    f"Could not create shipping cost: {e}"
+                )
 
     else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
 
+
+# ===========================================================================
+# Customer orders (customer-facing)
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes([  retail_permissions.EntitySubscriptionPermission,
-                     permissions.IsAuthenticated])
+@permission_classes(
+    [
+        retail_permissions.EntitySubscriptionPermission,
+        permissions.IsAuthenticated,
+    ]
+)
 def customerOrdersAPIView(request):
     customer_orders = []
     try:
@@ -1152,6 +1468,7 @@ def customerOrdersAPIView(request):
 
     if request.data["action"] == "GetOrderShippngCostByDistance":
         """Get customer order shipping by distance"""
+
         entity_id = None
         entity = None
 
@@ -1172,11 +1489,13 @@ def customerOrdersAPIView(request):
                 distance_in_km_to__gte=distance,
                 entity=entity,
             ).exists():
-                shipping_cost_obj = models.RetailersShippingRates.objects.filter(
-                    distance_in_km_from__lte=distance,
-                    distance_in_km_to__gte=distance,
-                    entity=entity,
-                ).first()
+                shipping_cost_obj = (
+                    models.RetailersShippingRates.objects.filter(
+                        distance_in_km_from__lte=distance,
+                        distance_in_km_to__gte=distance,
+                        entity=entity,
+                    ).first()
+                )
                 shipping_cost = shipping_cost_obj.shipping_cost
             else:
                 raise exceptions.ValidationError(
@@ -1198,12 +1517,12 @@ def customerOrdersAPIView(request):
 
     elif request.data["action"] == "MakeCustomerOrderPayment":
         """ Customer order payment"""
-    
+
         errors, retailer_order = retailer_utils.make_customer_order_payment(
             request.data, request.user
         )
         if retailer_order:
-            serializer =serializers.CustomerOrdersSerializer(
+            serializer = serializers.CustomerOrdersSerializer(
                 retailer_order, many=False, context={"request": request}
             )
             return custom_success_message(
@@ -1213,33 +1532,54 @@ def customerOrdersAPIView(request):
                 "customer_order",
             )
 
-        if len(errors)>0:
-            return custom_errors_response(1,"Customer order payment process failed",errors)
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Customer order payment process failed", errors
+            )
+
     elif request.data["action"] == "RetrieveOwnOrders":
         """Get entity orders"""
-        own_orders = retailer_utils.get_own_orders(request.data, request.user)
+
+        own_orders = retailer_utils.get_own_orders(
+            request.data, request.user
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(own_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
-    else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
 
+    else:
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
+
+
+# ===========================================================================
+# Prescriptions (remote API)
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes([  retail_permissions.EntitySubscriptionPermission, 
-                     permissions.IsAuthenticated])
+@permission_classes(
+    [
+        retail_permissions.EntitySubscriptionPermission,
+        permissions.IsAuthenticated,
+    ]
+)
 def remoteRetailPrescriptionsAPIView(request):
-
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
     if request.data["action"] == "UpdateRetailPrescription":
-        errors, prescription = retail_prescriptions_utils.update_retail_prescription(
-            request.data, request.user
+        errors, prescription = (
+            retail_prescriptions_utils.update_retail_prescription(
+                request.data, request.user
+            )
         )
         if prescription:
             serializer = serializers.RetailPrescriptionsSerializer(
@@ -1252,10 +1592,15 @@ def remoteRetailPrescriptionsAPIView(request):
                 "prescription",
             )
         else:
-            return custom_errors_response(1,"Retail prescription not created",errors)
+            return custom_errors_response(
+                1, "Retail prescription not created", errors
+            )
+
     elif request.data["action"] == "GetRetailPrescriptionDetails":
-        errors, prescription = retail_prescriptions_utils.get_retail_prescription_details(
-            request.data, request.user
+        errors, prescription = (
+            retail_prescriptions_utils.get_retail_prescription_details(
+                request.data, request.user
+            )
         )
         if prescription:
             serializer = serializers.RetailPrescriptionsSerializer(
@@ -1268,10 +1613,15 @@ def remoteRetailPrescriptionsAPIView(request):
                 "prescription",
             )
         else:
-            return custom_errors_response(1,"Retail prescription not retrieved",errors)
+            return custom_errors_response(
+                1, "Retail prescription not retrieved", errors
+            )
+
     elif request.data["action"] == "MakePrescriptionOrderPayment":
-        errors, customer_order = retail_prescriptions_utils.make_prescription_order_payment(
-            request.data, request.user
+        errors, customer_order = (
+            retail_prescriptions_utils.make_prescription_order_payment(
+                request.data, request.user
+            )
         )
         if customer_order:
             serializer = serializers.CustomerOrdersSerializer(
@@ -1284,11 +1634,15 @@ def remoteRetailPrescriptionsAPIView(request):
                 "customer_order",
             )
         else:
-            return custom_errors_response(1,"Prescriptiom order not updated",errors)
-        
+            return custom_errors_response(
+                1, "Prescriptiom order not updated", errors
+            )
+
     if request.data["action"] == "UpdateRetailPrescriptionItem":
-        errors, prescription_item = retail_prescriptions_utils.update_retail_prescription_item(
-            request.data, request.user
+        errors, prescription_item = (
+            retail_prescriptions_utils.update_retail_prescription_item(
+                request.data, request.user
+            )
         )
         if prescription_item:
             serializer = serializers.PrescriptionItemsSerializer(
@@ -1301,10 +1655,15 @@ def remoteRetailPrescriptionsAPIView(request):
                 "prescription_item",
             )
         else:
-            return custom_errors_response(1,"Retail prescription item not updated",errors)  
+            return custom_errors_response(
+                1, "Retail prescription item not updated", errors
+            )
+
     elif request.data["action"] == "RemoveRetailPrescriptionItem":
-        errors, prescription = retail_prescriptions_utils.remove_retail_prescription_item(
-            request.data, request.user
+        errors, prescription = (
+            retail_prescriptions_utils.remove_retail_prescription_item(
+                request.data, request.user
+            )
         )
         if prescription:
             serializer = serializers.RetailPrescriptionsSerializer(
@@ -1317,10 +1676,15 @@ def remoteRetailPrescriptionsAPIView(request):
                 "prescription",
             )
         else:
-            return custom_errors_response(1,"Retail prescription not updated",errors)
+            return custom_errors_response(
+                1, "Retail prescription not updated", errors
+            )
+
     elif request.data["action"] == "CreateOrUpdatePrescriptionOrderItem":
-        errors, prescription = retail_prescriptions_utils.create_or_update_prescription_order_item(
-            request.data, request.user
+        errors, prescription = (
+            retail_prescriptions_utils.create_or_update_prescription_order_item(
+                request.data, request.user
+            )
         )
         if prescription:
             serializer = serializers.RetailPrescriptionsSerializer(
@@ -1333,42 +1697,66 @@ def remoteRetailPrescriptionsAPIView(request):
                 "prescription",
             )
         else:
-            return custom_errors_response(1,"Retail prescription order not updated",errors)
-    
+            return custom_errors_response(
+                1, "Retail prescription order not updated", errors
+            )
+
     elif request.data["action"] == "RetrieveEntityRetailPrescriptions":
         """Retrieve entity retail prescriptions"""
 
-        customer_orders = retail_prescriptions_utils.get_entity_retail_prescriptions(request.data, request.user)
+        customer_orders = (
+            retail_prescriptions_utils.get_entity_retail_prescriptions(
+                request.data, request.user
+            )
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_orders, request)
         serializer = serializers.RetailPrescriptionsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "RetrieveUserRetailPrescriptions":
         """Retrieve user retail prescriptions"""
 
-        customer_orders = retail_prescriptions_utils.get_user_retail_prescriptions(request.data, request.user)
+        customer_orders = (
+            retail_prescriptions_utils.get_user_retail_prescriptions(
+                request.data, request.user
+            )
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(customer_orders, request)
         serializer = serializers.RetailPrescriptionsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetRelatedEntityInventoryForProduct":
         """Retrieve user retail prescriptions"""
 
-        retailer_receipts = retail_prescriptions_utils.get_related_inventory_for_product(request.data, request.user)
+        retailer_receipts = (
+            retail_prescriptions_utils.get_related_inventory_for_product(
+                request.data, request.user
+            )
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_receipts, request)
         serializer = RetailerReceiptsSerializer(
-            page, many=True, context={"request": request, "user": request.user}
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
-        return paginator.get_paginated_response(serializer.data) 
-    
+        return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "CreateRetailPrescriptionItem":
-        errors, prescription = retail_prescriptions_utils.create_retail_prescription_item(
-            request.data, request.user
+        errors, prescription = (
+            retail_prescriptions_utils.create_retail_prescription_item(
+                request.data, request.user
+            )
         )
         if prescription:
             serializer = serializers.RetailPrescriptionsSerializer(
@@ -1380,18 +1768,26 @@ def remoteRetailPrescriptionsAPIView(request):
                 serializer.data,
                 "prescription",
             )
-        if len(errors)>0:
-            return custom_errors_response(1,"Retail prescription item not created",errors)     
-    
-    else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        if len(errors) > 0:
+            return custom_errors_response(
+                1, "Retail prescription item not created", errors
+            )
 
+    else:
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
+
+
+# ===========================================================================
+# Shipping rates
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes(
     [
-         retail_permissions.EntitySubscriptionPermission,
-           retail_permissions.RetailAdminPermission,
+        retail_permissions.EntitySubscriptionPermission,
+        retail_permissions.RetailAdminPermission,
     ]
 )
 def retailersShippinRatesAPIView(request):
@@ -1405,8 +1801,10 @@ def retailersShippinRatesAPIView(request):
             request.data, request.user
         )
 
-        shipping_rate = retailers_shipping_rates_utils.create_retailer_shipping_rate(
-            request.data, request.user
+        shipping_rate = (
+            retailers_shipping_rates_utils.create_retailer_shipping_rate(
+                request.data, request.user
+            )
         )
         if shipping_rate:
             serializer = serializers.RetailerShippingRatesSerializer(
@@ -1418,11 +1816,11 @@ def retailersShippinRatesAPIView(request):
                 serializer.data,
                 "retailer_receipt",
             )
-
         else:
             return custom_error_response(
                 1, "Retailer shipping rate could not be created"
             )
+
     elif request.data["action"] == "GetConstituencyShippingRates":
         """Get entity shipping rates for each constituency"""
 
@@ -1435,8 +1833,14 @@ def retailersShippinRatesAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
-    
+        raise exceptions.ValidationError(
+            f'Action {request.data["action"]} is unknown'
+        )
+
+
+# ===========================================================================
+# Prescriptions — create (multipart)
+# ===========================================================================
 
 class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
     """
@@ -1444,8 +1848,10 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
     """
 
     name = "retail-prescription-create"
-    permission_classes = (  retail_permissions.EntitySubscriptionPermission, 
-                          permissions.IsAuthenticated,)
+    permission_classes = (
+        retail_permissions.EntitySubscriptionPermission,
+        permissions.IsAuthenticated,
+    )
     serializer_class = serializers.RetailPrescriptionsSerializer
     parser_classes = (MultiPartParser, FormParser)
 
@@ -1453,35 +1859,41 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         dependant = None
         retailer = None
         origin_latitude = None
-        origin_longitude=None
-        errors_messages=[]
-        origin_point=None
-        destination_point=None
+        origin_longitude = None
+        errors_messages = []
+        origin_point = None
+        destination_point = None
         dependant_id = request.POST.get("patient", None)
-        pharmacy_id=None
-        create_log("info",request.data)
-        create_log("info",request.FILES)
- 
+        pharmacy_id = None
+        create_log("info", request.data)
+        create_log("info", request.FILES)
 
-        
-        origin_latitude =request.POST.get("origin_latitude", None)
-        origin_longitude =request.POST.get("origin_longitude", None)
+        origin_latitude = request.POST.get("origin_latitude", None)
+        origin_longitude = request.POST.get("origin_longitude", None)
         if origin_latitude and origin_longitude:
-            origin_point = fromstr(f"POINT({origin_longitude} {origin_latitude})", srid=4326)
-        
-        destination_latitude =request.POST.get("destination_latitude", None)
-        destination_longitude =request.POST.get("destination_longitude", None)
+            origin_point = fromstr(
+                f"POINT({origin_longitude} {origin_latitude})", srid=4326
+            )
+
+        destination_latitude = request.POST.get("destination_latitude", None)
+        destination_longitude = request.POST.get("destination_longitude", None)
         if destination_latitude and destination_longitude:
-            destination_point = fromstr(f"POINT({origin_longitude} {origin_latitude})", srid=4326)        
+            destination_point = fromstr(
+                f"POINT({origin_longitude} {origin_latitude})", srid=4326
+            )
 
         if dependant_id:
-            dependant = authentication_models_validators.validate_dependant(dependant_id)
+            dependant = authentication_models_validators.validate_dependant(
+                dependant_id
+            )
 
         pharmacy_id = request.POST.get("entity", None)
         if pharmacy_id:
-            print("pharmacy_id",pharmacy_id)
-            retailer = authentication_models_validators.validate_entity(pharmacy_id)
-            if retailer and not retailer.entity_type =="PHARMACY":
+            print("pharmacy_id", pharmacy_id)
+            retailer = authentication_models_validators.validate_entity(
+                pharmacy_id
+            )
+            if retailer and not retailer.entity_type == "PHARMACY":
                 errors_messages.append("Selected entity is not a pharmacy")
                 return Response(
                     data={
@@ -1503,12 +1915,21 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 },
                 status=status.HTTP_200_OK,
             )
-        
+
         minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=2)
         hour_ago = datetime.datetime.now() - datetime.timedelta(minutes=60)
-        if  models.Prescriptions.objects.filter(created_by=request.user,created__gte=minutes_ago, entity=retailer,status="QUEUING").exists():
-            errors_messages.append(f"Prescriptin created an minutes ago already exists for {dependant}. Try again after 2 minutes if it is not a repetition")
-            create_log("error","Conflicting prescription detected")
+        if models.Prescriptions.objects.filter(
+            created_by=request.user,
+            created__gte=minutes_ago,
+            entity=retailer,
+            status="QUEUING",
+        ).exists():
+            errors_messages.append(
+                f"Prescriptin created an minutes ago already exists for "
+                f"{dependant}. Try again after 2 minutes if it is not a "
+                f"repetition"
+            )
+            create_log("error", "Conflicting prescription detected")
             return Response(
                 data={
                     "response_code": 1,
@@ -1519,12 +1940,11 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
         else:
-            create_log("info","No conflict prescription")
-       
-       
+            create_log("info", "No conflict prescription")
+
         files = request.FILES.getlist("images")
-        create_log("info",request.FILES)
-        create_log("info",len(files))
+        create_log("info", request.FILES)
+        create_log("info", len(files))
         if files:
             request.data.pop("images")
             serializer_context = {
@@ -1535,15 +1955,19 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 data=request.data, context=serializer_context
             )
 
-
-         
-            
             if serializer.is_valid(raise_exception=True):
                 try:
-                    serializer.save(created_by=request.user,patient=dependant,origin_point=origin_point,destination_point=destination_point)
+                    serializer.save(
+                        created_by=request.user,
+                        patient=dependant,
+                        origin_point=origin_point,
+                        destination_point=destination_point,
+                    )
                 except IntegrityError as exc:
                     raise exceptions.ValidationError(exc)
-                item = models.Prescriptions.objects.get(id=serializer.data["id"])
+                item = models.Prescriptions.objects.get(
+                    id=serializer.data["id"]
+                )
                 errors_messages = []
 
                 uploaded_files = []
@@ -1552,23 +1976,31 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                         owner=request.user,
                         image=file,
                         prescription=item,
-                        entity=retailer   
+                        entity=retailer,
                     )
                     uploaded_files.append(content)
 
                 item.images.add(*uploaded_files)
                 item.save()
                 context = serializer.data
-                arr =[]
-                ls= serializers.PrescriptionImageSerializer(item.images,context={'request': request}, many=True).data,
-                context["images"] =arr
+                arr = []
+                ls = serializers.PrescriptionImageSerializer(
+                    item.images, context={"request": request}, many=True
+                ).data,
+                context["images"] = arr
 
                 errors_messages = []
                 return Response(
                     data={
                         "response_code": 0,
-                        "response_message": "Retail prescription succesfully created",
-                        "prescription": serializers.RetailPrescriptionsSerializer(item,context={'request': request}).data,
+                        "response_message": (
+                            "Retail prescription succesfully created"
+                        ),
+                        "prescription": (
+                            serializers.RetailPrescriptionsSerializer(
+                                item, context={"request": request}
+                            ).data
+                        ),
                         "errors": errors_messages,
                     },
                     status=status.HTTP_201_CREATED,
@@ -1578,7 +2010,10 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 errors_messages = []
                 for field_name, field_errors in default_errors.items():
                     for field_error in field_errors:
-                        error_message = "%s: %s" % (field_name, field_error)
+                        error_message = "%s: %s" % (
+                            field_name,
+                            field_error,
+                        )
                         errors_messages.append(error_message)
 
                 return Response(
@@ -1593,61 +2028,19 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         else:
             errors_messages.append("At least one image is required")
             return Response(
-                                data={
-                                    "response_code": 1,
-                                    "response_message": "Retail prescription not created",
-                                    "errors": errors_messages,
-                                    "status": status.HTTP_200_OK,
-                                },
-                                status=status.HTTP_200_OK,
-                            )
-        
+                data={
+                    "response_code": 1,
+                    "response_message": "Retail prescription not created",
+                    "errors": errors_messages,
+                    "status": status.HTTP_200_OK,
+                },
+                status=status.HTTP_200_OK,
+            )
 
 
-import datetime
-from decimal import Decimal
-from django.db import transaction
-from django.db.models import Q
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-
-import datetime
-from decimal import Decimal
-from django.db import transaction
-from django.db.models import Q
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-
-# retailers/views.py
-import datetime
-from decimal import Decimal
-from django.db.models import Q
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from authentication.models import Entities
-from retailers.models import RetailerReceipts
-from .serializers import InventoryPredictionQuerySerializer
-
-
-import datetime
-from decimal import Decimal
-from django.db import transaction
-from django.db.models import Q
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-
-# --- Custom System Relational Imports ---
-from authentication.models import Entities
-from wholesalers.models import WholesalerReceipts
-from retailers.models import RetailerIndent, RetailerIndentItem, RetailerOrders, RetailerOrderItems
+# ===========================================================================
+# Indent — close and generate orders
+# ===========================================================================
 
 class RetailerCloseAndOrderIndentAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1656,8 +2049,10 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
         """
         Phase 3 Closing Transaction API View:
         1. Closes out active internal RetailerIndent draft (sets is_open="false").
-        2. Synchronizes final selected frontend items with RetailerIndentItem database metrics rows.
-        3. Spawns distinct RetailerOrders mapped strictly to RetailerOrders schema model attributes.
+        2. Synchronizes final selected frontend items with RetailerIndentItem
+           database metrics rows.
+        3. Spawns distinct RetailerOrders mapped strictly to RetailerOrders
+           schema model attributes.
         """
         data = request.data
         indent_id = data.get("indent_id")
@@ -1665,52 +2060,88 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
 
         if not indent_id or not frontend_items:
             return Response(
-                {"error": "Missing parameters. Ensure indent_id and item list arrays are populated."},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "error": (
+                        "Missing parameters. Ensure indent_id and item "
+                        "list arrays are populated."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        entity = Entities.objects.filter(Q(owner=request.user) | Q(administrator=request.user), is_active=True).first()
+        entity = Entities.objects.filter(
+            Q(owner=request.user) | Q(administrator=request.user),
+            is_active=True,
+        ).first()
         if not entity:
-            return Response({"error": "No active retailer entity profile configuration matched."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    "error": (
+                        "No active retailer entity profile configuration "
+                        "matched."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         try:
             with transaction.atomic():
                 # 1. Fetch and close parent Indent lifecycle tracking state flags
                 try:
-                    indent = RetailerIndent.objects.select_for_update().get(id=indent_id, entity=entity, is_open="true")
+                    indent = RetailerIndent.objects.select_for_update().get(
+                        id=indent_id,
+                        entity=entity,
+                        is_open="true",
+                    )
                 except RetailerIndent.DoesNotExist:
                     return Response(
-                        {"error": f"Active open draft indent reference ID {indent_id} missing or already finalized."},
-                        status=status.HTTP_404_NOT_FOUND
+                        {
+                            "error": (
+                                f"Active open draft indent reference ID "
+                                f"{indent_id} missing or already finalized."
+                            )
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
                     )
 
                 # Lock the document state
                 indent.is_open = "false"
                 indent.save()
 
-                # Group entries by distinct Wholesaler IDs to map discrete corporate fields
+                # Group entries by distinct Wholesaler IDs to map discrete
+                # corporate fields
                 wholesaler_groups = {}
-                
-                # 2. Iterate selected lines to update configurations and map bundles
+
+                # 2. Iterate selected lines to update configurations and map
+                #    bundles
                 for item in frontend_items:
                     receipt_id = item.get("wholesaler_receipt")
                     if not receipt_id:
                         continue
 
                     try:
-                        w_receipt = WholesalerReceipts.objects.get(id=receipt_id)
+                        w_receipt = WholesalerReceipts.objects.get(
+                            id=receipt_id
+                        )
                     except WholesalerReceipts.DoesNotExist:
-                        raise ValueError(f"Target wholesale catalog record ID {receipt_id} unresolvable.")
+                        raise ValueError(
+                            f"Target wholesale catalog record ID "
+                            f"{receipt_id} unresolvable."
+                        )
 
                     supplier_entity = w_receipt.received_from
                     if not supplier_entity:
-                        raise ValueError(f"Wholesaler stock receipt ID {receipt_id} lacks a valid provider profile link.")
+                        raise ValueError(
+                            f"Wholesaler stock receipt ID {receipt_id} "
+                            f"lacks a valid provider profile link."
+                        )
 
                     req_qty = int(item["required_quantity"])
                     final_price = Decimal(str(item["price"]))
                     gross_subtotal = Decimal(str(item["total"]))
 
-                    # Synchronize final variables onto existing matching RetailerIndentItem rows
+                    # Synchronize final variables onto existing matching
+                    # RetailerIndentItem rows
                     RetailerIndentItem.objects.update_or_create(
                         entity=entity,
                         retailer_indent=indent,
@@ -1721,26 +2152,33 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                             "final_pack_price": final_price,
                             "item_gross_total_amount": gross_subtotal,
                             "item_net_total_amount": gross_subtotal,
-                            "wholesaler_price_discount_id": item.get("wholesaler_price_discount_id"),
-                            "wholesaler_quantity_discount_id": item.get("wholesaler_quantity_discount_id")
-                        }
+                            "wholesaler_price_discount_id": item.get(
+                                "wholesaler_price_discount_id"
+                            ),
+                            "wholesaler_quantity_discount_id": item.get(
+                                "wholesaler_quantity_discount_id"
+                            ),
+                        },
                     )
 
                     # Initialize vendor grouping array tracks dynamically
                     if supplier_entity.id not in wholesaler_groups:
                         wholesaler_groups[supplier_entity.id] = {
                             "supplier": supplier_entity,
-                            "lines": []
+                            "lines": [],
                         }
-                    
-                    wholesaler_groups[supplier_entity.id]["lines"].append({
-                        "w_receipt": w_receipt,
-                        "quantity": req_qty,
-                        "price": final_price,
-                        "total": gross_subtotal
-                    })
 
-                # 3. Create independent RetailerOrders sheets for each distinct Wholesaler group
+                    wholesaler_groups[supplier_entity.id]["lines"].append(
+                        {
+                            "w_receipt": w_receipt,
+                            "quantity": req_qty,
+                            "price": final_price,
+                            "total": gross_subtotal,
+                        }
+                    )
+
+                # 3. Create independent RetailerOrders sheets for each
+                #    distinct Wholesaler group
                 created_orders_metadata = []
 
                 for w_id, group in wholesaler_groups.items():
@@ -1749,12 +2187,13 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
 
                     order_gross = sum(ln["total"] for ln in lines)
 
-                    # Generate parent Retailer Order tracking header document block matching choices metrics
+                    # Generate parent Retailer Order tracking header document
+                    # block matching choices metrics
                     retailer_order = RetailerOrders.objects.create(
                         entity=entity,
                         owner=entity.owner,
-                        retailer=entity,            # Matches related_name='wholesalerOrderRetailer'
-                        wholesaler=supplier,        # Matches related_name='wholesalerOrderWholesaler'
+                        retailer=entity,       # related_name='wholesalerOrderRetailer'
+                        wholesaler=supplier,   # related_name='wholesalerOrderWholesaler'
                         order_origin="RETAILER",
                         order_type="NORMAL",
                         order_terms="CASH",
@@ -1773,10 +2212,11 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                         final_price_total=order_gross,
                         order_discount_total=Decimal("0.00"),
                         order_tax_total=Decimal("0.00"),
-                        shipping_amount=Decimal("0.00")
+                        shipping_amount=Decimal("0.00"),
                     )
 
-                    # Append granular child row metrics lines matching RetailerOrderItems schema parameters
+                    # Append granular child row metrics lines matching
+                    # RetailerOrderItems schema parameters
                     for ln in lines:
                         RetailerOrderItems.objects.create(
                             entity=entity,
@@ -1795,70 +2235,63 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                             unit_of_issue="Pack",
                             item_tax=Decimal("0.00"),
                             item_tax_total=Decimal("0.00"),
-                            item_counter_price_discount_amount_total=Decimal("0.00"),
-                            item_price_discount_total=Decimal("0.00")
+                            item_counter_price_discount_amount_total=(
+                                Decimal("0.00")
+                            ),
+                            item_price_discount_total=Decimal("0.00"),
                         )
 
-                    created_orders_metadata.append({
-                        "order_id": retailer_order.id,
-                        "supplier_title": supplier.title,
-                        "order_total": float(order_gross)
-                    })
+                    created_orders_metadata.append(
+                        {
+                            "order_id": retailer_order.id,
+                            "supplier_title": supplier.title,
+                            "order_total": float(order_gross),
+                        }
+                    )
 
-                return Response({
-                    "message": "Indent requisition closed and vendor purchase orders generated successfully.",
-                    "retailer_indent_id": indent.id,
-                    "indent_status": "CLOSED_FINALIZED",
-                    "purchase_orders_created": created_orders_metadata
-                }, status=status.HTTP_201_CREATED)
+                return Response(
+                    {
+                        "message": (
+                            "Indent requisition closed and vendor purchase "
+                            "orders generated successfully."
+                        ),
+                        "retailer_indent_id": indent.id,
+                        "indent_status": "CLOSED_FINALIZED",
+                        "purchase_orders_created": created_orders_metadata,
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
 
         except Exception as transaction_error:
             return Response(
-                {"error": f"Full-stack atomic generation sequence failed execution: {str(transaction_error)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {
+                    "error": (
+                        f"Full-stack atomic generation sequence failed "
+                        f"execution: {str(transaction_error)}"
+                    )
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-# retailers/views.py
 
-from decimal import Decimal
-
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.views import APIView
-
-from employees.models import Employees
-from retailers.models import (
-    IndentItemSource,
-    RetailerIndent,
-    RetailerIndentItem,
-)
-from wholesalers.models import WholesalerReceipts
-
-from .serializers import (
-    RetailerIndentItemEditSerializer,
-    RetailerIndentItemsSerializer,
-    RetailerIndentParamsSerializer,
-    RetailerIndentSerializer,
-)
-
+# ===========================================================================
+# Indent — item operations (APIView-based)
+# ===========================================================================
 
 def _fire_refresh(entity_id):
     try:
         from retailers.tasks import refresh_entity_predictions
+
         refresh_entity_predictions.delay(str(entity_id))
     except Exception as e:
         print(f"[INDENT] Failed to schedule refresh: {e}")
 
 
-# =========================================================
-# Indent header
-# =========================================================
-
 class RetailerIndentDetailView(APIView):
     """
     GET /api/v1/retailers/indents/current/
     """
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -1896,6 +2329,7 @@ class RetailerIndentParamsUpdateView(APIView):
     """
     PATCH /api/v1/retailers/indents/<indent_id>/params/
     """
+
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, indent_id, *args, **kwargs):
@@ -1951,15 +2385,12 @@ class RetailerIndentParamsUpdateView(APIView):
         )
 
 
-# =========================================================
-# Indent item operations
-# =========================================================
-
 class RetailerIndentItemUpdateView(APIView):
     """
     PATCH /api/v1/retailers/indent-items/<item_id>/
     Body: { "required_quantity": 15 }
     """
+
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, item_id, *args, **kwargs):
@@ -2007,25 +2438,17 @@ class RetailerIndentItemUpdateView(APIView):
 
     def _recompute_amounts(self, item):
         indent = item.retailer_indent
-        pricing_percentage = float(
-            indent.pricing_percentage or 30
-        )
+        pricing_percentage = float(indent.pricing_percentage or 30)
 
         receipt = item.wholesale_receipt
         cost_per_unit = Decimal(str(item.final_unit_price or 0))
 
         if receipt and receipt.recommended_retail_price:
-            sell_per_unit = Decimal(
-                str(receipt.recommended_retail_price)
-            )
+            sell_per_unit = Decimal(str(receipt.recommended_retail_price))
             pricing_source = "recommended_retail_price"
         else:
-            markup = (
-                Decimal(str(pricing_percentage)) / Decimal("100")
-            )
-            sell_per_unit = cost_per_unit * (
-                Decimal("1") + markup
-            )
+            markup = Decimal(str(pricing_percentage)) / Decimal("100")
+            sell_per_unit = cost_per_unit * (Decimal("1") + markup)
             pricing_source = "retailer_markup"
 
         qty = Decimal(str(item.required_quantity))
@@ -2036,8 +2459,7 @@ class RetailerIndentItemUpdateView(APIView):
         margin = Decimal("0")
         if sell_per_unit > 0:
             margin = (
-                (sell_per_unit - cost_per_unit)
-                / sell_per_unit
+                (sell_per_unit - cost_per_unit) / sell_per_unit
             ) * Decimal("100")
 
         item.item_gross_total_amount = cost_per_unit * qty
@@ -2046,9 +2468,7 @@ class RetailerIndentItemUpdateView(APIView):
             "cost_per_unit": float(cost_per_unit),
             "sell_per_unit": float(sell_per_unit),
             "pricing_source": pricing_source,
-            "profit_per_unit": float(
-                sell_per_unit - cost_per_unit
-            ),
+            "profit_per_unit": float(sell_per_unit - cost_per_unit),
             "margin_percent": float(round(margin, 2)),
             "total_cost": float(round(total_cost, 2)),
             "total_revenue": float(round(total_revenue, 2)),
@@ -2065,6 +2485,7 @@ class RetailerIndentItemDeleteView(APIView):
     """
     DELETE /api/v1/retailers/indent-items/<item_id>/delete/
     """
+
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, item_id, *args, **kwargs):
@@ -2104,6 +2525,7 @@ class RetailerIndentItemCreateView(APIView):
         "required_quantity": 10
     }
     """
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, indent_id, *args, **kwargs):
@@ -2128,9 +2550,7 @@ class RetailerIndentItemCreateView(APIView):
 
         receipt_id = request.data.get("wholesale_receipt")
         try:
-            quantity = int(
-                request.data.get("required_quantity", 0)
-            )
+            quantity = int(request.data.get("required_quantity", 0))
         except (TypeError, ValueError):
             quantity = 0
 
@@ -2193,15 +2613,6 @@ class RetailerIndentItemCreateView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
-# apps/retailers/views.py
-
-from django.db import IntegrityError
-from django.shortcuts import get_object_or_404
-
-from .serializers import (
-    RetailerIndentItemParamsUpdateSerializer,
-)
-
 
 class RetailerIndentItemParamsUpdateView(APIView):
     """
@@ -2232,8 +2643,7 @@ class RetailerIndentItemParamsUpdateView(APIView):
             return Response(
                 {
                     "detail": (
-                        "This indent is closed and cannot be "
-                        "edited."
+                        "This indent is closed and cannot be edited."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -2259,19 +2669,13 @@ class RetailerIndentItemParamsUpdateView(APIView):
                 ).first()
                 if receipt is None:
                     return Response(
-                        {
-                            "detail": (
-                                "Wholesale receipt not found."
-                            )
-                        },
+                        {"detail": "Wholesale receipt not found."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 item.wholesale_receipt = receipt
 
         if "wholesaler_price_discount" in data:
-            discount_id = data.pop(
-                "wholesaler_price_discount"
-            )
+            discount_id = data.pop("wholesaler_price_discount")
             if discount_id is None:
                 item.wholesaler_price_discount = None
             else:
@@ -2282,19 +2686,13 @@ class RetailerIndentItemParamsUpdateView(APIView):
                 )
                 if discount is None:
                     return Response(
-                        {
-                            "detail": (
-                                "Price discount not found."
-                            )
-                        },
+                        {"detail": "Price discount not found."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 item.wholesaler_price_discount = discount
 
         if "wholesaler_quantity_discount" in data:
-            discount_id = data.pop(
-                "wholesaler_quantity_discount"
-            )
+            discount_id = data.pop("wholesaler_quantity_discount")
             if discount_id is None:
                 item.wholesaler_quantity_discount = None
             else:
@@ -2305,20 +2703,14 @@ class RetailerIndentItemParamsUpdateView(APIView):
                 )
                 if discount is None:
                     return Response(
-                        {
-                            "detail": (
-                                "Quantity discount not found."
-                            )
-                        },
+                        {"detail": "Quantity discount not found."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 item.wholesaler_quantity_discount = discount
 
         # ---- Scalar fields ----
         if "required_quantity" in data:
-            item.required_quantity = data[
-                "required_quantity"
-            ]
+            item.required_quantity = data["required_quantity"]
 
         if "source" in data:
             item.source = data["source"]
@@ -2368,33 +2760,26 @@ class RetailerIndentItemParamsUpdateView(APIView):
                     else None
                 ),
                 "params": {
-                    "required_quantity": (
-                        item.required_quantity
-                    ),
+                    "required_quantity": item.required_quantity,
                     "source": item.source,
-
                     # Price snapshot chain — echo back the
                     # values as they are now stored, including
                     # the ones the model may have recomputed.
                     "supplier_unit_selling_price": (
                         str(item.supplier_unit_selling_price)
-                        if item.supplier_unit_selling_price
-                        is not None
+                        if item.supplier_unit_selling_price is not None
                         else None
                     ),
                     "recommended_retail_price": (
                         str(item.recommended_retail_price)
-                        if item.recommended_retail_price
-                        is not None
+                        if item.recommended_retail_price is not None
                         else None
                     ),
                     "markup_percentage_used": (
                         str(item.markup_percentage_used)
-                        if item.markup_percentage_used
-                        is not None
+                        if item.markup_percentage_used is not None
                         else None
                     ),
-
                     # Derived values the model recomputed
                     "total_quantity": item.total_quantity,
                     "bonus_quantity_earned": (
@@ -2410,8 +2795,7 @@ class RetailerIndentItemParamsUpdateView(APIView):
                     ),
                     "item_net_total_amount": (
                         str(item.item_net_total_amount)
-                        if item.item_net_total_amount
-                        is not None
+                        if item.item_net_total_amount is not None
                         else None
                     ),
                 },
@@ -2419,52 +2803,17 @@ class RetailerIndentItemParamsUpdateView(APIView):
             status=status.HTTP_202_ACCEPTED,
         )
 
-# retailers/views.py
 
-from datetime import timedelta
-
-from django.utils import timezone
-from django.db.models import Prefetch
-from rest_framework import exceptions, permissions
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.pagination import PageNumberPagination
-
-from core.responses import custom_success_message, custom_errors_response
-from retailers.retail_permissions import EntitySubscriptionPermission
-from authentication.models import Entities
-from products.models import Products
-
-from .models import (
-    RetailerProductRequest,
-    RetailerProductRequestItem,
-    RetailerProductRequestOffer,
-    RetailerProductRequestItemWholesaler
-)
-from .serializers import (
-    RetailerProductRequestSerializer,
-    RetailerProductRequestListSerializer,
-)
-from .services.request_confirmation import retailer_confirm_offers
-
-
-REQUEST_EXPIRY_DAYS = 14
-WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
-
-# retailers/views.py
-
-from rest_framework import exceptions, permissions
-from rest_framework.decorators import api_view, permission_classes
-
-from retailers.retail_permissions import EntitySubscriptionPermission
-from .services.product_requests import product_requests_dispatch
-
-
+# ===========================================================================
+# Product requests
+# ===========================================================================
 
 @api_view(["POST"])
-@permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
+@permission_classes(
+    [EntitySubscriptionPermission, permissions.IsAuthenticated]
+)
 def productRequestsAPIView(request):
     """
-    bb
     HTTP entry point for the product requests dispatcher.
 
     The dispatcher returns one of:

@@ -701,6 +701,13 @@ class Entities(models.Model):
         blank=True,
         on_delete=models.DO_NOTHING,
     )
+    sub_county = models.ForeignKey(
+        SubCounties,
+        related_name="entity_sub_county",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+    )
     constituency = models.ForeignKey(
         Constituencies,
         related_name="entity_constituency",

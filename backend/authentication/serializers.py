@@ -418,7 +418,7 @@ class CountiesSerializer(serializers.ModelSerializer):
             "sub_counties",
         )
         read_only_fields = ("id",)
-        
+
 
 class TownsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -602,6 +602,7 @@ class EntityMiniSerializer(serializers.ModelSerializer):
             "postal_address",
             "country",
             "county",
+            "sub_county",
             "is_verified",
             "road",
             "building",
@@ -660,6 +661,7 @@ class EntitySerializer(serializers.ModelSerializer):
             "town",
             "country",
             "county",
+            "sub_county",
             "constituency",
             "road",
             "building",
