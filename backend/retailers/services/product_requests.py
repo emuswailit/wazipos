@@ -25,6 +25,23 @@
 #   CancelRequest               — retailer cancels an entire request
 #   CancelRequestItem           — retailer cancels a single line
 #   Respond                     — wholesaler accepts / rejects lines
+#
+# -----------------------------------------------------------------------
+# PERSISTENCE HOOKS
+#
+# `RetailerProductRequestItem.save()` accepts `refresh_parent` and
+# `recalculate` keyword arguments. Both are consumed by save(); they
+# are NOT constructor arguments. Use:
+#
+#     item = RetailerProductRequestItem(...)   # real model fields only
+#     item.save(refresh_parent=False)
+#
+# NOT:
+#
+#     RetailerProductRequestItem.objects.create(..., refresh_parent=False)
+#
+# The latter raises `TypeError: unexpected keyword argument` because
+# Model.__init__ only accepts real fields.
 # -----------------------------------------------------------------------
 
 from __future__ import annotations
@@ -256,6 +273,14 @@ def _status_display(obj, field="status") -> str:
     return str(getattr(obj, field, ""))
 
 
+def _user_display(user) -> str | None:
+    """Human-readable label for a User or None."""
+    if user is None:
+        return None
+    name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    return name or getattr(user, "username", None) or str(user.pk)
+
+
 # =========================================================
 # Serialization helpers
 # =========================================================
@@ -267,9 +292,15 @@ def _serialize_offer(offer, *, wholesaler_view: bool = False) -> dict:
     `wholesaler_view=True` returns the narrower shape a wholesaler
     sees for their own offers — no `wholesaler` / `wholesaler_title`
     fields (they are implicit), no retailer-only fields.
+
+    All fields the client's `areOffersEqual` change-detector reads
+    are present in both views, including `responded_at` and
+    `resulting_order_item`, so a state-only change still triggers a
+    re-render on the client.
     """
     base = {
         "id": str(offer.id),
+        "request_item": str(offer.request_item_id),
         "offered_quantity": offer.offered_quantity,
         "offered_unit_price": (
             str(offer.offered_unit_price)
@@ -290,6 +321,22 @@ def _serialize_offer(offer, *, wholesaler_view: bool = False) -> dict:
         "status_display": _status_display(offer, "status"),
         "response_note": offer.response_note,
         "retailer_response_note": offer.retailer_response_note,
+        "responded_by_user": (
+            str(offer.responded_by_user_id)
+            if offer.responded_by_user_id
+            else None
+        ),
+        "responded_by_user_name": _user_display(
+            getattr(offer, "responded_by_user", None)
+        ),
+        "responded_at": (
+            str(offer.responded_at) if offer.responded_at else None
+        ),
+        "resulting_order_item": (
+            str(offer.resulting_order_item_id)
+            if offer.resulting_order_item_id
+            else None
+        ),
         "created": str(offer.created),
         "updated": str(offer.updated),
     }
@@ -304,10 +351,18 @@ def _serialize_offer(offer, *, wholesaler_view: bool = False) -> dict:
                 if offer.wholesaler_receipt_id
                 else None
             ),
-            "wholesaler_receipt_title": getattr(
-                getattr(offer, "wholesaler_receipt", None),
-                "title",
-                "",
+            "wholesaler_receipt_title": (
+                getattr(
+                    getattr(
+                        getattr(offer, "wholesaler_receipt", None),
+                        "product",
+                        None,
+                    ),
+                    "title",
+                    "",
+                )
+                if offer.wholesaler_receipt_id
+                else ""
             ),
             "retailer_confirmed_at": (
                 str(offer.retailer_confirmed_at)
@@ -441,7 +496,10 @@ def _prefetch_for_list(*, tagged_wholesaler_id=None):
     that were not sent to them.
     """
     offers_qs = RetailerProductRequestOffer.objects.select_related(
-        "wholesaler", "wholesaler_receipt",
+        "wholesaler",
+        "wholesaler_receipt",
+        "wholesaler_receipt__product",
+        "responded_by_user",
     )
     pairs_qs = (
         RetailerProductRequestItemWholesaler.objects
@@ -467,6 +525,58 @@ def _prefetch_for_list(*, tagged_wholesaler_id=None):
         ]
 
     return [Prefetch("items", queryset=items_qs)]
+
+
+# =========================================================
+# Realtime — push helpers
+# =========================================================
+
+def _notify_retailer_group():
+    """
+    Broadcast a "something changed" event to the retailer product-
+    requests channel group.
+
+    The consumer handles the event by re-querying the caller's own
+    list and re-sending it — no payload is carried on the event.
+
+    Group name and event type must match what
+    `RetailerProductRequestsConsumer` joins and handles.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        async_to_sync(get_channel_layer().group_send)(
+            "retailer-product-requests",
+            {"type": "send_retailer_product_requests"},
+        )
+    except Exception:
+        logger.exception("retailer group notify failed")
+
+
+def _notify_wholesaler_group():
+    """
+    Broadcast a "something changed" event to the wholesaler product-
+    requests channel group.
+
+    Mirrors `_notify_retailer_group`. The wholesaler consumer (in a
+    separate file) is expected to join group `wholesaler-product-
+    requests` and handle event type
+    `send_wholesaler_product_requests`.
+
+    Adjust the group name / event type to match whichever convention
+    the wholesaler consumer actually uses.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        async_to_sync(get_channel_layer().group_send)(
+            "wholesaler-product-requests",
+            {"type": "send_wholesaler_product_requests"},
+        )
+    except Exception:
+        logger.exception("wholesaler group notify failed")
 
 
 # =========================================================
@@ -564,7 +674,10 @@ def handle_create_request(user, data, request=None):
                 if line_urgency not in ("low", "medium", "high"):
                     line_urgency = urgency
 
-                line = RetailerProductRequestItem.objects.create(
+                # Construct the instance first. `refresh_parent` is
+                # consumed by Item.save(), not by Model.__init__, so
+                # it cannot be passed through objects.create().
+                line = RetailerProductRequestItem(
                     request=req,
                     product_id=product_id,
                     requested_quantity=qty,
@@ -574,13 +687,14 @@ def handle_create_request(user, data, request=None):
                     owner=user,
                     entity_id=entity_id,
                     status=RetailerProductRequestItem.Status.PENDING,
-                    # Line has no offers yet; skip the derived-field
-                    # recalc on create — nothing to compute. The
-                    # default in `Item.save()` would run recalculate,
-                    # which is a no-op for a line with no offers but
-                    # still touches the parent.
-                    refresh_parent=False,
                 )
+                # Save with refresh_parent=False: the parent request
+                # is recalculated once at the end of this method, so
+                # per-line parent recomputes are wasted work.
+                # save() runs recalculate(save=False) internally,
+                # which derives offer_count / confirmed_quantity /
+                # status from the (currently empty) offer set.
+                line.save(refresh_parent=False)
 
                 target_ids = item.get("target_wholesaler_ids") or []
                 for wid in target_ids:
@@ -592,8 +706,6 @@ def handle_create_request(user, data, request=None):
                         entity_id=entity_id,
                     )
 
-                line.recalculate(save=True)
-
             req.recalculate(save=True)
 
     except ValueError as e:
@@ -602,6 +714,11 @@ def handle_create_request(user, data, request=None):
             "Request could not be created",
             {"detail": str(e)},
         )
+
+    # Notify both sides: retailer's own list, and every targeted
+    # wholesaler's tagged list.
+    _notify_retailer_group()
+    _notify_wholesaler_group()
 
     return (
         "success",
@@ -762,7 +879,6 @@ def handle_get_request_details(user, data, request=None):
 
     entity_id = _resolve_entity_id(user)
 
-    # Wholesaler path: prefetch only the caller's tagged items.
     if is_wholesaler and not is_retailer:
         qs = (
             RetailerProductRequest.objects
@@ -804,9 +920,6 @@ def handle_get_request_details(user, data, request=None):
                 {"request_id": "Not found."},
             )
 
-    # A user holding both roles: default to the retailer view
-    # (they own the request scope). A pure wholesaler gets the
-    # scoped view.
     if is_wholesaler and not is_retailer:
         payload = _serialize_request(req, wholesaler_id=entity_id)
     else:
@@ -926,8 +1039,6 @@ def handle_create_offer(user, data, request=None):
             {"request_id": f"Status is {req.status}."},
         )
 
-    # Guard against resurrecting an offer the retailer has already
-    # acted on. Same rule as the service layer enforces.
     existing = (
         RetailerProductRequestOffer.objects
         .filter(request_item=line, wholesaler_id=entity_id)
@@ -963,7 +1074,13 @@ def handle_create_offer(user, data, request=None):
                 },
             )
         )
+        # save() on the item bubbles to the parent request with
+        # default refresh_parent=True — one recompute, correct for a
+        # single-line mutation.
         line.save()
+
+    _notify_retailer_group()
+    _notify_wholesaler_group()
 
     return (
         "success",
@@ -1048,10 +1165,10 @@ def handle_withdraw_offer(user, data, request=None):
     with transaction.atomic():
         offer.status = RetailerProductRequestOffer.Status.WITHDRAWN
         offer.save(update_fields=["status", "updated"])
-        # save() on the offer bubbles to line + request automatically;
-        # keep the explicit call so the recalc is guaranteed even if
-        # a future change disables the auto-bubble.
         line.recalculate(save=True)
+
+    _notify_retailer_group()
+    _notify_wholesaler_group()
 
     return (
         "success",
@@ -1144,6 +1261,9 @@ def handle_confirm_offers(user, data, request=None):
             "Request could not be updated",
             {"detail": str(e)},
         )
+
+    _notify_retailer_group()
+    _notify_wholesaler_group()
 
     return (
         "success",
@@ -1240,6 +1360,9 @@ def handle_cancel_request(user, data, request=None):
             ]
         )
 
+    _notify_retailer_group()
+    _notify_wholesaler_group()
+
     return (
         "success",
         "Request cancelled",
@@ -1317,6 +1440,9 @@ def handle_cancel_request_item(user, data, request=None):
     with transaction.atomic():
         line.status = RetailerProductRequestItem.Status.CANCELLED
         line.save(update_fields=["status", "updated"])
+
+    _notify_retailer_group()
+    _notify_wholesaler_group()
 
     return (
         "success",
@@ -1480,9 +1606,6 @@ def handle_respond(user, data, request=None):
             {"overlap": list(overlap)},
         )
 
-    # Resolve the wholesaler entity for both the service call and the
-    # downstream notification. Previously `user.entity_id` was used,
-    # which for a multi-role user could be the wrong entity.
     wholesaler_entity = None
     for attr in ("entity", "entity_id"):
         v = getattr(user, attr, None)
@@ -1490,8 +1613,6 @@ def handle_respond(user, data, request=None):
             wholesaler_entity = v
             break
     if wholesaler_entity is None:
-        # Fall back to the resolved id, wrapped so the service can
-        # still extract `.pk` (via `_get_entity_id`).
         wholesaler_entity = entity_id
 
     try:
@@ -1512,26 +1633,8 @@ def handle_respond(user, data, request=None):
             {"detail": str(e)},
         )
 
-    # ---- Realtime push (best-effort) ----
-    try:
-        from analytics.realtime import push_request_response
-
-        push_request_response(
-            str(req.entity_id),
-            {
-                "request_id": str(req.id),
-                "request_number": req.request_number,
-                "wholesaler_id": str(entity_id),
-                "wholesaler_title": getattr(
-                    getattr(user, "entity", None), "title", ""
-                ),
-                "offered_line_count": offered_count,
-                "rejected_line_count": rejected_count,
-                "note": note,
-            },
-        )
-    except Exception:
-        logger.exception("push_request_response failed")
+    _notify_retailer_group()
+    _notify_wholesaler_group()
 
     return (
         "success",
