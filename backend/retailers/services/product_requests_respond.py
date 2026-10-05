@@ -269,8 +269,14 @@ def wholesaler_respond_to_request(
 
         # If a receipt was supplied, it must belong to this wholesaler
         # and be for the same product as the line.
+        #
+        # `received_from` on WholesalerReceipts is the *supplier*
+        # (distributor / manufacturer) the wholesaler bought from —
+        # NOT the wholesaler's own entity. The wholesaler's entity
+        # is on the base `entity` field (from EntityRelatedModel),
+        # exposed as `receipt.entity_id` without a DB fetch.
         if receipt is not None:
-            if str(receipt.received_from_id or "") != str(entity_id):
+            if str(receipt.entity_id or "") != str(entity_id):
                 raise ValueError(
                     f"Receipt {resolved_receipt_id} does not belong "
                     f"to the responding wholesaler."
