@@ -13,6 +13,10 @@ from django.dispatch import receiver
 from .models import (
     RetailerIndent,
     RetailerIndentItem,
+    RetailerProductRequest,
+    RetailerProductRequestItem,
+    RetailerProductRequestOffer,
+    RetailerProductRequestResponse,
     RetailerReceipts,
 )
 
@@ -201,3 +205,157 @@ def retailer_indent_item_deleted_recalc(
 
     with silence_indent_signals():
         indent.recalculate()
+
+
+# =====================================================================
+# Retailer product requests
+#
+# Four models participate in a request's lifecycle. Any save or
+# delete on one of them nudges the retailer and wholesaler sockets,
+# which re-query their own scoped view and re-send it. No payload
+# travels on the wire — just an invalidate.
+#
+# The through-model RetailerProductRequestItemWholesaler is
+# intentionally NOT wired. Every code path that writes a target
+# pair also saves the parent item, whose signal covers it. If a
+# future code path writes through-rows in isolation, add it to the
+# loop below.
+#
+# Both group events fire via the same helpers the dispatcher used
+# to call by hand (`_notify_retailer_group` and
+# `_notify_wholesaler_group`). Those helpers should now be treated
+# as signal-owned — the explicit calls in the dispatcher handlers
+# are redundant and can be removed.
+# =====================================================================
+
+# Thread-local silence flag, mirrors `silence_indent_signals`.
+_silenced_pr = threading.local()
+
+
+def _is_product_request_silenced() -> bool:
+    return getattr(_silenced_pr, "on", False)
+
+
+@contextmanager
+def silence_product_request_signals():
+    """
+    Suppress product-request socket pushes for the duration of the
+    block. Nestable. Useful for migrations, backfills, and tests.
+    """
+    previous = getattr(_silenced_pr, "on", False)
+    _silenced_pr.on = True
+    try:
+        yield
+    finally:
+        _silenced_pr.on = previous
+
+
+def _do_broadcast_product_requests_changed():
+    """
+    Fire one retailer event and one wholesaler event.
+
+    The notify helpers are imported lazily so this module can be
+    imported by `apps.ready()` without dragging the services layer
+    in at app-load time (which imports models and could circular
+    with `retailers.models`).
+    """
+    # Lazy import — see docstring.
+    try:
+        from .services.product_requests import (
+            _notify_retailer_group,
+            _notify_wholesaler_group,
+        )
+    except Exception:
+        logger.exception(
+            "product-request signals: notify helpers unavailable"
+        )
+        return
+
+    try:
+        _notify_retailer_group()
+    except Exception:
+        logger.exception(
+            "product-request signals: retailer notify failed"
+        )
+
+    try:
+        _notify_wholesaler_group()
+    except Exception:
+        logger.exception(
+            "product-request signals: wholesaler notify failed"
+        )
+
+
+def _schedule_product_request_push():
+    """
+    Queue the push for after COMMIT.
+
+    Deferring to `on_commit` guarantees the consumer's re-query
+    sees the committed rows, not the pre-change state. If the
+    surrounding transaction rolls back, the callback never fires —
+    no stale push escapes.
+
+    Safe to call repeatedly within one transaction: each call
+    queues its own `on_commit` callback, and each callback is a
+    cheap group send. Consumers debounce on their side by
+    re-querying only the caller's own list.
+    """
+    if _is_product_request_silenced():
+        return
+    transaction.on_commit(_do_broadcast_product_requests_changed)
+
+
+# ---- RetailerProductRequest ----
+
+@receiver(post_save, sender=RetailerProductRequest)
+def retailer_product_request_saved(
+    sender, instance, created, **kwargs
+):
+    _schedule_product_request_push()
+
+
+@receiver(post_delete, sender=RetailerProductRequest)
+def retailer_product_request_deleted(sender, instance, **kwargs):
+    _schedule_product_request_push()
+
+
+# ---- RetailerProductRequestItem ----
+
+@receiver(post_save, sender=RetailerProductRequestItem)
+def retailer_product_request_item_saved(
+    sender, instance, created, **kwargs
+):
+    _schedule_product_request_push()
+
+
+@receiver(post_delete, sender=RetailerProductRequestItem)
+def retailer_product_request_item_deleted(sender, instance, **kwargs):
+    _schedule_product_request_push()
+
+
+# ---- RetailerProductRequestOffer ----
+
+@receiver(post_save, sender=RetailerProductRequestOffer)
+def retailer_product_request_offer_saved(
+    sender, instance, created, **kwargs
+):
+    _schedule_product_request_push()
+
+
+@receiver(post_delete, sender=RetailerProductRequestOffer)
+def retailer_product_request_offer_deleted(sender, instance, **kwargs):
+    _schedule_product_request_push()
+
+
+# ---- RetailerProductRequestResponse ----
+
+@receiver(post_save, sender=RetailerProductRequestResponse)
+def retailer_product_request_response_saved(
+    sender, instance, created, **kwargs
+):
+    _schedule_product_request_push()
+
+
+@receiver(post_delete, sender=RetailerProductRequestResponse)
+def retailer_product_request_response_deleted(sender, instance, **kwargs):
+    _schedule_product_request_push()
