@@ -6,7 +6,7 @@ from datetime import timedelta
 from decimal import Decimal
 # imports at the top of the file — add this line next to the
 # existing retailer_utils import:
-from retailers.utils import retailer_dashboard_utils
+from retailers.utils import client_dashboard_utils
 # ---------- Third-party ----------
 from django.contrib.gis.geos import fromstr
 from django.db import IntegrityError, transaction
@@ -419,7 +419,7 @@ def clientOrdersAPIView(request):
     elif request.data["action"] == "GetClientDashboard":
         """Aggregated dashboard for the authenticated user."""
 
-        dashboard = retailer_dashboard_utils.get_user_dashboard(
+        dashboard = client_dashboard_utils.get_user_dashboard(
             request.user
         )
 
