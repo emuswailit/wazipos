@@ -1751,6 +1751,10 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
     manufacturer_title = serializers.SerializerMethodField(read_only=True)
     is_pom = serializers.SerializerMethodField(read_only=True)
 
+    # ── NEW ──────────────────────────────────────────────────
+    category = serializers.SerializerMethodField(read_only=True)
+    category_title = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = models.RetailerReceipts
         fields = (
@@ -1806,6 +1810,8 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             "units_per_pack",
             "manufacturer",
             "manufacturer_title",
+            "category",           # ← new
+            "category_title",     # ← new
         )
         read_only_fields = (
             "id",
@@ -1890,6 +1896,21 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             return obj.product.manufacturer.title
         return ""
 
+    # ── NEW ──────────────────────────────────────────────────
+    # Direct access is safe because the view's queryset uses
+    # `.select_related("product__category")` — no extra query,
+    # no descriptor-raise on dangling FKs. See the view note
+    # below.
+    def get_category(self, obj):
+        if obj.product and obj.product.category:
+            return obj.product.category.id
+        return ""
+
+    def get_category_title(self, obj):
+        if obj.product and obj.product.category:
+            return obj.product.category.title
+        return ""
+
     def get_formulation_title(self, obj):
         if obj.product.preparation:
             return obj.product.preparation.formulation.title
@@ -1940,8 +1961,6 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
                 elif expiry_days > 56:
                     return f"EXPIRES IN {expiry_days} DAY(S)"
         return None
-
-
 # ===========================================================================
 # Retailer payments / discounts / movement / shipping rates
 # ===========================================================================

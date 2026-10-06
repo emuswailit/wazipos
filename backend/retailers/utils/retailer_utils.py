@@ -253,7 +253,6 @@ def confirm_item_in_retailer_order(receipt, retailer_order_obj):
 
         # new start
 
-
 def get_retailer_receipts_for_entity(data, user):
     retailer_receipts = None
     entity = None
@@ -264,17 +263,29 @@ def get_retailer_receipts_for_entity(data, user):
         entity = validate_entity(entity_id)
 
     if entity:
-        if RetailerReceipts.objects.filter(
-            entity=entity,
-        ).exists():
-            return RetailerReceipts.objects.filter(
-                entity=entity,
-            ).all()
+        qs = (
+            RetailerReceipts.objects
+            .filter(entity=entity)
+            .select_related(
+                "product",
+                "product__category",
+                "product__manufacturer",
+                "product__preparation",
+                "product__preparation__formulation",
+                "product__origin_country",
+                "entity",
+                "received_from",
+            )
+            .order_by("-created")
+        )
 
+        if qs.exists():
+            return qs
         else:
             raise exceptions.ValidationError(
                 "No items were retrived for the selected entity"
             )
+
 def get_products( customerOrderItem):
         
         return customerOrderItem.retailer_receipt.product
