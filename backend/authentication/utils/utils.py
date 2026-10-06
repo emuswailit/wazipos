@@ -473,6 +473,9 @@ def get_facilitator_entities(user):
 RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
 
 
+RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
+
+
 def get_retail_entities(user, data):
     qs = Entities.objects.filter(entity_type__in=RETAIL_ENTITY_TYPES)
 
@@ -483,9 +486,9 @@ def get_retail_entities(user, data):
     sub_county = data.get("sub_county") or None
 
     if county:
-        qs = qs.filter(county__iexact=county)
+        qs = qs.filter(county_id=county)
     if sub_county:
-        qs = qs.filter(sub_county__iexact=sub_county)
+        qs = qs.filter(sub_county_id=sub_county)
 
     return qs
 
