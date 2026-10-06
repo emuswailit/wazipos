@@ -470,13 +470,21 @@ def get_facilitator_entities(user):
     return entities
 
 
-def get_retail_entities(user):
-    entities=[]
-    if user.is_staff:
-        entities = Entities.objects.filter(entity_type="RETAIL").all()
-    else:
-        entities= Entities.objects.filter(entity_type="RETAIL", is_verified="true")
-    return entities
+def get_retail_entities(user, data):
+    qs = Entities.objects.filter(entity_type="RETAIL")
+
+    if not user.is_staff:
+        qs = qs.filter(is_verified=True)  # or is_verified="true" if CharField
+
+    county = data.get("county")
+    sub_county = data.get("sub_county")
+
+    if county:
+        qs = qs.filter(county__iexact=county)
+    if sub_county:
+        qs = qs.filter(sub_county__iexact=sub_county)
+
+    return qs
 
 
 def get_agent_entities(user):

@@ -27,7 +27,7 @@ from authentication.validators.authentication_models_validators import (
     verify_category_exists,
     validate_user
 )
-from products.validators.product_models_validator import validate_product
+from products.validators.product_models_validator import validate_product, validate_category
 from transport.transport_validators import validate_sacco_personnel
 from . import serializers
 from properties.models import Property
@@ -210,6 +210,74 @@ def locations_filters_api_view(request):
         page = paginator.paginate_queryset(all_receipts, request)
         serializer = RetailerReceiptsSerializer(
             page, many=True, context={"request": request, "user": request.user}
+        )
+        return paginator.get_paginated_response(serializer.data)
+    elif request.data["action"] == "GetAdjacentShopsByCategory":
+        """Retrieve shops selling products in the given category, nearest first."""
+
+        coords = request.data.get("coords") or {}
+        latitude = coords.get("latitude")
+        longitude = coords.get("longitude")
+        category_id = request.data.get("category")
+
+        if latitude is None or longitude is None:
+            raise exceptions.ValidationError(
+                "coords.latitude and coords.longitude are required"
+            )
+        if not category_id:
+            raise exceptions.ValidationError("category is required")
+
+        category = validate_category(category_id)
+        user_location = Point(float(longitude), float(latitude), srid=4326)
+
+        # Distinct entities with at least one receipt for a product in
+        # the requested category. `distinct()` replaces the old O(n²)
+        # `if receipt.entity in entities` loop.
+        entity_ids = (
+            RetailerReceipts.objects
+            .filter(product__category=category)
+            .values_list("entity_id", flat=True)
+            .distinct()
+        )
+
+        if not entity_ids:
+            raise exceptions.ValidationError("No receipts for this category")
+
+        # Nearest location per entity, with farness set in km.
+        locations = []
+        for entity_id in entity_ids:
+            loc = (
+                Locations.objects
+                .filter(entity_id=entity_id)
+                .annotate(distance=Distance("point", user_location))
+                .order_by("distance")
+                .first()
+            )
+            if loc is None:
+                continue
+            loc.farness = round(loc.distance.m / 1000, 2)
+            locations.append(loc)
+
+        if not locations:
+            return Response(
+                data={
+                    "response_code": 1,
+                    "response_message": "No shops retrieved",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Sort by farness across the whole set before paginating — otherwise
+        # the page you get back is whichever slice of the unsorted list the
+        # paginator happens to hand you.
+        locations.sort(key=lambda l: l.farness)
+
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(locations, request)
+        serializer = LocationsSerializer(
+            page,
+            many=True,
+            context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
 

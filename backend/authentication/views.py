@@ -1595,9 +1595,10 @@ def entitiesAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
     elif request.data["action"] == "GetRetailEntities":
-        """Get retailer entities"""
+        """Get retailer entities, optionally filtered by county and sub_county."""
 
-        entities = utils.get_retail_entities(request.user)
+        entities = utils.get_retail_entities(request.user, request.data)
+
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(entities, request)
         serializer = EntitySerializer(page, many=True, context={"request": request})
