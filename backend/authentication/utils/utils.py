@@ -469,13 +469,6 @@ def get_facilitator_entities(user):
 
     return entities
 
-
-RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
-
-
-RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
-
-
 RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
 
 
@@ -486,41 +479,13 @@ def get_retail_entities(user, data):
         qs = qs.filter(is_verified=True)
 
     county = data.get("county") or None
-    sub_county = data.get("sub_county") or None
 
-    # County-only filter — applies first, and remains in effect
-    # regardless of what happens with the sub-county below.
     if county:
         qs = qs.filter(county_id=county)
 
-    # Sub-county filter — only applied when we can confirm it
-    # belongs to the requested county. Guards against stale picks
-    # (e.g. user switched counties and the old sub-county id is
-    # still in the payload) which would otherwise return nothing.
-    if sub_county and county:
-        sub_county_belongs = SubCounties.objects.filter(
-            id=sub_county,
-            county_id=county,
-        ).exists()
-
-        if sub_county_belongs:
-            qs = qs.filter(sub_county_id=sub_county)
-        else:
-            pass
-            # Silent fallback to county-only. Log so you can spot
-            # frontend bugs without failing the request.
-            # crea(
-            #     "GetRetailEntities: sub_county %s does not belong to "
-            #     "county %s; ignoring sub_county filter.",
-            #     sub_county,
-            #     county,
-            # )
-
-    # Sub-county without county — nothing to anchor it to, so we
-    # ignore it. Frontend always sends the pair, but this keeps the
-    # helper safe if called from elsewhere.
-
-
+    # sub_county is intentionally NOT filtered here — the frontend
+    # narrows the list client-side. The payload may still carry a
+    # stale `sub_county` key from earlier versions; it's ignored.
     return qs
 
 
