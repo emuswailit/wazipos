@@ -518,12 +518,7 @@ def get_retail_entities(user, data):
     # Sub-county without county — nothing to anchor it to, so we
     # ignore it. Frontend always sends the pair, but this keeps the
     # helper safe if called from elsewhere.
-    elif sub_county and not county:
-        logger.warning(
-            "GetRetailEntities: sub_county %s supplied without county; "
-            "ignoring sub_county filter.",
-            sub_county,
-        )
+
 
     return qs
 
