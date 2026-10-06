@@ -506,9 +506,10 @@ def get_retail_entities(user, data):
         if sub_county_belongs:
             qs = qs.filter(sub_county_id=sub_county)
         else:
+            pass
             # Silent fallback to county-only. Log so you can spot
             # frontend bugs without failing the request.
-            # logger.warning(
+            # crea(
             #     "GetRetailEntities: sub_county %s does not belong to "
             #     "county %s; ignoring sub_county filter.",
             #     sub_county,
