@@ -256,11 +256,11 @@ def _entity_rows(qs):
 # Public entry point
 # ============================================================
 
-def get_client_dashboard(client):
+def get_client_dashboard(user):
     now = timezone.localtime(timezone.now())
 
     # ── Owned entities, split by type ──────────────────────
-    owned = Entities.objects.filter(owner=client)
+    owned = Entities.objects.filter(owner=user)
 
     owned_retail = owned.filter(**{_ENTITY_TYPE_FIELD: _RETAIL})
     owned_general_ws = owned.filter(**{_ENTITY_TYPE_FIELD: _GENERAL_WS})
