@@ -419,7 +419,7 @@ def clientOrdersAPIView(request):
     elif request.data["action"] == "GetClientDashboard":
         """Aggregated dashboard for the authenticated user."""
 
-        dashboard = client_dashboard_utils.get_user_dashboard(
+        dashboard = client_dashboard_utils.get_client_dashboard(
             request.user
         )
 
