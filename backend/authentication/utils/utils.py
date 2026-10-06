@@ -508,12 +508,12 @@ def get_retail_entities(user, data):
         else:
             # Silent fallback to county-only. Log so you can spot
             # frontend bugs without failing the request.
-            logger.warning(
-                "GetRetailEntities: sub_county %s does not belong to "
-                "county %s; ignoring sub_county filter.",
-                sub_county,
-                county,
-            )
+            # logger.warning(
+            #     "GetRetailEntities: sub_county %s does not belong to "
+            #     "county %s; ignoring sub_county filter.",
+            #     sub_county,
+            #     county,
+            # )
 
     # Sub-county without county — nothing to anchor it to, so we
     # ignore it. Frontend always sends the pair, but this keeps the
