@@ -31,7 +31,7 @@ from authentication.models import (
     Clusters,
     Plans,
     YearLetters,
-    Users
+    Users, Counties,SubCounties
 )
 from django.contrib.auth import get_user_model
 from django.db import transaction
