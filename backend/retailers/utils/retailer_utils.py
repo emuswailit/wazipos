@@ -3562,8 +3562,18 @@ def create_customer_order(data, user):
             return errors, None
 
         if retailer_receipt.current_unit_quantity < purchased_quantity:
+            product_title = (
+                getattr(
+                    getattr(retailer_receipt, "product", None),
+                    "title",
+                    None,
+                )
+                or getattr(retailer_receipt, "product_title", None)
+                or "Item"
+            )
             errors.append(
-                f"Only {retailer_receipt.current_unit_quantity} available"
+                f"Only {retailer_receipt.current_unit_quantity} "
+                f"{product_title} available"
             )
             return errors, None
 
@@ -3670,7 +3680,6 @@ def create_customer_order(data, user):
     except Exception as e:
         errors.append(str(e))
         return errors, None
-
     
             
 
