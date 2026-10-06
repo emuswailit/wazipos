@@ -470,14 +470,17 @@ def get_facilitator_entities(user):
     return entities
 
 
+RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
+
+
 def get_retail_entities(user, data):
-    qs = Entities.objects.filter(entity_type="RETAIL")
+    qs = Entities.objects.filter(entity_type__in=RETAIL_ENTITY_TYPES)
 
     if not user.is_staff:
-        qs = qs.filter(is_verified=True)  # or is_verified="true" if CharField
+        qs = qs.filter(is_verified=True)
 
-    county = data.get("county")
-    sub_county = data.get("sub_county")
+    county = data.get("county") or None
+    sub_county = data.get("sub_county") or None
 
     if county:
         qs = qs.filter(county__iexact=county)
