@@ -1,6 +1,8 @@
 # retailers/utils/client_dashboard_utils.py
 #
-# get_user_dashboard — aggregated dashboard for the authenticated user.
+# get_client_dashboard — aggregated dashboard for the authenticated
+# user (the "client" persona: shopper + shop owner + wholesaler
+# owner in one).
 #
 # Buckets:
 #   orders.self                → orders the user placed as a customer
@@ -20,7 +22,7 @@
 # return 0 / "0.00" / {} / [] — never null — so the client can render
 # unconditionally.
 #
-# Public entry point: get_user_dashboard(user)
+# Public entry point: get_client_dashboard(user)
 
 from decimal import Decimal
 from datetime import timedelta
@@ -34,7 +36,19 @@ from wholesalers.models import RetailerOrders
 
 
 # ── Bucket tuning ──────────────────────────────────────────
-_TERMINAL_ORDER_STATUSES = ("DELIVERED", "COMPLETED", "CANCELLED")
+# Two sets because CustomerOrders and RetailerOrders use
+# different status vocabularies. Tune each independently.
+_TERMINAL_CUSTOMER_ORDER_STATUSES = (
+    "DELIVERED",
+    "COMPLETED",
+    "CANCELLED",
+)
+_TERMINAL_RETAILER_ORDER_STATUSES = (
+    "DELIVERED",
+    "COMPLETED",
+    "CANCELLED",
+    "RECEIVED",
+)
 _OPEN_PRESCRIPTION_STATUSES = ("QUEUING",)
 _RECENT_LIMIT = 5
 _ENTITY_LIST_LIMIT = 20
@@ -47,10 +61,20 @@ _GENERAL_WS = "GeneralWholesaler"
 _PHARMA_WS = "PharmaceuticalWholesaler"
 
 # ── RetailerOrders shape ───────────────────────────────────
-# The FK on RetailerOrders pointing at the receiving wholesaler
-# entity, and the total field to sum.
+# Confirmed against the deployed model:
+#   - FK to the receiving wholesaler entity is `wholesaler`
+#   - total-to-sum is `final_price_total`
+#   - the retailer's display name lives on `retailer`
+#   - the order number FK is `document_number`
 _RETAILER_ORDER_WS_FK = "wholesaler"
-_RETAILER_ORDER_TOTAL_FIELD = "total_amount"
+_RETAILER_ORDER_TOTAL_FIELD = "final_price_total"
+_RETAILER_ORDER_COUNTERPARTY_FK = "retailer"
+_RETAILER_ORDER_DOC_NUMBER_FK = "document_number"
+
+# ── CustomerOrders shape ───────────────────────────────────
+_CUSTOMER_ORDER_TOTAL_FIELD = "order_net_price_total"
+_CUSTOMER_ORDER_DOC_NUMBER_FK = "order_number"
+_CUSTOMER_ORDER_COUNTERPARTY_FK = "entity"
 
 
 # ============================================================
@@ -71,6 +95,22 @@ def _period_starts(now):
     month_start = today_start.replace(day=1)
     year_start = today_start.replace(month=1, day=1)
     return today_start, week_start, month_start, year_start
+
+
+def _doc_number_str(obj, fk_name):
+    """
+    document_number / order_number are FKs to DocumentNumbers.
+    Return the human-readable string if it exists, else the pk.
+    """
+    doc = getattr(obj, fk_name, None)
+    if not doc:
+        return None
+    return (
+        getattr(doc, "number", None)
+        or getattr(doc, "value", None)
+        or getattr(doc, "code", None)
+        or str(doc.id)
+    )
 
 
 # ============================================================
@@ -131,40 +171,6 @@ def _bucketed_agg(qs, sum_field, now):
     }
 
 
-def _order_number(o):
-    """
-    order_number is a FK to DocumentNumbers. Return the
-    human-readable string if it exists, else the primary key.
-    """
-    num = o.order_number
-    if not num:
-        return None
-    return (
-        getattr(num, "number", None)
-        or getattr(num, "value", None)
-        or getattr(num, "code", None)
-        or str(num.id)
-    )
-
-
-def _recent_order_rows(qs):
-    rows = (
-        qs.order_by("-created")
-        .select_related("entity", "order_number")[:_RECENT_LIMIT]
-    )
-    return [
-        {
-            "id": str(o.id),
-            "order_number": _order_number(o),
-            "entity_name": o.entity.title if o.entity else None,
-            "status": o.status,
-            "total": str(o.order_net_price_total or Decimal("0.00")),
-            "created": o.created.isoformat(),
-        }
-        for o in rows
-    ]
-
-
 def _order_status_breakdown(qs):
     return {
         (r["status"] or "UNKNOWN"): r["n"]
@@ -172,12 +178,83 @@ def _order_status_breakdown(qs):
     }
 
 
-def _decorate_order_bucket(bucket, qs):
+# ── CustomerOrders recent rows ─────────────────────────────
+
+def _recent_customer_order_rows(qs):
+    rows = (
+        qs.order_by("-created")
+        .select_related(_CUSTOMER_ORDER_COUNTERPARTY_FK,
+                        _CUSTOMER_ORDER_DOC_NUMBER_FK)[:_RECENT_LIMIT]
+    )
+    out = []
+    for o in rows:
+        counterparty = getattr(o, _CUSTOMER_ORDER_COUNTERPARTY_FK, None)
+        out.append({
+            "id": str(o.id),
+            "order_number": _doc_number_str(
+                o, _CUSTOMER_ORDER_DOC_NUMBER_FK,
+            ),
+            "entity_name": (
+                getattr(counterparty, "title", None)
+                if counterparty else None
+            ),
+            "status": o.status,
+            "total": str(
+                getattr(o, _CUSTOMER_ORDER_TOTAL_FIELD, None)
+                or Decimal("0.00")
+            ),
+            "created": o.created.isoformat(),
+        })
+    return out
+
+
+# ── RetailerOrders recent rows ─────────────────────────────
+
+def _recent_retailer_order_rows(qs):
+    rows = (
+        qs.order_by("-created")
+        .select_related(_RETAILER_ORDER_COUNTERPARTY_FK,
+                        _RETAILER_ORDER_DOC_NUMBER_FK)[:_RECENT_LIMIT]
+    )
+    out = []
+    for o in rows:
+        counterparty = getattr(o, _RETAILER_ORDER_COUNTERPARTY_FK, None)
+        out.append({
+            "id": str(o.id),
+            "order_number": _doc_number_str(
+                o, _RETAILER_ORDER_DOC_NUMBER_FK,
+            ),
+            "entity_name": (
+                getattr(counterparty, "title", None)
+                if counterparty else None
+            ),
+            "status": o.status,
+            "total": str(
+                getattr(o, _RETAILER_ORDER_TOTAL_FIELD, None)
+                or Decimal("0.00")
+            ),
+            "created": o.created.isoformat(),
+        })
+    return out
+
+
+# ── Bucket decorators ──────────────────────────────────────
+
+def _decorate_customer_bucket(bucket, qs):
     bucket["status_breakdown"] = _order_status_breakdown(qs)
     bucket["open_orders"] = qs.exclude(
-        status__in=_TERMINAL_ORDER_STATUSES,
+        status__in=_TERMINAL_CUSTOMER_ORDER_STATUSES,
     ).count()
-    bucket["recent"] = _recent_order_rows(qs)
+    bucket["recent"] = _recent_customer_order_rows(qs)
+    return bucket
+
+
+def _decorate_retailer_bucket(bucket, qs):
+    bucket["status_breakdown"] = _order_status_breakdown(qs)
+    bucket["open_orders"] = qs.exclude(
+        status__in=_TERMINAL_RETAILER_ORDER_STATUSES,
+    ).count()
+    bucket["recent"] = _recent_retailer_order_rows(qs)
     return bucket
 
 
@@ -186,10 +263,6 @@ def _decorate_order_bucket(bucket, qs):
 # ============================================================
 
 def _bucketed_counts(qs, now):
-    """
-    Count-only variant of _bucketed_agg. Used for row-types that
-    carry no monetary total (prescriptions).
-    """
     today_start, week_start, month_start, year_start = _period_starts(now)
 
     agg = qs.aggregate(
@@ -272,16 +345,16 @@ def get_client_dashboard(user):
 
     # ── Orders ─────────────────────────────────────────────
     self_qs = models.CustomerOrders.objects.filter(customer=user)
-    self_bucket = _decorate_order_bucket(
-        _bucketed_agg(self_qs, "order_net_price_total", now),
+    self_bucket = _decorate_customer_bucket(
+        _bucketed_agg(self_qs, _CUSTOMER_ORDER_TOTAL_FIELD, now),
         self_qs,
     )
 
     shop_qs = models.CustomerOrders.objects.filter(
         entity_id__in=owned_retail_ids,
     ).exclude(customer=user)
-    shop_bucket = _decorate_order_bucket(
-        _bucketed_agg(shop_qs, "order_net_price_total", now),
+    shop_bucket = _decorate_customer_bucket(
+        _bucketed_agg(shop_qs, _CUSTOMER_ORDER_TOTAL_FIELD, now),
         shop_qs,
     )
 
@@ -309,7 +382,7 @@ def get_client_dashboard(user):
         general_qs = RetailerOrders.objects.filter(
             **{f"{_RETAILER_ORDER_WS_FK}_id__in": owned_general_ws_ids},
         )
-        owned_wholesalers["general"] = _decorate_order_bucket(
+        owned_wholesalers["general"] = _decorate_retailer_bucket(
             _bucketed_agg(
                 general_qs, _RETAILER_ORDER_TOTAL_FIELD, now,
             ),
@@ -321,7 +394,7 @@ def get_client_dashboard(user):
         pharma_qs = RetailerOrders.objects.filter(
             **{f"{_RETAILER_ORDER_WS_FK}_id__in": owned_pharma_ws_ids},
         )
-        owned_wholesalers["pharmaceutical"] = _decorate_order_bucket(
+        owned_wholesalers["pharmaceutical"] = _decorate_retailer_bucket(
             _bucketed_agg(
                 pharma_qs, _RETAILER_ORDER_TOTAL_FIELD, now,
             ),
