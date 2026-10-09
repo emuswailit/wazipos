@@ -5,7 +5,6 @@ from datetime import date
 
 # ---------- Third-party ----------
 from rest_framework import exceptions, serializers
-from rest_framework.validators import UniqueTogetherValidator
 
 # ---------- Django ----------
 from django.db.models import Sum
@@ -13,28 +12,16 @@ from django.db.models import Sum
 # ---------- Local apps ----------
 from authentication.models import UserImages
 from authentication.serializers import (
-    DependantsSerializer,
     EntityMiniSerializer,
     EntitySerializer,
     GenericUserSerializer,
     UserImageSerializer,
-    UsersSerializer,
 )
-from core.serializers import BaseModelSerializer
-from drugs.models import Frequency, Preparation, Routes
-from employees.models import Employees
-from employees.serializers import EmployeesSerializer
+from employees.models import Employees  # noqa: F401  (re-exported for other modules)
 from payments.models import PaymentMethods
-from payments.serializers import (
-    PaymentMethodsSerializer,
-    PriceDiscountsSerializer,
-    QuantityDiscountsSerializer,
-)
 from products.models import ProductImages
-from products.serializers import ProductImageSerializer, ProductsSerializer
-from utils.logging import create_log
+from products.serializers import ProductImageSerializer
 from wholesalers.models import (
-    RetailerOrderItems,
     WholesalerPriceDiscounts,
     WholesalerQuantityDiscounts,
     WholesalerReceipts,
@@ -45,7 +32,18 @@ from wholesalers.serializers import (
 )
 
 from . import models
-from .models import RetailerIndent, RetailerIndentItem
+from .models import RetailerIndent
+
+
+# ===========================================================================
+# Helpers
+# ===========================================================================
+
+def numOfDays(date1, date2):
+    """Signed day difference between two `datetime.date` values."""
+    if isinstance(date1, date) and isinstance(date2, date):
+        return (date2 - date1).days
+    return 0
 
 
 # ===========================================================================
@@ -56,68 +54,48 @@ class ReviewsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.RetailerReviews
         fields = (
-            "id",
-            "url",
-            "variation",
-            "rating",
-            "comment",
-            "created",
-            "updated",
-            "owner",
+            "id", "url", "variation", "rating", "comment",
+            "created", "updated", "owner",
         )
-        read_only_fields = (
-            "id",
-            "url",
-            "created",
-            "updated",
-            "owner",
-        )
+        read_only_fields = ("id", "url", "created", "updated", "owner")
 
     def create(self, validated_data):
         user = self.context.get("user")
-        variation = validated_data.get("variation", None)
+        variation = validated_data.get("variation")
 
-        # Check if user has already reviewed the variation
-        if variation:
-            if models.RetailerReviews.objects.filter(
-                variation=variation, owner=user
-            ).exists():
-                raise exceptions.ValidationError(
-                    f"Review for {variation} by {user} already exists "
-                )
+        if variation and models.RetailerReviews.objects.filter(
+            variation=variation, owner=user
+        ).exists():
+            raise exceptions.ValidationError(
+                f"Review for {variation} by {user} already exists"
+            )
 
-        rating = validated_data.get("rating", None)
-
-        # Ensure user has selected a rating
-        if not rating:
+        if not validated_data.get("rating"):
             raise exceptions.ValidationError("Please select a rating")
 
         review = models.RetailerReviews.objects.create(**validated_data)
-        if review:
-            reviews = variation.reviews_set.all()
-            variation.num_reviews = len(reviews)
-            # Calculate and save current variation rating
-            total = 0
-            for i in reviews:
-                total += i.rating
-            variation.rating = total / len(reviews)
-            variation.save()
-            return review
-        else:
-            raise exceptions.ValidationError("Review was not created")
+
+        reviews = variation.reviews_set.all()
+        variation.num_reviews = reviews.count()
+        variation.rating = (
+            sum(r.rating for r in reviews) / variation.num_reviews
+            if variation.num_reviews else 0
+        )
+        variation.save()
+
+        return review
 
     def update(self, instance, validated_data):
-        # FIX: original called instance.save() twice back-to-back.
         instance.comment = validated_data.get("comment", instance.comment)
         instance.rating = validated_data.get("rating", instance.rating)
         instance.save()
 
         reviews = instance.variation.reviews_set.all()
-        total = 0
-        for i in reviews:
-            total += i.rating
-        instance.variation.num_reviews = len(reviews)
-        instance.variation.rating = total / len(reviews)
+        instance.variation.num_reviews = reviews.count()
+        instance.variation.rating = (
+            sum(r.rating for r in reviews) / instance.variation.num_reviews
+            if instance.variation.num_reviews else 0
+        )
         instance.variation.save()
 
         return instance
@@ -134,38 +112,20 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.ShippingAddress
         fields = (
-            "id",
-            "entity",
-            "contact_person_name",
-            "contact_person_phone",
-            "estate",
-            "road",
-            "city",
-            "county",
-            "county_title",
-            "country",
-            "country_title",
-            "created",
-            "updated",
+            "id", "entity",
+            "contact_person_name", "contact_person_phone",
+            "estate", "road", "city",
+            "county", "county_title",
+            "country", "country_title",
+            "created", "updated",
         )
-        read_only_fields = (
-            "owner",
-            "created",
-            "updated",
-            "entity",
-        )
+        read_only_fields = ("owner", "created", "updated", "entity")
 
     def get_county_title(self, obj):
-        if obj.county:
-            return obj.county.title
-        else:
-            return ""
+        return obj.county.title if obj.county else ""
 
     def get_country_title(self, obj):
-        if obj.country:
-            return obj.country.title
-        else:
-            return ""
+        return obj.country.title if obj.country else ""
 
 
 # ===========================================================================
@@ -176,12 +136,7 @@ class WholesaleReceiptsSerializer(serializers.ModelSerializer):
     class Meta:
         model = WholesalerReceipts
         fields = "__all__"
-        read_only_fields = (
-            "owner",
-            "created",
-            "updated",
-            "entity",
-        )
+        read_only_fields = ("owner", "created", "updated", "entity")
 
 
 class WholesalerReceiptsDisplaySerializer(serializers.ModelSerializer):
@@ -197,27 +152,16 @@ class WholesalerReceiptsDisplaySerializer(serializers.ModelSerializer):
     class Meta:
         model = WholesalerReceipts
         fields = (
-            "id",
-            "entity",
-            "entity_title",
-            "product",
-            "product_title",
-            "preparation",
-            "preparation_title",
+            "id", "entity", "entity_title",
+            "product", "product_title",
+            "preparation", "preparation_title",
             "units_per_pack",
             "current_unit_quantity",
-            "unit_selling_price",
-            "final_unit_selling_price",
+            "unit_selling_price", "final_unit_selling_price",
             "images",
-            "wholesaler_price_discount",
-            "wholesaler_quantity_discounts",
+            "wholesaler_price_discount", "wholesaler_quantity_discounts",
         )
-        read_only_fields = (
-            "owner",
-            "created",
-            "updated",
-            "entity",
-        )
+        read_only_fields = ("owner", "created", "updated", "entity")
 
     def get_product_title(self, obj):
         return obj.product.title
@@ -226,61 +170,41 @@ class WholesalerReceiptsDisplaySerializer(serializers.ModelSerializer):
         return obj.product.units_per_pack
 
     def get_preparation(self, obj):
-        preparation_id = ""
-        if obj.product.preparation:
-            preparation_id = obj.product.preparation.id
-        return preparation_id
+        return obj.product.preparation.id if obj.product.preparation else ""
 
     def get_preparation_title(self, obj):
-        if obj.product.preparation:
-            return obj.product.preparation.title
-        else:
-            return ""
+        return obj.product.preparation.title if obj.product.preparation else ""
 
     def get_entity_title(self, obj):
-        if obj.entity:
-            return obj.entity.title
-        else:
-            return ""
+        return obj.entity.title if obj.entity else ""
 
     def get_images(self, obj):
-        images = []
-        if obj.product:
-            images = ProductImages.objects.filter(product_id=obj.product.id)
-            return ProductImageSerializer(
-                images, context=self.context, many=True
-            ).data
-        return images
+        if not obj.product:
+            return []
+        images = ProductImages.objects.filter(product_id=obj.product.id)
+        return ProductImageSerializer(
+            images, context=self.context, many=True
+        ).data
 
     def get_wholesaler_price_discount(self, obj):
-        if WholesalerPriceDiscounts.objects.filter(
-            wholesaler_receipt=obj, is_active="true"
-        ).exists():
-            wholesaler_price_discounts = WholesalerPriceDiscounts.objects.filter(
-                wholesaler_receipt=obj, is_active="true"
-            ).first()
-            return WholesalerPriceDiscountsSerializer(
-                wholesaler_price_discounts,
-                context=self.context,
-                many=False,
-            ).data
-        else:
+        discount = (
+            WholesalerPriceDiscounts.objects
+            .filter(wholesaler_receipt=obj, is_active="true")
+            .first()
+        )
+        if not discount:
             return None
+        return WholesalerPriceDiscountsSerializer(
+            discount, context=self.context, many=False
+        ).data
 
     def get_wholesaler_quantity_discounts(self, obj):
-        wholesaler_quantity_discounts = []
-        if WholesalerQuantityDiscounts.objects.filter(
+        discounts = WholesalerQuantityDiscounts.objects.filter(
             wholesaler_receipt=obj, is_active="true"
-        ).exists():
-            wholesaler_quantity_discounts = WholesalerQuantityDiscounts.objects.filter(
-                wholesaler_receipt=obj, is_active="true"
-            ).all()
-            return WholesalerQuantityDiscountsSerializer(
-                wholesaler_quantity_discounts,
-                context=self.context,
-                many=True,
-            ).data
-        return wholesaler_quantity_discounts
+        )
+        return WholesalerQuantityDiscountsSerializer(
+            discounts, context=self.context, many=True
+        ).data
 
 
 # ===========================================================================
@@ -295,43 +219,30 @@ class OrderEstimateSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.OrderEstimate
         fields = (
-            "entity",
-            "product",
-            "product_title",
-            "required_estimate",
-            "current_quantity",
-            "average_sold_daily",
-            "retailer_indent",
-            "offers",
-            "images",
+            "entity", "product", "product_title",
+            "required_estimate", "current_quantity", "average_sold_daily",
+            "retailer_indent", "offers", "images",
         )
-        read_only_fields = (
-            "owner",
-            "created",
-            "updated",
-            "entity",
-        )
+        read_only_fields = ("owner", "created", "updated", "entity")
 
     def get_product_title(self, obj):
         return obj.product.title
 
     def get_images(self, obj):
-        images = []
-        if obj.product:
-            images = ProductImages.objects.filter(product_id=obj.product.id)
-            return ProductImageSerializer(
-                images, context=self.context, many=True
-            ).data
-        return images
+        if not obj.product:
+            return []
+        images = ProductImages.objects.filter(product_id=obj.product.id)
+        return ProductImageSerializer(
+            images, context=self.context, many=True
+        ).data
 
     def get_offers(self, obj):
-        offers = []
-        if obj.product:
-            offers = WholesalerReceipts.objects.filter(product_id=obj.product.id)
-            return WholesalerReceiptsDisplaySerializer(
-                offers, context=self.context, many=True
-            ).data
-        return offers
+        if not obj.product:
+            return []
+        offers = WholesalerReceipts.objects.filter(product_id=obj.product.id)
+        return WholesalerReceiptsDisplaySerializer(
+            offers, context=self.context, many=True
+        ).data
 
 
 # ===========================================================================
@@ -343,7 +254,6 @@ class CustomerOrderItemsSerializer(serializers.ModelSerializer):
     title = serializers.SerializerMethodField(read_only=True)
     images = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Placement snapshot (model-computed) ----
     is_placement = serializers.BooleanField(read_only=True)
     wholesaler_base_unit_price = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True, allow_null=True,
@@ -358,57 +268,32 @@ class CustomerOrderItemsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CustomerOrderItems
         fields = (
-            "id",
-            "title",
-            "customer_order",
-            "retailer_receipt",
-            "purchased_quantity",
-            "discount_quantity",
-            "total_quantity",
-            "unit_of_issue",
-            "quantity",
+            "id", "title",
+            "customer_order", "retailer_receipt",
+            "purchased_quantity", "discount_quantity", "total_quantity",
+            "unit_of_issue", "quantity",
 
-            # Unit price chain
-            "item_price",
-            "item_price_total",
-            "item_tax",
-            "item_tax_total",
-            "item_price_discount",
-            "item_price_discount_total",
-            "item_net_price",
-            "item_net_price_total",
+            "item_price", "item_price_total",
+            "item_tax", "item_tax_total",
+            "item_price_discount", "item_price_discount_total",
+            "item_net_price", "item_net_price_total",
             "item_counter_price_discount",
             "item_counter_price_discount_amount",
             "item_counter_price_discount_amount_total",
 
-            # Placement settlement snapshot
-            "is_placement",
-            "wholesaler_base_unit_price",
-            "wholesaler_total",
-            "retailer_margin_total",
+            "is_placement", "wholesaler_base_unit_price",
+            "wholesaler_total", "retailer_margin_total",
 
             "receipt_details",
-            "created",
-            "updated",
-            "images",
+            "created", "updated", "images",
         )
         read_only_fields = (
-            "id",
-            "created",
-            "updated",
-
-            # Derived totals — set by CustomerOrderItems.recalculate()
-            "item_price_total",
-            "item_tax_total",
-            "item_price_discount_total",
-            "item_net_price_total",
+            "id", "created", "updated",
+            "item_price_total", "item_tax_total",
+            "item_price_discount_total", "item_net_price_total",
             "item_counter_price_discount_amount_total",
-
-            # Placement snapshot — set by CustomerOrderItems.recalculate()
-            "is_placement",
-            "wholesaler_base_unit_price",
-            "wholesaler_total",
-            "retailer_margin_total",
+            "is_placement", "wholesaler_base_unit_price",
+            "wholesaler_total", "retailer_margin_total",
         )
 
     def get_title(self, obj):
@@ -420,19 +305,19 @@ class CustomerOrderItemsSerializer(serializers.ModelSerializer):
         if not obj.retailer_receipt or not obj.retailer_receipt.product:
             return None
         images = ProductImages.objects.filter(
-            product=obj.retailer_receipt.product,
+            product=obj.retailer_receipt.product
         )
         if not images.exists():
             return None
         return ProductImageSerializer(
-            images, context=self.context, many=True,
+            images, context=self.context, many=True
         ).data
 
     def get_receipt_details(self, obj):
         if not obj.retailer_receipt:
             return None
         return RetailerReceiptsSerializer(
-            obj.retailer_receipt, context=self.context, many=False,
+            obj.retailer_receipt, context=self.context, many=False
         ).data
 
 
@@ -446,67 +331,39 @@ class DuplicateCustomerOrderItemsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CustomerOrderItems
         fields = (
-            "id",
-            "title",
-            "customer_order",
-            "customer_order_number",
+            "id", "title", "customer_order", "customer_order_number",
             "retailer_receipt",
-            "purchased_quantity",
-            "discount_quantity",
-            "total_quantity",
-            "unit_of_issue",
-            "quantity",
-            "item_price",
-            "item_price_total",
-            "item_tax",
-            "item_tax_total",
-            "item_price_discount",
-            "item_price_discount_total",
-            "item_net_price",
-            "item_net_price_total",
+            "purchased_quantity", "discount_quantity", "total_quantity",
+            "unit_of_issue", "quantity",
+            "item_price", "item_price_total",
+            "item_tax", "item_tax_total",
+            "item_price_discount", "item_price_discount_total",
+            "item_net_price", "item_net_price_total",
             "item_counter_price_discount",
             "item_counter_price_discount_amount",
             "item_counter_price_discount_amount_total",
-            "created",
-            "updated",
-            "images",
+            "created", "updated", "images",
         )
-        read_only_fields = ("id", "url", "dose", "created", "updated")
-
-    # FIX: removed `get_variationDetails` — it read `obj.variation`,
-    # which CustomerOrderItems does not have, and it was not in
-    # Meta.fields so it was never serialized.
+        read_only_fields = ("id", "created", "updated")
 
     def get_item_price_discount_total(self, obj):
-        if obj.item_price_discount_total:
-            return obj.item_price_discount_total
-        else:
-            return "0.00"
+        return obj.item_price_discount_total or "0.00"
 
     def get_discount_quantity(self, obj):
-        if obj.discount_quantity:
-            return obj.discount_quantity
-        else:
-            return "0"
-
-    # FIX: `get_title` was defined twice. Kept one.
+        return obj.discount_quantity or "0"
 
     def get_title(self, obj):
         return obj.retailer_receipt.product.title
 
     def get_images(self, obj):
-        images = None
-        if obj.retailer_receipt.product:
-            if ProductImages.objects.filter(
-                product=obj.retailer_receipt.product
-            ).exists():
-                images = ProductImages.objects.filter(
-                    product=obj.retailer_receipt.product
-                ).all()
-            return ProductImageSerializer(
-                images, context=self.context, many=True
-            ).data
-        return None
+        if not obj.retailer_receipt or not obj.retailer_receipt.product:
+            return []
+        images = ProductImages.objects.filter(
+            product=obj.retailer_receipt.product
+        )
+        return ProductImageSerializer(
+            images, context=self.context, many=True
+        ).data
 
     def get_customer_order_number(self, obj):
         return obj.customer_order.order_number.document_number
@@ -516,7 +373,7 @@ class MiniCustomerOrdersSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CustomerOrders
         fields = "__all__"
-        read_only_fields = ("id", "url", "created", "updated", "owner")
+        read_only_fields = ("id", "created", "updated", "owner")
 
 
 class CustomerOrdersSerializer(serializers.ModelSerializer):
@@ -525,11 +382,9 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     is_delivered_string = serializers.SerializerMethodField(read_only=True)
     is_packed_string = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Nested items / address ----
     order_items = serializers.SerializerMethodField(read_only=True)
     shipping_address = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Payment display (delegated to CustomerOrderPayment) ----
     psp_reference_number = serializers.SerializerMethodField(read_only=True)
     provider_reference_number = serializers.SerializerMethodField(read_only=True)
     payment_status = serializers.SerializerMethodField(read_only=True)
@@ -537,7 +392,6 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     payment_summary = serializers.SerializerMethodField(read_only=True)
     payments = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Contact / user ----
     selected_payment_method_title = serializers.SerializerMethodField(read_only=True)
     vendor = serializers.SerializerMethodField(read_only=True)
     user = serializers.SerializerMethodField(read_only=True)
@@ -545,7 +399,6 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     email = serializers.SerializerMethodField(read_only=True)
     images = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Boda / geo ----
     bodaboda_title = serializers.SerializerMethodField(read_only=True)
     bodaboda_farness = serializers.SerializerMethodField(read_only=True)
     bodaboda_latitude = serializers.SerializerMethodField(read_only=True)
@@ -555,151 +408,73 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     destination_latitude = serializers.SerializerMethodField(read_only=True)
     destination_longitude = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Document number ----
     order_number = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.CustomerOrders
         fields = (
-            "id",
-            "draft_id",
-            "status",
-            "reference_number",
-            "psp_reference_number",
-            "provider_reference_number",
-            "employee",
-            "order_number",
-            "order_type",
+            "id", "draft_id", "status", "reference_number",
+            "psp_reference_number", "provider_reference_number",
+            "employee", "order_number", "order_type",
             "payment_account_number",
-            "order_price_discount_total",
-            "order_net_price_total",
-            "order_price_total",
-            "order_tax_total",
-            "order_origin",
-            "shipping_cost",
-            "is_quoted",
+            "order_price_discount_total", "order_net_price_total",
+            "order_price_total", "order_tax_total",
+            "order_origin", "shipping_cost", "is_quoted",
 
-            # Payment state (model-owned, read-only)
-            "is_paid",
-            "paid_at",
-            "paid_total",
-            "balance_due",
-            "is_settled",
-            "due_date",
+            "is_paid", "paid_at", "paid_total", "balance_due",
+            "is_settled", "due_date",
 
-            # Delivery state
-            "is_delivered",
-            "is_delivered_string",
-            "delivered_at",
-            "delivered_by",
-            "is_packed",
-            "is_packed_string",
-            "packed_at",
-            "packed_by",
-            "is_received",
-            "received_at",
-            "received_by",
+            "is_delivered", "is_delivered_string",
+            "delivered_at", "delivered_by",
+            "is_packed", "is_packed_string",
+            "packed_at", "packed_by",
+            "is_received", "received_at", "received_by",
             "delivery_method",
 
-            # Relationships
-            "customer",
-            "coupon",
-            "entity",
-            "entity_title",
-            "vendor",
-            "user",
-            "phone",
-            "email",
+            "customer", "coupon",
+            "entity", "entity_title",
+            "vendor", "user", "phone", "email",
 
-            # Boda / geo
-            "bodaboda",
-            "bodaboda_title",
-            "bodaboda_farness",
-            "bodaboda_latitude",
-            "bodaboda_longitude",
-            "origin_latitude",
-            "origin_longitude",
-            "destination_latitude",
-            "destination_longitude",
-            "origin_point",
-            "destination_point",
-            "farness",
-            "city_name",
+            "bodaboda", "bodaboda_title", "bodaboda_farness",
+            "bodaboda_latitude", "bodaboda_longitude",
+            "origin_latitude", "origin_longitude",
+            "destination_latitude", "destination_longitude",
+            "origin_point", "destination_point",
+            "farness", "city_name",
 
-            # Contact snapshot
-            "customer_name",
-            "customer_phone",
-            "recipient_name",
-            "recipient_phone",
+            "customer_name", "customer_phone",
+            "recipient_name", "recipient_phone",
 
-            # Payment methods / display
-            "selected_payment_method",
-            "selected_payment_method_title",
-            "payment_status",
-            "payment_description",
-            "payment_summary",
-            "payments",
+            "selected_payment_method", "selected_payment_method_title",
+            "payment_status", "payment_description",
+            "payment_summary", "payments",
 
-            # Nested
-            "order_items",
-            "images",
-            "shipping_address",
+            "order_items", "images", "shipping_address",
 
-            # Timestamps
-            "created",
-            "updated",
-            "owner",
+            "created", "updated", "owner",
         )
         read_only_fields = (
-            "id",
-            "created",
-            "updated",
-            "owner",
-            "entity",
+            "id", "created", "updated", "owner", "entity",
 
-            # Derived totals — set by CustomerOrders.recalculate()
-            "order_price_total",
-            "order_tax_total",
-            "order_price_discount_total",
-            "order_net_price_total",
+            "order_price_total", "order_tax_total",
+            "order_price_discount_total", "order_net_price_total",
 
-            # Derived payment state — set by recompute_order_payment_state()
-            "is_paid",
-            "paid_at",
-            "paid_total",
-            "balance_due",
-            "is_settled",
+            "is_paid", "paid_at", "paid_total",
+            "balance_due", "is_settled",
 
-            # Event-driven delivery state — set by deliver_customer_order()
-            "is_delivered",
-            "delivered_at",
+            "is_delivered", "delivered_at",
 
-            # Method fields — read-only by nature
-            "entity_title",
-            "is_delivered_string",
-            "is_packed_string",
-            "order_items",
-            "shipping_address",
-            "psp_reference_number",
-            "provider_reference_number",
-            "payment_status",
-            "payment_description",
-            "payment_summary",
-            "payments",
+            "entity_title", "is_delivered_string", "is_packed_string",
+            "order_items", "shipping_address",
+            "psp_reference_number", "provider_reference_number",
+            "payment_status", "payment_description",
+            "payment_summary", "payments",
             "selected_payment_method_title",
-            "vendor",
-            "user",
-            "phone",
-            "email",
-            "images",
-            "bodaboda_title",
-            "bodaboda_farness",
-            "bodaboda_latitude",
-            "bodaboda_longitude",
-            "origin_latitude",
-            "origin_longitude",
-            "destination_latitude",
-            "destination_longitude",
+            "vendor", "user", "phone", "email", "images",
+            "bodaboda_title", "bodaboda_farness",
+            "bodaboda_latitude", "bodaboda_longitude",
+            "origin_latitude", "origin_longitude",
+            "destination_latitude", "destination_longitude",
             "order_number",
         )
 
@@ -707,21 +482,7 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     # Payment helpers
     # ------------------------------------------------------------------
 
-    def _successful_payment(self, obj):
-        """First SUCCESS payment. Cached on the instance between calls."""
-        cached = getattr(obj, "_successful_payment_cache", None)
-        if cached is None:
-            cached = (
-                models.CustomerOrderPayment.objects
-                .filter(customer_order=obj, status="SUCCESS")
-                .select_related("payment_method")
-                .first()
-            )
-            obj._successful_payment_cache = cached
-        return cached
-
     def _any_payment(self, obj):
-        """First payment of any status. Cached on the instance."""
         cached = getattr(obj, "_any_payment_cache", None)
         if cached is None:
             cached = (
@@ -746,23 +507,20 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
         return payment.description if payment else ""
 
     def get_payment_status(self, obj):
-        """Return the most authoritative payment status available."""
-        if models.CustomerOrderPayment.objects.filter(
-            customer_order=obj, status="SUCCESS",
-        ).exists():
+        statuses = set(
+            models.CustomerOrderPayment.objects
+            .filter(customer_order=obj)
+            .values_list("status", flat=True)
+        )
+        if "SUCCESS" in statuses:
             return "SUCCESS"
-        if models.CustomerOrderPayment.objects.filter(
-            customer_order=obj, status="PENDING",
-        ).exists():
+        if "PENDING" in statuses:
             return "PENDING"
-        if models.CustomerOrderPayment.objects.filter(
-            customer_order=obj, status="FAILED",
-        ).exists():
+        if "FAILED" in statuses:
             return "FAILED"
         return "UNAVAILABLE"
 
     def get_payment_summary(self, obj):
-        """Aggregate of successful payments vs. order net total."""
         agg = (
             models.CustomerOrderPayment.objects
             .filter(customer_order=obj, status="SUCCESS")
@@ -775,22 +533,19 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
             "balance_due": round(max(0.0, owed - paid), 2),
             "is_paid": paid >= owed if owed else False,
             "payment_count": models.CustomerOrderPayment.objects.filter(
-                customer_order=obj,
+                customer_order=obj
             ).count(),
         }
 
     def get_payments(self, obj):
-        """All payments against this order, in chronological order."""
         payments = (
             models.CustomerOrderPayment.objects
             .filter(customer_order=obj)
             .select_related("payment_method")
             .order_by("created")
         )
-        if not payments.exists():
-            return []
         return CustomerOrderPaymentsSerializer(
-            payments, context=self.context, many=True,
+            payments, context=self.context, many=True
         ).data
 
     # ------------------------------------------------------------------
@@ -800,17 +555,17 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     def get_order_items(self, obj):
         items = obj.parent_order.all()
         return CustomerOrderItemsSerializer(
-            items, context=self.context, many=True,
+            items, context=self.context, many=True
         ).data
 
     def get_shipping_address(self, obj):
         address = models.ShippingAddress.objects.filter(
-            customer_order_id=obj.id,
+            customer_order_id=obj.id
         ).first()
         if not address:
             return None
         return ShippingAddressSerializer(
-            address, context=self.context, many=False,
+            address, context=self.context, many=False
         ).data
 
     # ------------------------------------------------------------------
@@ -818,7 +573,7 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------
 
     def get_entity_title(self, obj):
-        return f"{obj.entity.title}" if obj.entity else ""
+        return obj.entity.title if obj.entity else ""
 
     def get_vendor(self, obj):
         return obj.entity.title if obj.entity else ""
@@ -833,14 +588,12 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
         return obj.order_number.document_number if obj.order_number else "N/A"
 
     def get_selected_payment_method_title(self, obj):
-        if obj.selected_payment_method:
-            return obj.selected_payment_method.title
-        return ""
+        return obj.selected_payment_method.title if obj.selected_payment_method else ""
 
     def get_user(self, obj):
-        if obj.owner:
-            return f"{obj.owner.first_name} {obj.owner.last_name}"
-        return ""
+        if not obj.owner:
+            return ""
+        return f"{obj.owner.first_name} {obj.owner.last_name}"
 
     def get_phone(self, obj):
         return obj.owner.phone if obj.owner else ""
@@ -856,7 +609,7 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
         if not images.exists():
             return []
         return UserImageSerializer(
-            images, context=self.context, many=True,
+            images, context=self.context, many=True
         ).data
 
     # ------------------------------------------------------------------
@@ -864,14 +617,12 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------
 
     def get_bodaboda_title(self, obj):
-        if obj.bodaboda:
-            return f"{obj.bodaboda.owner.first_name}, {obj.bodaboda.owner.phone}"
-        return ""
+        if not obj.bodaboda:
+            return ""
+        return f"{obj.bodaboda.owner.first_name}, {obj.bodaboda.owner.phone}"
 
     def get_bodaboda_farness(self, obj):
-        if obj.bodaboda:
-            return f"{obj.bodaboda.farness}km"
-        return ""
+        return f"{obj.bodaboda.farness}km" if obj.bodaboda else ""
 
     def get_bodaboda_latitude(self, obj):
         if obj.bodaboda and obj.bodaboda.point:
@@ -884,24 +635,16 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
         return None
 
     def get_origin_longitude(self, obj):
-        if obj.origin_point:
-            return list(obj.origin_point)[0]
-        return None
+        return list(obj.origin_point)[0] if obj.origin_point else None
 
     def get_origin_latitude(self, obj):
-        if obj.origin_point:
-            return list(obj.origin_point)[1]
-        return None
+        return list(obj.origin_point)[1] if obj.origin_point else None
 
     def get_destination_longitude(self, obj):
-        if obj.destination_point:
-            return list(obj.destination_point)[0]
-        return None
+        return list(obj.destination_point)[0] if obj.destination_point else None
 
     def get_destination_latitude(self, obj):
-        if obj.destination_point:
-            return list(obj.destination_point)[1]
-        return None
+        return list(obj.destination_point)[1] if obj.destination_point else None
 
 
 class CustomerOrdersDetailedSerializer(serializers.ModelSerializer):
@@ -919,179 +662,101 @@ class CustomerOrdersDetailedSerializer(serializers.ModelSerializer):
     phone = serializers.SerializerMethodField()
     email = serializers.SerializerMethodField()
 
-    # FIX: removed `dependant` and `dependant_details` — there is no
-    # `dependant` FK on CustomerOrders. Removed `payment` — it was
-    # declared but never listed in Meta.fields.
-
     class Meta:
         model = models.CustomerOrders
         fields = (
-            "id",
-            "employee",
-            "reference_number",
-            "payment_account_number",
+            "id", "employee", "reference_number", "payment_account_number",
             "order_origin",
-            "order_price_discount_total",
-            "order_price_total",
-            "order_tax_total",
-            "order_net_price_total",
-            "shipping_cost",
-            "shipping_address",
-            "is_quoted",
-            "is_paid",
-            "paid_at",
-            "is_delivered",
-            "is_delivered_string",
-            "is_packed_string",
-            "delivered_at",
-            "delivered_by",
-            "is_packed",
-            "packed_at",
-            "packed_by",
-            "is_received",
-            "received_at",
-            "received_by",
+            "order_price_discount_total", "order_price_total",
+            "order_tax_total", "order_net_price_total",
+            "shipping_cost", "shipping_address",
+            "is_quoted", "is_paid", "paid_at",
+            "is_delivered", "is_delivered_string", "is_packed_string",
+            "delivered_at", "delivered_by",
+            "is_packed", "packed_at", "packed_by",
+            "is_received", "received_at", "received_by",
             "delivery_method",
-            "customer",
-            "coupon",
-            "entity",
-            "vendor",
-            "user",
-            "phone",
-            "email",
-            "due_date",
-            "created",
-            "updated",
-            "owner",
-            "customer_name",
-            "customer_phone",
-            "owner_details",
-            "entity_details",
-            "customer_details",
-            "selected_payment_method",
-            "selected_payment_method_title",
+            "customer", "coupon", "entity",
+            "vendor", "user", "phone", "email", "due_date",
+            "created", "updated", "owner",
+            "customer_name", "customer_phone",
+            "owner_details", "entity_details", "customer_details",
+            "selected_payment_method", "selected_payment_method_title",
         )
-        read_only_fields = (
-            "id", "url", "created", "updated", "owner", "net_amount",
-        )
+        read_only_fields = ("id", "created", "updated", "owner", "net_amount")
 
     def get_shipping_cost(self, obj):
         return float(obj.shipping_cost or 0)
 
     def get_shipping_address(self, obj):
         address = models.ShippingAddress.objects.filter(
-            customer_order_id=obj.id,
+            customer_order_id=obj.id
         ).first()
         if not address:
             return None
         return ShippingAddressSerializer(
-            address, context=self.context, many=False,
+            address, context=self.context, many=False
         ).data
 
     def get_owner_details(self, obj):
-        if models.Users.objects.filter(id=obj.owner.id).exists():
-            user = models.Users.objects.filter(id=obj.owner.id).first()
-            return GenericUserSerializer(
-                user, context=self.context, many=False
-            ).data
-        return None
+        if not obj.owner:
+            return None
+        return GenericUserSerializer(
+            obj.owner, context=self.context, many=False
+        ).data
 
     def get_customer_details(self, obj):
-        if obj.customer:
-            if models.Users.objects.filter(id=obj.customer.id).exists():
-                user = models.Users.objects.filter(id=obj.customer.id).first()
-                return GenericUserSerializer(
-                    user, context=self.context, many=False
-                ).data
-        return None
+        if not obj.customer:
+            return None
+        return GenericUserSerializer(
+            obj.customer, context=self.context, many=False
+        ).data
 
     def get_entity_details(self, obj):
-        if models.Entities.objects.filter(id=obj.entity.id).exists():
-            entity = models.Entities.objects.filter(id=obj.entity.id).first()
-            return EntitySerializer(
-                entity, context=self.context, many=False
-            ).data
-        return None
+        if not obj.entity:
+            return None
+        return EntitySerializer(
+            obj.entity, context=self.context, many=False
+        ).data
 
     def get_vendor(self, obj):
-        if models.Entities.objects.filter(id=obj.entity.id).exists():
-            entity = models.Entities.objects.filter(id=obj.entity.id).first()
-            return entity.title
-        return ""
+        return obj.entity.title if obj.entity else ""
 
     def get_user(self, obj):
-        if models.Users.objects.filter(id=obj.owner.id).exists():
-            owner = models.Users.objects.filter(id=obj.owner.id).first()
-            return f"{owner.first_name} {owner.last_name}"
-        return ""
+        if not obj.owner:
+            return ""
+        return f"{obj.owner.first_name} {obj.owner.last_name}"
 
     def get_phone(self, obj):
-        if models.Users.objects.filter(id=obj.owner.id).exists():
-            owner = models.Users.objects.filter(id=obj.owner.id).first()
-            return f"{owner.phone}"
-        return ""
+        return obj.owner.phone if obj.owner else ""
 
     def get_email(self, obj):
-        if models.Users.objects.filter(id=obj.owner.id).exists():
-            owner = models.Users.objects.filter(id=obj.owner.id).first()
-            return f"{owner.email}"
-        return ""
+        return obj.owner.email if obj.owner else ""
 
     def get_selected_payment_method_title(self, obj):
-        if obj.selected_payment_method:
-            if PaymentMethods.objects.filter(
-                id=obj.selected_payment_method.id
-            ).exists():
-                spm = models.PaymentMethods.objects.filter(
-                    id=obj.selected_payment_method.id
-                ).first()
-                return f"{spm.title}"
-        return ""
+        if not obj.selected_payment_method:
+            return ""
+        return PaymentMethods.objects.get(id=obj.selected_payment_method.id).title
 
     def get_is_paid(self, obj):
-        """
-        FIX: previous body did `obj.is_paid == "true"` (comparison, not
-        assignment) followed by `obj.save()`, so nothing was ever
-        written. It also mutated the model from a read-only serializer
-        getter. The order's `is_paid` is owned by the model's payment
-        state recompute; this getter just reports it.
-        """
         return "true" if obj.is_paid == "true" else "false"
 
     def get_is_packed_string(self, obj):
-        if obj.is_packed:
-            return "Yes"
-        return "No"
+        return "Yes" if obj.is_packed else "No"
 
 
 class CustomerOrderPaymentsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CustomerOrderPayment
         fields = (
-            "id",
-            "paying_entity",
-            "customer_order",
-            "receiving_entity",
-            "reference_number",
-            "psp_reference_number",
-            "provider_reference_number",
-            "administrator_account",
-            "amount",
-            "is_validated",
-            "narration",
-            "currency",
-            "status",
+            "id", "paying_entity", "customer_order", "receiving_entity",
+            "reference_number", "psp_reference_number",
+            "provider_reference_number", "administrator_account",
+            "amount", "is_validated", "narration", "currency", "status",
             "entity_collection_account",
-            "created",
-            "updated",
-            "owner",
+            "created", "updated", "owner",
         )
-        read_only_fields = (
-            "id",
-            "created",
-            "updated",
-            "owner",
-        )
+        read_only_fields = ("id", "created", "updated", "owner")
 
 
 class CustomerOrderSettlementSerializer(serializers.ModelSerializer):
@@ -1100,27 +765,19 @@ class CustomerOrderSettlementSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CustomerOrderSettlement
         fields = (
-            "id",
-            "entity",
-            "customer_order_payment",
-            "receiving_entity",
-            "reference_number",
-            "payment_services_provider",
-            "psp_title",
-            "amount",
-            "account_from",
-            "account_to",
-            "created",
-            "updated",
+            "id", "entity", "customer_order_payment", "receiving_entity",
+            "reference_number", "psp_title", "amount",
+            "account_from", "account_to", "created", "updated",
         )
-        read_only_fields = (
-            "id",
-            "created",
-            "updated",
-        )
+        read_only_fields = ("id", "created", "updated")
 
     def get_psp_title(self, obj):
-        return obj.payment_services_provider.psp_title
+        return (
+            obj.customer_order_payment.payment_services_provider.psp_title
+            if obj.customer_order_payment
+            and obj.customer_order_payment.payment_services_provider
+            else ""
+        )
 
 
 # ===========================================================================
@@ -1136,32 +793,16 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.OutOfStock
         fields = (
-            "id",
-            "draft_id",
-            "entity",
-            "product",
+            "id", "draft_id", "entity", "product",
             "unit_of_receipt",
-            "product_title",
-            "units_per_pack",
-            "customer",
-            "customer_name",
-            "customer_phone",
+            "product_title", "units_per_pack",
+            "customer", "customer_name", "customer_phone",
             "required_quantity",
-            "is_special_order",
-            "is_ordered",
-            "retailer_indent",
-            "created",
-            "images",
-            "wholesaler_offers",
-            "updated",
-            "owner",
+            "is_special_order", "is_ordered", "retailer_indent",
+            "created", "images", "wholesaler_offers",
+            "updated", "owner",
         )
-        read_only_fields = (
-            "id",
-            "created",
-            "updated",
-            "owner",
-        )
+        read_only_fields = ("id", "created", "updated", "owner")
 
     def get_product_title(self, obj):
         return obj.product.title
@@ -1170,9 +811,7 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
         return obj.product.units_per_pack
 
     def get_images(self, obj):
-        images = []
-        if ProductImages.objects.filter(product=obj.product).exists():
-            images = ProductImages.objects.filter(product=obj.product).all()
+        images = ProductImages.objects.filter(product=obj.product)
         return ProductImageSerializer(
             images, context=self.context, many=True
         ).data
@@ -1180,10 +819,6 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
     def get_wholesaler_offers(self, obj):
         if not obj.product_id:
             return []
-
-        # Local imports to avoid a circular dependency between the
-        # retailers and wholesalers apps.
-        from datetime import date
 
         from django.db.models import Case, Count, IntegerField, Q, Value, When
 
@@ -1193,9 +828,6 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
         try:
             today = date.today()
 
-            # A receipt is "discounted" if it has an active price
-            # discount OR an active quantity discount whose date
-            # window covers today.
             active_price_discount = Q(
                 wholesaler_price_discount_receipt__is_active="true",
                 wholesaler_price_discount_receipt__start__lte=today,
@@ -1213,45 +845,32 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
                 .annotate(
                     has_price_discount=Count(
                         "wholesaler_price_discount_receipt",
-                        filter=active_price_discount,
-                        distinct=True,
+                        filter=active_price_discount, distinct=True,
                     ),
                     has_quantity_discount=Count(
                         "wholesaler_quantity_discount_receipt",
-                        filter=active_quantity_discount,
-                        distinct=True,
+                        filter=active_quantity_discount, distinct=True,
                     ),
                 )
                 .annotate(
                     discount_rank=Case(
-                        # Both price + quantity discounts
                         When(
                             has_price_discount__gt=0,
                             has_quantity_discount__gt=0,
                             then=Value(3),
                         ),
-                        # Price discount only
                         When(has_price_discount__gt=0, then=Value(2)),
-                        # Quantity discount only
                         When(has_quantity_discount__gt=0, then=Value(1)),
-                        # No active discount
                         default=Value(0),
                         output_field=IntegerField(),
                     ),
                 )
                 .select_related(
-                    "product",
-                    "product__preparation",
-                    "product__manufacturer",
-                    "product__origin_country",
-                    # FIX: "wholesaler_variation" removed — no such
-                    # FK on WholesalerReceipts.
-                    "received_from",
-                    "retailer_order_item",
-                    "employee",
-                    "owner",
+                    "product", "product__preparation",
+                    "product__manufacturer", "product__origin_country",
+                    "received_from", "retailer_order_item",
+                    "employee", "owner",
                 )
-                # Best offers first, then cheapest price, then newest.
                 .order_by(
                     "-discount_rank",
                     "final_unit_selling_price",
@@ -1263,8 +882,6 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
                 receipts, context=self.context, many=True
             ).data
         except Exception:
-            # Never let an offer-lookup failure break the
-            # OutOfStock response.
             return []
 
 
@@ -1273,8 +890,6 @@ class OutOfStocksSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class InventoryPredictionQuerySerializer(serializers.Serializer):
-    """Sanitises the input params for the simulator playground endpoint."""
-
     days_to_order = serializers.IntegerField(min_value=1, max_value=365)
     lead_time_days = serializers.IntegerField(
         min_value=0, max_value=90, default=0
@@ -1288,22 +903,11 @@ class InventoryPredictionQuerySerializer(serializers.Serializer):
 
 
 # ===========================================================================
-# Retailer indent — item edit (narrow)
+# Retailer indent — items
 # ===========================================================================
 
 class RetailerIndentItemEditSerializer(serializers.ModelSerializer):
-    """
-    Only the editable quantity. Everything else is derived from the
-    wholesale receipt at creation time.
-
-    Used by RetailerIndentItemUpdateView.patch when the caller only
-    wants to change the quantity on an existing line.
-    """
-
-    required_quantity = serializers.IntegerField(
-        min_value=1,
-        max_value=100000,
-    )
+    required_quantity = serializers.IntegerField(min_value=1, max_value=100000)
 
     class Meta:
         model = models.RetailerIndentItem
@@ -1317,39 +921,27 @@ class RetailerIndentItemEditSerializer(serializers.ModelSerializer):
         return value
 
 
-# ===========================================================================
-# Retailer indent — items (full)
-# ===========================================================================
-
 class RetailerIndentItemsSerializer(serializers.ModelSerializer):
-    # ---- Product / wholesaler info ----
     wholesale_receipt_title = serializers.SerializerMethodField()
     wholesaler = serializers.SerializerMethodField()
     wholesaler_title = serializers.SerializerMethodField()
 
-    # ---- Batch dates ----
     manufacture_date = serializers.SerializerMethodField()
     expiry_date = serializers.SerializerMethodField()
 
-    # ---- Images ----
     images = serializers.SerializerMethodField()
 
-    # ---- Discount titles ----
     wholesaler_price_discount_title = serializers.SerializerMethodField()
     wholesaler_quantity_discount_title = serializers.SerializerMethodField()
 
-    # ---- Campaign link ----
     campaign_item_details = serializers.SerializerMethodField()
 
-    # ---- Entity info ----
     entity_title = serializers.SerializerMethodField()
 
-    # ---- Source label ----
     source_label = serializers.CharField(
         source="get_source_display", read_only=True,
     )
 
-    # ---- Snapshot fields (persisted) ----
     supplier_unit_selling_price = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True, allow_null=True,
     )
@@ -1363,7 +955,6 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
         max_digits=6, decimal_places=2, read_only=True, allow_null=True,
     )
 
-    # ---- Bonus rule snapshot ----
     bonus_quantity_earned = serializers.IntegerField(read_only=True)
     bonus_blocks_earned = serializers.IntegerField(read_only=True)
     bonus_rule_buy_quantity = serializers.IntegerField(
@@ -1373,7 +964,6 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
         read_only=True, allow_null=True,
     )
 
-    # ---- Profit accessors (model @property) ----
     cost_per_unit = serializers.CharField(read_only=True, allow_null=True)
     sell_per_unit = serializers.CharField(read_only=True, allow_null=True)
     profit_per_unit = serializers.CharField(read_only=True, allow_null=True)
@@ -1383,113 +973,65 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
     pricing_source = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
-        model = RetailerIndentItem
+        model = models.RetailerIndentItem
         fields = (
-            "id",
-            "entity",
-            "entity_title",
+            "id", "entity", "entity_title",
 
-            # Source
-            "source",
-            "source_label",
+            "source", "source_label",
 
-            # Relationships
             "retailer_indent",
-            "wholesale_receipt",
-            "wholesale_receipt_title",
-            "wholesaler",
-            "wholesaler_title",
+            "wholesale_receipt", "wholesale_receipt_title",
+            "wholesaler", "wholesaler_title",
 
-            # Product request attribution
-            "product_request",
-            "product_request_offer",
+            "product_request", "product_request_offer",
 
-            # Discounts
-            "wholesaler_price_discount",
-            "wholesaler_price_discount_title",
+            "wholesaler_price_discount", "wholesaler_price_discount_title",
             "wholesaler_quantity_discount",
             "wholesaler_quantity_discount_title",
 
-            # Campaign
-            "campaign_item",
-            "campaign_item_details",
+            "campaign_item", "campaign_item_details",
 
-            # Quantities
-            "required_quantity",
-            "total_quantity",
+            "required_quantity", "total_quantity",
 
-            # Bonus snapshot
-            "bonus_quantity_earned",
-            "bonus_blocks_earned",
-            "bonus_rule_buy_quantity",
-            "bonus_rule_free_quantity",
+            "bonus_quantity_earned", "bonus_blocks_earned",
+            "bonus_rule_buy_quantity", "bonus_rule_free_quantity",
 
-            # Price snapshot chain
             "supplier_unit_selling_price",
             "final_supplier_unit_selling_price",
             "recommended_retail_price",
             "markup_percentage_used",
 
-            # Derived pricing (model @property)
             "final_unit_price",
             "item_gross_total_amount",
             "item_net_total_amount",
 
-            # Profit
             "profit_estimate",
-            "cost_per_unit",
-            "sell_per_unit",
-            "profit_per_unit",
-            "total_profit",
-            "total_revenue",
-            "margin_percent",
+            "cost_per_unit", "sell_per_unit", "profit_per_unit",
+            "total_profit", "total_revenue", "margin_percent",
             "pricing_source",
 
-            # Lead time
-            "lead_time_days",
-            "lead_time_variance_days",
-            "lead_time_source",
+            "lead_time_days", "lead_time_variance_days", "lead_time_source",
 
-            # Product metadata
-            "manufacture_date",
-            "expiry_date",
-            "images",
+            "manufacture_date", "expiry_date", "images",
 
-            # Timestamps / audit
-            "created",
-            "updated",
-            "owner",
+            "created", "updated", "owner",
         )
         read_only_fields = (
-            "id",
-            "entity",
-            "created",
-            "updated",
-            "owner",
+            "id", "entity", "created", "updated", "owner",
 
-            # Snapshots
             "final_supplier_unit_selling_price",
             "markup_percentage_used",
 
-            # Bonus snapshot
-            "bonus_quantity_earned",
-            "bonus_blocks_earned",
-            "bonus_rule_buy_quantity",
-            "bonus_rule_free_quantity",
+            "bonus_quantity_earned", "bonus_blocks_earned",
+            "bonus_rule_buy_quantity", "bonus_rule_free_quantity",
 
-            # Derived pricing
             "final_unit_price",
             "item_gross_total_amount",
             "item_net_total_amount",
 
-            # Profit
             "profit_estimate",
-            "cost_per_unit",
-            "sell_per_unit",
-            "profit_per_unit",
-            "total_profit",
-            "total_revenue",
-            "margin_percent",
+            "cost_per_unit", "sell_per_unit", "profit_per_unit",
+            "total_profit", "total_revenue", "margin_percent",
             "pricing_source",
         )
 
@@ -1531,24 +1073,22 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
         if not obj.wholesale_receipt:
             return []
         images = ProductImages.objects.filter(
-            product=obj.wholesale_receipt.product,
+            product=obj.wholesale_receipt.product
         )
         return ProductImageSerializer(
-            images, context=self.context, many=True,
+            images, context=self.context, many=True
         ).data
 
     def get_wholesaler_price_discount_title(self, obj):
         return (
             obj.wholesaler_price_discount.title
-            if obj.wholesaler_price_discount
-            else ""
+            if obj.wholesaler_price_discount else ""
         )
 
     def get_wholesaler_quantity_discount_title(self, obj):
         return (
             obj.wholesaler_quantity_discount.title
-            if obj.wholesaler_quantity_discount
-            else ""
+            if obj.wholesaler_quantity_discount else ""
         )
 
     def get_campaign_item_details(self, obj):
@@ -1575,24 +1115,15 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
     has_items = serializers.SerializerMethodField()
     active_item_count = serializers.SerializerMethodField()
 
-    # ---- Campaign attribution ----
     campaign_title = serializers.SerializerMethodField(read_only=True)
 
-    # ---- Lead-time aggregate ----
     average_lead_time_days = serializers.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        read_only=True,
-        allow_null=True,
+        max_digits=6, decimal_places=2, read_only=True, allow_null=True,
     )
     average_variance_days = serializers.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        read_only=True,
-        allow_null=True,
+        max_digits=6, decimal_places=2, read_only=True, allow_null=True,
     )
 
-    # ---- Projected aggregates ----
     total_cost = serializers.DecimalField(
         max_digits=14, decimal_places=2, read_only=True,
     )
@@ -1606,88 +1137,51 @@ class RetailerIndentSerializer(serializers.ModelSerializer):
     class Meta:
         model = RetailerIndent
         fields = (
-            "id",
-            "is_open",
-            "indent_number",
-            "entity",
-            "entity_title",
+            "id", "is_open", "indent_number",
+            "entity", "entity_title",
 
-            # Campaign attribution
-            "campaign",
-            "campaign_title",
+            "campaign", "campaign_title",
 
-            # Ordering parameters
-            "lead_time",
-            "order_days",
-            "budget_amount",
-            "budget_enforced",
-            "pricing_percentage",
+            "lead_time", "order_days",
+            "budget_amount", "budget_enforced", "pricing_percentage",
 
-            # Aggregate lead time
-            "average_lead_time_days",
-            "average_variance_days",
-            "min_lead_time_days",
-            "max_lead_time_days",
+            "average_lead_time_days", "average_variance_days",
+            "min_lead_time_days", "max_lead_time_days",
             "lead_time_updated_at",
 
-            # Projected aggregates
-            "total_cost",
-            "total_revenue",
-            "total_profit",
-            "included_item_count",
-            "excluded_item_count",
-            "over_budget",
-            "has_items",
-            "active_item_count",
+            "total_cost", "total_revenue", "total_profit",
+            "included_item_count", "excluded_item_count",
+            "over_budget", "has_items", "active_item_count",
 
-            # Snapshot of the config used to generate
             "config_snapshot",
 
-            # Nested items
             "retailer_indent_items",
 
-            # Timestamps / audit
-            "created",
-            "updated",
-            "owner",
+            "created", "updated", "owner",
         )
         read_only_fields = (
-            "id",
-            "indent_number",
-            "campaign",
-            "campaign_title",
-            "average_lead_time_days",
-            "average_variance_days",
-            "min_lead_time_days",
-            "max_lead_time_days",
+            "id", "indent_number",
+            "campaign", "campaign_title",
+            "average_lead_time_days", "average_variance_days",
+            "min_lead_time_days", "max_lead_time_days",
             "lead_time_updated_at",
-            "total_cost",
-            "total_revenue",
-            "total_profit",
-            "included_item_count",
-            "excluded_item_count",
-            "over_budget",
-            "has_items",
-            "active_item_count",
-            "config_snapshot",
-            "created",
-            "updated",
-            "owner",
+            "total_cost", "total_revenue", "total_profit",
+            "included_item_count", "excluded_item_count",
+            "over_budget", "has_items", "active_item_count",
+            "config_snapshot", "created", "updated", "owner",
         )
 
     def get_entity_title(self, obj):
         return obj.entity.title if obj.entity else ""
 
     def get_campaign_title(self, obj):
-        # `select_related("campaign")` on the queryset avoids an N+1
-        # here. Without it, this fires one query per indent.
         campaign = getattr(obj, "campaign", None)
         return campaign.title if campaign else ""
 
     def get_retailer_indent_items(self, obj):
         items = obj.indent_for_item.all()
         return RetailerIndentItemsSerializer(
-            items, context=self.context, many=True,
+            items, context=self.context, many=True
         ).data
 
     def get_has_items(self, obj):
@@ -1706,21 +1200,9 @@ class MiniRetailerReceiptsSerializer(serializers.ModelSerializer):
         model = models.RetailerReceipts
         fields = "__all__"
         read_only_fields = (
-            "id",
-            "url",
-            "created",
-            "entity",
-            "description",
-            "unit_buying_price",
-            "unit_price_discount",
-            "pack_price_discount",
-            "unit_selling_price",
-            "updated",
-            "owner",
-            "retailer_variation_details",
-            "received_from_details",
-            "received_from_title",
-            "images",
+            "id", "created", "entity",
+            "unit_buying_price", "unit_price_discount", "unit_selling_price",
+            "updated", "owner",
         )
 
 
@@ -1750,101 +1232,56 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
     manufacturer = serializers.SerializerMethodField(read_only=True)
     manufacturer_title = serializers.SerializerMethodField(read_only=True)
     is_pom = serializers.SerializerMethodField(read_only=True)
-
-    # ── NEW ──────────────────────────────────────────────────
     category = serializers.SerializerMethodField(read_only=True)
     category_title = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.RetailerReceipts
         fields = (
-            "id",
-            "title",
-            "entity",
-            "entity_title",
-            "product",
-            "draft_id",
-            "preparation_title",
-            "product_title",
-            "formulation_title",
-            "long_title",
-            "received_from",
-            "unit_of_receipt",
-            "received_from_title",
-            "retailer_order",
-            "retailer_order_item",
-            "wholesaler_receipt",
-            "batch",
-            "bar_code",
-            "manufacture_date",
-            "expiry_date",
-            "unit_buying_price",
-            "unit_selling_price",
-            "unit_price_discount",
+            "id", "title",
+            "entity", "entity_title",
+            "product", "draft_id",
+            "preparation_title", "product_title",
+            "formulation_title", "long_title",
+            "received_from", "unit_of_receipt", "received_from_title",
+            "retailer_order", "retailer_order_item", "wholesaler_receipt",
+            "batch", "bar_code",
+            "manufacture_date", "expiry_date",
+            "unit_buying_price", "unit_selling_price", "unit_price_discount",
             "final_unit_selling_price",
-            "allocated_shipping_total",
-            "allocated_shipping_per_unit",
+            "allocated_shipping_total", "allocated_shipping_per_unit",
             "landed_unit_buying_price",
-            "current_unit_quantity",
-            "received_unit_quantity",
-            "reserved_unit_quantity",
-            "available_unit_quantity",
-            "in_placement",
-            "is_consignment_open",
-            "is_active",
-            "is_pom",
+            "current_unit_quantity", "received_unit_quantity",
+            "reserved_unit_quantity", "available_unit_quantity",
+            "in_placement", "is_consignment_open",
+            "is_active", "is_pom",
             "supplier_invoice",
-            "origin_country",
-            "origin_country_title",
+            "origin_country", "origin_country_title",
             "placement_sold_quantity",
             "placement_owed_total",
             "placement_margin_total",
             "images",
-            "created",
-            "updated",
-            "employee",
-            "owner",
-            "days_to_expiry",
-            "expiry_status",
-            "packaging",
-            "units_per_pack",
-            "manufacturer",
-            "manufacturer_title",
-            "category",           # ← new
-            "category_title",     # ← new
+            "created", "updated", "employee", "owner",
+            "days_to_expiry", "expiry_status",
+            "packaging", "units_per_pack",
+            "manufacturer", "manufacturer_title",
+            "category", "category_title",
         )
         read_only_fields = (
-            "id",
-            "created",
-            "updated",
-            "entity",
-            "owner",
-            "final_unit_selling_price",
-            "landed_unit_buying_price",
-            "allocated_shipping_total",
-            "allocated_shipping_per_unit",
+            "id", "created", "updated", "entity", "owner",
+            "final_unit_selling_price", "landed_unit_buying_price",
+            "allocated_shipping_total", "allocated_shipping_per_unit",
             "available_unit_quantity",
-            "placement_sold_quantity",
-            "placement_owed_total",
+            "placement_sold_quantity", "placement_owed_total",
             "placement_margin_total",
-            "is_consignment_open",
-            "received_from_title",
-            "images",
+            "is_consignment_open", "received_from_title", "images",
         )
 
-    # ------------------------------------------------------------------
-    # Method fields
-    # ------------------------------------------------------------------
-
     def get_received_from_title(self, obj):
-        if obj.received_from:
-            return obj.received_from.title
-        return ""
+        return obj.received_from.title if obj.received_from else ""
 
     def get_entity_title(self, obj):
-        if obj.entity:
-            return obj.entity.title
-        return ""
+        return obj.entity.title if obj.entity else ""
 
     def get_title(self, obj):
         if obj.product.preparation:
@@ -1854,53 +1291,32 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
                 f"{obj.product.preparation.formulation.title} "
                 f"{obj.product.units_per_pack}s"
             )
-        else:
-            return f"{obj.product.title} {obj.product.units_per_pack}s"
+        return f"{obj.product.title} {obj.product.units_per_pack}s"
 
     def get_is_pom(self, obj):
-        # Derive the flag — no write side-effect.
         return bool(obj.product.preparation)
 
     def get_preparation_title(self, obj):
-        if obj.product.preparation:
-            return obj.product.preparation.title
-        return ""
+        return obj.product.preparation.title if obj.product.preparation else ""
 
     def get_origin_country_title(self, obj):
-        if obj.product.origin_country:
-            return obj.product.origin_country.title
-        return ""
+        return obj.product.origin_country.title if obj.product.origin_country else ""
 
     def get_origin_country(self, obj):
-        if obj.product.origin_country:
-            return obj.product.origin_country.id
-        return ""
+        return obj.product.origin_country.id if obj.product.origin_country else ""
 
     def get_product_title(self, obj):
-        if obj.product.title:
-            return obj.product.title
-        return ""
+        return obj.product.title or ""
 
     def get_packaging(self, obj):
-        if obj.product.packaging:
-            return obj.product.packaging
-        return ""
+        return obj.product.packaging or ""
 
     def get_manufacturer(self, obj):
-        if obj.product.manufacturer:
-            return obj.product.manufacturer.id
-        return ""
+        return obj.product.manufacturer.id if obj.product.manufacturer else ""
 
     def get_manufacturer_title(self, obj):
-        if obj.product.manufacturer:
-            return obj.product.manufacturer.title
-        return ""
+        return obj.product.manufacturer.title if obj.product.manufacturer else ""
 
-    # ── NEW ──────────────────────────────────────────────────
-    # Direct access is safe because the view's queryset uses
-    # `.select_related("product__category")` — no extra query,
-    # no descriptor-raise on dangling FKs. See the view note
-    # below.
     def get_category(self, obj):
         if obj.product and obj.product.category:
             return obj.product.category.id
@@ -1912,9 +1328,10 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
         return ""
 
     def get_formulation_title(self, obj):
-        if obj.product.preparation:
-            return obj.product.preparation.formulation.title
-        return ""
+        return (
+            obj.product.preparation.formulation.title
+            if obj.product.preparation else ""
+        )
 
     def get_long_title(self, obj):
         if obj.product.preparation:
@@ -1923,8 +1340,7 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
                 f"{obj.product.preparation.formulation.title} - "
                 f"{obj.product.title} {obj.product.units_per_pack}s"
             )
-        else:
-            return f"{obj.product.title}"
+        return f"{obj.product.title}"
 
     def get_images(self, obj):
         if not obj.product:
@@ -1933,34 +1349,33 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
         if not images.exists():
             return None
         return ProductImageSerializer(
-            images, context=self.context, many=True,
+            images, context=self.context, many=True
         ).data
 
     def get_days_to_expiry(self, obj):
         if obj.expiry_date:
-            today = date.today()
-            expiry_date = obj.expiry_date
-            if expiry_date:
-                return numOfDays(today, expiry_date)
+            return numOfDays(date.today(), obj.expiry_date)
         return None
 
     def get_expiry_status(self, obj):
-        if obj.expiry_date:
-            today = date.today()
-            expiry_date = obj.expiry_date
-            expiry_days = numOfDays(today, expiry_date)
-            if expiry_days is not None:
-                if expiry_days < 1:
-                    return f"EXPIRED {expiry_days} DAY(S) AGO"
-                elif 1 < expiry_days < 7:
-                    return f"EXPIRES IN A WEEK (IN {expiry_days} DAY(S)"
-                elif 7 < expiry_days < 28:
-                    return f"EXPIRES IN A MONTH (IN {expiry_days} DAY(S)"
-                elif 28 < expiry_days < 56:
-                    return f"EXPIRES 2 MONTHS (IN {expiry_days} DAY(S)"
-                elif expiry_days > 56:
-                    return f"EXPIRES IN {expiry_days} DAY(S)"
+        if not obj.expiry_date:
+            return None
+        expiry_days = numOfDays(date.today(), obj.expiry_date)
+        if expiry_days is None:
+            return None
+        if expiry_days < 1:
+            return f"EXPIRED {expiry_days} DAY(S) AGO"
+        elif 1 < expiry_days < 7:
+            return f"EXPIRES IN A WEEK (IN {expiry_days} DAY(S)"
+        elif 7 < expiry_days < 28:
+            return f"EXPIRES IN A MONTH (IN {expiry_days} DAY(S)"
+        elif 28 < expiry_days < 56:
+            return f"EXPIRES 2 MONTHS (IN {expiry_days} DAY(S)"
+        elif expiry_days > 56:
+            return f"EXPIRES IN {expiry_days} DAY(S)"
         return None
+
+
 # ===========================================================================
 # Retailer payments / discounts / movement / shipping rates
 # ===========================================================================
@@ -1969,14 +1384,14 @@ class RetailerPaymentsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.RetailerPayments
         fields = "__all__"
-        read_only_fields = ("id", "url", "created", "updated")
+        read_only_fields = ("id", "created", "updated")
 
 
 class RetailQuantityDiscountsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.RetailQuantityDiscounts
         fields = "__all__"
-        read_only_fields = ("id", "url", "created", "updated")
+        read_only_fields = ("id", "created", "updated")
 
 
 class ProductMovementSerializer(serializers.ModelSerializer):
@@ -1987,20 +1402,12 @@ class ProductMovementSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.ProductMovement
         fields = (
-            "retailer_receipt",
-            "customer_order_item",
-            "customer_order",
-            "retailer_order",
-            "balance",
-            "direction",
-            "quantity",
-            "transaction_date",
-            "id",
-            "owner_title",
-            "created",
-            "updated",
+            "retailer_receipt", "customer_order_item", "customer_order",
+            "retailer_order", "balance", "direction", "quantity",
+            "transaction_date", "id", "owner_title",
+            "created", "updated",
         )
-        read_only_fields = ("id", "url", "created", "updated")
+        read_only_fields = ("id", "created", "updated")
 
     def get_owner_title(self, obj):
         if obj.owner:
@@ -2035,29 +1442,22 @@ class WholesalerInvoicesSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.WholesalerInvoices
         fields = (
-            "source_entity",
-            "invoice_number",
-            "total_amount",
-            "paid_amount",
-            "outstanding_amount",
-            "delivered_by",
-            "received_by",
+            "source_entity", "invoice_number", "total_amount",
+            "paid_amount", "outstanding_amount",
+            "delivered_by", "received_by",
         )
         read_only_fields = ("id", "created", "owner", "updated")
 
     def get_total_amount(self, obj):
         total_amount = 0.00
-        if models.WholesalerInvoiceItems.objects.filter(
+        items = models.WholesalerInvoiceItems.objects.filter(
             wholesaler_invoice=obj
-        ).exists():
-            items_in_invoice = models.WholesalerInvoiceItems.objects.filter(
-                wholesaler_invoice=obj
-            ).all()
-            for item in items_in_invoice:
-                total_amount = total_amount + (
-                    float(item.purchased_unit_quantity)
-                    * float(item.pack_buying_price or 0)
-                )
+        )
+        for item in items:
+            total_amount += (
+                float(item.purchased_unit_quantity)
+                * float(item.pack_buying_price or 0)
+            )
         return total_amount
 
 
@@ -2065,42 +1465,21 @@ class WholesalerInvoicesItemsSerializer(serializers.ModelSerializer):
     item_total_amount = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
-        verbose_name_plural = "Inbound Invoice Items"
         model = models.WholesalerInvoiceItems
         fields = (
-            "wholesaler_invoice",
-            "product",
-            "purchased_unit_quantity",
-            "bonus_unit_quantity",
-            "pack_buying_price",
-            # FIX: "pack_seling_price" → "pack_selling_price"
-            "pack_selling_price",
-            "percent_discount",
-            "manufacture_date",
-            "expiry_date",
+            "wholesaler_invoice", "product",
+            "purchased_unit_quantity", "bonus_unit_quantity",
+            "pack_buying_price", "pack_selling_price", "percent_discount",
+            "manufacture_date", "expiry_date",
             "item_total_amount",
         )
         read_only_fields = ("id", "created", "owner", "updated")
 
     def get_item_total_amount(self, obj):
-        # FIX: field is `purchased_unit_quantity`, not
-        # `purchased_quantity`.
         return (
             float(obj.purchased_unit_quantity or 0)
             * float(obj.pack_buying_price or 0)
         )
-
-
-# ===========================================================================
-# Helpers
-# ===========================================================================
-
-def numOfDays(date1, date2):
-    # check which date is greater to avoid days output in -ve number
-    if isinstance(date1, date) and isinstance(date2, date):
-        return (date2 - date1).days
-    else:
-        return 0
 
 
 # ===========================================================================
@@ -2112,14 +1491,9 @@ class CustomerPaymentsSerializer(serializers.ModelSerializer):
         ordering = ["-id"]
         model = models.CustomerOrderPayment
         fields = (
-            "id",
-            "customer_order",
-            "payment_method",
-            "owner",
-            "narration",
-            "reference_number",
-            "created",
-            "updated",
+            "id", "customer_order", "payment_method", "owner",
+            "narration", "reference_number",
+            "created", "updated",
         )
         read_only_fields = ("id", "created", "updated")
 
@@ -2132,14 +1506,8 @@ class PrescriptionImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.PrescriptionImages
         fields = (
-            "id",
-            "image",
-            "thumbnail",
-            "owner",
-            "prescription",
-            "entity",
-            "created",
-            "updated",
+            "id", "image", "thumbnail", "owner", "prescription",
+            "entity", "created", "updated",
         )
         read_only_fields = ("prescription", "thumbnail", "owner", "entity")
 
@@ -2149,23 +1517,13 @@ class PrescriptionsSerializer(serializers.ModelSerializer):
         ordering = ["-created"]
         model = models.Prescriptions
         fields = (
-            "id",
-            "entity",
-            "created_by",
-            "interpreted_by",
-            "is_closed",
-            "is_dispensed",
-            "origin_point",
-            "destination_point",
-            "status",
-            "nature",
-            "patient",
-            "patient_name",
-            "patient_gender",
-            "patient_date_of_birth",
-            "comment",
-            "created",
-            "updated",
+            "id", "entity", "created_by", "interpreted_by",
+            "is_closed", "is_dispensed",
+            "origin_point", "destination_point",
+            "status", "nature",
+            "patient", "patient_name", "patient_gender",
+            "patient_date_of_birth", "comment",
+            "created", "updated",
         )
         read_only_fields = ("id", "created_by", "created", "updated")
 
@@ -2183,71 +1541,40 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
         ordering = ["-created"]
         model = models.Prescriptions
         fields = (
-            "id",
-            "entity",
-            "entity_title",
-            "entity_details",
-            "created_by",
-            "interpreted_by",
-            "is_closed",
-            "is_dispensed",
-            "origin_point",
-            "destination_point",
-            "status",
-            "nature",
-            "images",
-            "items",
-            "items_count",
-            "patient",
-            "patient_name",
-            "patient_gender",
-            "patient_date_of_birth",
-            "patient_age",
-            "comment",
-            "key",
-            "created",
-            "updated",
+            "id", "entity", "entity_title", "entity_details",
+            "created_by", "interpreted_by",
+            "is_closed", "is_dispensed",
+            "origin_point", "destination_point",
+            "status", "nature",
+            "images", "items", "items_count",
+            "patient", "patient_name", "patient_gender",
+            "patient_date_of_birth", "patient_age", "comment",
+            "key", "created", "updated",
         )
         read_only_fields = ("id", "created_by", "created", "updated")
-
-        extra_kwargs = {
-            "images": {
-                "required": False,
-            },
-        }
+        extra_kwargs = {"images": {"required": False}}
 
     def get_key(self, obj):
         return obj.id
 
     def get_items(self, obj):
-        items = []
-        if models.PrescriptionItems.objects.filter(prescription=obj).exists():
-            items = models.PrescriptionItems.objects.filter(
-                prescription=obj
-            ).all()
+        items = models.PrescriptionItems.objects.filter(prescription=obj)
         return PrescriptionItemsSerializer(
             items, many=True, context=self.context
         ).data
 
     def get_items_count(self, obj):
-        if models.PrescriptionItems.objects.filter(prescription=obj).exists():
-            return models.PrescriptionItems.objects.filter(
-                prescription=obj
-            ).count()
-        else:
-            return 0
+        return models.PrescriptionItems.objects.filter(prescription=obj).count()
 
     def get_entity_title(self, obj):
-        entity_title = ""
-        if obj.entity:
-            entity_title = obj.entity.title
-        return entity_title
+        return obj.entity.title if obj.entity else ""
 
     def get_entity_details(self, obj):
-        if obj.entity:
-            return EntityMiniSerializer(
-                obj.entity, many=False, context=self.context
-            ).data
+        if not obj.entity:
+            return None
+        return EntityMiniSerializer(
+            obj.entity, many=False, context=self.context
+        ).data
 
     def get_patient_age(self, obj):
         from core.date_utils import get_age_in_years
@@ -2262,16 +1589,10 @@ class PrescriptionItemAdministrationsSerializer(serializers.ModelSerializer):
         ordering = ["-id"]
         model = models.PrescriptionItemAdministrations
         fields = (
-            "id",
-            "entity",
-            "comment",
-            "administration_date",
-            "administration_time",
-            "prescription_item",
-            "is_administered",
-            "key",
-            "created",
-            "updated",
+            "id", "entity", "comment",
+            "administration_date", "administration_time",
+            "prescription_item", "is_administered",
+            "key", "created", "updated",
         )
         read_only_fields = ("id", "entity", "created", "updated")
 
@@ -2297,163 +1618,90 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.PrescriptionItems
         fields = (
-            "id",
-            "prescription",
-            "preparation",
-            "preparation_title",
-            "product",
-            "product_title",
-            "prescribed_by",
-            "interpreted_by",
-            "frequency",
-            "frequency_title",
-            "route",
-            "route_title",
-            "dose",
-            "days",
-            "unit_of_issue",
-            "retailer_receipt",
-            "total_cost",
-            "retailer_receipt_price",
-            "required_unit_quantity",
-            "current_order_unit_quantity",
-            "issued_unit_quantity",
-            "balance_unit_quantity",
-            "required_value",
-            "current_order_value",
-            "issued_value",
-            "balance_value",
-            "administrations",
-            "administration_progress",
-            "is_divisible",
-            "key",
-            "created_by",
-            "created",
-            "updated",
+            "id", "prescription",
+            "preparation", "preparation_title",
+            "product", "product_title",
+            "prescribed_by", "interpreted_by",
+            "frequency", "frequency_title",
+            "route", "route_title",
+            "dose", "days", "unit_of_issue", "retailer_receipt",
+            "total_cost", "retailer_receipt_price",
+            "required_unit_quantity", "current_order_unit_quantity",
+            "issued_unit_quantity", "balance_unit_quantity",
+            "required_value", "current_order_value",
+            "issued_value", "balance_value",
+            "administrations", "administration_progress",
+            "is_divisible", "key",
+            "created_by", "created", "updated",
         )
         read_only_fields = ("id", "created_by", "created", "updated")
 
     def get_key(self, obj):
         return obj.id
 
+    def _unit_price(self, obj):
+        return (
+            float(obj.retailer_receipt.unit_selling_price)
+            if obj.retailer_receipt else 0.00
+        )
+
     def get_retailer_receipt_price(self, obj):
-        if obj.retailer_receipt:
-            return obj.retailer_receipt.unit_selling_price
-        else:
-            return 0.00
+        return self._unit_price(obj)
 
     def get_total_cost(self, obj):
-        total_cost = 0.00
-        if obj.retailer_receipt and obj.required_unit_quantity:
-            total_cost = float(obj.retailer_receipt.unit_selling_price) * float(
-                obj.required_unit_quantity
-            )
-        return total_cost
+        if not obj.retailer_receipt or not obj.required_unit_quantity:
+            return 0.00
+        return self._unit_price(obj) * float(obj.required_unit_quantity)
 
     def get_required_value(self, obj):
-        required_value = 0.00
-        if obj.retailer_receipt and obj.required_unit_quantity:
-            required_value = float(obj.retailer_receipt.unit_selling_price) * float(
-                obj.required_unit_quantity
-            )
-        return required_value
+        if not obj.retailer_receipt or not obj.required_unit_quantity:
+            return 0.00
+        return self._unit_price(obj) * float(obj.required_unit_quantity)
 
     def get_issued_value(self, obj):
-        issued_value = 0.00
-        if obj.retailer_receipt and obj.issued_unit_quantity:
-            issued_value = float(obj.retailer_receipt.unit_selling_price) * float(
-                obj.issued_unit_quantity
-            )
-        return issued_value
+        if not obj.retailer_receipt or not obj.issued_unit_quantity:
+            return 0.00
+        return self._unit_price(obj) * float(obj.issued_unit_quantity)
 
     def get_balance_value(self, obj):
-        balance_value = 0.00
-        if obj.retailer_receipt and obj.balance_unit_quantity:
-            balance_value = float(obj.retailer_receipt.unit_selling_price) * float(
-                obj.balance_unit_quantity
-            )
-        return balance_value
+        if not obj.retailer_receipt or not obj.balance_unit_quantity:
+            return 0.00
+        return self._unit_price(obj) * float(obj.balance_unit_quantity)
 
     def get_current_order_value(self, obj):
-        current_order_value = 0.00
-        if obj.retailer_receipt and obj.current_order_unit_quantity:
-            current_order_value = float(
-                obj.retailer_receipt.unit_selling_price
-            ) * float(obj.current_order_unit_quantity)
-        return current_order_value
+        if not obj.retailer_receipt or not obj.current_order_unit_quantity:
+            return 0.00
+        return self._unit_price(obj) * float(obj.current_order_unit_quantity)
 
     def get_product_title(self, obj):
-        if obj.product:
-            return obj.product.title
-        else:
-            return ""
+        return obj.product.title if obj.product else ""
 
     def get_preparation_title(self, obj):
-        if obj.product.preparation:
-            return obj.product.preparation.title
-        else:
-            return ""
+        return obj.product.preparation.title if obj.product.preparation else ""
 
     def get_frequency_title(self, obj):
-        if obj.frequency:
-            return obj.frequency.title
-        else:
-            return ""
+        return obj.frequency.title if obj.frequency else ""
 
     def get_route_title(self, obj):
-        if obj.route:
-            return obj.route.title
-        else:
-            return ""
+        return obj.route.title if obj.route else ""
 
     def get_administrations(self, obj):
-        administrations = []
-        if models.PrescriptionItemAdministrations.objects.filter(
-            prescription_item=obj
-        ).exists():
-            administrations = (
-                models.PrescriptionItemAdministrations.objects.filter(
-                    prescription_item=obj
-                )
-                .all()
-                .order_by("administration_date")
-            )
+        administrations = (
+            models.PrescriptionItemAdministrations.objects
+            .filter(prescription_item=obj)
+            .order_by("administration_date")
+        )
         return PrescriptionItemAdministrationsSerializer(
             administrations, many=True, context=self.context
         ).data
 
     def get_administration_progress(self, obj):
-        true_administrations = []
-        false_administrations = []
-        total_administrations = []
-        if models.PrescriptionItemAdministrations.objects.filter(
+        qs = models.PrescriptionItemAdministrations.objects.filter(
             prescription_item=obj
-        ).exists():
-            total_administrations = (
-                models.PrescriptionItemAdministrations.objects.filter(
-                    prescription_item=obj
-                ).all()
-            )
-
-        if models.PrescriptionItemAdministrations.objects.filter(
-            prescription_item=obj, is_administered="true"
-        ).exists():
-            true_administrations = (
-                models.PrescriptionItemAdministrations.objects.filter(
-                    prescription_item=obj, is_administered="true"
-                ).all()
-            )
-
-        if models.PrescriptionItemAdministrations.objects.filter(
-            prescription_item=obj, is_administered="false"
-        ).exists():
-            false_administrations = (
-                models.PrescriptionItemAdministrations.objects.filter(
-                    prescription_item=obj, is_administered="false"
-                ).all()
-            )
-
-        return f"{len(true_administrations)}/{len(total_administrations)}"
+        )
+        total = qs.count()
+        administered = qs.filter(is_administered="true").count()
+        return f"{administered}/{total}"
 
 
 # ===========================================================================
@@ -2466,16 +1714,9 @@ class PurchasesReturnsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.PurchasesReturns
         fields = (
-            "id",
-            "draft_id",
-            "retailer_receipt",
-            "retailer_receipt_title",
-            "retailer_order",
-            "quantity",
-            "justification",
-            "owner",
-            "created",
-            "updated",
+            "id", "draft_id", "retailer_receipt", "retailer_receipt_title",
+            "retailer_order", "quantity", "justification", "owner",
+            "created", "updated",
         )
         read_only_fields = ("id", "created", "updated")
 
@@ -2489,16 +1730,9 @@ class SalesReturnsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.SalesReturns
         fields = (
-            "id",
-            "draft_id",
-            "retailer_receipt",
-            "retailer_receipt_title",
-            "quantity",
-            "customer_order",
-            "justification",
-            "owner",
-            "created",
-            "updated",
+            "id", "draft_id", "retailer_receipt", "retailer_receipt_title",
+            "quantity", "customer_order", "justification", "owner",
+            "created", "updated",
         )
         read_only_fields = ("id", "created", "updated")
 
@@ -2511,17 +1745,6 @@ class SalesReturnsSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class StockAdjustmentsSerializer(serializers.ModelSerializer):
-    """
-    Serializer for StockAdjustments.
-
-    Additions since the original version:
-      - return_intent        (new field)
-      - linked_return        (new field, FK to WholesalerReceiptReturns)
-      - direction            (was missing from the original)
-      - display strings      (return_intent_display, direction_display)
-      - linked return summary (linked_return_id, linked_return_status)
-    """
-
     retailer_receipt_title = serializers.SerializerMethodField(read_only=True)
     return_intent_display = serializers.CharField(
         source="get_return_intent_display", read_only=True,
@@ -2537,27 +1760,13 @@ class StockAdjustmentsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.StockAdjustments
         fields = (
-            "id",
-            "retailer_receipt",
-            "retailer_receipt_title",
-            "quantity",
-            "direction",
-            "direction_display",
-            "justification",
-            "return_intent",
-            "return_intent_display",
-            "linked_return",
-            "linked_return_id",
-            "linked_return_status",
-            "owner",
-            "created",
-            "updated",
+            "id", "retailer_receipt", "retailer_receipt_title",
+            "quantity", "direction", "direction_display", "justification",
+            "return_intent", "return_intent_display",
+            "linked_return", "linked_return_id", "linked_return_status",
+            "owner", "created", "updated",
         )
-        read_only_fields = (
-            "id",
-            "created",
-            "updated",
-        )
+        read_only_fields = ("id", "created", "updated")
 
     def get_retailer_receipt_title(self, obj):
         if obj.retailer_receipt and obj.retailer_receipt.product:
@@ -2570,101 +1779,56 @@ class StockAdjustmentsSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class RetailerIndentParamsSerializer(serializers.ModelSerializer):
-    """
-    Only the parameters a retailer is allowed to edit on their
-    own indent.
-    """
-
     class Meta:
         model = RetailerIndent
         fields = [
-            "order_days",           # replaces days_to_order
-            "lead_time",            # replaces lead_time_days
-            "budget_amount",
-            "budget_enforced",
-            "pricing_percentage",
+            "order_days", "lead_time",
+            "budget_amount", "budget_enforced", "pricing_percentage",
         ]
 
 
 class RetailerOrderCheckoutItemSerializer(serializers.Serializer):
-    """Validates individual items inside the bulk checkout array payload."""
-
     wholesaler_receipt_id = serializers.IntegerField()
     purchased_quantity = serializers.IntegerField(min_value=0)
 
 
 class BulkWholesaleCheckoutRequestSerializer(serializers.Serializer):
-    """Validates the simplified payload where only the items array matters."""
-
     items = RetailerOrderCheckoutItemSerializer(many=True, allow_empty=False)
 
 
 class RetailerIndentItemParamsUpdateSerializer(serializers.Serializer):
-    """
-    Fields a retailer is allowed to edit on a single indent item.
-
-    The user can override the price snapshot chain
-    (supplier_unit_selling_price, recommended_retail_price) — for
-    example when the supplier's list price or RRP is wrong or
-    missing — and the model recomputes the derived bonus,
-    markup, totals, and profit on save.
-
-    This is the superset serializer; `RetailerIndentItemEditSerializer`
-    is the narrow (quantity-only) variant.
-    """
-
     required_quantity = serializers.IntegerField(
-        required=False,
-        min_value=1,
-        max_value=100000,
+        required=False, min_value=1, max_value=100000,
     )
     source = serializers.ChoiceField(
         choices=[
-            "PREDICTION",
-            "MANUAL",
-            "IMPORTED",
-            "USER_ADDED",
-            "WHOLESALER_ADDED",
-            "PRODUCT_REQUEST",
+            "PREDICTION", "MANUAL", "IMPORTED",
+            "USER_ADDED", "WHOLESALER_ADDED", "PRODUCT_REQUEST",
         ],
         required=False,
     )
 
-    # ---- Price snapshot chain (user-editable) ----
     supplier_unit_selling_price = serializers.DecimalField(
-        required=False,
-        allow_null=True,
-        max_digits=10,
-        decimal_places=2,
+        required=False, allow_null=True, max_digits=10, decimal_places=2,
         min_value=0,
     )
     recommended_retail_price = serializers.DecimalField(
-        required=False,
-        allow_null=True,
-        max_digits=10,
-        decimal_places=2,
+        required=False, allow_null=True, max_digits=10, decimal_places=2,
         min_value=0,
     )
     markup_percentage_used = serializers.DecimalField(
-        required=False,
-        allow_null=True,
-        max_digits=10,
-        decimal_places=2,
+        required=False, allow_null=True, max_digits=10, decimal_places=2,
         min_value=0,
     )
 
-    # ---- Optional FK overrides ----
     wholesaler_price_discount = serializers.UUIDField(
-        required=False,
-        allow_null=True,
+        required=False, allow_null=True,
     )
     wholesaler_quantity_discount = serializers.UUIDField(
-        required=False,
-        allow_null=True,
+        required=False, allow_null=True,
     )
     wholesale_receipt = serializers.UUIDField(
-        required=False,
-        allow_null=True,
+        required=False, allow_null=True,
     )
 
     def validate(self, attrs):
@@ -2680,80 +1844,44 @@ class RetailerIndentItemParamsUpdateSerializer(serializers.Serializer):
 # ===========================================================================
 
 class RetailerProductRequestOfferSerializer(serializers.ModelSerializer):
-    """
-    Full offer shape for the retailer's view of one of their requests.
-    Includes the offering wholesaler's display data.
-    """
-
     wholesaler_title = serializers.CharField(
-        source="wholesaler.title",
-        read_only=True,
+        source="wholesaler.title", read_only=True,
     )
-    # FIX: WholesalerReceipts has no `title` — it has `product.title`.
     wholesaler_receipt_title = serializers.CharField(
         source="wholesaler_receipt.product.title",
-        read_only=True,
-        allow_null=True,
+        read_only=True, allow_null=True,
     )
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
 
     class Meta:
         model = models.RetailerProductRequestOffer
         fields = [
-            "id",
-            "request_item",
-            "wholesaler",
-            "wholesaler_title",
-            "wholesaler_receipt",
-            "wholesaler_receipt_title",
-            "offered_quantity",
-            "offered_unit_price",
-            "batch",
-            "expiry_date",
-            "manufacture_date",
-            "is_placement",
-            "status",
-            "status_display",
-            "response_note",
-            "retailer_response_note",
-            "retailer_confirmed_at",
-            "created",
-            "updated",
+            "id", "request_item", "wholesaler", "wholesaler_title",
+            "wholesaler_receipt", "wholesaler_receipt_title",
+            "offered_quantity", "offered_unit_price",
+            "batch", "expiry_date", "manufacture_date", "is_placement",
+            "status", "status_display",
+            "response_note", "retailer_response_note", "retailer_confirmed_at",
+            "created", "updated",
         ]
         read_only_fields = fields
 
 
 class WholesalerFacingOfferSerializer(serializers.ModelSerializer):
-    """
-    Offer shape for a wholesaler's view of one of their own offers.
-    Hides who else is offering, and hides retailer-only fields.
-    """
-
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
 
     class Meta:
         model = models.RetailerProductRequestOffer
         fields = [
-            "id",
-            "request_item",
-            "offered_quantity",
-            "offered_unit_price",
-            "batch",
-            "expiry_date",
-            "manufacture_date",
-            "is_placement",
-            "status",
-            "status_display",
-            "response_note",
-            "retailer_response_note",
-            "created",
-            "updated",
+            "id", "request_item", "offered_quantity", "offered_unit_price",
+            "batch", "expiry_date", "manufacture_date", "is_placement",
+            "status", "status_display",
+            "response_note", "retailer_response_note",
+            "created", "updated",
         ]
         read_only_fields = fields
 
@@ -2763,63 +1891,37 @@ class WholesalerFacingOfferSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class RetailerProductRequestItemSerializer(serializers.ModelSerializer):
-    """
-    Retailer-facing item. Includes every offer received on the line
-    and the list of wholesalers the line was sent to.
-    """
-
     product_title = serializers.CharField(
-        source="product.title",
-        read_only=True,
+        source="product.title", read_only=True,
     )
     urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
+        source="get_urgency_display", read_only=True,
     )
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
-    offers = RetailerProductRequestOfferSerializer(
-        many=True,
-        read_only=True,
-    )
+    offers = RetailerProductRequestOfferSerializer(many=True, read_only=True)
     target_wholesaler_ids = serializers.SerializerMethodField()
     target_wholesalers = serializers.SerializerMethodField()
 
     class Meta:
         model = models.RetailerProductRequestItem
         fields = [
-            "id",
-            "request",
-            "product",
-            "product_title",
-            "requested_quantity",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "status_display",
-            "offer_count",
-            "total_offered_quantity",
-            "confirmed_quantity",
-            "target_wholesaler_ids",
-            "target_wholesalers",
-            "offers",
-            "created",
-            "updated",
+            "id", "request", "product", "product_title",
+            "requested_quantity", "urgency", "urgency_display", "note",
+            "status", "status_display",
+            "offer_count", "total_offered_quantity", "confirmed_quantity",
+            "target_wholesaler_ids", "target_wholesalers", "offers",
+            "created", "updated",
         ]
         read_only_fields = fields
 
     def _active_pairs(self, obj):
-        # Use prefetched attribute if present, else query.
         cached = getattr(obj, "active_target_pairs", None)
         if cached is not None:
             return cached
         return list(
-            obj.target_pairs.filter(is_active=True).select_related(
-                "wholesaler"
-            )
+            obj.target_pairs.filter(is_active=True).select_related("wholesaler")
         )
 
     def get_target_wholesaler_ids(self, obj):
@@ -2827,85 +1929,49 @@ class RetailerProductRequestItemSerializer(serializers.ModelSerializer):
 
     def get_target_wholesalers(self, obj):
         return [
-            {
-                "id": str(p.wholesaler_id),
-                "title": p.wholesaler.title,
-            }
+            {"id": str(p.wholesaler_id), "title": p.wholesaler.title}
             for p in self._active_pairs(obj)
         ]
 
 
 class RetailerProductRequestListItemSerializer(serializers.ModelSerializer):
-    """
-    Compact item shape for the retailer's list endpoint. No offers,
-    no targeting detail — just enough for a summary row.
-    """
-
     product_title = serializers.CharField(
-        source="product.title",
-        read_only=True,
+        source="product.title", read_only=True,
     )
     urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
+        source="get_urgency_display", read_only=True,
     )
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
 
     class Meta:
         model = models.RetailerProductRequestItem
         fields = [
-            "id",
-            "product",
-            "product_title",
-            "requested_quantity",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "status_display",
-            "offer_count",
-            "total_offered_quantity",
-            "confirmed_quantity",
+            "id", "product", "product_title",
+            "requested_quantity", "urgency", "urgency_display", "note",
+            "status", "status_display",
+            "offer_count", "total_offered_quantity", "confirmed_quantity",
             "created",
         ]
         read_only_fields = fields
 
 
 class WholesalerFacingItemSerializer(serializers.ModelSerializer):
-    """
-    Item shape for a wholesaler. Contains only the caller's own
-    offers.
-
-    Reads `wholesaler_id` from context. Uses `my_offers_cache` if the
-    queryset prefetched it; otherwise falls back to a filtered query.
-    """
-
     product_title = serializers.CharField(
-        source="product.title",
-        read_only=True,
+        source="product.title", read_only=True,
     )
     urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
+        source="get_urgency_display", read_only=True,
     )
     my_offers = serializers.SerializerMethodField()
 
     class Meta:
         model = models.RetailerProductRequestItem
         fields = [
-            "id",
-            "product",
-            "product_title",
-            "requested_quantity",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "my_offers",
-            "created",
+            "id", "product", "product_title",
+            "requested_quantity", "urgency", "urgency_display", "note",
+            "status", "my_offers", "created",
         ]
         read_only_fields = fields
 
@@ -2913,14 +1979,13 @@ class WholesalerFacingItemSerializer(serializers.ModelSerializer):
         wholesaler_id = self.context.get("wholesaler_id")
         if not wholesaler_id:
             return []
-        # Use prefetched attribute if present.
         cached = getattr(obj, "my_offers_cache", None)
         if cached is not None:
             offers = cached
         else:
             offers = obj.offers.filter(wholesaler_id=wholesaler_id)
         return WholesalerFacingOfferSerializer(
-            offers, context=self.context, many=True,
+            offers, context=self.context, many=True
         ).data
 
 
@@ -2929,98 +1994,50 @@ class WholesalerFacingItemSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class RetailerProductRequestSerializer(serializers.ModelSerializer):
-    """
-    Full retailer-facing request. Every item with every offer.
-    Used by GetRequestDetails on the retailer side.
-    """
-
-    entity_title = serializers.CharField(
-        source="entity.title",
-        read_only=True,
-    )
+    entity_title = serializers.CharField(source="entity.title", read_only=True)
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
     urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
+        source="get_urgency_display", read_only=True,
     )
-    items = RetailerProductRequestItemSerializer(
-        many=True,
-        read_only=True,
-    )
+    items = RetailerProductRequestItemSerializer(many=True, read_only=True)
 
     class Meta:
         model = models.RetailerProductRequest
         fields = [
-            "id",
-            "draft_id",
-            "request_number",
-            "entity",
-            "entity_title",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "status_display",
-            "total_line_count",
-            "fulfilled_line_count",
-            "partial_line_count",
-            "pending_line_count",
-            "expires_at",
-            "fulfilled_at",
-            "cancelled_at",
-            "created",
-            "updated",
-            "items",
+            "id", "draft_id", "request_number",
+            "entity", "entity_title",
+            "urgency", "urgency_display", "note",
+            "status", "status_display",
+            "total_line_count", "fulfilled_line_count",
+            "partial_line_count", "pending_line_count",
+            "expires_at", "fulfilled_at", "cancelled_at",
+            "created", "updated", "items",
         ]
         read_only_fields = fields
 
 
 class RetailerProductRequestListSerializer(serializers.ModelSerializer):
-    """
-    Compact retailer-facing request. Nested item summaries, no
-    offers. Used by GetMyRequests and the WS initial snapshot.
-    """
-
-    entity_title = serializers.CharField(
-        source="entity.title",
-        read_only=True,
-    )
+    entity_title = serializers.CharField(source="entity.title", read_only=True)
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
     urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
+        source="get_urgency_display", read_only=True,
     )
-    items = RetailerProductRequestListItemSerializer(
-        many=True,
-        read_only=True,
-    )
+    items = RetailerProductRequestListItemSerializer(many=True, read_only=True)
 
     class Meta:
         model = models.RetailerProductRequest
         fields = [
-            "id",
-            "draft_id",
-            "request_number",
-            "entity",
-            "entity_title",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "status_display",
-            "total_line_count",
-            "fulfilled_line_count",
-            "partial_line_count",
-            "pending_line_count",
-            "expires_at",
-            "created",
-            "items",
+            "id", "draft_id", "request_number",
+            "entity", "entity_title",
+            "urgency", "urgency_display", "note",
+            "status", "status_display",
+            "total_line_count", "fulfilled_line_count",
+            "partial_line_count", "pending_line_count",
+            "expires_at", "created", "items",
         ]
         read_only_fields = fields
 
@@ -3030,31 +2047,12 @@ class RetailerProductRequestListSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class WholesalerFacingListSerializer(serializers.ModelSerializer):
-    """
-    Request shape for a wholesaler's list view.
-
-    Relies on the queryset passing a `tagged_items` attribute
-    (Prefetch to_attr) containing only the caller's tagged items.
-    Computes `line_count` from that set so the wholesaler never sees
-    counts for lines they weren't sent.
-
-    If `tagged_items` is missing (i.e. the queryset was built without
-    the prefetch), the serializer returns an empty `items` list
-    rather than falling back to `obj.items`, which would leak every
-    line on the request.
-    """
-
-    entity_title = serializers.CharField(
-        source="entity.title",
-        read_only=True,
-    )
+    entity_title = serializers.CharField(source="entity.title", read_only=True)
     status_display = serializers.CharField(
-        source="get_status_display",
-        read_only=True,
+        source="get_status_display", read_only=True,
     )
     urgency_display = serializers.CharField(
-        source="get_urgency_display",
-        read_only=True,
+        source="get_urgency_display", read_only=True,
     )
     line_count = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
@@ -3062,52 +2060,28 @@ class WholesalerFacingListSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.RetailerProductRequest
         fields = [
-            "id",
-            "request_number",
-            "entity",
-            "entity_title",
-            "urgency",
-            "urgency_display",
-            "note",
-            "status",
-            "status_display",
-            "line_count",
-            "expires_at",
-            "created",
-            "items",
+            "id", "request_number",
+            "entity", "entity_title",
+            "urgency", "urgency_display", "note",
+            "status", "status_display", "line_count",
+            "expires_at", "created", "items",
         ]
         read_only_fields = fields
 
-    # ---------------------------------------------------------------
-    # Internal helpers
-    # ---------------------------------------------------------------
-
     def _get_tagged_items(self, obj):
-        """
-        Return the prefetched `tagged_items` list if present, else
-        an empty list. This is the ONLY place the serializer reads
-        items from — it must never touch `obj.items`, because that
-        relation contains every line on the request.
-        """
         cached = getattr(obj, "tagged_items", None)
         if cached is None:
-            if __debug__:
-                import logging
+            import logging
 
-                logging.getLogger(__name__).warning(
-                    "WholesalerFacingListSerializer called on "
-                    "request %s without a `tagged_items` prefetch. "
-                    "Returning an empty items list. Add "
-                    "Prefetch('items', queryset=..., "
-                    "to_attr='tagged_items') to the queryset.",
-                    getattr(obj, "id", "<unknown>"),
-                )
+            logging.getLogger(__name__).warning(
+                "WholesalerFacingListSerializer called on request %s "
+                "without a `tagged_items` prefetch. Returning an empty "
+                "items list. Add Prefetch('items', queryset=..., "
+                "to_attr='tagged_items') to the queryset.",
+                getattr(obj, "id", "<unknown>"),
+            )
             return []
         return list(cached)
-
-    # ---------------------------------------------------------------
-    # Field methods
-    # ---------------------------------------------------------------
 
     def get_line_count(self, obj):
         return len(self._get_tagged_items(obj))
@@ -3115,76 +2089,48 @@ class WholesalerFacingListSerializer(serializers.ModelSerializer):
     def get_items(self, obj):
         wholesaler_id = self.context.get("wholesaler_id")
         tagged = self._get_tagged_items(obj)
-
         if not tagged:
             return []
-
         return [
             WholesalerFacingItemSerializer(
-                item,
-                context={"wholesaler_id": wholesaler_id},
+                item, context={"wholesaler_id": wholesaler_id}
             ).data
             for item in tagged
         ]
 
 
 class WholesalerFacingDetailSerializer(WholesalerFacingListSerializer):
-    """
-    Same fields as the list serializer today. Kept as a separate
-    class so the details response can diverge (e.g. include more
-    metadata) without touching the list endpoint.
-    """
-
     pass
 
 
 # ===========================================================================
-# Retailer product requests — targeting pairs (admin / debug)
+# Retailer product requests — targeting pairs / responses
 # ===========================================================================
 
 class RetailerProductRequestItemWholesalerSerializer(serializers.ModelSerializer):
     wholesaler_title = serializers.CharField(
-        source="wholesaler.title",
-        read_only=True,
+        source="wholesaler.title", read_only=True,
     )
 
     class Meta:
         model = models.RetailerProductRequestItemWholesaler
         fields = [
-            "id",
-            "request_item",
-            "wholesaler",
-            "wholesaler_title",
-            "notified_at",
-            "seen_at",
-            "is_active",
-            "owner",
-            "created",
-            "updated",
+            "id", "request_item", "wholesaler", "wholesaler_title",
+            "notified_at", "seen_at", "is_active", "owner",
+            "created", "updated",
         ]
         read_only_fields = fields
 
 
-# ===========================================================================
-# Retailer product requests — responses
-# ===========================================================================
-
 class RetailerProductRequestResponseSerializer(serializers.ModelSerializer):
     wholesaler_title = serializers.CharField(
-        source="wholesaler.title",
-        read_only=True,
+        source="wholesaler.title", read_only=True,
     )
 
     class Meta:
         model = models.RetailerProductRequestResponse
         fields = [
-            "id",
-            "request",
-            "wholesaler",
-            "wholesaler_title",
-            "note",
-            "owner",
-            "created",
-            "updated",
+            "id", "request", "wholesaler", "wholesaler_title",
+            "note", "owner", "created", "updated",
         ]
         read_only_fields = fields

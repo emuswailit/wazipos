@@ -12,6 +12,14 @@ TRUE_FALSE_OPTIONS = (
     ("false", "false"),
 )
 
+RECURRENCE_PERIOD_OPTIONS = (
+    ("DAILY", "DAILY"),
+    ("WEEKLY", "WEEKLY"),
+    ("MONTHLY", "MONTHLY"),
+    ("QUARTERLY", "QUARTERLY"),
+    ("YEARLY", "YEARLY"),
+)
+
 UNITS_OF_ISSUE_CHOICES = (
     ("Pack", "Pack"),
     ("Piece", "Piece"),

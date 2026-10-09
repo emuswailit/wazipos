@@ -1,8 +1,9 @@
 # retailers/models.py
 
 # ---------- Standard library ----------
-import datetime
+import logging
 import uuid
+from datetime import date, time as dt_time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 
@@ -22,7 +23,6 @@ from django.core.files import File
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Q, Sum
-from django.db.models.fields.related import ManyToManyField
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -53,10 +53,12 @@ from wholesalers.models import (
 
 User = get_user_model()
 
+logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
 # Constants / helpers
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 TWO_PLACES = Decimal("0.01")
 
@@ -69,11 +71,18 @@ def _q(value) -> Decimal:
 
 
 def prescription_image_upload_to(instance, filename):
-    title = instance.prescription.patient_name
-    slug = slugify(title)
-    basename, file_extension = filename.split(".")
-    new_filename = "%s-%s.%s" % (slug, instance.id, file_extension)
-    return new_filename
+    # `prescription` is nullable — guard against AttributeError at upload time.
+    if instance.prescription_id and instance.prescription.patient_name:
+        slug = slugify(instance.prescription.patient_name)
+    else:
+        slug = "prescription"
+
+    if "." in filename:
+        basename, file_extension = filename.rsplit(".", 1)
+    else:
+        file_extension = "jpg"
+
+    return f"{slug}-{instance.id}.{file_extension}"
 
 
 def compress_image(image):
@@ -82,8 +91,7 @@ def compress_image(image):
         im = im.convert("RGB")
     im_io = BytesIO()
     im.save(im_io, "jpeg", quality=70, optimize=True)
-    new_image = File(im_io, name=image.name)
-    return new_image
+    return File(im_io, name=image.name)
 
 
 def convert_time(time_str):
@@ -92,9 +100,9 @@ def convert_time(time_str):
     return time_str
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Enums / choices
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class UnitsOfReceipt(models.TextChoices):
     Gram = "Gram", _("Gram")
@@ -121,9 +129,6 @@ class IndentItemSource(models.TextChoices):
     USER_ADDED = "USER_ADDED", "Manually added by the retailer"
     WHOLESALER_ADDED = "WHOLESALER_ADDED", "Added from a wholesaler's catalogue"
     IMPORTED = "IMPORTED", "Imported from an external source"
-    # FIX: added so the confirmation service can tag indent items that
-    # were seeded from a product-request offer with a semantically
-    # correct source. Previously it wrote a raw string not in the enum.
     PRODUCT_REQUEST = "PRODUCT_REQUEST", "Confirmed from a retailer product request"
 
 
@@ -144,10 +149,6 @@ class StatusOptions(models.TextChoices):
 
 class DirectionOptions(models.TextChoices):
     ISSUE = "ISSUE", _("ISSUE")
-    # FIX: original mapped FAILED = "RECEIPT" — a copy-paste bug. Any
-    # code that resolved DirectionOptions.FAILED got "RECEIPT", and
-    # code filtering on the "RECEIPT" value could not reference it by
-    # name. Split into the correct member.
     RECEIPT = "RECEIPT", _("RECEIPT")
 
 
@@ -162,9 +163,9 @@ PRODUCT_MOVEMENT_OPTIONS = (
 )
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Retailer catalogue / reviews
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class RetailerCoupon(models.Model):
     code = models.CharField(max_length=50, unique=True)
@@ -220,9 +221,9 @@ class RetailerReviews(EntityRelatedModel):
     )
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Wholesaler invoices
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class WholesalerInvoices(EntityRelatedModel):
     source_entity = models.ForeignKey(
@@ -292,14 +293,12 @@ class WholesalerInvoiceItems(EntityRelatedModel):
     )
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Retailer inventory
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class RetailerReceipts(EntityRelatedModel):
-    """
-    Retailer's own inventory lot.
-    """
+    """Retailer's own inventory lot."""
 
     draft_id = models.CharField(max_length=256, null=True, blank=True)
     product = models.ForeignKey("products.Products", on_delete=models.CASCADE)
@@ -568,14 +567,12 @@ class RetailQuantityDiscounts(EntityRelatedModel):
     )
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Indents
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class RetailerIndent(EntityRelatedModel):
-    """
-    A replenishment plan for a retailer.
-    """
+    """A replenishment plan for a retailer."""
 
     class Meta:
         verbose_name_plural = "Retailer Indents"
@@ -595,18 +592,6 @@ class RetailerIndent(EntityRelatedModel):
     lead_time = models.IntegerField(default=0)
     order_days = models.IntegerField(default=30)
 
-    # Optional attribution — which campaign spawned this indent, if any.
-    #
-    # Referenced by string ("wholesalers.WholesalerCampaign") to avoid
-    # a circular import: RetailerIndent is in retailers.models, and
-    # WholesalerCampaign is in wholesalers.models. Django resolves the
-    # string lazily when the app registry is ready, so neither module
-    # has to import the other.
-    #
-    # SET_NULL on delete: a campaign can be deleted (drafts are, and
-    # published campaigns get closed rather than removed, but drafts
-    # are removable). The indent survives; only the attribution is
-    # lost.
     campaign = models.ForeignKey(
         "wholesalers.WholesalerCampaign",
         on_delete=models.SET_NULL,
@@ -667,9 +652,6 @@ class RetailerIndent(EntityRelatedModel):
     def __str__(self):
         return f"{self.indent_number or '(unsaved)'} · {self.entity.title}"
 
-    def clean(self):
-        super().clean()
-
     def save(self, *args, **kwargs):
         if not self.indent_number:
             self.indent_number = self._generate_indent_number()
@@ -678,10 +660,7 @@ class RetailerIndent(EntityRelatedModel):
             with transaction.atomic():
                 (
                     RetailerIndent.objects
-                    .filter(
-                        entity_id=self.entity_id,
-                        is_open="true",
-                    )
+                    .filter(entity_id=self.entity_id, is_open="true")
                     .exclude(pk=self.pk)
                     .update(is_open="false")
                 )
@@ -773,9 +752,7 @@ class RetailerIndent(EntityRelatedModel):
 
         budget = self.budget_amount
         if budget is not None:
-            self.over_budget = (
-                self.total_cost > Decimal(str(budget))
-            )
+            self.over_budget = (self.total_cost > Decimal(str(budget)))
         else:
             self.over_budget = False
 
@@ -792,9 +769,7 @@ class RetailerIndent(EntityRelatedModel):
 
 
 class RetailerIndentItem(EntityRelatedModel):
-    """
-    One line on a retailer indent.
-    """
+    """One line on a retailer indent."""
 
     class Meta:
         verbose_name_plural = "Retailer Indent Items"
@@ -803,9 +778,6 @@ class RetailerIndentItem(EntityRelatedModel):
                 fields=("wholesale_receipt", "retailer_indent", "entity"),
                 name="uniq_retailer_indent_item_receipt_indent_entity",
             ),
-            # FIX: offer-level idempotency. Repeat ConfirmOffers calls
-            # for the same offer now map to a single indent item, and
-            # the DB rejects duplicates if application code slips.
             models.UniqueConstraint(
                 fields=["product_request_offer"],
                 condition=Q(product_request_offer__isnull=False),
@@ -1118,9 +1090,9 @@ class RetailerIndentItem(EntityRelatedModel):
         return (self.profit_estimate or {}).get("pricing_source")
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Out of stock / estimates / shipping rates
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class OutOfStock(EntityRelatedModel):
     class Meta:
@@ -1168,7 +1140,7 @@ class OutOfStock(EntityRelatedModel):
 
 class OrderEstimate(EntityRelatedModel):
     class Meta:
-        verbose_name_plural = "Out Of Stock Items"
+        verbose_name_plural = "Order Estimates"
 
     product = models.ForeignKey(
         "products.Products",
@@ -1232,12 +1204,12 @@ class RetailersShippingRates(EntityRelatedModel):
         unique_together = ("entity", "distance_in_km_from", "distance_in_km_to")
 
 
-# ---------------------------------------------------------------------------
-# Prescriptions
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Prescriptions (must precede CustomerOrders)
+# ===========================================================================
 
 class PrescriptionImages(EntityRelatedModel):
-    """Model prescription image"""
+    """Prescription image."""
 
     prescription = models.ForeignKey(
         "Prescriptions",
@@ -1262,21 +1234,18 @@ class PrescriptionImages(EntityRelatedModel):
         verbose_name_plural = "Retail Prescription Images"
 
     def save(self, *args, **kwargs):
-        if self.image:
-            image = self.image
-            if image.size > 0.1 * 1024 * 1024:
-                self.image = compress_image(image)
-        super(PrescriptionImages, self).save(*args, **kwargs)
+        if self._state.adding and self.image and self.image.size > 0.1 * 1024 * 1024:
+            self.image = compress_image(self.image)
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        if self.prescription.patient_name:
-            return f"{self.prescription.patient_name}"
-        else:
-            return None
+        if self.prescription and self.prescription.patient_name:
+            return self.prescription.patient_name
+        return f"Prescription image {self.pk}"
 
 
 class Prescriptions(EntityRelatedModel):
-    """Model for retail inventory"""
+    """Retail prescription header."""
 
     PRESCRIPTION_STATUS_CHOICES = (
         ("CANCELLED", "CANCELLED"),
@@ -1320,30 +1289,23 @@ class Prescriptions(EntityRelatedModel):
     is_dispensed = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
-    images = models.ManyToManyField(
-        PrescriptionImages,
-        related_name="images",
-    )
-    patient_gender = models.CharField(
-        max_length=120,
-        choices=GENDER_CHOICES,
-    )
-    relationship = models.CharField(
-        max_length=120, choices=RELATIONSHIP_CHOICES
-    )
+    patient_gender = models.CharField(max_length=120, choices=GENDER_CHOICES)
+    relationship = models.CharField(max_length=120, choices=RELATIONSHIP_CHOICES)
     patient_name = models.CharField(max_length=256)
     patient_date_of_birth = models.DateField()
     comment = models.CharField(max_length=256, null=True, blank=True, default="")
     status = models.CharField(
         max_length=120, choices=PRESCRIPTION_STATUS_CHOICES, default="QUEUING"
     )
-    nature = models.CharField(
-        max_length=120, choices=PRESCRIPTION_NATURE_CHOICES,
-    )
+    nature = models.CharField(max_length=120, choices=PRESCRIPTION_NATURE_CHOICES)
     origin_point = geomodel.PointField(null=True, blank=True, srid=4326)
     destination_point = geomodel.PointField(null=True, blank=True, srid=4326)
     patient = models.ForeignKey(
-        Dependants, on_delete=models.CASCADE, null=True, blank=True
+        Dependants,
+        related_name="prescriptions",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -1356,54 +1318,54 @@ class Prescriptions(EntityRelatedModel):
 
 
 class PrescriptionItems(EntityRelatedModel):
-    """Model for retail prescription item"""
+    """Retail prescription item."""
 
     prescription = models.ForeignKey(
         Prescriptions,
-        related_name="prescription_item_prescription",
+        related_name="prescription_items",
         on_delete=models.CASCADE,
     )
     preparation = models.ForeignKey(
         Preparation,
-        related_name="prescription_item_preparation",
+        related_name="prescription_items",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
     product = models.ForeignKey(
         "products.Products",
-        related_name="prescription_item_preparation",
+        related_name="prescription_items",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
     prescribed_by = models.ForeignKey(
         Employees,
-        related_name="prescription_item_prescribed_by",
+        related_name="prescription_items_prescribed",
         on_delete=models.CASCADE,
     )
     route = models.ForeignKey(
         Routes,
-        related_name="prescription_item_route",
+        related_name="prescription_items",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
     frequency = models.ForeignKey(
         Frequency,
-        related_name="prescription_item_frequency",
+        related_name="prescription_items",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
     dose = models.CharField(max_length=128)
-    days = models.IntegerField()
+    days = models.PositiveIntegerField()
     is_divisible = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
     interpreted_by = models.ForeignKey(
         Employees,
-        related_name="prescription_item_interpreted_by",
+        related_name="prescription_items_interpreted",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -1415,14 +1377,14 @@ class PrescriptionItems(EntityRelatedModel):
     instruction = models.CharField(max_length=256, null=True, blank=True)
     created_by = models.ForeignKey(
         Employees,
-        related_name="prescription_item_created_by",
+        related_name="prescription_items_created",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
     retailer_receipt = models.ForeignKey(
         RetailerReceipts,
-        related_name="prescription_item_retailer_receipt",
+        related_name="prescription_items",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -1441,19 +1403,19 @@ class PrescriptionItems(EntityRelatedModel):
         verbose_name_plural = "Retail Prescription Items"
 
     def __str__(self):
-        return f"{self.id}"
+        return f"{self.pk}"
 
     def save(self, *args, **kwargs):
         self.balance_unit_quantity = (
             self.required_unit_quantity - self.issued_unit_quantity
         )
-        super(PrescriptionItems, self).save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
 
 class PrescriptionItemAdministrations(EntityRelatedModel):
     prescription_item = models.ForeignKey(
         PrescriptionItems,
-        related_name="prescription_item_administration_prescription_item",
+        related_name="administrations",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -1468,59 +1430,16 @@ class PrescriptionItemAdministrations(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
 
-
-@receiver(post_save, sender=PrescriptionItems)
-def create_retail_presciption_item_administrations_model(sender, instance, created, **kwargs):
-    from datetime import date, datetime, timedelta
-
-    if created and instance:
-        try:
-            print("Am at receiver 1")
-            date_count = 0
-            administration_date = date.today()
-            time_apart = 0
-            if instance.days:
-                for day in range(instance.days):
-                    date_count = int(date_count) + 1
-                    administration_date = date.today() + timedelta(days=date_count)
-                    administration_time = 0
-                    print("Am at receiver 2")
-                    if instance.frequency.numerical:
-                        time_apart = 24 / int(instance.frequency.numerical)
-                        for i in range(int(instance.frequency.numerical)):
-                            administration_time = int(
-                                administration_time + 24 / int(instance.frequency.numerical)
-                            )
-                            print("Dates", administration_date)
-                            print("Times", time_apart)
-                            if len(str(administration_time)) == 1:
-                                administration_time_f = "0" + str(administration_time) + ":00"
-                            else:
-                                administration_time_f = str(administration_time) + ":00"
-                            print("l administration_time_f", len(administration_time_f))
-                            print("administration_time_f", administration_time_f)
-                            time_time = datetime.strptime(
-                                convert_time(administration_time_f), "%H:%M"
-                            ).time()
-                            created = PrescriptionItemAdministrations.objects.create(
-                                prescription_item=instance,
-                                administration_date=administration_date,
-                                administration_time=time_time,
-                                owner=instance.owner,
-                                entity=instance.entity,
-                            )
-        except Exception as e:
-            print(str(e))
+    class Meta:
+        verbose_name_plural = "Retail Prescription Item Administrations"
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Customer orders
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class CustomerOrders(EntityRelatedModel):
-    """
-    End-customer order. Terminal document in the chain.
-    """
+    """End-customer order. Terminal document in the chain."""
 
     class OrderOriginOptions(models.TextChoices):
         CUSTOMER = "CUSTOMER", _("CUSTOMER")
@@ -1558,9 +1477,7 @@ class CustomerOrders(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    payment_account_number = models.CharField(
-        max_length=50, null=True, blank=True,
-    )
+    payment_account_number = models.CharField(max_length=50, null=True, blank=True)
     reference_number = models.CharField(max_length=100, null=True, blank=True)
     prescription = models.ForeignKey(
         Prescriptions, null=True, blank=True, on_delete=models.CASCADE,
@@ -1772,39 +1689,8 @@ class CustomerOrders(EntityRelatedModel):
             ])
 
 
-@receiver(post_save, sender=CustomerOrders)
-def send_notification_on_create(sender, instance, created, **kwargs):
-    if created:
-        print("Am at receiver 1", instance.order_price_total)
-        channel_layer = get_channel_layer()
-        group_name = f"user_{instance.owner.id}"
-        notification_data = {
-            "type": "send_notification",
-            "customer_name": instance.customer_name,
-            "customer_phone": instance.customer_phone,
-            "delivery_method": instance.delivery_method,
-            "is_received": instance.is_received,
-            "is_delivered": instance.is_delivered,
-            "selected_payment_method": str(instance.selected_payment_method.id) if instance.selected_payment_method else "",
-            "selected_payment_method_title": instance.selected_payment_method.title if instance.selected_payment_method else "",
-            "is_paid": instance.is_paid,
-            "shipping_cost": instance.shipping_cost,
-            "status": instance.status,
-            "order_price_total": instance.order_price_total,
-            "entity": str(instance.entity.id),
-            "entity_title": instance.entity.title,
-            "owner": str(instance.owner.id),
-            "id": str(instance.id),
-        }
-        async_to_sync(channel_layer.group_send)(group_name, notification_data)
-    else:
-        print("Am at receiver 2", "Not created")
-
-
 class CustomerOrderItems(EntityRelatedModel):
-    """
-    One line on a customer order — the actual sale event.
-    """
+    """One line on a customer order — the actual sale event."""
 
     customer_order = models.ForeignKey(
         CustomerOrders,
@@ -2162,9 +2048,9 @@ class CustomerOrderSettlement(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Stock movements / adjustments / returns
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class ProductMovement(EntityRelatedModel):
     product = models.ForeignKey(
@@ -2266,10 +2152,8 @@ class SalesReturns(EntityRelatedModel):
 
 
 class StockAdjustments(EntityRelatedModel):
-    """
-    Stock adjustment record. Handles both regular adjustments and
-    the initiating half of a wholesaler return workflow.
-    """
+    """Stock adjustment record. Handles regular adjustments and the
+    initiating half of a wholesaler return workflow."""
 
     class Meta:
         verbose_name_plural = "Stock Adjustment"
@@ -2324,14 +2208,12 @@ class StockAdjustments(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Retailer product requests
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class RetailerProductRequest(EntityRelatedModel):
-    """
-    A proforma-style request from a retailer to their wholesale network.
-    """
+    """A proforma-style request from a retailer to their wholesale network."""
 
     class Status(models.TextChoices):
         DRAFT = "DRAFT", _("Draft — not yet published")
@@ -2347,13 +2229,7 @@ class RetailerProductRequest(EntityRelatedModel):
         MEDIUM = "medium", _("Medium")
         HIGH = "high", _("High")
 
-    request_number = models.CharField(
-        max_length=32,
-        null=True,
-        blank=True,
-        # FIX: uniqueness is per-entity (see Meta.constraints). Was
-        # global, which collided the moment a second entity onboarded.
-    )
+    request_number = models.CharField(max_length=32, null=True, blank=True)
     draft_id = models.CharField(
         max_length=256,
         null=True,
@@ -2379,8 +2255,6 @@ class RetailerProductRequest(EntityRelatedModel):
 
     total_line_count = models.IntegerField(default=0)
     fulfilled_line_count = models.IntegerField(default=0)
-    # FIX: added so recalculate() can distinguish "no movement" from
-    # "in progress" for requests whose lines are all partially filled.
     partial_line_count = models.IntegerField(default=0)
     pending_line_count = models.IntegerField(default=0)
 
@@ -2400,9 +2274,6 @@ class RetailerProductRequest(EntityRelatedModel):
         verbose_name_plural = "Retailer Product Requests"
         ordering = ["-created"]
         constraints = [
-            # FIX: replaces the dropped global `unique=True` on the
-            # field. Numbers are generated per-entity, so uniqueness
-            # must be scoped the same way.
             models.UniqueConstraint(
                 fields=["entity", "request_number"],
                 condition=Q(request_number__isnull=False),
@@ -2419,15 +2290,9 @@ class RetailerProductRequest(EntityRelatedModel):
         return f"{self.request_number or '(unsaved)'} · {self.entity.title}"
 
     def save(self, *args, **kwargs):
-        # Only the first insert needs a generated number; updates skip
-        # the lock and the generation path entirely.
         if self.request_number or not self.entity_id:
             return super().save(*args, **kwargs)
 
-        # Serialize number generation per entity: two concurrent
-        # creates for the same entity would otherwise both read the
-        # same "last" number and produce the same value. Locking the
-        # entity row is cheap and scoped.
         with transaction.atomic():
             Entities.objects.select_for_update().filter(pk=self.entity_id).first()
             self.request_number = self._generate_number()
@@ -2454,13 +2319,7 @@ class RetailerProductRequest(EntityRelatedModel):
         return f"PR{seq:010d}"
 
     def recalculate(self, save=True):
-        """
-        Recompute line counts and roll the request status forward.
-
-        `partial_line_count` is a subset of `pending_line_count`;
-        both are exposed so callers can distinguish "no movement yet"
-        from "in progress".
-        """
+        """Recompute line counts and roll the request status forward."""
         items = self.items.all()
 
         self.total_line_count = items.count()
@@ -2479,7 +2338,6 @@ class RetailerProductRequest(EntityRelatedModel):
             self.Status.CANCELLED,
             self.Status.EXPIRED,
         ):
-            # Terminal / pre-publish states are not rolled forward.
             pass
         elif (
             self.total_line_count > 0
@@ -2489,15 +2347,8 @@ class RetailerProductRequest(EntityRelatedModel):
             if not self.fulfilled_at:
                 self.fulfilled_at = timezone.now()
         elif self.fulfilled_line_count > 0 or self.partial_line_count > 0:
-            # FIX: previously only fully-fulfilled lines advanced the
-            # request past PUBLISHED. A request whose lines were all
-            # partially fulfilled sat on PUBLISHED forever.
             self.status = self.Status.PARTIALLY_FULFILLED
         elif items.filter(offer_count__gt=0).exists():
-            # FIX: ACKNOWLEDGED now keys off offers, not off standalone
-            # RetailerProductRequestResponse notes. A wholesaler who
-            # submits an offer without first posting a response still
-            # moves the request forward.
             self.status = self.Status.ACKNOWLEDGED
 
         if save:
@@ -2524,9 +2375,7 @@ class RetailerProductRequest(EntityRelatedModel):
 
 
 class RetailerProductRequestItem(EntityRelatedModel):
-    """
-    One product line on a request. Demand side only.
-    """
+    """One product line on a request. Demand side only."""
 
     class Status(models.TextChoices):
         PENDING = "PENDING", _("No offers yet")
@@ -2545,12 +2394,7 @@ class RetailerProductRequestItem(EntityRelatedModel):
         on_delete=models.CASCADE,
         related_name="request_items",
     )
-    draft_id = models.CharField(
-        max_length=256,
-        null=True,
-        blank=True,
-        db_index=True,
-    )
+    draft_id = models.CharField(max_length=256, null=True, blank=True, db_index=True)
     requested_quantity = models.IntegerField(default=0)
     urgency = models.CharField(
         max_length=10,
@@ -2589,12 +2433,6 @@ class RetailerProductRequestItem(EntityRelatedModel):
         verbose_name_plural = "Retailer Product Request Items"
         ordering = ["created"]
         constraints = [
-            # NOTE: the previous version of this file was reported to
-            # have carried a stale `uniq_retailer_indent_item_*`
-            # constraint here that references fields not present on
-            # this model. The original model never actually defined
-            # it; if your in-flight migrations include one, drop it in
-            # the same migration that adds the check below.
             models.CheckConstraint(
                 check=Q(requested_quantity__gte=0),
                 name="request_item_requested_quantity_non_negative",
@@ -2611,12 +2449,6 @@ class RetailerProductRequestItem(EntityRelatedModel):
 
     @property
     def active_target_wholesalers(self):
-        """
-        Active targets only. `self.target_wholesalers.all()` is the raw
-        through-relation and returns de-targeted wholesalers too — use
-        this property anywhere the caller expects "who can currently
-        see this".
-        """
         return Entities.objects.filter(
             targeted_request_pairs__request_item=self,
             targeted_request_pairs__is_active=True,
@@ -2663,17 +2495,6 @@ class RetailerProductRequestItem(EntityRelatedModel):
                 "updated",
             ])
 
-    # ------------------------------------------------------------------
-    # Persistence hooks
-    #
-    # `recalculate`  — recompute THIS row's derived fields, in memory.
-    # `refresh_parent` — after we persist, ask the request to recompute
-    #                    its counts. Defaults to True so a single item
-    #                    mutation keeps the parent in sync. Batch flows
-    #                    pass refresh_parent=False and call the
-    #                    request's recalculate() themselves once.
-    # ------------------------------------------------------------------
-
     def save(self, *args, **kwargs):
         refresh_parent = kwargs.pop("refresh_parent", True)
 
@@ -2706,9 +2527,7 @@ class RetailerProductRequestItem(EntityRelatedModel):
 
 
 class RetailerProductRequestItemWholesaler(EntityRelatedModel):
-    """
-    One row per (line, wholesaler) target pair.
-    """
+    """One row per (line, wholesaler) target pair."""
 
     request_item = models.ForeignKey(
         RetailerProductRequestItem,
@@ -2721,10 +2540,6 @@ class RetailerProductRequestItemWholesaler(EntityRelatedModel):
         related_name="targeted_request_pairs",
     )
 
-    # Added for audit symmetry with the rest of the app. Nullable so
-    # the column can be added without a data migration blocking
-    # deploys; backfill in a follow-up migration and then flip to
-    # non-null if you want it to match the rest of the app.
     owner = models.ForeignKey(
         "authentication.Users",
         null=True,
@@ -2775,9 +2590,7 @@ class RetailerProductRequestItemWholesaler(EntityRelatedModel):
 
 
 class RetailerProductRequestOffer(EntityRelatedModel):
-    """
-    One wholesaler's offer against a request line.
-    """
+    """One wholesaler's offer against a request line."""
 
     class Status(models.TextChoices):
         OFFERED = "OFFERED", _("Awaiting retailer")
@@ -2786,8 +2599,6 @@ class RetailerProductRequestOffer(EntityRelatedModel):
         WITHDRAWN = "WITHDRAWN", _("Withdrawn — stock consumed")
         FULFILLED = "FULFILLED", _("Order item created")
         CANCELLED = "CANCELLED", _("Cancelled by wholesaler")
-        # FIX: distinguishes a wholesaler's refusal from a retailer's.
-        # The previous code overlaid both onto CANCELLED.
         DECLINED_BY_WHOLESALER = "DECLINED_BY_WHOLESALER", _("Declined by wholesaler")
 
     request_item = models.ForeignKey(
@@ -2827,9 +2638,7 @@ class RetailerProductRequestOffer(EntityRelatedModel):
     )
 
     retailer_confirmed_at = models.DateTimeField(null=True, blank=True)
-    retailer_response_note = models.CharField(
-        max_length=256, blank=True, default="",
-    )
+    retailer_response_note = models.CharField(max_length=256, blank=True, default="")
 
     responded_by_user = models.ForeignKey(
         "authentication.Users",
@@ -2839,9 +2648,7 @@ class RetailerProductRequestOffer(EntityRelatedModel):
         related_name="product_request_offers",
     )
     responded_at = models.DateTimeField(null=True, blank=True)
-    response_note = models.CharField(
-        max_length=256, blank=True, default="",
-    )
+    response_note = models.CharField(max_length=256, blank=True, default="")
 
     resulting_order_item = models.ForeignKey(
         "wholesalers.RetailerOrderItems",
@@ -2856,10 +2663,6 @@ class RetailerProductRequestOffer(EntityRelatedModel):
 
     class Meta:
         verbose_name_plural = "Retailer Product Request Offers"
-        # Meta.ordering removed. It applied to every query, including
-        # the aggregates in the parent's recalculate() — pure overhead
-        # on data about to be summed. Callers that need an order should
-        # call .order_by() explicitly.
         constraints = [
             models.UniqueConstraint(
                 fields=["request_item", "wholesaler"],
@@ -2908,9 +2711,6 @@ class RetailerProductRequestOffer(EntityRelatedModel):
                 "request line."
             )
 
-        # FIX: enforce targeting. Without this, the through-model's
-        # is_active flag is decorative — a wholesaler could offer on a
-        # line they were never targeted for.
         if self.wholesaler_id and self.request_item_id:
             is_targeted = (
                 RetailerProductRequestItemWholesaler.objects
@@ -2930,14 +2730,6 @@ class RetailerProductRequestOffer(EntityRelatedModel):
         if errors:
             raise ValidationError(errors)
 
-    # ------------------------------------------------------------------
-    # Persistence hooks
-    #
-    # An offer mutation changes the parent item's offer_count /
-    # confirmed_quantity, which in turn changes the request's counts
-    # and status. Bubble both hops.
-    # ------------------------------------------------------------------
-
     def save(self, *args, **kwargs):
         refresh_parent = kwargs.pop("refresh_parent", True)
         super().save(*args, **kwargs)
@@ -2949,8 +2741,6 @@ class RetailerProductRequestOffer(EntityRelatedModel):
                 .first()
             )
             if item is not None:
-                # Item.save() recalculates the item and bubbles to the
-                # request in turn.
                 item.save(refresh_parent=True)
 
     def delete(self, *args, **kwargs):
@@ -2970,9 +2760,7 @@ class RetailerProductRequestOffer(EntityRelatedModel):
 
 
 class RetailerProductRequestResponse(EntityRelatedModel):
-    """
-    A lightweight wholesaler response attached to a whole request.
-    """
+    """A lightweight wholesaler response attached to a whole request."""
 
     request = models.ForeignKey(
         RetailerProductRequest,
@@ -2985,10 +2773,6 @@ class RetailerProductRequestResponse(EntityRelatedModel):
         related_name="product_request_responses",
     )
 
-    # Added for audit symmetry with the rest of the app. Nullable so
-    # the column can be added without a data migration blocking
-    # deploys; backfill in a follow-up migration and then flip to
-    # non-null if you want it to match the rest of the app.
     owner = models.ForeignKey(
         "authentication.Users",
         null=True,
@@ -3020,9 +2804,6 @@ class RetailerProductRequestResponse(EntityRelatedModel):
         refresh_parent = kwargs.pop("refresh_parent", True)
         super().save(*args, **kwargs)
 
-        # The request's status consults offers for ACKNOWLEDGED, but a
-        # response is worth bubbling so counts/status are freshly
-        # computed whenever one lands.
         if refresh_parent and self.request_id:
             parent = (
                 RetailerProductRequest.objects
@@ -3044,3 +2825,91 @@ class RetailerProductRequestResponse(EntityRelatedModel):
             if parent is not None:
                 parent.recalculate(save=True)
         return result
+
+
+# ===========================================================================
+# Signals
+# ===========================================================================
+
+def generate_administration_schedule(prescription_item):
+    """
+    Create `doses_per_day * days` administration rows for a prescription item.
+    Doses are evenly spaced across 24 hours, starting from day+1.
+    Uses integer minutes to avoid float drift.
+    """
+    doses_per_day = int(prescription_item.frequency.numerical)
+    if doses_per_day <= 0:
+        return
+
+    interval_minutes = (24 * 60) // doses_per_day
+    rows = []
+    today = date.today()
+
+    for day_offset in range(1, prescription_item.days + 1):
+        administration_date = today + timedelta(days=day_offset)
+        for dose_index in range(1, doses_per_day + 1):
+            total_minutes = interval_minutes * dose_index
+            hour, minute = divmod(total_minutes, 60)
+            rows.append(
+                PrescriptionItemAdministrations(
+                    prescription_item=prescription_item,
+                    administration_date=administration_date,
+                    administration_time=dt_time(hour=hour, minute=minute),
+                    owner=prescription_item.owner,
+                    entity=prescription_item.entity,
+                )
+            )
+
+    PrescriptionItemAdministrations.objects.bulk_create(rows)
+
+
+@receiver(post_save, sender=PrescriptionItems)
+def on_prescription_item_created(sender, instance, created, **kwargs):
+    if not created:
+        return
+    if not instance.days or not instance.frequency:
+        return
+    if not instance.frequency.numerical:
+        return
+
+    try:
+        generate_administration_schedule(instance)
+    except Exception:
+        logger.exception(
+            "Failed to generate administration schedule for PrescriptionItems %s",
+            instance.pk,
+        )
+
+
+@receiver(post_save, sender=CustomerOrders)
+def send_notification_on_create(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    channel_layer = get_channel_layer()
+    group_name = f"user_{instance.owner.id}"
+    notification_data = {
+        "type": "send_notification",
+        "customer_name": instance.customer_name,
+        "customer_phone": instance.customer_phone,
+        "delivery_method": instance.delivery_method,
+        "is_received": instance.is_received,
+        "is_delivered": instance.is_delivered,
+        "selected_payment_method": (
+            str(instance.selected_payment_method.id)
+            if instance.selected_payment_method else ""
+        ),
+        "selected_payment_method_title": (
+            instance.selected_payment_method.title
+            if instance.selected_payment_method else ""
+        ),
+        "is_paid": instance.is_paid,
+        "shipping_cost": instance.shipping_cost,
+        "status": instance.status,
+        "order_price_total": instance.order_price_total,
+        "entity": str(instance.entity.id),
+        "entity_title": instance.entity.title,
+        "owner": str(instance.owner.id),
+        "id": str(instance.id),
+    }
+    async_to_sync(channel_layer.group_send)(group_name, notification_data)
