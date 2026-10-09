@@ -16,28 +16,40 @@
 #   owned_wholesalers.pharmaceutical
 #                              → RetailerOrders routed at the user's
 #                                PharmaceuticalWholesaler entities
+#   inventory                  → item count + total value for the
+#                                entity the user is "currently logged
+#                                into" (entity_id param). Always
+#                                present; retail + wholesale slots
+#                                both emitted, zeros if the entity
+#                                type doesn't apply.
 #
 # All monetary values are strings of Decimal, quantized to 2dp by the
 # underlying model save() handlers. Counts are ints. Empty buckets
 # return 0 / "0.00" / {} / [] — never null — so the client can render
 # unconditionally.
 #
-# Public entry point: get_client_dashboard(user)
+# Public entry point: get_client_dashboard(user, entity_id=None)
 
 from decimal import Decimal
 from datetime import timedelta
 
-from django.db.models import Count, Sum, Q, Avg
+from django.db.models import (
+    Count,
+    Sum,
+    Q,
+    Avg,
+    F,
+    DecimalField,
+    ExpressionWrapper,
+)
 from django.utils import timezone
 
 from authentication.models import Entities
 from retailers import models
-from wholesalers.models import RetailerOrders
+from wholesalers.models import RetailerOrders, WholesalerReceipts
 
 
 # ── Bucket tuning ──────────────────────────────────────────
-# Two sets because CustomerOrders and RetailerOrders use
-# different status vocabularies. Tune each independently.
 _TERMINAL_CUSTOMER_ORDER_STATUSES = (
     "DELIVERED",
     "COMPLETED",
@@ -54,18 +66,12 @@ _RECENT_LIMIT = 5
 _ENTITY_LIST_LIMIT = 20
 
 # ── Entity discriminator ───────────────────────────────────
-# CamelCase strings as stored on Entities.entity_type.
 _ENTITY_TYPE_FIELD = "entity_type"
 _RETAIL = "Retail"
 _GENERAL_WS = "GeneralWholesaler"
 _PHARMA_WS = "PharmaceuticalWholesaler"
 
 # ── RetailerOrders shape ───────────────────────────────────
-# Confirmed against the deployed model:
-#   - FK to the receiving wholesaler entity is `wholesaler`
-#   - total-to-sum is `final_price_total`
-#   - the retailer's display name lives on `retailer`
-#   - the order number FK is `document_number`
 _RETAILER_ORDER_WS_FK = "wholesaler"
 _RETAILER_ORDER_TOTAL_FIELD = "final_price_total"
 _RETAILER_ORDER_COUNTERPARTY_FK = "retailer"
@@ -98,10 +104,6 @@ def _period_starts(now):
 
 
 def _doc_number_str(obj, fk_name):
-    """
-    document_number / order_number are FKs to DocumentNumbers.
-    Return the human-readable string if it exists, else the pk.
-    """
     doc = getattr(obj, fk_name, None)
     if not doc:
         return None
@@ -118,10 +120,6 @@ def _doc_number_str(obj, fk_name):
 # ============================================================
 
 def _bucketed_agg(qs, sum_field, now):
-    """
-    One-pass aggregate: counts, sums, averages for today / week /
-    month / year / all. Returns the standard order bucket shape.
-    """
     today_start, week_start, month_start, year_start = _period_starts(now)
 
     agg = qs.aggregate(
@@ -178,8 +176,6 @@ def _order_status_breakdown(qs):
     }
 
 
-# ── CustomerOrders recent rows ─────────────────────────────
-
 def _recent_customer_order_rows(qs):
     rows = (
         qs.order_by("-created")
@@ -207,8 +203,6 @@ def _recent_customer_order_rows(qs):
         })
     return out
 
-
-# ── RetailerOrders recent rows ─────────────────────────────
 
 def _recent_retailer_order_rows(qs):
     rows = (
@@ -238,8 +232,6 @@ def _recent_retailer_order_rows(qs):
     return out
 
 
-# ── Bucket decorators ──────────────────────────────────────
-
 def _decorate_customer_bucket(bucket, qs):
     bucket["status_breakdown"] = _order_status_breakdown(qs)
     bucket["open_orders"] = qs.exclude(
@@ -259,7 +251,7 @@ def _decorate_retailer_bucket(bucket, qs):
 
 
 # ============================================================
-# Prescription aggregates (count-only — no monetary total)
+# Prescription aggregates (count-only)
 # ============================================================
 
 def _bucketed_counts(qs, now):
@@ -312,6 +304,109 @@ def _decorate_rx_bucket(bucket, qs):
 
 
 # ============================================================
+# Inventory summaries (for the current entity)
+# ============================================================
+
+def _empty_inventory_slot():
+    return {
+        "item_count": 0,
+        "total_value": "0.00",
+    }
+
+
+def _retail_inventory_summary(entity):
+    """
+    Retail on-hand: distinct product count and total selling value
+    across active receipts (current_unit_quantity > 0).
+    """
+    active = models.RetailerReceipts.objects.filter(
+        entity=entity,
+        current_unit_quantity__gt=0,
+    )
+
+    agg = active.aggregate(
+        item_count=Count("product", distinct=True),
+        total_value=Sum(
+            ExpressionWrapper(
+                F("current_unit_quantity") * F("final_unit_selling_price"),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+    )
+
+    return {
+        "item_count": _int(agg["item_count"]),
+        "total_value": _dec(agg["total_value"]),
+    }
+
+
+def _wholesale_inventory_summary(entity):
+    """
+    Wholesale on-hand: distinct product count and total selling
+    value across active receipts.
+
+    NOTE: field names on WholesalerReceipts inferred from the
+    retailer side. Verify `current_unit_quantity` and
+    `unit_selling_price` exist; swap in the real names if not.
+    """
+    active = WholesalerReceipts.objects.filter(
+        entity=entity,
+        current_unit_quantity__gt=0,
+    )
+
+    agg = active.aggregate(
+        item_count=Count("product", distinct=True),
+        total_value=Sum(
+            ExpressionWrapper(
+                F("current_unit_quantity") * F("unit_selling_price"),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+    )
+
+    return {
+        "item_count": _int(agg["item_count"]),
+        "total_value": _dec(agg["total_value"]),
+    }
+
+
+def _build_inventory_section(current_entity):
+    """
+    Always returns a fully populated structure. When current_entity
+    is None, both slots come back as zeros — so the client can
+    render the card regardless of context.
+    """
+    if current_entity is None:
+        return {
+            "entity": {"id": None, "name": None, "type": None},
+            "retail": _empty_inventory_slot(),
+            "wholesale": _empty_inventory_slot(),
+        }
+
+    entity_type = getattr(current_entity, _ENTITY_TYPE_FIELD, None)
+    is_retail = entity_type == _RETAIL
+    is_wholesaler = entity_type in (_GENERAL_WS, _PHARMA_WS)
+
+    return {
+        "entity": {
+            "id": str(current_entity.id),
+            "name": getattr(current_entity, "title", None) or "",
+            "type": entity_type,
+        },
+        "retail": (
+            _retail_inventory_summary(current_entity)
+            if is_retail
+            else _empty_inventory_slot()
+        ),
+        "wholesale": (
+            _wholesale_inventory_summary(current_entity)
+            if is_wholesaler
+            else _empty_inventory_slot()
+        ),
+    }
+
+
+# ============================================================
 # Entities
 # ============================================================
 
@@ -329,8 +424,21 @@ def _entity_rows(qs):
 # Public entry point
 # ============================================================
 
-def get_client_dashboard(user):
+def get_client_dashboard(user, entity_id=None):
+    """
+    `entity_id` is the entity the user is "currently logged into"
+    on the client. Optional. When provided and owned by the user,
+    the `inventory` section is populated with that entity's
+    receipt-level summary. Otherwise the section returns zeros.
+    """
     now = timezone.localtime(timezone.now())
+
+    # ── Currently-logged-in entity (inventory scope) ──────
+    current_entity = None
+    if entity_id:
+        current_entity = Entities.objects.filter(
+            id=entity_id, owner=user,
+        ).first()
 
     # ── Owned entities, split by type ──────────────────────
     owned = Entities.objects.filter(owner=user)
@@ -431,5 +539,6 @@ def get_client_dashboard(user):
         },
         "owned_wholesalers": owned_wholesalers,
         "entities": entities,
+        "inventory": _build_inventory_section(current_entity),
         "generated_at": now.isoformat(),
     }
