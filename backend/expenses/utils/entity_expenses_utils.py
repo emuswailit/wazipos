@@ -294,6 +294,9 @@ def update_entity_expense(data, user):
     Only fields present in `data` are changed. Passing
     `expense_category: null` (or "") clears the category.
 
+    `expense_category` may be a UUID (normal) or a title string
+    (tolerated for clients that submit the display label by mistake).
+
     Returns (errors, expense).
     """
     errors = []
@@ -315,21 +318,37 @@ def update_entity_expense(data, user):
         errors.append(str(e))
         return errors, None
 
+    # -------------------- Category --------------------
     if "expense_category" in data:
-        category_id = data.get("expense_category")
-        if category_id:
-            try:
-                category = models.EntityExpenseCategories.objects.get(
-                    id=category_id,
-                    entity=user.entity,
-                )
-                expense.expense_category = category
-            except models.EntityExpenseCategories.DoesNotExist:
-                errors.append("Category not found")
-                return errors, None
-        else:
-            expense.expense_category = None
+        raw = data.get("expense_category")
 
+        if not raw:
+            expense.expense_category = None
+        else:
+            # Try the UUID first — the normal path.
+            category = models.EntityExpenseCategories.objects.filter(
+                id=raw,
+                entity=user.entity,
+            ).first()
+
+            # Fall back to a title match (case-insensitive). This
+            # tolerates clients that mistakenly send the display
+            # label instead of the underlying UUID.
+            if category is None:
+                category = models.EntityExpenseCategories.objects.filter(
+                    title__iexact=str(raw).strip(),
+                    entity=user.entity,
+                ).first()
+
+            if category is None:
+                errors.append(
+                    f"Category not found for value '{raw}'."
+                )
+                return errors, None
+
+            expense.expense_category = category
+
+    # -------------------- Scalar fields --------------------
     if "expense_date" in data:
         expense.expense_date = data.get("expense_date") or None
 
@@ -348,7 +367,6 @@ def update_entity_expense(data, user):
 
     expense.save()
     return errors, expense
-
 
 def delete_entity_expense(data, user):
     """
