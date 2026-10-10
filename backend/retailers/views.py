@@ -45,7 +45,7 @@ from wholesalers.models import (
     WholesalerReceiptReturns,
     WholesalerReceipts,
 )
-from wholesalers.serializers import RetailerOrdersSerializer, WholesalerReceiptReturnsSerializer
+from wholesalers.serializers import RetailerOrdersSerializer, WholesalerReceiptReturnListSerializer
 
 from . import customer_order_responses, models, retail_permissions, serializers
 from .serializers import (
@@ -197,7 +197,7 @@ def retailerReceiptsAdminAPIView(request):
         )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(purchases_returns, request)
-        serializer = WholesalerReceiptReturnsSerializer(
+        serializer = WholesalerReceiptReturnListSerializer(
             page, many=True,
             context={"request": request, "user": request.user},
         )
