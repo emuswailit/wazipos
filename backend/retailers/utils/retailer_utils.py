@@ -3800,133 +3800,208 @@ def retrieve_open_indent(user):
         errors.append("No open indent")
         return errors,None
         
+# retailers/utils/retailer_utils.py
+
+from django.db import transaction
+
+# ... existing imports ...
 
 
-def create_sales_return(data,user):
-    errors =[]
-    retailer_receipt =None
-    customer_receipt =None
-    customer_order_item =None
-    quantity =None
-    if not "retailer_receipt" in data or data["retailer_receipt"]=="":
+# ---------------------------------------------------------------------------
+# Stock adjustments
+# ---------------------------------------------------------------------------
+
+def create_stock_adjustment(data, user):
+    errors = []
+    retailer_receipt = None
+
+    if not data.get("retailer_receipt"):
         errors.append("Retailer receipt ID is required")
         return errors, None
-    else:
-        if models.RetailerReceipts.objects.filter(id=data["retailer_receipt"]).exists():
-            retailer_receipt = models.RetailerReceipts.objects.filter(id=data["retailer_receipt"]).first()
-        else:
-            errors.append("No product with provided ID")
-            return errors, None
-    
-    if not "customer_order" in data or data["customer_order"]=="":
-        errors.append("Retailer receipt ID is required")
-        return errors, None
-    else:
-        if models.CustomerOrders.objects.filter(id=data["customer_order"]).exists():
-            customer_order = models.CustomerOrders.objects.filter(id=data["customer_order"]).first()
 
-            if not CustomerOrderItems.objects.filter(customer_order=customer_order,retailer_receipt=retailer_receipt).exists():
-                errors.append("This product was not in the selected order")
-                return errors,None
-            else:
-                customer_order_item = CustomerOrderItems.objects.filter(customer_order=customer_order,retailer_receipt=retailer_receipt).first()    
-        else:
-            errors.append("No product with provided ID")
-            return errors, None
-    
-    
-    if not "quantity" in data or data["quantity"]=="":
+    retailer_receipt = models.RetailerReceipts.objects.filter(
+        id=data["retailer_receipt"]
+    ).first()
+    if not retailer_receipt:
+        errors.append("No product with provided ID")
+        return errors, None
+
+    if data.get("quantity") in (None, ""):
         errors.append("Quantity is required")
         return errors, None
 
-    else:
-        quantity = data["quantity"]
-
-
-        if int(quantity)>int(customer_order_item.purchased_quantity):
-            errors.append(f"Original order had {customer_order_item.purchased_quantity} units. You are are returning {quantity}")
-            return errors, None
-
-    if not "justification" in data or data["justification"]=="":
+    if not data.get("justification"):
         errors.append("Justification is required")
         return errors, None
-    
-    try:
-        created = models.SalesReturns.objects.create(
-            entity=user.entity,
-            owner=user,
-            retailer_receipt=retailer_receipt,
-            customer_order=customer_order,
-            quantity=data["quantity"],
-            justification=data["justification"]
-        )
 
-        if created:
-            return [], created
-
-
-    except Exception as e:
-        errors.append(str(e))
-        return errors, None
-    
-def create_stock_adjustment(data,user):
-    errors =[]
-    retailer_receipt =None
-    if not "retailer_receipt" in data or data["retailer_receipt"]=="":
-        errors.append("Retailer receipt ID is required")
-        return errors, None
-    else:
-        if models.RetailerReceipts.objects.filter(id=data["retailer_receipt"]).exists():
-            retailer_receipt = models.RetailerReceipts.objects.filter(id=data["retailer_receipt"]).first()
-        else:
-            errors.append("No product with provided ID")
-            return errors, None
-    
-    if not "quantity" in data or data["quantity"]=="":
-        errors.append("Quantity is required")
-        return errors, None
-
-    if not "justification" in data or data["justification"]=="":
-        errors.append("Justification is required")
-        return errors, None
-    
-    if not "direction" in data or data["direction"]=="":
+    if not data.get("direction"):
         errors.append("Adjustment direction is required")
         return errors, None
-    
-    if data["direction"] not in ["INCREMENT","DECREMENT"]:
+
+    if data["direction"] not in ("INCREMENT", "DECREMENT"):
         errors.append("Invalid adjustment direction")
         return errors, None
+
     if data["direction"] == "DECREMENT":
-        if int(data["quantity"])>int(retailer_receipt.current_unit_quantity):
-            errors.append(f"Only {retailer_receipt.current_unit_quantity} are currently in inventory")
+        if int(data["quantity"]) > int(retailer_receipt.current_unit_quantity):
+            errors.append(
+                f"Only {retailer_receipt.current_unit_quantity} are "
+                f"currently in inventory"
+            )
             return errors, None
-    
+
+    # Optional — defaults to "NONE" for direct adjustments that aren't
+    # the byproduct of a sales return or a wholesaler return.
+    return_intent = data.get("return_intent") or "NONE"
+
     try:
-        created = models.StockAdjustments.objects.create(
-            entity=user.entity,
-            owner=user,
-            retailer_receipt=retailer_receipt,
-            quantity=data["quantity"],
-            justification=data["justification"],
-            direction=data["direction"]
-        )
+        with transaction.atomic():
+            created = models.StockAdjustments.objects.create(
+                entity=user.entity,
+                owner=user,
+                retailer_receipt=retailer_receipt,
+                quantity=data["quantity"],
+                justification=data["justification"],
+                direction=data["direction"],
+                return_intent=return_intent,
+            )
 
-        if created:
-            if created.direction =="INCREMENT":
-                retailer_receipt.current_unit_quantity=int(retailer_receipt.current_unit_quantity)+int(data["quantity"])
-                retailer_receipt.save()
-            elif created.direction =="DECREMENT":
-                retailer_receipt.current_unit_quantity=int(retailer_receipt.current_unit_quantity)-int(data["quantity"])
-                retailer_receipt.save()
-            else:
-                pass
+            if created.direction == "INCREMENT":
+                retailer_receipt.current_unit_quantity = (
+                    int(retailer_receipt.current_unit_quantity)
+                    + int(data["quantity"])
+                )
+                retailer_receipt.save(
+                    update_fields=["current_unit_quantity"]
+                )
+            elif created.direction == "DECREMENT":
+                retailer_receipt.current_unit_quantity = (
+                    int(retailer_receipt.current_unit_quantity)
+                    - int(data["quantity"])
+                )
+                retailer_receipt.save(
+                    update_fields=["current_unit_quantity"]
+                )
+
             return [], created
-
 
     except Exception as e:
         errors.append(str(e))
         return errors, None
+
+
+# ---------------------------------------------------------------------------
+# Sales returns
+# ---------------------------------------------------------------------------
+
+def create_sales_return(data, user):
+    errors = []
+    retailer_receipt = None
+    customer_order = None
+    customer_order_item = None
+
+    # -------- retailer_receipt --------
+    if not data.get("retailer_receipt"):
+        errors.append("Retailer receipt ID is required")
+        return errors, None
+
+    retailer_receipt = models.RetailerReceipts.objects.filter(
+        id=data["retailer_receipt"]
+    ).first()
+    if not retailer_receipt:
+        errors.append("No product with provided ID")
+        return errors, None
+
+    # -------- customer_order --------
+    if not data.get("customer_order"):
+        errors.append("Customer order ID is required")
+        return errors, None
+
+    customer_order = models.CustomerOrders.objects.filter(
+        id=data["customer_order"]
+    ).first()
+    if not customer_order:
+        errors.append("No order with provided ID")
+        return errors, None
+
+    # -------- customer_order_item (must contain this receipt) --------
+    customer_order_item = CustomerOrderItems.objects.filter(
+        customer_order=customer_order,
+        retailer_receipt=retailer_receipt,
+    ).first()
+    if not customer_order_item:
+        errors.append("This product was not in the selected order")
+        return errors, None
+
+    # -------- quantity --------
+    if data.get("quantity") in (None, ""):
+        errors.append("Quantity is required")
+        return errors, None
+
+    try:
+        quantity = int(data["quantity"])
+    except (TypeError, ValueError):
+        errors.append("Quantity must be a number")
+        return errors, None
+
+    if quantity <= 0:
+        errors.append("Quantity must be greater than zero")
+        return errors, None
+
+    purchased = int(customer_order_item.purchased_quantity or 0)
+    if quantity > purchased:
+        errors.append(
+            f"Original order had {purchased} units. "
+            f"You are returning {quantity}"
+        )
+        return errors, None
+
+    # -------- justification --------
+    if not data.get("justification"):
+        errors.append("Justification is required")
+        return errors, None
+
+    # -------- create sales return + stock adjustment atomically --------
+    try:
+        with transaction.atomic():
+            sales_return = models.SalesReturns.objects.create(
+                entity=user.entity,
+                owner=user,
+                retailer_receipt=retailer_receipt,
+                customer_order=customer_order,
+                quantity=quantity,
+                justification=data["justification"],
+            )
+
+            # A sales return puts stock BACK into inventory. The
+            # adjustment inherits the same receipt, quantity, and
+            # justification as the sales return.
+            adjustment_payload = {
+                "retailer_receipt": str(retailer_receipt.id),
+                "quantity": quantity,
+                "justification": data["justification"],
+                "direction": "INCREMENT",
+                "return_intent": "CUSTOMER_RETURN",
+            }
+
+            adj_errors, adjustment = create_stock_adjustment(
+                adjustment_payload, user
+            )
+
+            if adj_errors or adjustment is None:
+                # Raise inside the transaction so the SalesReturns row
+                # is rolled back too. Both must succeed, or neither.
+                raise ValueError(
+                    "; ".join(adj_errors)
+                    or "Stock adjustment could not be created"
+                )
+
+            return [], sales_return
+
+    except Exception as e:
+        errors.append(str(e))
+        return errors, None
+
 
 def search_customer_orders(data,user):
     # TODO: reference search with Q
