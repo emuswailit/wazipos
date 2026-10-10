@@ -1765,7 +1765,6 @@ class WholesalerPaymentsSerializer(serializers.ModelSerializer):
             return ""
 
 # wholesalers/serializers.py
-
 from rest_framework import serializers
 
 from wholesalers.models import WholesalerReceiptReturns
@@ -1775,12 +1774,9 @@ class WholesalerReceiptReturnDetailSerializer(serializers.ModelSerializer):
     """
     Full read-only detail of a return. Used by:
       - InitiateReturn
-      - CreateReturn
       - GetReturnDetails
-      - UpdateReturn
-      - ConfirmReturn
+      - AcceptReturn
       - RejectReturn
-      - SettleReturn
       - CancelReturn
     """
 
@@ -1822,13 +1818,21 @@ class WholesalerReceiptReturnDetailSerializer(serializers.ModelSerializer):
     return_type_display = serializers.CharField(
         source="get_return_type_display", read_only=True,
     )
-    confirmation_outcome_display = serializers.CharField(
-        source="get_confirmation_outcome_display", read_only=True,
-    )
 
     # Property fields
     net_refund_per_unit = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True,
+    )
+
+    # Actor display names — optional convenience for UIs
+    accepted_by_name = serializers.CharField(
+        source="accepted_by.get_full_name", read_only=True,
+    )
+    rejected_by_name = serializers.CharField(
+        source="rejected_by.get_full_name", read_only=True,
+    )
+    cancelled_by_name = serializers.CharField(
+        source="cancelled_by.get_full_name", read_only=True,
     )
 
     class Meta:
@@ -1857,18 +1861,18 @@ class WholesalerReceiptReturnDetailSerializer(serializers.ModelSerializer):
             # reason
             "reason", "reason_display", "justification",
             "return_type", "return_type_display",
-            # confirmation
-            "confirmation_outcome", "confirmation_outcome_display",
-            "confirmed_quantity", "written_off_quantity",
-            "confirmation_notes",
+            # decision
+            "decision_notes",
             # state
             "status", "status_display",
-            "is_confirmed", "is_settled",
             # who
-            "employee", "confirmed_by", "settled_by", "rejected_by",
+            "employee",
+            "accepted_by", "accepted_by_name",
+            "rejected_by", "rejected_by_name",
+            "cancelled_by", "cancelled_by_name",
             "owner",
             # timestamps
-            "confirmed_at", "settled_at", "rejected_at", "cancelled_at",
+            "accepted_at", "rejected_at", "cancelled_at",
             "created", "updated",
         ]
         read_only_fields = fields  # everything
@@ -1878,8 +1882,6 @@ class WholesalerReceiptReturnListSerializer(serializers.ModelSerializer):
     """
     Lightweight list output. Used by:
       - ListReturns
-      - GetStaleReturns
-      - GetReturnMismatches
     """
 
     product_title = serializers.CharField(source="product.title", read_only=True)
@@ -1895,9 +1897,6 @@ class WholesalerReceiptReturnListSerializer(serializers.ModelSerializer):
     reason_display = serializers.CharField(
         source="get_reason_display", read_only=True,
     )
-    confirmation_outcome_display = serializers.CharField(
-        source="get_confirmation_outcome_display", read_only=True,
-    )
 
     class Meta:
         model = WholesalerReceiptReturns
@@ -1909,7 +1908,6 @@ class WholesalerReceiptReturnListSerializer(serializers.ModelSerializer):
             "quantity", "total_refund_amount",
             "reason", "reason_display",
             "status", "status_display",
-            "confirmation_outcome", "confirmation_outcome_display",
             "created", "updated",
         ]
         read_only_fields = fields

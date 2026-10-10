@@ -1,21 +1,12 @@
 # wholesalers/utils/return_utils.py
 
-from datetime import timedelta
-
-from django.db.models import Q, F
-from django.utils import timezone
+from django.db.models import Q
 
 from retailers.models import RetailerReceipts
 from wholesalers.models import WholesalerReceiptReturns
-from wholesalers.services.return_confirmation import (
-    confirm_return as confirm_return_service,
-)
 from wholesalers.services.return_management import (
-    create_return as create_return_service,
-    update_return as update_return_service,
-    delete_return as delete_return_service,
+    accept_return as accept_return_service,
     reject_return as reject_return_service,
-    settle_return as settle_return_service,
     cancel_return as cancel_return_service,
 )
 from retailers.services.wholesaler_return import (
@@ -99,9 +90,11 @@ def initiate_return(data, user):
         "restocking_fee_percent": "<decimal 0-100>"                  # optional
     }
 
-    Creates both records atomically:
+    Creates both records atomically via the service:
       - StockAdjustments (retailer ledger decrement)
-      - WholesalerReceiptReturns (wholesaler queue, PENDING_CONFIRMATION)
+      - WholesalerReceiptReturns (wholesaler queue, status=PENDING)
+
+    No stock moves on accept/reject beyond what initiate already did.
     """
     errors = {}
 
@@ -146,42 +139,6 @@ def initiate_return(data, user):
         return {"detail": str(e)}, None
 
 
-def create_return(data, user):
-    """
-    Wholesaler-initiated return.
-
-    Payload:
-    {
-        "action": "CreateReturn",
-        "wholesaler_entity": "<uuid>",
-        "retailer_entity": "<uuid>",
-        "product": "<uuid>",
-        "quantity": <int>,
-        "reason": "<enum>",
-        "justification": "<string max 256>",
-        "retailer_receipt": "<uuid>",        # optional
-        "wholesaler_receipt": "<uuid>",      # optional
-        "return_type": "<enum>",             # optional
-        "unit_price_paid": "<decimal>",      # optional
-        "unit_price_refunded": "<decimal>",  # optional
-        "restocking_fee_percent": "<decimal>"  # optional
-    }
-    """
-    required = [
-        "wholesaler_entity", "retailer_entity", "product",
-        "quantity", "reason", "justification",
-    ]
-    errors = {f: "This field is required." for f in required if not data.get(f)}
-    if errors:
-        return errors, None
-
-    try:
-        ret = create_return_service(data, user)
-        return {}, ret
-    except Exception as e:
-        return {"detail": str(e)}, None
-
-
 def get_entity_returns(data, user):
     """
     List returns scoped to the caller's entity.
@@ -189,15 +146,12 @@ def get_entity_returns(data, user):
     Payload:
     {
         "action": "ListReturns",
-        "status": "<enum: PENDING_CONFIRMATION | CONFIRMED | SETTLED |
-                          REJECTED | CANCELLED>",     # optional
-        "reason": "<enum>",                             # optional
-        "return_type": "<enum>",                        # optional
-        "confirmation_outcome": "<enum: PENDING | TAKE_BACK | WRITE_OFF |
-                                         PARTIAL_TAKE_BACK>",  # optional
-        "wholesaler_entity": "<uuid>",                  # optional
-        "retailer_entity": "<uuid>",                    # optional
-        "search": "<string>"                            # optional
+        "status": "<enum: PENDING | ACCEPTED | REJECTED | CANCELLED>",  # optional
+        "reason": "<enum>",                                             # optional
+        "return_type": "<enum>",                                        # optional
+        "wholesaler_entity": "<uuid>",                                  # optional
+        "retailer_entity": "<uuid>",                                    # optional
+        "search": "<string>"                                            # optional
     }
 
     Minimal payload:
@@ -215,8 +169,6 @@ def get_entity_returns(data, user):
         qs = qs.filter(reason=data["reason"])
     if data.get("return_type"):
         qs = qs.filter(return_type=data["return_type"])
-    if data.get("confirmation_outcome"):
-        qs = qs.filter(confirmation_outcome=data["confirmation_outcome"])
     if data.get("wholesaler_entity"):
         qs = qs.filter(wholesaler_entity_id=data["wholesaler_entity"])
     if data.get("retailer_entity"):
@@ -242,173 +194,45 @@ def get_return_details(data, user):
         "action": "GetReturnDetails",
         "return_id": "<uuid>"
     }
+
+    Returns (obj, errors). NOTE the inverted tuple order relative to
+    the other handlers — matches the dispatcher's unpack for this
+    action only.
     """
     return _get_return_or_none(data.get("return_id"), user)
 
 
-def update_return(data, user):
+def accept_return(data, user):
     """
-    Update a PENDING_CONFIRMATION return.
+    Wholesaler accepts the return.
 
     Payload:
     {
-        "action": "UpdateReturn",
+        "action": "AcceptReturn",
         "return_id": "<uuid>",
-        "justification": "<string max 256>",           # optional
-        "reference_number": "<string max 100>",        # optional
-        "return_type": "<enum>",                       # optional
-        "unit_price_refunded": "<decimal>",            # optional
-        "restocking_fee_percent": "<decimal 0-100>"    # optional
+        "unit_price_refunded": "<decimal>",            # optional override
+        "restocking_fee_percent": "<decimal 0-100>",   # optional override
+        "notes": "<string>"                            # optional
     }
 
-    Only PENDING_CONFIRMATION returns can be edited. Whitelisted fields
-    only — any other field is rejected.
-    """
-    ret, errors = _get_return_or_none(data.get("return_id"), user)
-    if errors:
-        return errors, None
-
-    if not _is_party(user, ret):
-        return {"detail": "You are not a party to this return."}, None
-
-    if ret.status != "PENDING_CONFIRMATION":
-        return {
-            "status": "Only PENDING_CONFIRMATION returns can be edited.",
-        }, None
-
-    try:
-        ret = update_return_service(ret, data, user)
-        return {}, ret
-    except Exception as e:
-        return {"detail": str(e)}, None
-
-
-def delete_return(data, user):
-    """
-    Delete a PENDING_CONFIRMATION return.
-
-    Payload:
-    {
-        "action": "DeleteReturn",
-        "return_id": "<uuid>"
-    }
-
-    Only PENDING_CONFIRMATION returns. Use CancelReturn for other states.
-    """
-    ret, errors = _get_return_or_none(data.get("return_id"), user)
-    if errors:
-        return errors, None
-
-    if not _is_party(user, ret):
-        return {"detail": "You are not a party to this return."}, None
-
-    if ret.status != "PENDING_CONFIRMATION":
-        return {
-            "status": (
-                "Only PENDING_CONFIRMATION returns can be deleted. "
-                "Use CancelReturn for other states."
-            ),
-        }, None
-
-    try:
-        delete_return_service(ret, user)
-        return {}, ret
-    except Exception as e:
-        return {"detail": str(e)}, None
-
-
-# =====================================================================
-# State transitions
-# =====================================================================
-
-def confirm_return(data, user):
-    """
-    Wholesaler confirms physical receipt of a return.
-
-    Payload (full take-back):
-    {
-        "action": "ConfirmReturn",
-        "return_id": "<uuid>",
-        "outcome": "TAKE_BACK",
-        "notes": "<string>"   # optional
-    }
-
-    Payload (full write-off):
-    {
-        "action": "ConfirmReturn",
-        "return_id": "<uuid>",
-        "outcome": "WRITE_OFF",
-        "notes": "<string>"   # optional
-    }
-
-    Payload (partial take-back):
-    {
-        "action": "ConfirmReturn",
-        "return_id": "<uuid>",
-        "outcome": "PARTIAL_TAKE_BACK",
-        "confirmed_quantity": <int>,
-        "written_off_quantity": <int>,
-        "notes": "<string>"   # optional
-    }
-    confirmed_quantity + written_off_quantity MUST equal the return's
-    total quantity.
+    Transitions PENDING -> ACCEPTED. The retailer-side StockAdjustment
+    was already written at initiate; accept does not touch it. Any
+    wholesaler-side inventory move is written by the service.
     """
     ret, errors = _get_return_or_none(data.get("return_id"), user)
     if errors:
         return errors, None
 
     if not _is_wholesaler_side(user, ret):
-        return {"detail": "Only the receiving wholesaler may confirm."}, None
+        return {"detail": "Only the receiving wholesaler may accept."}, None
 
-    if ret.status != "PENDING_CONFIRMATION":
+    if ret.status != "PENDING":
         return {
-            "status": f"Cannot confirm a return in status {ret.status}.",
+            "status": f"Cannot accept a return in status {ret.status}.",
         }, None
 
-    outcome = data.get("outcome")
-    if not outcome:
-        return {"outcome": "This field is required."}, None
-
-    if outcome == "TAKE_BACK":
-        confirmed = ret.quantity
-        written_off = 0
-    elif outcome == "WRITE_OFF":
-        confirmed = 0
-        written_off = ret.quantity
-    elif outcome == "PARTIAL_TAKE_BACK":
-        try:
-            confirmed = int(data.get("confirmed_quantity", 0))
-            written_off = int(data.get("written_off_quantity", 0))
-        except (TypeError, ValueError):
-            return {"outcome": "Quantities must be integers."}, None
-
-        if confirmed <= 0 or written_off <= 0:
-            return {
-                "outcome": (
-                    "PARTIAL_TAKE_BACK requires confirmed_quantity and "
-                    "written_off_quantity to both be greater than zero."
-                ),
-            }, None
-
-        if confirmed + written_off != ret.quantity:
-            return {
-                "outcome": (
-                    f"Split ({confirmed}+{written_off}) must equal "
-                    f"return quantity ({ret.quantity})."
-                ),
-            }, None
-    else:
-        return {"outcome": f"Unknown outcome: {outcome}."}, None
-
     try:
-        ret = confirm_return_service(
-            return_obj=ret,
-            outcome=outcome,
-            confirmed_quantity=confirmed,
-            written_off_quantity=written_off,
-            by_user=user,
-            notes=data.get("notes", ""),
-        )
+        ret = accept_return_service(ret, data, user)
         return {}, ret
     except Exception as e:
         return {"detail": str(e)}, None
@@ -425,9 +249,11 @@ def reject_return(data, user):
         "reason": "<string>"   # optional
     }
 
-    The retailer's ledger adjustment stays in place — the retailer
-    physically shipped the goods. Dispute resolution is a financial
-    matter handled outside this API.
+    Transitions PENDING -> REJECTED. No stock move on either side.
+    The retailer's initiating adjustment stays in place because the
+    goods physically left the retailer. If the wholesaler needs to
+    reconcile their own books later, they use the regular manual
+    stock-adjustment flow.
     """
     ret, errors = _get_return_or_none(data.get("return_id"), user)
     if errors:
@@ -436,9 +262,9 @@ def reject_return(data, user):
     if not _is_wholesaler_side(user, ret):
         return {"detail": "Only the receiving wholesaler may reject."}, None
 
-    if ret.status != "PENDING_CONFIRMATION":
+    if ret.status != "PENDING":
         return {
-            "status": "Only PENDING_CONFIRMATION returns can be rejected.",
+            "status": "Only PENDING returns can be rejected.",
         }, None
 
     try:
@@ -448,51 +274,9 @@ def reject_return(data, user):
         return {"detail": str(e)}, None
 
 
-def settle_return(data, user):
-    """
-    Mark a CONFIRMED return as financially settled.
-
-    Payload (original terms):
-    {
-        "action": "SettleReturn",
-        "return_id": "<uuid>",
-        "notes": "<string>"   # optional
-    }
-
-    Payload (override refund at settle time):
-    {
-        "action": "SettleReturn",
-        "return_id": "<uuid>",
-        "unit_price_refunded": "<decimal>",            # optional
-        "restocking_fee_percent": "<decimal 0-100>",   # optional
-        "notes": "<string>"                            # optional
-    }
-
-    Only the receiving wholesaler may settle. Return must be CONFIRMED.
-    Overrides are typically used when the final refund was negotiated
-    after physical inspection.
-    """
-    ret, errors = _get_return_or_none(data.get("return_id"), user)
-    if errors:
-        return errors, None
-
-    if not _is_wholesaler_side(user, ret):
-        return {"detail": "Only the receiving wholesaler may settle."}, None
-
-    if ret.status != "CONFIRMED":
-        return {"status": "Only CONFIRMED returns can be settled."}, None
-
-    try:
-        ret = settle_return_service(ret, data, user)
-        return {}, ret
-    except Exception as e:
-        return {"detail": str(e)}, None
-
-
 def cancel_return(data, user):
     """
-    Cancel a PENDING_CONFIRMATION return. Either party may cancel while
-    pre-confirmation. Once confirmed, use a compensating return instead.
+    Cancel a PENDING return. Either party may cancel pre-decision.
 
     Payload:
     {
@@ -500,6 +284,9 @@ def cancel_return(data, user):
         "return_id": "<uuid>",
         "reason": "<string>"   # optional
     }
+
+    Transitions PENDING -> CANCELLED. The service reverses the
+    retailer-side initiating adjustment.
     """
     ret, errors = _get_return_or_none(data.get("return_id"), user)
     if errors:
@@ -508,9 +295,9 @@ def cancel_return(data, user):
     if not _is_party(user, ret):
         return {"detail": "You are not a party to this return."}, None
 
-    if ret.status != "PENDING_CONFIRMATION":
+    if ret.status != "PENDING":
         return {
-            "status": "Only PENDING_CONFIRMATION returns can be cancelled.",
+            "status": "Only PENDING returns can be cancelled.",
         }, None
 
     try:
@@ -518,54 +305,3 @@ def cancel_return(data, user):
         return {}, ret
     except Exception as e:
         return {"detail": str(e)}, None
-
-
-# =====================================================================
-# Reconciliation
-# =====================================================================
-
-def get_stale_returns(data, user):
-    """
-    Returns stuck in PENDING_CONFIRMATION beyond N days.
-
-    Payload:
-    {
-        "action": "GetStaleReturns",
-        "days": <int>   # optional, default 7
-    }
-
-    These are goods that left the retailer's shelf but the wholesaler
-    hasn't acknowledged. Signal of supply chain friction or lost stock.
-    """
-    try:
-        days = int(data.get("days", 7))
-    except (TypeError, ValueError):
-        days = 7
-
-    cutoff = timezone.now() - timedelta(days=days)
-    return _scoped_returns(user).filter(
-        status="PENDING_CONFIRMATION",
-        created__lt=cutoff,
-    ).order_by("created")
-
-
-def get_return_mismatches(data, user):
-    """
-    Returns where the paired StockAdjustment's quantity doesn't match
-    the return's quantity — a data integrity signal.
-
-    Payload:
-    {
-        "action": "GetReturnMismatches"
-    }
-
-    Every paired pair should match (the service creates both atomically
-    with the same quantity). A mismatch indicates a bug, a partial
-    failure, or manual DB tampering.
-    """
-    qs = _scoped_returns(user)
-    return (
-        qs.filter(initiating_adjustment__isnull=False)
-        .exclude(initiating_adjustment__quantity=F("quantity"))
-        .order_by("-created")
-    )

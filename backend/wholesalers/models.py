@@ -1551,10 +1551,23 @@ class RetailerOrderPayments(EntityRelatedModel):
         self.retailer_order.pay_in_reference_number = self.pay_in_reference_number
         super(RetailerOrderPayments, self).save(*args, **kwargs)
 
+# wholesalers/models.py
 
 class WholesalerReceiptReturns(EntityRelatedModel):
     """
     Wholesaler-side record of a return initiated by a retailer.
+
+    Lifecycle:
+        PENDING   — retailer initiated. Retailer-side StockAdjustment
+                    already exists (created at initiate). Wholesaler
+                    has not decided yet.
+        ACCEPTED  — wholesaler took the goods back.
+        REJECTED  — wholesaler declined. Retailer-side adjustment
+                    stays in place (goods physically left). Wholesaler
+                    reconciles their own books later via a manual
+                    adjustment if needed.
+        CANCELLED — either party cancelled while PENDING. The service
+                    reverses the retailer-side initiating adjustment.
     """
 
     class ReturnReasonOptions(models.TextChoices):
@@ -1574,18 +1587,12 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         REPLACEMENT = "REPLACEMENT", _("Replacement stock")
 
     class ReturnStatusOptions(models.TextChoices):
-        PENDING_CONFIRMATION = "PENDING_CONFIRMATION", _("Awaiting wholesaler confirmation")
-        CONFIRMED = "CONFIRMED", _("Confirmed by wholesaler")
-        SETTLED = "SETTLED", _("Financially settled")
-        REJECTED = "REJECTED", _("Rejected by wholesaler")
-        CANCELLED = "CANCELLED", _("Cancelled before receipt")
+        PENDING   = "PENDING",   _("Awaiting wholesaler decision")
+        ACCEPTED  = "ACCEPTED",  _("Accepted by wholesaler")
+        REJECTED  = "REJECTED",  _("Rejected by wholesaler")
+        CANCELLED = "CANCELLED", _("Cancelled before decision")
 
-    class ConfirmationOptions(models.TextChoices):
-        PENDING = "PENDING", _("Pending confirmation")
-        TAKE_BACK = "TAKE_BACK", _("Take back into inventory")
-        WRITE_OFF = "WRITE_OFF", _("Cast / write off")
-        PARTIAL_TAKE_BACK = "PARTIAL_TAKE_BACK", _("Partial take back, rest written off")
-
+    # ---- FKs ----
     retailer_order = models.ForeignKey(
         RetailerOrders,
         related_name="wholesaler_receipt_returns",
@@ -1618,7 +1625,7 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         blank=True,
         help_text=_(
             "The retailer's lot being returned. The paired "
-            "StockAdjustment decrements this lot."
+            "StockAdjustment decrements this lot at initiate time."
         ),
     )
     wholesaler_receipt = models.ForeignKey(
@@ -1635,8 +1642,9 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         null=True,
         blank=True,
         help_text=_(
-            "The retailer-side adjustment created alongside this "
-            "return. Reverse side of StockAdjustments.linked_return."
+            "Retailer-side adjustment created alongside this return "
+            "at initiate time. Reversed on cancel; left in place on "
+            "reject."
         ),
     )
     product = models.ForeignKey(
@@ -1662,17 +1670,25 @@ class WholesalerReceiptReturns(EntityRelatedModel):
     )
 
     unit_price_paid = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0.00,
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
         help_text=_("Frozen from retailer_order_item.item_final_price at creation."),
     )
     unit_price_refunded = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0.00,
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
     )
     restocking_fee_percent = models.DecimalField(
-        max_digits=5, decimal_places=2, default=0.00,
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
     )
     total_refund_amount = models.DecimalField(
-        max_digits=14, decimal_places=2, default=0.00,
+        max_digits=14,
+        decimal_places=2,
+        default=0.00,
     )
 
     reason = models.CharField(
@@ -1687,27 +1703,17 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         default=ReturnTypeOptions.REFUND,
     )
 
-    confirmation_outcome = models.CharField(
-        max_length=20,
-        choices=ConfirmationOptions.choices,
-        default=ConfirmationOptions.PENDING,
-    )
-    confirmed_quantity = models.IntegerField(default=0)
-    written_off_quantity = models.IntegerField(default=0)
-    confirmation_notes = models.TextField(blank=True)
-
     status = models.CharField(
         max_length=30,
         choices=ReturnStatusOptions.choices,
-        default=ReturnStatusOptions.PENDING_CONFIRMATION,
-    )
-    is_confirmed = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    is_settled = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
+        default=ReturnStatusOptions.PENDING,
     )
 
+    # Single free-text field for the wholesaler's decision note.
+    # Replaces confirmation_notes.
+    decision_notes = models.TextField(blank=True)
+
+    # ---- Actors ----
     employee = models.ForeignKey(
         Employees,
         related_name="employee_creating_wholesaler_return",
@@ -1715,16 +1721,9 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    confirmed_by = models.ForeignKey(
+    accepted_by = models.ForeignKey(
         Users,
-        related_name="wholesaler_return_confirmed_by",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
-    settled_by = models.ForeignKey(
-        Users,
-        related_name="wholesaler_return_settled_by",
+        related_name="wholesaler_return_accepted_by",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1736,9 +1735,16 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    cancelled_by = models.ForeignKey(
+        Users,
+        related_name="wholesaler_return_cancelled_by",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
-    confirmed_at = models.DateTimeField(null=True, blank=True)
-    settled_at = models.DateTimeField(null=True, blank=True)
+    # ---- Timestamps ----
+    accepted_at = models.DateTimeField(null=True, blank=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
 
@@ -1763,6 +1769,8 @@ class WholesalerReceiptReturns(EntityRelatedModel):
     def __str__(self) -> str:
         return f"Return {self.id} — {self.product.title} × {self.quantity}"
 
+    # ---- Derived values ----
+
     @property
     def net_refund_per_unit(self) -> Decimal:
         return _q(
@@ -1777,6 +1785,8 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         if save:
             super().save(update_fields=["total_refund_amount", "updated"])
 
+    # ---- Validation ----
+
     def clean(self):
         super().clean()
         errors = {}
@@ -1784,18 +1794,10 @@ class WholesalerReceiptReturns(EntityRelatedModel):
         if self.quantity is None or self.quantity <= 0:
             errors["quantity"] = "Quantity must be greater than zero."
 
-        if (
-            self.confirmation_outcome
-            and self.confirmation_outcome != self.ConfirmationOptions.PENDING
-            and self.confirmed_quantity + self.written_off_quantity
-            != self.quantity
-        ):
-            errors["confirmed_quantity"] = (
-                "Confirmed + written off quantity must equal total quantity."
-            )
-
         if errors:
             raise ValidationError(errors)
+
+    # ---- Persistence ----
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
@@ -1820,9 +1822,10 @@ class WholesalerReceiptReturns(EntityRelatedModel):
                 self.unit_price_refunded = self.unit_price_paid
 
         else:
+            # Product and quantity are frozen once a decision is made.
             if self.status in (
-                self.ReturnStatusOptions.CONFIRMED,
-                self.ReturnStatusOptions.SETTLED,
+                self.ReturnStatusOptions.ACCEPTED,
+                self.ReturnStatusOptions.REJECTED,
             ):
                 original = (
                     WholesalerReceiptReturns.objects
@@ -1831,11 +1834,11 @@ class WholesalerReceiptReturns(EntityRelatedModel):
                 )
                 if original.product_id != self.product_id:
                     raise ValidationError(
-                        "Product cannot be changed after confirmation."
+                        "Product cannot be changed after decision."
                     )
                 if original.quantity != self.quantity:
                     raise ValidationError(
-                        "Quantity cannot be changed after confirmation. "
+                        "Quantity cannot be changed after decision. "
                         "Issue a compensating return instead."
                     )
 

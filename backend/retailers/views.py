@@ -4,6 +4,7 @@
 import datetime
 from decimal import Decimal
 
+
 # ---------- Third-party ----------
 from django.contrib.gis.geos import fromstr
 from django.db import IntegrityError, transaction
@@ -46,7 +47,7 @@ from wholesalers.models import (
     WholesalerReceipts,
 )
 from wholesalers.serializers import RetailerOrdersSerializer, WholesalerReceiptReturnListSerializer
-
+from .utils import daily_retailer_report, retailer_utils
 from . import customer_order_responses, models, retail_permissions, serializers
 from .serializers import (
     RetailerIndentItemEditSerializer,
@@ -58,6 +59,7 @@ from .serializers import (
 from .services.product_requests import product_requests_dispatch
 from .utils import (
     client_dashboard_utils,
+    daily_retailer_report,
     retail_prescriptions_utils,
     retailer_utils,
     retailers_shipping_rates_utils,
@@ -264,6 +266,31 @@ def retailerReceiptsAdminAPIView(request):
             context={"request": request, "user": request.user},
         )
         return paginator.get_paginated_response(serializer.data)
+
+        # -----------------------------------------------------------------
+    # Reports — daily sales
+    #
+    # Default: today. Also accepts:
+    #   { "date": "YYYY-MM-DD" }              — single day
+    #   { "from": "YYYY-MM-DD" }              — from that day through today
+    #   { "from": "YYYY-MM-DD", "to": "..." } — explicit range
+    # Staff may pass "entity_id"; others are scoped to their own entity.
+    # -----------------------------------------------------------------
+
+    elif action == "GetDailySalesReport":
+        errors, report = daily_retailer_report(
+            request.data, request.user,
+        )
+        if report:
+            return custom_success_message(
+                0,
+                "Daily sales report",
+                report,
+                "report",
+            )
+        return custom_errors_response(
+            1, "Could not build daily sales report", errors,
+        )
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
 

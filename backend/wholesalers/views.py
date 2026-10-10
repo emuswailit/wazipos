@@ -1960,6 +1960,21 @@ class WholesalerCampaignUpdateAPIView(generics.RetrieveUpdateAPIView):
 # Wholesaler receipt returns dispatcher
 # ===========================================================================
 
+# wholesalers/views.py (or wherever receiptReturnsAPIView lives)
+
+# from rest_framework.decorators import api_view, permission_classes
+# from rest_framework import permissions, exceptions
+# from rest_framework.pagination import PageNumberPagination
+
+# from . import serializers, utils
+# from  core.app_permissions import EntitySubscriptionPermission
+# from core.responses import custom_success_message, custom_errors_response
+
+
+# ===========================================================================
+# Wholesaler receipt returns dispatcher
+# ===========================================================================
+
 @api_view(["POST"])
 @permission_classes([EntitySubscriptionPermission, permissions.IsAuthenticated])
 def receiptReturnsAPIView(request):
@@ -1968,11 +1983,27 @@ def receiptReturnsAPIView(request):
 
     Route:  POST /api/v1/wholesalers/receipt-returns
     Body:   { "action": "<ActionName>", ...payload }
+
+    Lifecycle:
+        PENDING   -> ACCEPTED   (wholesaler takes the goods back)
+        PENDING   -> REJECTED   (wholesaler declines; reconciles their
+                                 own books later via a manual
+                                 stock adjustment if needed)
+        PENDING   -> CANCELLED  (either party, pre-decision)
+
+    The retailer-side StockAdjustment is written at initiate time by
+    the underlying service. Accept does not touch retailer stock;
+    reject does not touch retailer stock; cancel reverses the
+    initiating adjustment.
     """
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
+    # -------------------------------------------------------------------
+    # Initiate
+    # -------------------------------------------------------------------
 
     if action == "InitiateReturn":
         errors, ret = utils.initiate_return(request.data, request.user)
@@ -1985,16 +2016,9 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be initiated", errors)
 
-    elif action == "CreateReturn":
-        errors, ret = utils.create_return(request.data, request.user)
-        if ret:
-            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
-                ret, many=False, context={"request": request},
-            )
-            return custom_success_message(
-                0, "Return created successfully", serializer.data, "return",
-            )
-        return custom_errors_response(1, "Return could not be created", errors)
+    # -------------------------------------------------------------------
+    # Reads
+    # -------------------------------------------------------------------
 
     elif action == "ListReturns":
         qs = utils.get_entity_returns(request.data, request.user)
@@ -2006,6 +2030,8 @@ def receiptReturnsAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     elif action == "GetReturnDetails":
+        # NOTE: get_return_details returns (obj, errors) — inverted
+        # relative to the other handlers in this dispatcher.
         ret, errors = utils.get_return_details(request.data, request.user)
         if ret:
             serializer = serializers.WholesalerReceiptReturnDetailSerializer(
@@ -2016,35 +2042,20 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be retrieved", errors)
 
-    elif action == "UpdateReturn":
-        errors, ret = utils.update_return(request.data, request.user)
+    # -------------------------------------------------------------------
+    # Decisions
+    # -------------------------------------------------------------------
+
+    elif action == "AcceptReturn":
+        errors, ret = utils.accept_return(request.data, request.user)
         if ret:
             serializer = serializers.WholesalerReceiptReturnDetailSerializer(
                 ret, many=False, context={"request": request},
             )
             return custom_success_message(
-                0, "Return updated successfully", serializer.data, "return",
+                0, "Return accepted successfully", serializer.data, "return",
             )
-        return custom_errors_response(1, "Return could not be updated", errors)
-
-    elif action == "DeleteReturn":
-        errors, ret = utils.delete_return(request.data, request.user)
-        if ret:
-            return custom_success_message(
-                0, "Return deleted successfully", {}, "return",
-            )
-        return custom_errors_response(1, "Return could not be deleted", errors)
-
-    elif action == "ConfirmReturn":
-        errors, ret = utils.confirm_return(request.data, request.user)
-        if ret:
-            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
-                ret, many=False, context={"request": request},
-            )
-            return custom_success_message(
-                0, "Return confirmed successfully", serializer.data, "return",
-            )
-        return custom_errors_response(1, "Return could not be confirmed", errors)
+        return custom_errors_response(1, "Return could not be accepted", errors)
 
     elif action == "RejectReturn":
         errors, ret = utils.reject_return(request.data, request.user)
@@ -2057,17 +2068,6 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be rejected", errors)
 
-    elif action == "SettleReturn":
-        errors, ret = utils.settle_return(request.data, request.user)
-        if ret:
-            serializer = serializers.WholesalerReceiptReturnDetailSerializer(
-                ret, many=False, context={"request": request},
-            )
-            return custom_success_message(
-                0, "Return settled successfully", serializer.data, "return",
-            )
-        return custom_errors_response(1, "Return could not be settled", errors)
-
     elif action == "CancelReturn":
         errors, ret = utils.cancel_return(request.data, request.user)
         if ret:
@@ -2079,27 +2079,12 @@ def receiptReturnsAPIView(request):
             )
         return custom_errors_response(1, "Return could not be cancelled", errors)
 
-    elif action == "GetStaleReturns":
-        qs = utils.get_stale_returns(request.data, request.user)
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(qs, request)
-        serializer = serializers.WholesalerReceiptReturnListSerializer(
-            page, many=True, context={"request": request},
-        )
-        return paginator.get_paginated_response(serializer.data)
-
-    elif action == "GetReturnMismatches":
-        qs = utils.get_return_mismatches(request.data, request.user)
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(qs, request)
-        serializer = serializers.WholesalerReceiptReturnListSerializer(
-            page, many=True, context={"request": request},
-        )
-        return paginator.get_paginated_response(serializer.data)
+    # -------------------------------------------------------------------
+    # Unknown
+    # -------------------------------------------------------------------
 
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")
-
 
 # ===========================================================================
 # Wholesaler product requests dispatcher

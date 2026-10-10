@@ -2152,11 +2152,35 @@ class SalesReturns(EntityRelatedModel):
 
 
 class StockAdjustments(EntityRelatedModel):
-    """Stock adjustment record. Handles regular adjustments and the
-    initiating half of a wholesaler return workflow."""
+    """
+    Stock adjustment record.
+
+    Handles:
+      - Regular manual adjustments (return_intent="NONE")
+      - The initiating half of a wholesaler return
+        (return_intent="WHOLESALER_RETURN", paired with `linked_return`)
+      - Compensating movements tied to a customer/sales return
+        (return_intent="CUSTOMER_RETURN", paired with `sales_return`)
+
+    Invariant: a row with return_intent="CUSTOMER_RETURN" must always
+    carry a non-null `sales_return`. The application layer enforces
+    this by only writing such rows from create_sales_return /
+    update_sales_return / delete_sales_return, never from the public
+    CreateStockAdjustment action. Add the CheckConstraint below if
+    your DB supports it for a hard guarantee.
+    """
 
     class Meta:
         verbose_name_plural = "Stock Adjustment"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(return_intent="CUSTOMER_RETURN")
+                    | models.Q(sales_return__isnull=False)
+                ),
+                name="customer_return_requires_sales_return",
+            ),
+        ]
 
     RETURN_INTENTS = (
         ("NONE", "NONE"),
@@ -2186,8 +2210,10 @@ class StockAdjustments(EntityRelatedModel):
         help_text=(
             "When 'WHOLESALER_RETURN', this adjustment signals the "
             "wholesaler that goods are inbound and should expect a "
-            "return. The paired WholesalerReceiptReturns is created in "
-            "the same transaction."
+            "return. The paired WholesalerReceiptReturns is created "
+            "in the same transaction. When 'CUSTOMER_RETURN', this "
+            "adjustment is a stock movement tied to a sales return, "
+            "referenced by `sales_return`."
         ),
     )
     linked_return = models.ForeignKey(
@@ -2199,6 +2225,21 @@ class StockAdjustments(EntityRelatedModel):
         help_text=(
             "The WholesalerReceiptReturns created alongside this "
             "adjustment. Set for return_intent=WHOLESALER_RETURN."
+        ),
+    )
+    sales_return = models.ForeignKey(
+        "retailers.SalesReturns",
+        related_name="stock_adjustments",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text=(
+            "The sales return this adjustment is paired with. Set "
+            "for return_intent=CUSTOMER_RETURN. A single return can "
+            "have multiple adjustments over its lifetime (the "
+            "original INCREMENT plus each compensating delta when "
+            "its quantity is edited, plus the reversal written when "
+            "it is deleted)."
         ),
     )
     owner = models.ForeignKey(
