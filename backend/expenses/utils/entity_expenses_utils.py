@@ -334,19 +334,7 @@ def update_entity_expense(data, user):
             # Fall back to a title match (case-insensitive). This
             # tolerates clients that mistakenly send the display
             # label instead of the underlying UUID.
-            if category is None:
-                category = models.EntityExpenseCategories.objects.filter(
-                    title__iexact=str(raw).strip(),
-                    entity=user.entity,
-                ).first()
-
-            if category is None:
-                errors.append(
-                    f"Category not found for value '{raw}'."
-                )
-                return errors, None
-
-            expense.expense_category = category
+   
 
     # -------------------- Scalar fields --------------------
     if "expense_date" in data:
