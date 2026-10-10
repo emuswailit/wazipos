@@ -562,10 +562,21 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
             str(timezone.now().date())
         ).strftime("%Y-%m-%d %H:%M:%S")
 
+        # customer_orders = CustomerOrders.objects.filter(
+        #     entity=self.user.entity,
+        #     created__gte=formatted_from_date,
+        # ).order_by('-created')
+        from datetime import timedelta
+        from django.utils import timezone
+
+        # earlier in the function
+        formatted_from_date = (timezone.now() - timedelta(days=7)).isoformat()
+
+        # your existing filter, unchanged
         customer_orders = CustomerOrders.objects.filter(
             entity=self.user.entity,
             created__gte=formatted_from_date,
-        ).order_by('-created')
+        ).order_by('-created')[:100]
 
         orders = CustomerOrdersSerializer(
             customer_orders,

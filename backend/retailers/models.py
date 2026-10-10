@@ -2091,34 +2091,34 @@ class ProductMovement(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
 
-class PurchasesReturns(EntityRelatedModel):
-    class Meta:
-        verbose_name_plural = "Purchases Returns"
+# class PurchasesReturns(EntityRelatedModel):
+#     class Meta:
+#         verbose_name_plural = "Purchases Returns"
 
-    draft_id = models.CharField(max_length=256, null=True, blank=True)
-    retailer_receipt = models.ForeignKey(
-        RetailerReceipts,
-        related_name="purchase_return_inventory",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    retailer_order = models.ForeignKey(
-        RetailerOrders,
-        related_name="purchase_return_inventory",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    quantity = models.IntegerField(default=0)
-    justification = models.CharField(max_length=256)
-    owner = models.ForeignKey(
-        Users,
-        related_name="purchases_returned_by",
-        on_delete=models.CASCADE,
-    )
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
+#     draft_id = models.CharField(max_length=256, null=True, blank=True)
+#     retailer_receipt = models.ForeignKey(
+#         RetailerReceipts,
+#         related_name="purchase_return_inventory",
+#         on_delete=models.CASCADE,
+#         null=True,
+#         blank=True,
+#     )
+#     retailer_order = models.ForeignKey(
+#         RetailerOrders,
+#         related_name="purchase_return_inventory",
+#         on_delete=models.CASCADE,
+#         null=True,
+#         blank=True,
+#     )
+#     quantity = models.IntegerField(default=0)
+#     justification = models.CharField(max_length=256)
+#     owner = models.ForeignKey(
+#         Users,
+#         related_name="purchases_returned_by",
+#         on_delete=models.CASCADE,
+#     )
+#     created = models.DateTimeField(auto_now_add=True)
+#     updated = models.DateTimeField(auto_now=True)
 
 
 class SalesReturns(EntityRelatedModel):

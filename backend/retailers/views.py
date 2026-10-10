@@ -42,9 +42,10 @@ from retailers.serializers import RetailerReceiptsSerializer
 from utils.logging import create_log
 from wholesalers.models import (
     RetailerOrders,
+    WholesalerReceiptReturns,
     WholesalerReceipts,
 )
-from wholesalers.serializers import RetailerOrdersSerializer
+from wholesalers.serializers import RetailerOrdersSerializer, WholesalerReceiptReturnsSerializer
 
 from . import customer_order_responses, models, retail_permissions, serializers
 from .serializers import (
@@ -188,34 +189,15 @@ def retailerReceiptsAdminAPIView(request):
             1, "Retailer inventory receipt could not be updated", errors
         )
 
-    elif action == "CreatePurchasesReturn":
-        errors, purchases_return = retailer_utils.create_purchases_return(
-            request.data, request.user
-        )
-        create_log("info", purchases_return)
 
-        if purchases_return:
-            serializer = serializers.PurchasesReturnsSerializer(
-                purchases_return, many=False, context={"request": request}
-            )
-            return custom_success_message(
-                0,
-                "Purchases return created successfully",
-                serializer.data,
-                "purchases_return",
-            )
-        if errors:
-            return custom_errors_response(
-                1, "Purchases return not created", errors
-            )
 
     elif action == "GetPurchasesReturns":
-        purchases_returns = models.PurchasesReturns.objects.filter(
-            entity=request.user.entity
+        purchases_returns =WholesalerReceiptReturns.objects.filter(
+            retailer_entity=request.user.entity
         )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(purchases_returns, request)
-        serializer = serializers.PurchasesReturnsSerializer(
+        serializer = WholesalerReceiptReturnsSerializer(
             page, many=True,
             context={"request": request, "user": request.user},
         )
