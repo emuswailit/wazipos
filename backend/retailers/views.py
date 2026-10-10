@@ -303,6 +303,17 @@ def retailerReceiptsAdminAPIView(request):
         return custom_errors_response(
             1, "Could not build profit and loss", errors,
         )
+    elif action == "GetExpiryReport":
+        errors, report = retailer_utils.get_expiry_report(
+            request.data, request.user,
+        )
+        if report:
+            return custom_success_message(
+                0, "Expiry report", report, "report",
+            )
+        return custom_errors_response(
+            1, "Could not build expiry report", errors,
+        )
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
 
