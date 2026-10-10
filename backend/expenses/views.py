@@ -130,5 +130,6 @@ def entityExpensesAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
 
+
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")

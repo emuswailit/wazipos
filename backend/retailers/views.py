@@ -64,6 +64,7 @@ from .utils import (
     retailer_utils,
     retailers_shipping_rates_utils,
     wholesaler_invoice_utils,
+    profit_and_loss_utils
 )
 
 
@@ -291,7 +292,17 @@ def retailerReceiptsAdminAPIView(request):
         return custom_errors_response(
             1, "Could not build daily sales report", errors,
         )
-
+    elif action == "GetProfitAndLoss":
+        errors, report = profit_and_loss_utils.get_profit_and_loss(
+            request.data, request.user,
+        )
+        if report:
+            return custom_success_message(
+                0, "Profit and loss", report, "report",
+            )
+        return custom_errors_response(
+            1, "Could not build profit and loss", errors,
+        )
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
 
