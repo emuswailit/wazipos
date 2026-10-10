@@ -65,7 +65,8 @@ from .utils import (
     retailers_shipping_rates_utils,
     wholesaler_invoice_utils,
     profit_and_loss_utils,
-    expiry_report_utils
+    expiry_report_utils,
+    stock_report_utils
 )
 
 
@@ -314,6 +315,17 @@ def retailerReceiptsAdminAPIView(request):
             )
         return custom_errors_response(
             1, "Could not build expiry report", errors,
+        )
+    elif action == "GetStockReport":
+        errors, report = stock_report_utils.get_stock_report(
+            request.data, request.user,
+        )
+        if report:
+            return custom_success_message(
+                0, "Stock report", report, "report",
+            )
+        return custom_errors_response(
+            1, "Could not build stock report", errors,
         )
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
