@@ -3811,10 +3811,36 @@ from django.db import transaction
 # Stock adjustments
 # ---------------------------------------------------------------------------
 
+# retailers/utils/retailer_utils.py
+#
+# Sales returns and stock adjustments.
+#
+# Policy A: each (customer_order, retailer_receipt) pair can be
+# returned exactly once. Partial returns and repeat returns are
+# rejected.
+
+from django.db import transaction
+
+# ... your other imports ...
+
+
+# ===========================================================================
+# Stock adjustments
+# ===========================================================================
+
 def create_stock_adjustment(data, user):
+    """
+    Create a StockAdjustments row and apply the delta to the
+    receipt's current_unit_quantity. Runs inside a transaction so a
+    failure during the receipt save doesn't leave a dangling row.
+
+    `return_intent` defaults to "NONE" for direct adjustments that
+    aren't the byproduct of a sales return or a wholesaler return.
+    """
     errors = []
     retailer_receipt = None
 
+    # -------- retailer_receipt --------
     if not data.get("retailer_receipt"):
         errors.append("Retailer receipt ID is required")
         return errors, None
@@ -3826,14 +3852,27 @@ def create_stock_adjustment(data, user):
         errors.append("No product with provided ID")
         return errors, None
 
+    # -------- quantity --------
     if data.get("quantity") in (None, ""):
         errors.append("Quantity is required")
         return errors, None
 
+    try:
+        quantity = int(data["quantity"])
+    except (TypeError, ValueError):
+        errors.append("Quantity must be a number")
+        return errors, None
+
+    if quantity <= 0:
+        errors.append("Quantity must be greater than zero")
+        return errors, None
+
+    # -------- justification --------
     if not data.get("justification"):
         errors.append("Justification is required")
         return errors, None
 
+    # -------- direction --------
     if not data.get("direction"):
         errors.append("Adjustment direction is required")
         return errors, None
@@ -3843,24 +3882,23 @@ def create_stock_adjustment(data, user):
         return errors, None
 
     if data["direction"] == "DECREMENT":
-        if int(data["quantity"]) > int(retailer_receipt.current_unit_quantity):
+        if quantity > int(retailer_receipt.current_unit_quantity):
             errors.append(
                 f"Only {retailer_receipt.current_unit_quantity} are "
                 f"currently in inventory"
             )
             return errors, None
 
-    # Optional — defaults to "NONE" for direct adjustments that aren't
-    # the byproduct of a sales return or a wholesaler return.
     return_intent = data.get("return_intent") or "NONE"
 
+    # -------- atomic create + apply --------
     try:
         with transaction.atomic():
             created = models.StockAdjustments.objects.create(
                 entity=user.entity,
                 owner=user,
                 retailer_receipt=retailer_receipt,
-                quantity=data["quantity"],
+                quantity=quantity,
                 justification=data["justification"],
                 direction=data["direction"],
                 return_intent=return_intent,
@@ -3868,16 +3906,14 @@ def create_stock_adjustment(data, user):
 
             if created.direction == "INCREMENT":
                 retailer_receipt.current_unit_quantity = (
-                    int(retailer_receipt.current_unit_quantity)
-                    + int(data["quantity"])
+                    int(retailer_receipt.current_unit_quantity) + quantity
                 )
                 retailer_receipt.save(
                     update_fields=["current_unit_quantity"]
                 )
             elif created.direction == "DECREMENT":
                 retailer_receipt.current_unit_quantity = (
-                    int(retailer_receipt.current_unit_quantity)
-                    - int(data["quantity"])
+                    int(retailer_receipt.current_unit_quantity) - quantity
                 )
                 retailer_receipt.save(
                     update_fields=["current_unit_quantity"]
@@ -3890,15 +3926,24 @@ def create_stock_adjustment(data, user):
         return errors, None
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Sales returns
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 def create_sales_return(data, user):
+    """
+    Create a sales return.
+
+    Policy A: each (customer_order, retailer_receipt) pair can be
+    returned exactly once. On success, a paired StockAdjustments row
+    is created with direction="INCREMENT" and
+    return_intent="CUSTOMER_RETURN", and the receipt's
+    current_unit_quantity is bumped accordingly.
+
+    Both writes share a transaction — either both succeed or neither
+    does.
+    """
     errors = []
-    retailer_receipt = None
-    customer_order = None
-    customer_order_item = None
 
     # -------- retailer_receipt --------
     if not data.get("retailer_receipt"):
@@ -3933,6 +3978,21 @@ def create_sales_return(data, user):
         errors.append("This product was not in the selected order")
         return errors, None
 
+    # -------- ALREADY-RETURNED CHECK (Policy A) --------
+    existing = models.SalesReturns.objects.filter(
+        customer_order=customer_order,
+        retailer_receipt=retailer_receipt,
+    ).first()
+
+    if existing:
+        errors.append(
+            f"This item was already returned on "
+            f"{existing.created.strftime('%Y-%m-%d')} "
+            f"({existing.quantity} unit(s)). Each order line can only "
+            f"be returned once."
+        )
+        return errors, None
+
     # -------- quantity --------
     if data.get("quantity") in (None, ""):
         errors.append("Quantity is required")
@@ -3961,7 +4021,7 @@ def create_sales_return(data, user):
         errors.append("Justification is required")
         return errors, None
 
-    # -------- create sales return + stock adjustment atomically --------
+    # -------- atomic: sales return + stock adjustment --------
     try:
         with transaction.atomic():
             sales_return = models.SalesReturns.objects.create(
@@ -3973,24 +4033,18 @@ def create_sales_return(data, user):
                 justification=data["justification"],
             )
 
-            # A sales return puts stock BACK into inventory. The
-            # adjustment inherits the same receipt, quantity, and
-            # justification as the sales return.
-            adjustment_payload = {
-                "retailer_receipt": str(retailer_receipt.id),
-                "quantity": quantity,
-                "justification": data["justification"],
-                "direction": "INCREMENT",
-                "return_intent": "CUSTOMER_RETURN",
-            }
-
             adj_errors, adjustment = create_stock_adjustment(
-                adjustment_payload, user
+                {
+                    "retailer_receipt": str(retailer_receipt.id),
+                    "quantity": quantity,
+                    "justification": data["justification"],
+                    "direction": "INCREMENT",
+                    "return_intent": "CUSTOMER_RETURN",
+                },
+                user,
             )
 
             if adj_errors or adjustment is None:
-                # Raise inside the transaction so the SalesReturns row
-                # is rolled back too. Both must succeed, or neither.
                 raise ValueError(
                     "; ".join(adj_errors)
                     or "Stock adjustment could not be created"
@@ -4003,6 +4057,157 @@ def create_sales_return(data, user):
         return errors, None
 
 
+def update_sales_return(data, user):
+    """
+    Update an existing sales return.
+
+    Policy A still applies. The record being edited is excluded from
+    the "already returned" check so an edit doesn't reject itself.
+
+    Note: this does NOT reconcile the linked StockAdjustments row.
+    If the quantity changes, the receipt's current_unit_quantity
+    stays wherever create_sales_return left it. Add a paired
+    adjustment (INCREMENT when the return grows, DECREMENT when it
+    shrinks) if you want the stock position to track edits.
+    """
+    errors = []
+
+    # -------- locate --------
+    sales_return_id = data.get("sales_return") or data.get("id")
+    if not sales_return_id:
+        errors.append("sales_return is required")
+        return errors, None
+
+    sales_return = models.SalesReturns.objects.filter(
+        id=sales_return_id,
+        entity=user.entity,
+    ).first()
+    if not sales_return:
+        errors.append("Sales return not found")
+        return errors, None
+
+    # -------- resolve effective values (merge over current) --------
+    new_receipt_id = (
+        data.get("retailer_receipt") or sales_return.retailer_receipt_id
+    )
+    new_order_id = (
+        data.get("customer_order") or sales_return.customer_order_id
+    )
+    new_quantity_raw = data.get("quantity", sales_return.quantity)
+    new_justification = data.get(
+        "justification", sales_return.justification
+    )
+
+    # -------- receipt --------
+    retailer_receipt = models.RetailerReceipts.objects.filter(
+        id=new_receipt_id
+    ).first()
+    if not retailer_receipt:
+        errors.append("No product with provided ID")
+        return errors, None
+
+    # -------- order --------
+    customer_order = models.CustomerOrders.objects.filter(
+        id=new_order_id
+    ).first()
+    if not customer_order:
+        errors.append("No order with provided ID")
+        return errors, None
+
+    # -------- line must exist --------
+    customer_order_item = CustomerOrderItems.objects.filter(
+        customer_order=customer_order,
+        retailer_receipt=retailer_receipt,
+    ).first()
+    if not customer_order_item:
+        errors.append("This product was not in the selected order")
+        return errors, None
+
+    # -------- Policy A: another return on this pair? --------
+    conflicting = (
+        models.SalesReturns.objects
+        .filter(
+            customer_order=customer_order,
+            retailer_receipt=retailer_receipt,
+        )
+        .exclude(id=sales_return.id)
+        .first()
+    )
+
+    if conflicting:
+        errors.append(
+            f"Another return already exists for this order line "
+            f"({conflicting.created.strftime('%Y-%m-%d')}). "
+            f"Each order line can only be returned once."
+        )
+        return errors, None
+
+    # -------- quantity --------
+    try:
+        quantity = int(new_quantity_raw)
+    except (TypeError, ValueError):
+        errors.append("Quantity must be a number")
+        return errors, None
+
+    if quantity <= 0:
+        errors.append("Quantity must be greater than zero")
+        return errors, None
+
+    purchased = int(customer_order_item.purchased_quantity or 0)
+    if quantity > purchased:
+        errors.append(
+            f"Original order had {purchased} units. "
+            f"You are returning {quantity}"
+        )
+        return errors, None
+
+    # -------- justification --------
+    if not str(new_justification or "").strip():
+        errors.append("Justification is required")
+        return errors, None
+
+    # -------- apply --------
+    try:
+        sales_return.retailer_receipt = retailer_receipt
+        sales_return.customer_order = customer_order
+        sales_return.quantity = quantity
+        sales_return.justification = new_justification
+        sales_return.save()
+        return errors, sales_return
+
+    except Exception as e:
+        errors.append(str(e))
+        return errors, None
+
+
+def delete_sales_return(data, user):
+    """
+    Delete a sales return owned by the caller's entity.
+
+    Note: this does NOT reverse the stock adjustment that
+    create_sales_return made. If you want the receipt's quantity to
+    roll back, create a compensating adjustment with direction=
+    "DECREMENT" before calling this.
+    """
+    errors = []
+
+    sales_return_id = data.get("sales_return") or data.get("id")
+    if not sales_return_id:
+        errors.append("sales_return is required")
+        return errors, None
+
+    sales_return = models.SalesReturns.objects.filter(
+        id=sales_return_id,
+        entity=user.entity,
+    ).first()
+    if not sales_return:
+        errors.append("Sales return not found")
+        return errors, None
+
+    sales_return.delete()
+    return errors, sales_return
+
+    
 def search_customer_orders(data,user):
     # TODO: reference search with Q
     """ Filter with Q  """
