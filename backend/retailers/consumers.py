@@ -2,6 +2,8 @@
 
 import json
 from datetime import date, datetime, timedelta
+from datetime import timedelta
+from django.utils import timezone
 
 import dateutil.parser
 import simplejson
@@ -566,8 +568,7 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
         #     entity=self.user.entity,
         #     created__gte=formatted_from_date,
         # ).order_by('-created')
-        from datetime import timedelta
-        from django.utils import timezone
+
 
         # earlier in the function
         formatted_from_date = (timezone.now() - timedelta(days=7)).isoformat()
