@@ -186,3 +186,194 @@ def delete_entity_expense(data, user):
 
     expense.delete()
     return errors, expense
+
+
+# ----------------------------------------------------------------------
+# Update / Delete: EntityExpenseCategory
+# ----------------------------------------------------------------------
+
+def update_entity_expense_category(data, user):
+    """
+    Update an entity expense category owned by the caller's entity.
+    Only the fields present in `data` are changed.
+
+    Returns (errors, category).
+    """
+    errors = []
+
+    category_id = data.get("entity_expense_category") or data.get("id")
+    if not category_id:
+        errors.append("entity_expense_category is required")
+        return errors, None
+
+    try:
+        category = models.EntityExpenseCategories.objects.get(
+            id=category_id,
+            entity=user.entity,
+        )
+    except models.EntityExpenseCategories.DoesNotExist:
+        errors.append("Category not found")
+        return errors, None
+    except Exception as e:
+        errors.append(str(e))
+        return errors, None
+
+    if "title" in data:
+        title = (data.get("title") or "").strip()
+        if not title:
+            errors.append("title cannot be empty")
+            return errors, None
+        category.title = title.upper()
+
+    if "description" in data:
+        category.description = data.get("description") or None
+
+    if "is_recurrent" in data:
+        category.is_recurrent = str(data.get("is_recurrent") or "false")
+
+    if "recurrence_period" in data:
+        period = data.get("recurrence_period")
+        if category.is_recurrent == "true" and period:
+            category.recurrence_period = period
+        else:
+            category.recurrence_period = None
+
+    category.updated_by = user
+    category.save()
+    return errors, category
+
+
+def delete_entity_expense_category(data, user):
+    """
+    Delete an entity expense category owned by the caller's entity.
+
+    WARNING: EntityExpenses.expense_category has on_delete=CASCADE.
+    Deleting a category will also delete every expense that points
+    at it. If that is not what you want, switch the FK to SET_NULL
+    or enable the in-use guard below.
+
+    Returns (errors, deleted).
+    """
+    errors = []
+
+    category_id = data.get("entity_expense_category") or data.get("id")
+    if not category_id:
+        errors.append("entity_expense_category is required")
+        return errors, None
+
+    try:
+        category = models.EntityExpenseCategories.objects.get(
+            id=category_id,
+            entity=user.entity,
+        )
+    except models.EntityExpenseCategories.DoesNotExist:
+        errors.append("Category not found")
+        return errors, None
+    except Exception as e:
+        errors.append(str(e))
+        return errors, None
+
+    # Uncomment to block deletion of in-use categories.
+    # if models.EntityExpenses.objects.filter(expense_category=category).exists():
+    #     errors.append(
+    #         "Cannot delete a category that is still used by expenses."
+    #     )
+    #     return errors, None
+
+    category.delete()
+    return errors, category
+
+
+# ----------------------------------------------------------------------
+# Update / Delete: EntityExpense
+# ----------------------------------------------------------------------
+
+def update_entity_expense(data, user):
+    """
+    Update an entity expense owned by the caller's entity.
+    Only fields present in `data` are changed. Passing
+    `expense_category: null` (or "") clears the category.
+
+    Returns (errors, expense).
+    """
+    errors = []
+
+    expense_id = data.get("entity_expense") or data.get("id")
+    if not expense_id:
+        errors.append("entity_expense is required")
+        return errors, None
+
+    try:
+        expense = models.EntityExpenses.objects.get(
+            id=expense_id,
+            entity=user.entity,
+        )
+    except models.EntityExpenses.DoesNotExist:
+        errors.append("Expense not found")
+        return errors, None
+    except Exception as e:
+        errors.append(str(e))
+        return errors, None
+
+    if "expense_category" in data:
+        category_id = data.get("expense_category")
+        if category_id:
+            try:
+                category = models.EntityExpenseCategories.objects.get(
+                    id=category_id,
+                    entity=user.entity,
+                )
+                expense.expense_category = category
+            except models.EntityExpenseCategories.DoesNotExist:
+                errors.append("Category not found")
+                return errors, None
+        else:
+            expense.expense_category = None
+
+    if "expense_date" in data:
+        expense.expense_date = data.get("expense_date") or None
+
+    if "amount" in data:
+        try:
+            expense.amount = data.get("amount") or 0
+        except (TypeError, ValueError):
+            errors.append("amount must be a number")
+            return errors, None
+
+    if "description" in data:
+        expense.description = data.get("description") or None
+
+    if errors:
+        return errors, None
+
+    expense.save()
+    return errors, expense
+
+
+def delete_entity_expense(data, user):
+    """
+    Delete an entity expense owned by the caller's entity.
+
+    Returns (errors, deleted).
+    """
+    errors = []
+
+    expense_id = data.get("entity_expense") or data.get("id")
+    if not expense_id:
+        errors.append("entity_expense is required")
+        return errors, None
+
+    try:
+        expense = models.EntityExpenses.objects.get(
+            id=expense_id,
+            entity=user.entity,
+        )
+    except models.EntityExpenses.DoesNotExist:
+        errors.append("Expense not found")
+        return errors, None
+    except Exception as e:
+        errors.append(str(e))
+        return errors, None
+
+    expense.delete()
+    return errors, expense
