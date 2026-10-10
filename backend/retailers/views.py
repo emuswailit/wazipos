@@ -64,7 +64,8 @@ from .utils import (
     retailer_utils,
     retailers_shipping_rates_utils,
     wholesaler_invoice_utils,
-    profit_and_loss_utils
+    profit_and_loss_utils,
+    expiry_report_utils
 )
 
 
@@ -304,7 +305,7 @@ def retailerReceiptsAdminAPIView(request):
             1, "Could not build profit and loss", errors,
         )
     elif action == "GetExpiryReport":
-        errors, report = retailer_utils.get_expiry_report(
+        errors, report = expiry_report_utils.get_expiry_report(
             request.data, request.user,
         )
         if report:
