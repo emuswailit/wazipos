@@ -291,8 +291,16 @@ def delete_entity_expense_category(data, user):
 def update_entity_expense(data, user):
     """
     Update an entity expense owned by the caller's entity.
-    Only fields present in `data` are changed. Passing
-    `expense_category: null` (or "") clears the category.
+
+    Only fields present in `data` are changed.
+
+    Category rules:
+      - Missing / null / empty       → error: user must select a category.
+      - Same value as current FK     → leave existing untouched.
+      - Different, resolvable value  → replace the FK.
+      - Different, unresolvable      → error: category not found.
+
+    The category is never cleared by this endpoint.
 
     `expense_category` may be a UUID (normal) or a title string
     (tolerated for clients that submit the display label by mistake).
@@ -319,22 +327,46 @@ def update_entity_expense(data, user):
         return errors, None
 
     # -------------------- Category --------------------
-    if "expense_category" in data:
-        raw = data.get("expense_category")
+    raw = data.get("expense_category")
+    incoming = str(raw).strip() if raw not in (None, "") else ""
 
-        if not raw:
-            expense.expense_category = None
-        else:
-            # Try the UUID first — the normal path.
+    if not incoming:
+        # No category supplied — the UI requires one, so treat this
+        # as a validation error rather than silently leaving or
+        # clearing the existing value.
+        errors.append("Please select a category.")
+        return errors, None
+
+    current = (
+        str(expense.expense_category_id)
+        if expense.expense_category_id
+        else ""
+    )
+
+    if incoming == current:
+        # Same value — leave the FK alone.
+        pass
+    else:
+        # Different value — resolve it. Try UUID first, then
+        # fall back to a case-insensitive title match.
+        category = models.EntityExpenseCategories.objects.filter(
+            id=incoming,
+            entity=user.entity,
+        ).first()
+
+        if category is None:
             category = models.EntityExpenseCategories.objects.filter(
-                id=raw,
+                title__iexact=incoming,
                 entity=user.entity,
             ).first()
 
-            # Fall back to a title match (case-insensitive). This
-            # tolerates clients that mistakenly send the display
-            # label instead of the underlying UUID.
-   
+        if category is None:
+            errors.append(
+                f"Category not found for value '{incoming}'."
+            )
+            return errors, None
+
+        expense.expense_category = category
 
     # -------------------- Scalar fields --------------------
     if "expense_date" in data:
@@ -356,6 +388,7 @@ def update_entity_expense(data, user):
     expense.save()
     return errors, expense
 
+    
 def delete_entity_expense(data, user):
     """
     Delete an entity expense owned by the caller's entity.
