@@ -278,7 +278,7 @@ def retailerReceiptsAdminAPIView(request):
     # -----------------------------------------------------------------
 
     elif action == "GetDailySalesReport":
-        errors, report = daily_retailer_report(
+        errors, report = daily_retailer_report.get_daily_sales_report(
             request.data, request.user,
         )
         if report:
