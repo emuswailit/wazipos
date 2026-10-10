@@ -1708,20 +1708,7 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
 # Purchases / sales returns
 # ===========================================================================
 
-class PurchasesReturnsSerializer(serializers.ModelSerializer):
-    retailer_receipt_title = serializers.SerializerMethodField(read_only=True)
 
-    class Meta:
-        model = models.PurchasesReturns
-        fields = (
-            "id", "draft_id", "retailer_receipt", "retailer_receipt_title",
-            "retailer_order", "quantity", "justification", "owner",
-            "created", "updated",
-        )
-        read_only_fields = ("id", "created", "updated")
-
-    def get_retailer_receipt_title(self, obj):
-        return obj.retailer_receipt.product.title
 
 
 class SalesReturnsSerializer(serializers.ModelSerializer):
