@@ -68,6 +68,7 @@ from .utils import (
     expiry_report_utils,
     stock_report_utils,
     low_stock_report_utils,
+    product_movement_report_utils
 )
 
 
@@ -347,16 +348,16 @@ def retailerReceiptsAdminAPIView(request):
     # Staff may pass "entity_id"; others are scoped to their own entity.
     # -----------------------------------------------------------------
 
-    elif action == "GetLowStockReport":
-        errors, report = low_stock_report_utils.get_low_stock_report(
+    elif action == "GetProductMovementReport":
+        errors, report = product_movement_report_utils.get_product_movement_report(
             request.data, request.user,
         )
         if report:
             return custom_success_message(
-                0, "Low stock report", report, "report",
+                0, "Product movement report", report, "report",
             )
         return custom_errors_response(
-            1, "Could not build low stock report", errors,
+            1, "Could not build product movement report", errors,
         )
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
