@@ -282,20 +282,28 @@ def retailerReceiptsAdminAPIView(request):
     # Staff may pass "entity_id"; others are scoped to their own entity.
     # -----------------------------------------------------------------
 
+    # -----------------------------------------------------------------
+    # Reports — daily sales
+    #
+    # Default: today. Also accepts:
+    #   { "date": "YYYY-MM-DD" }              — single day
+    #   { "from": "YYYY-MM-DD" }              — from that day through today
+    #   { "from": "YYYY-MM-DD", "to": "..." } — explicit range
+    # Staff may pass "entity_id"; others are scoped to their own entity.
+    # -----------------------------------------------------------------
+
     elif action == "GetDailySalesReport":
         errors, report = daily_retailer_report.get_daily_sales_report(
             request.data, request.user,
         )
         if report:
             return custom_success_message(
-                0,
-                "Daily sales report",
-                report,
-                "report",
+                0, "Daily sales report", report, "report",
             )
         return custom_errors_response(
             1, "Could not build daily sales report", errors,
         )
+
     elif action == "GetProfitAndLoss":
         errors, report = profit_and_loss_utils.get_profit_and_loss(
             request.data, request.user,
@@ -307,6 +315,7 @@ def retailerReceiptsAdminAPIView(request):
         return custom_errors_response(
             1, "Could not build profit and loss", errors,
         )
+
     elif action == "GetExpiryReport":
         errors, report = expiry_report_utils.get_expiry_report(
             request.data, request.user,
@@ -318,6 +327,7 @@ def retailerReceiptsAdminAPIView(request):
         return custom_errors_response(
             1, "Could not build expiry report", errors,
         )
+
     elif action == "GetStockReport":
         errors, report = stock_report_utils.get_stock_report(
             request.data, request.user,
@@ -335,17 +345,25 @@ def retailerReceiptsAdminAPIView(request):
     #
     # Lists products below their reorder target with suggested order
     # quantities, cost estimates, and wholesaler groupings.
+    # -----------------------------------------------------------------
+
+    elif action == "GetLowStockReport":
+        errors, report = low_stock_report_utils.get_low_stock_report(
+            request.data, request.user,
+        )
+        if report:
+            return custom_success_message(
+                0, "Low stock report", report, "report",
+            )
+        return custom_errors_response(
+            1, "Could not build low stock report", errors,
+        )
+
+    # -----------------------------------------------------------------
+    # Reports — product movement ledger
     #
-    # Payload:
-    #   { "lookback_days": 30 }           — velocity window (max 180)
-    #   { "cover_days": 30 }              — target days of cover (max 180)
-    #   { "category": "<uuid>" }          — filter to one category
-    #   { "wholesaler": "<uuid>" }        — filter to one wholesaler
-    #   { "search": "<string>" }          — search product / category
-    #   { "only_danger": true }           — only products at danger level
-    #   { "include_zero_velocity": true } — include products with no recent sales
-    #
-    # Staff may pass "entity_id"; others are scoped to their own entity.
+    # Full IN/OUT history for one product, with running balance,
+    # daily summary, and per-batch breakdown.
     # -----------------------------------------------------------------
 
     elif action == "GetProductMovementReport":
@@ -361,8 +379,6 @@ def retailerReceiptsAdminAPIView(request):
         )
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
-
-
 # ===========================================================================
 # Client orders (customer-facing)
 # ===========================================================================
