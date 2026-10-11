@@ -26,7 +26,13 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Count, Max, Sum, Value
+from django.db.models import (
+    Count,
+    DecimalField,
+    Max,
+    Sum,
+    Value,
+)
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -38,6 +44,22 @@ from retailers.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =====================================================================
+# Typed zero constants
+#
+# `Value(0)` is an IntegerField. When it's coalesced against a Sum
+# over a DecimalField, Django refuses to compile the query with
+# "Expression contains mixed types". These constants give each
+# fallback the correct output type up-front.
+# =====================================================================
+
+ZERO_DEC = Value(
+    Decimal("0.00"),
+    output_field=DecimalField(max_digits=18, decimal_places=2),
+)
+ZERO_INT = Value(0)
 
 
 # =====================================================================
@@ -154,6 +176,7 @@ def _keys(variations: Iterable[RetailerVariations]) -> List[Key]:
 
 
 def _load_current_stock(keys: List[Key]) -> Dict[Key, int]:
+    """current_unit_quantity is an IntegerField — ZERO_INT is fine."""
     entity_ids = {k[0] for k in keys}
     product_ids = {k[1] for k in keys}
     rows = (
@@ -164,7 +187,7 @@ def _load_current_stock(keys: List[Key]) -> Dict[Key, int]:
             is_active="true",
         )
         .values("entity_id", "product_id")
-        .annotate(units=Coalesce(Sum("current_unit_quantity"), Value(0)))
+        .annotate(units=Coalesce(Sum("current_unit_quantity"), ZERO_INT))
     )
     return {
         (str(r["entity_id"]), str(r["product_id"])): int(r["units"] or 0)
@@ -173,13 +196,16 @@ def _load_current_stock(keys: List[Key]) -> Dict[Key, int]:
 
 
 def _load_all_time_receipts(keys: List[Key]) -> Dict[Key, int]:
+    """received_unit_quantity is an IntegerField — ZERO_INT is fine."""
     entity_ids = {k[0] for k in keys}
     product_ids = {k[1] for k in keys}
     rows = (
         RetailerReceipts.objects
         .filter(entity_id__in=entity_ids, product_id__in=product_ids)
         .values("entity_id", "product_id")
-        .annotate(total=Coalesce(Sum("received_unit_quantity"), Value(0)))
+        .annotate(
+            total=Coalesce(Sum("received_unit_quantity"), ZERO_INT),
+        )
     )
     return {
         (str(r["entity_id"]), str(r["product_id"])): int(r["total"] or 0)
@@ -188,6 +214,7 @@ def _load_all_time_receipts(keys: List[Key]) -> Dict[Key, int]:
 
 
 def _load_all_time_issues(keys: List[Key]) -> Dict[Key, int]:
+    """total_quantity is a DecimalField — must use ZERO_DEC."""
     entity_ids = {k[0] for k in keys}
     product_ids = {k[1] for k in keys}
     rows = (
@@ -201,7 +228,7 @@ def _load_all_time_issues(keys: List[Key]) -> Dict[Key, int]:
             "customer_order__entity_id",
             "retailer_receipt__product_id",
         )
-        .annotate(total=Coalesce(Sum("total_quantity"), Value(0)))
+        .annotate(total=Coalesce(Sum("total_quantity"), ZERO_DEC))
     )
     return {
         (
@@ -412,7 +439,7 @@ def _load_raw_order_stats(
             "retailer_receipt__product_id",
             "customer_order__created__date",
         )
-        .annotate(units=Coalesce(Sum("total_quantity"), Value(0)))
+        .annotate(units=Coalesce(Sum("total_quantity"), ZERO_DEC))
     )
 
     bucket: Dict[Key, Dict[date, float]] = {}

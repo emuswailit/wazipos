@@ -59,13 +59,23 @@ from wholesalers.models import (
 
 
 # =====================================================================
-# Constants
+# Typed zero constants
+#
+# `Value(0)` is an IntegerField. Coalescing it against a Sum over a
+# DecimalField makes Django refuse to compile with "Expression
+# contains mixed types". Give each fallback the right type explicitly.
 # =====================================================================
 
-ZERO = Value(
+ZERO_DEC = Value(
     Decimal("0.00"),
     output_field=DecimalField(max_digits=18, decimal_places=2),
 )
+ZERO_INT = Value(0)
+
+
+# =====================================================================
+# Constants
+# =====================================================================
 
 DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_COVER_DAYS = 30
@@ -107,6 +117,9 @@ def _clamped_int(data, key, default, max_value):
 def _sales_velocity_map(entity, lookback_days):
     """
     { product_id: {units, last_sale} } for the lookback window.
+
+    `total_quantity` is a DecimalField — use ZERO_DEC as the Coalesce
+    fallback so Django can compile the aggregate.
     """
     cutoff = timezone.now().date() - timedelta(days=lookback_days)
 
@@ -120,7 +133,7 @@ def _sales_velocity_map(entity, lookback_days):
         .exclude(customer_order__status__in=EXCLUDED_ORDER_STATUSES)
         .values("retailer_receipt__product__id")
         .annotate(
-            units=Coalesce(Sum("total_quantity"), Value(0)),
+            units=Coalesce(Sum("total_quantity"), ZERO_DEC),
             last_sale=Max("customer_order__created"),
         )
     )
@@ -166,7 +179,7 @@ def _stock_map(entity):
         .filter(entity=entity, is_active="true")
         .values("product__id")
         .annotate(
-            units=Coalesce(Sum("current_unit_quantity"), Value(0)),
+            units=Coalesce(Sum("current_unit_quantity"), ZERO_INT),
             pack=Max("units_per_pack"),
             receipt_count=Count("id"),
         )
@@ -226,7 +239,7 @@ def _last_purchase_map(entity, product_ids):
 
 
 # =====================================================================
-# Wholesale offers — batched across all requested products
+# Wholesale offers
 # =====================================================================
 
 def _is_current_discount(discount, today):
@@ -235,8 +248,7 @@ def _is_current_discount(discount, today):
 
     Field names on the wholesaler discount models are not guaranteed
     to match the retailer-side convention (`start_date` / `end_date`).
-    We accept either spelling, and treat a missing date field as
-    "always current" rather than hiding the discount silently.
+    Accept either spelling; a missing date field means "always current".
     """
     start = (
         getattr(discount, "start_date", None)
@@ -258,10 +270,7 @@ def _load_wholesale_offers(product_ids, today):
     Return { product_id: [offer_dict, ...] } for all wholesaler lots
     carrying stock of any of the given products.
 
-    Three queries total regardless of product count:
-        1. WholesalerReceipts with stock > 0
-        2. Active WholesalerPriceDiscounts on those receipts
-        3. Active WholesalerQuantityDiscounts on those receipts
+    Three queries total regardless of product count.
     """
     if not product_ids:
         return {}
