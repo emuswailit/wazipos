@@ -275,13 +275,15 @@ def _load_wholesale_offers(product_ids, today):
     if not product_ids:
         return {}
 
+    # NOTE: WholesalerReceipts has no `is_active` field (that flag lives
+    # on RetailerReceipts). Availability is implied by
+    # `current_unit_quantity > 0`, which is the only test we need here.
     receipts = list(
         WholesalerReceipts.objects
         .filter(
             product_id__in=product_ids,
             current_unit_quantity__gt=0,
         )
-        .exclude(is_active="false")
         .select_related("entity", "product")
     )
     if not receipts:
