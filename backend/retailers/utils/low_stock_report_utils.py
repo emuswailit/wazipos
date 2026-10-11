@@ -265,6 +265,24 @@ def _is_current_discount(discount, today):
     return True
 
 
+def _resolve_pack_size(receipt):
+    """
+    Pack size for a wholesaler lot.
+
+    `WholesalerReceipts` has no `units_per_pack` field — that lives
+    on the joined product. Read from the product, fall back to the
+    receipt attribute if a future migration adds one, then to 1.
+    """
+    product = getattr(receipt, "product", None)
+    from_product = getattr(product, "units_per_pack", None)
+    from_receipt = getattr(receipt, "units_per_pack", None)
+    try:
+        value = from_product or from_receipt or 1
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 1
+
+
 def _load_wholesale_offers(product_ids, today):
     """
     Return { product_id: [offer_dict, ...] } for all wholesaler lots
@@ -275,9 +293,9 @@ def _load_wholesale_offers(product_ids, today):
     if not product_ids:
         return {}
 
-    # NOTE: WholesalerReceipts has no `is_active` field (that flag lives
-    # on RetailerReceipts). Availability is implied by
-    # `current_unit_quantity > 0`, which is the only test we need here.
+    # NOTE: WholesalerReceipts has no `is_active` field (that flag
+    # lives on RetailerReceipts). Availability is implied by
+    # `current_unit_quantity > 0`, which is the only test needed here.
     receipts = list(
         WholesalerReceipts.objects
         .filter(
@@ -380,7 +398,7 @@ def _load_wholesale_offers(product_ids, today):
             "expiry_date": expiry.isoformat() if expiry else None,
             "days_to_expiry": days_to_expiry,
             "available_units": int(r.current_unit_quantity or 0),
-            "pack_size": max(1, int(r.units_per_pack or 1)),
+            "pack_size": _resolve_pack_size(r),
             "unit_price": str(base_price.quantize(Decimal("0.01"))),
             "effective_unit_price": str(
                 effective_price.quantize(Decimal("0.01"))
