@@ -66,7 +66,8 @@ from .utils import (
     wholesaler_invoice_utils,
     profit_and_loss_utils,
     expiry_report_utils,
-    stock_report_utils
+    stock_report_utils,
+    low_stock_report_utils,
 )
 
 
@@ -327,6 +328,37 @@ def retailerReceiptsAdminAPIView(request):
         return custom_errors_response(
             1, "Could not build stock report", errors,
         )
+
+    # -----------------------------------------------------------------
+    # Reports — low stock / reorder
+    #
+    # Lists products below their reorder target with suggested order
+    # quantities, cost estimates, and wholesaler groupings.
+    #
+    # Payload:
+    #   { "lookback_days": 30 }           — velocity window (max 180)
+    #   { "cover_days": 30 }              — target days of cover (max 180)
+    #   { "category": "<uuid>" }          — filter to one category
+    #   { "wholesaler": "<uuid>" }        — filter to one wholesaler
+    #   { "search": "<string>" }          — search product / category
+    #   { "only_danger": true }           — only products at danger level
+    #   { "include_zero_velocity": true } — include products with no recent sales
+    #
+    # Staff may pass "entity_id"; others are scoped to their own entity.
+    # -----------------------------------------------------------------
+
+    elif action == "GetLowStockReport":
+        errors, report = low_stock_report_utils.get_low_stock_report(
+            request.data, request.user,
+        )
+        if report:
+            return custom_success_message(
+                0, "Low stock report", report, "report",
+            )
+        return custom_errors_response(
+            1, "Could not build low stock report", errors,
+        )
+
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
 

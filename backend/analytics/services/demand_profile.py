@@ -19,7 +19,7 @@ from analytics.models import DemandFact, ProductDemandProfile
 
 MIN_HISTORY_DAYS = 7
 WINDOW_DAYS = 90
-TREND_WINDOW = 30          # days for trend comparison
+TREND_WINDOW = 30
 INTERMITTENT_ZERO_PCT = 0.30
 ERRATIC_CV = 0.75
 STABLE_CV = 0.50
@@ -69,7 +69,6 @@ def _build_profile(
     """
     Compute stats for one (entity, product, tier).
     """
-    # Pull the daily net quantity across all source types
     daily = (
         DemandFact.objects
         .filter(
@@ -88,10 +87,30 @@ def _build_profile(
     if not days:
         return None
 
-    history_days = (as_of_date - days[0][0]).days + 1
+    first_fact_date = days[0][0]
+    history_days = (as_of_date - first_fact_date).days + 1
 
-    # Build a continuous daily series (fill missing dates with 0)
-    series = _fill_series(days, window_start, as_of_date)
+    # ------------------------------------------------------------------
+    # Series start selection.
+    #
+    # For mature products, the series spans the full 90-day window and
+    # pre-first-sale days count as zero demand — this is the correct
+    # treatment for intermittent demand.
+    #
+    # For new products (first sale inside the window), treating the
+    # pre-first-sale period as "zero demand days" would under-state the
+    # average demand enormously. We start the series on the actual first
+    # fact date so the average reflects the product's realised lifespan.
+    #
+    # The threshold (2 × MIN_HISTORY_DAYS) gives the classifier enough
+    # data to distinguish "new" from "recently active" cleanly.
+    # ------------------------------------------------------------------
+    if history_days >= MIN_HISTORY_DAYS * 2:
+        series_start = window_start
+    else:
+        series_start = first_fact_date
+
+    series = _fill_series(days, series_start, as_of_date)
 
     values = [v for _, v in series]
     n = len(values)
@@ -114,14 +133,11 @@ def _build_profile(
     total_90d = sum(values) if n >= 90 else None
     max_daily = max(values) if values else None
 
-    # ---- Trend ----
     trend_direction, trend_pct = _compute_trend(series, TREND_WINDOW)
 
-    # ---- Seasonality ----
     weekly = _weekly_seasonality(series)
     monthly = _monthly_seasonality(series)
 
-    # ---- Pattern ----
     pattern = _classify_pattern(
         history_days=history_days,
         cv=cv,
@@ -214,7 +230,6 @@ def _classify_pattern(history_days, cv, zero_pct, trend_direction, weekly, month
         return "intermittent"
     if cv is not None and cv > ERRATIC_CV:
         return "erratic"
-    # Seasonality detection: weekly peak/valley ratio > 1.5
     if weekly:
         vals = [v for v in weekly.values() if v > 0]
         if vals and (max(vals) / min(vals)) > 1.5:

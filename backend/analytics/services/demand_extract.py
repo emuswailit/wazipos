@@ -1,27 +1,56 @@
 # analytics/services/demand_extract.py
+#
+# DemandFact extractor.
+#
+# Reads from the operational tables and writes one DemandFact row per
+# (entity, product, tier, day, source_type).
+#
+# Sources:
+#     RetailerOrderItems (status=RECEIVED)         → WHOLESALER, "order"
+#     RetailerReceipts (direct, non-null supplier) → WHOLESALER, "direct_receipt"
+#     CustomerOrderItems                           → RETAILER,   "customer_sale"
+#     SalesReturns                                 → RETAILER,   "sales_return"
+#     WholesalerReceiptReturns (status=ACCEPTED)   → WHOLESALER, "wholesaler_return"
+#     StockAdjustments (expiry/damage)             → RETAILER,   "adjustment"
+#
+# Idempotent: for the given date, existing facts are deleted and rebuilt.
+#
+# ---------------------------------------------------------------------
+# DESIGN NOTES
+# ---------------------------------------------------------------------
+#
+# Date filtering
+#     We filter with `__gte` / `__lt` on timezone-aware datetimes rather
+#     than `__date=`. `__date` raises FieldError on DateField columns and
+#     emits naive-datetime warnings on DateTimeField columns under
+#     USE_TZ=True. `_day_bounds` produces aware boundaries that compare
+#     cleanly against any DateTimeField.
+#
+# Customer sales and `is_paid`
+#     `is_paid` is set only by the cashless payment webhook
+#     (check_jambopay_payment_status). Cash-at-counter sales never route
+#     through that flow, so they stay at is_paid="false" forever even
+#     though the sale happened.
+#
+#     We therefore do NOT filter on `is_paid`, and we do NOT require a
+#     terminal order status — the default PROCESSING status persists
+#     indefinitely for walk-out sales.
+#
+#     The only exclusion is CANCELLED orders, which never represented a
+#     sale.
+#
+# Wholesaler returns schema
+#     WholesalerReceiptReturns was simplified. The accepted state is
+#     status="ACCEPTED", the timestamp is `accepted_at` (there is no
+#     `confirmed_at`), and the accepted quantity is stored in `quantity`
+#     (there is no `confirmed_quantity`). Prior versions of this file
+#     filtered on the old names and silently returned zero rows.
 
-"""
-DemandFact extractor.
-
-Reads from the operational tables and writes one DemandFact row per
-(entity, product, tier, day, source_type).
-
-Sources:
-    RetailerOrderItems (status=RECEIVED)     → WHOLESALER, "order"
-    RetailerReceipts (direct, non-null supplier) → WHOLESALER, "direct_receipt"
-    CustomerOrderItems (is_paid=true)        → RETAILER,   "customer_sale"
-    SalesReturns                             → RETAILER,   "sales_return"
-    WholesalerReceiptReturns                 → WHOLESALER, "wholesaler_return"
-    StockAdjustments (expiry/damage)         → RETAILER,   "adjustment"
-
-Idempotent: for the given date, existing facts are deleted and rebuilt.
-"""
-
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.utils import timezone as tz
 
 from analytics.models import DemandFact
 from retailers.models import (
@@ -36,9 +65,39 @@ from wholesalers.models import (
 )
 
 
-# Which StockAdjustments count as demand depletion
+# Which StockAdjustments count as demand depletion.
+# return_intent uses values from StockAdjustments.RETURN_INTENTS, and
+# `direction` uses "DECREMENT" / "INCREMENT" — not "DECREASE".
 ADJUSTMENT_DEMAND_INTENTS = {"EXPIRY_WRITE_OFF", "DAMAGE_WRITE_OFF"}
 
+
+# =====================================================================
+# Date helpers
+# =====================================================================
+
+def _day_bounds(d: date):
+    """
+    Return (start, end) as timezone-aware datetimes for range filtering.
+
+    Aware boundaries compare cleanly against DateTimeField columns and
+    avoid the "naive datetime" RuntimeWarning that appears when a plain
+    `date` is passed to a timezone-aware DateTimeField filter.
+
+    Usage:
+        start, end = _day_bounds(fact_date)
+        qs.filter(created__gte=start, created__lt=end)
+    """
+    start = tz.make_aware(
+        datetime.combine(d, time.min),
+        tz.get_current_timezone(),
+    )
+    end = start + timedelta(days=1)
+    return start, end
+
+
+# =====================================================================
+# Entry point
+# =====================================================================
 
 def extract_daily_demand(fact_date: date | None = None) -> dict:
     """
@@ -79,11 +138,14 @@ def _extract_wholesaler_orders(fact_date, buckets):
     Retailer orders where the parent order status is RECEIVED.
     Seller = the wholesaler. Buyer = the retailer.
     """
+    day_start, day_end = _day_bounds(fact_date)
+
     lines = (
         RetailerOrderItems.objects
         .filter(
             retailer_order__status="RECEIVED",
-            created=fact_date,
+            created__gte=day_start,
+            created__lt=day_end,
         )
         .select_related(
             "retailer_order",
@@ -102,7 +164,9 @@ def _extract_wholesaler_orders(fact_date, buckets):
         product_id = receipt.product_id
 
         qty = Decimal(str(line.total_quantity or 0))
-        revenue = Decimal(str(line.item_net_price_total or line.item_final_price_total or 0))
+        revenue = Decimal(str(
+            line.item_net_price_total or line.item_final_price_total or 0
+        ))
 
         _add_bucket(
             buckets,
@@ -124,32 +188,33 @@ def _extract_wholesaler_direct_receipts(fact_date, buckets):
     supplier. These represent stock that arrived at the retailer from
     a known wholesaler outside the normal order flow.
     """
+    day_start, day_end = _day_bounds(fact_date)
+
     receipts = (
         RetailerReceipts.objects
         .filter(
             retailer_order_item__isnull=True,
             received_from__isnull=False,
             is_active="true",
-            created__date=fact_date,
+            created__gte=day_start,
+            created__lt=day_end,
         )
         .select_related("product")
     )
 
     for r in receipts:
         qty = Decimal(str(r.received_unit_quantity or 0))
-        # Direct receipts have no list price. Use buying price as
-        # a rough revenue substitute if needed; else zero.
         revenue = Decimal(str(
             (r.unit_buying_price or 0) * (r.received_unit_quantity or 0)
         ))
 
         _add_bucket(
             buckets,
-            entity_id=r.received_from_id,       # the supplier (seller)
+            entity_id=r.received_from_id,
             product_id=r.product_id,
             tier="WHOLESALER",
             source_type="direct_receipt",
-            buyer_entity_id=r.entity_id,        # the retailer
+            buyer_entity_id=r.entity_id,
             qty=qty,
             revenue=revenue,
             line_count=1,
@@ -163,15 +228,29 @@ def _extract_wholesaler_direct_receipts(fact_date, buckets):
 
 def _extract_customer_sales(fact_date, buckets):
     """
-    Customer sales where the parent order is_paid="true".
-    Seller = the retailer entity. Buyer = None (customer isn't an entity).
+    Customer sales that represent realised demand.
+
+    Counts every customer order line created that day except for
+    cancelled orders.
+
+    Deliberately does NOT filter on `is_paid`:
+        is_paid is only set by the cashless payment webhook. Cash sales
+        taken at the counter never generate a CustomerOrderPayment, so
+        they remain is_paid="false" forever — yet they are real demand.
+
+    Deliberately does NOT filter on `status`:
+        new orders default to PROCESSING and may never advance, because
+        the shop has no workflow that moves walk-out sales to DELIVERED
+        or COMPLETED. Requiring a terminal status would exclude them.
+
+    The only exclusion is CANCELLED orders.
     """
+    day_start, day_end = _day_bounds(fact_date)
+
     lines = (
         CustomerOrderItems.objects
-        .filter(
-            customer_order__is_paid="true",
-            created__date=fact_date,
-        )
+        .filter(created__gte=day_start, created__lt=day_end)
+        .exclude(customer_order__status="CANCELLED")
         .select_related(
             "customer_order",
             "retailer_receipt",
@@ -185,11 +264,13 @@ def _extract_customer_sales(fact_date, buckets):
             continue
 
         qty = Decimal(str(line.total_quantity or 0))
-        revenue = Decimal(str(line.item_net_price_total or line.item_price_total or 0))
+        revenue = Decimal(str(
+            line.item_net_price_total or line.item_price_total or 0
+        ))
 
         _add_bucket(
             buckets,
-            entity_id=line.customer_order.entity_id,  # the retailer
+            entity_id=line.customer_order.entity_id,
             product_id=receipt.product_id,
             tier="RETAILER",
             source_type="customer_sale",
@@ -206,9 +287,14 @@ def _extract_sales_returns(fact_date, buckets):
     Customer returns. Reduce net demand at the retailer tier.
     Recorded as a negative-quantity fact on the return date.
     """
+    day_start, day_end = _day_bounds(fact_date)
+
     returns = (
         SalesReturns.objects
-        .filter(created__date=fact_date)
+        .filter(
+            created__gte=day_start,
+            created__lt=day_end,
+        )
         .select_related("retailer_receipt", "retailer_receipt__product")
     )
 
@@ -239,20 +325,27 @@ def _extract_sales_returns(fact_date, buckets):
 
 def _extract_wholesaler_returns(fact_date, buckets):
     """
-    Retailer → wholesaler returns that have been received back.
-    Negative demand at the wholesaler tier.
+    Retailer → wholesaler returns that have been accepted back by the
+    wholesaler. Negative demand at the wholesaler tier.
+
+    Schema note: after the model simplification, the accepted state is
+    status="ACCEPTED", the timestamp is `accepted_at`, and the accepted
+    quantity lives in `quantity` — not `confirmed_at` / `confirmed_quantity`.
     """
+    day_start, day_end = _day_bounds(fact_date)
+
     returns = (
         WholesalerReceiptReturns.objects
         .filter(
-            status__in=["CONFIRMED", "SETTLED"],
-            confirmed_at__date=fact_date,
+            status="ACCEPTED",
+            accepted_at__gte=day_start,
+            accepted_at__lt=day_end,
         )
         .select_related("product")
     )
 
     for r in returns:
-        qty = -Decimal(str(r.confirmed_quantity or 0))
+        qty = -Decimal(str(r.quantity or 0))
         if qty == 0:
             continue
 
@@ -266,7 +359,7 @@ def _extract_wholesaler_returns(fact_date, buckets):
             qty=qty,
             revenue=Decimal("0"),
             line_count=1,
-            batch=getattr(r, "batch", None),
+            batch=None,
         )
 
 
@@ -278,13 +371,20 @@ def _extract_adjustments(fact_date, buckets):
     """
     Retail-side stock adjustments for expiry and damage.
     Treated as depletion (negative demand) at the retailer tier.
+
+    `direction` on StockAdjustments uses "DECREMENT" / "INCREMENT",
+    not "DECREASE". Prior versions filtered on "DECREASE" and matched
+    zero rows.
     """
+    day_start, day_end = _day_bounds(fact_date)
+
     adjustments = (
         StockAdjustments.objects
         .filter(
             return_intent__in=ADJUSTMENT_DEMAND_INTENTS,
-            direction="DECREASE",
-            created__date=fact_date,
+            direction="DECREMENT",
+            created__gte=day_start,
+            created__lt=day_end,
             retailer_receipt__isnull=False,
         )
         .select_related("retailer_receipt", "retailer_receipt__product")

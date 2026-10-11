@@ -11,14 +11,16 @@ For retailer-tier queries, enriches each product with:
     - suggested_campaigns  (active campaigns to opt into)
 """
 
+import logging
 from datetime import date
-from decimal import Decimal
 
-from django.db.models import Max, Sum
+from django.db.models import Count, Sum
 
 from analytics.models import DemandForecast
 from analytics.services.campaign_advisor import suggest_campaigns_for_product
 from analytics.services.offer_advisor import suggest_offers_for_product
+
+logger = logging.getLogger(__name__)
 
 
 # =====================================================================
@@ -67,7 +69,7 @@ def get_bulk_forecast(
             total_forecast=Sum("point_forecast"),
             total_p10=Sum("p10"),
             total_p90=Sum("p90"),
-            days_covered=Max("horizon_days"),
+            days_covered=Count("horizon_days"),
         )
         .order_by("product_id")
     )
@@ -105,17 +107,15 @@ def get_bulk_forecast(
         p["product_title"] = product_titles.get(p["product_id"], "")
 
     # ---- Daily breakdown ----
-    if include_daily:
-        daily_by_product = _load_daily(qs, product_ids_str)
-        for p in product_summaries:
-            daily = daily_by_product.get(p["product_id"], [])
-            p["daily"] = daily
-            if daily:
-                p["model_name"] = daily[0].get("model_name")
-                p["segment"] = daily[0].get("segment")
-    else:
-        for p in product_summaries:
-            p["daily"] = []
+    # `model_name` and `segment` are set on every product, even when
+    # `include_daily` is False or a product has no daily rows, so
+    # downstream consumers never hit a KeyError.
+    daily_by_product = _load_daily(qs) if include_daily else {}
+    for p in product_summaries:
+        daily = daily_by_product.get(p["product_id"], [])
+        p["daily"] = daily if include_daily else []
+        p["model_name"] = daily[0].get("model_name") if daily else None
+        p["segment"] = daily[0].get("segment") if daily else None
 
     # ---- Offers and campaigns (retailer-tier only) ----
     if tier == "RETAILER" and (include_offers or include_campaigns):
@@ -159,6 +159,10 @@ def _enrich_with_offers_and_campaigns(
     try:
         retailer_entity = Entities.objects.get(id=entity_id)
     except Entities.DoesNotExist:
+        logger.warning(
+            "bulk_forecast: retailer entity %s not found; skipping offers",
+            entity_id,
+        )
         for p in product_summaries:
             p["suggested_offers"] = []
             p["suggested_campaigns"] = []
@@ -184,6 +188,14 @@ def _enrich_with_offers_and_campaigns(
                     forecast_total=p["total_forecast"],
                 )
             except Exception:
+                # Log the traceback so operators can spot failures.
+                # The response shape stays valid (empty list) so a
+                # single product failure doesn't break the whole call.
+                logger.exception(
+                    "bulk_forecast: suggest_offers_for_product failed "
+                    "for product=%s entity=%s",
+                    p["product_id"], entity_id,
+                )
                 p["suggested_offers"] = []
         else:
             p["suggested_offers"] = []
@@ -196,6 +208,11 @@ def _enrich_with_offers_and_campaigns(
                     forecast_total=p["total_forecast"],
                 )
             except Exception:
+                logger.exception(
+                    "bulk_forecast: suggest_campaigns_for_product failed "
+                    "for product=%s entity=%s",
+                    p["product_id"], entity_id,
+                )
                 p["suggested_campaigns"] = []
         else:
             p["suggested_campaigns"] = []
@@ -205,13 +222,14 @@ def _enrich_with_offers_and_campaigns(
 # Daily loader
 # =====================================================================
 
-def _load_daily(qs, product_ids):
-    if not product_ids:
-        return {}
-
+def _load_daily(qs):
+    """
+    Pull per-day forecast rows for the products already selected by
+    `qs`. The caller has already filtered by entity, tier, run_date,
+    and horizon_days — no additional filtering is needed here.
+    """
     daily_rows = (
-        qs.filter(product_id__in=product_ids)
-        .values(
+        qs.values(
             "product_id", "forecast_date", "horizon_days",
             "point_forecast", "p10", "p50", "p90",
             "model_name", "segment",

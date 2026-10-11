@@ -43,9 +43,12 @@ ZERO = Value(
 DEFAULT_DEAD_DAYS = 30
 MAX_DEAD_DAYS = 365
 
-VALID_SALE_STATUSES = (
-    "COMPLETED", "DELIVERED", "RECEIVED", "PICKED", "DISPATCHED",
-)
+# Any status except CANCELLED counts as a real sale for the purpose of
+# deciding whether a product has sold recently. The original filter
+# only accepted terminal statuses (COMPLETED, DELIVERED, etc.), but in
+# practice most shops leave customer orders at PROCESSING after a
+# cash sale. Using "not CANCELLED" catches them all.
+EXCLUDED_ORDER_STATUSES = ("CANCELLED",)
 
 
 # =====================================================================
@@ -125,15 +128,17 @@ def _product_rows(entity):
 
 def _last_sale_map(entity):
     """
-    { product_id: last_sale_date } for products with at least one
-    delivered sale, all-time. Keyed by string product id.
+    { product_id: last_sale_datetime } for products with at least one
+    non-cancelled sale, all-time. Keyed by string product id.
     """
     rows = (
         CustomerOrderItems.objects
         .filter(
             customer_order__entity=entity,
-            customer_order__status__in=VALID_SALE_STATUSES,
             retailer_receipt__product_id__isnull=False,
+        )
+        .exclude(
+            customer_order__status__in=EXCLUDED_ORDER_STATUSES,
         )
         .values("retailer_receipt__product__id")
         .annotate(last_sale=Max("customer_order__created"))
@@ -172,6 +177,10 @@ def _shaped_rows(entity, dead_days):
             if retail > 0
             else Decimal("0.00")
         )
+
+        # A product whose receipts all have zero buying price produces
+        # cost = 0 and margin = 100%. Flag it so the frontend can warn.
+        cost_basis_missing = cost == Decimal("0.00") and units > 0
 
         nearest_expiry = r["nearest_expiry"]
         days_to_expiry = (
@@ -213,6 +222,7 @@ def _shaped_rows(entity, dead_days):
             "retail_value": str(retail.quantize(Decimal("0.01"))),
             "margin": str(margin.quantize(Decimal("0.01"))),
             "margin_percent": str(margin_pct.quantize(Decimal("0.01"))),
+            "cost_basis_missing": cost_basis_missing,
             "nearest_expiry": (
                 nearest_expiry.isoformat()
                 if nearest_expiry else None
@@ -309,6 +319,11 @@ def _kpi(rows):
             1 for r in rows
             if r["days_to_expiry"] is not None
             and r["days_to_expiry"] < 0
+        ),
+        # How many of the SKUs in this report have no cost data. When
+        # non-zero, the margin column is not trustworthy for those rows.
+        "cost_basis_missing_count": sum(
+            1 for r in rows if r["cost_basis_missing"]
         ),
     }
 

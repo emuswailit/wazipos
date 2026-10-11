@@ -18,6 +18,7 @@ from .models import (
     RetailerProductRequestOffer,
     RetailerProductRequestResponse,
     RetailerReceipts,
+    RetailerVariations,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,67 @@ def on_retailer_receipt_deleted(sender, instance, **kwargs):
     _broadcast_inventory_change(
         getattr(instance, "entity_id", None)
     )
+
+
+# =====================================================================
+# Retailer variation auto-registration
+#
+# RetailerVariations is the per-entity product registry. Every
+# analytics read, alert generation, and reporting surface filters
+# through it. This receiver ensures a variation row exists the first
+# time a (entity, product) pair appears on a receipt.
+#
+# get_or_create semantics:
+#   - idempotent on re-saves
+#   - concurrent-safe under Postgres SERIALIZABLE / default isolation
+#   - never overwrites curated fields the owner has set
+#   - never touches metrics the nightly service has populated
+#
+# Errors are swallowed and logged. A failure here must NOT roll back
+# the receipt write — the receipt is the durable inventory event;
+# the variation is recoverable via `manage.py backfill_variations`.
+# =====================================================================
+
+@receiver(
+    post_save,
+    sender=RetailerReceipts,
+    dispatch_uid="retailers.ensure_variation_exists",
+)
+def ensure_variation_exists(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    entity_id = getattr(instance, "entity_id", None)
+    product_id = getattr(instance, "product_id", None)
+
+    if not entity_id or not product_id:
+        return
+
+    try:
+        variation, was_created = RetailerVariations.objects.get_or_create(
+            entity_id=entity_id,
+            product_id=product_id,
+            defaults={
+                "is_active": True,
+                "owner_id": getattr(instance, "owner_id", None),
+                "pack_quantity": getattr(instance, "units_per_pack", 0) or 0,
+                "unit_quantity": getattr(instance, "units_per_pack", 0) or 0,
+            },
+        )
+        if was_created:
+            logger.info(
+                "Registered new variation: entity=%s product=%s",
+                entity_id,
+                product_id,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to auto-register variation for receipt %s "
+            "(entity=%s product=%s)",
+            instance.pk,
+            entity_id,
+            product_id,
+        )
 
 
 # =====================================================================

@@ -1,3 +1,5 @@
+# wazi/celery.py
+
 from __future__ import absolute_import, unicode_literals
 import os
 from celery import Celery
@@ -18,7 +20,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 app.conf.broker_url = "redis://127.0.0.1:6379/0"
 app.conf.enable_utc = False
-app.conf.update(timezone='Africa/Nairobi')
+app.conf.update(timezone="Africa/Nairobi")
 
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
@@ -98,32 +100,40 @@ app.conf.beat_schedule = {
     },
 
     # WHOLESALERS
-        "load_wholesaler_receipts": {
+    "load_wholesaler_receipts": {
         "task": "wholesalers.tasks.load_wholesaler_receipts",
         "schedule": 120.0,
         "args": None,
     },
-
-        "load_retailer_orders": {
+    "load_retailer_orders": {
         "task": "wholesalers.tasks.load_retailer_orders",
         "schedule": 120.0,
         "args": None,
     },
     # retailer filtered
-        "load_filtered_retailer_orders": {
+    "load_filtered_retailer_orders": {
         "task": "wholesalers.tasks.load_filtered_retailer_orders",
         "schedule": 120.0,
         "args": None,
     },
-        "load_wholesaler_product_requests": {
+    "load_wholesaler_product_requests": {
         "task": "wholesalers.tasks.load_wholesaler_product_requests",
         "schedule": 120.0,
         "args": None,
     },
-        "load_retailer_product_requests": {
+    "load_retailer_product_requests": {
         "task": "retailers.tasks.load_retailer_product_requests",
         "schedule": 120.0,
         "args": None,
     },
 
+    # ── Retailer variation metrics ─────────────────────────────────
+    # Recompute reorder thresholds, safety stock, EOQ, lead times,
+    # running totals on every RetailerVariations row. Runs nightly at
+    # 02:00 Africa/Nairobi, after the analytics pipeline has finished.
+    "retailers-update-variation-metrics-daily": {
+        "task": "retailers.tasks.update_variation_metrics",
+        "schedule": crontab(hour=2, minute=0),
+        "args": None,
+    },
 }

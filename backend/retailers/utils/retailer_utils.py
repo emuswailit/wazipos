@@ -4339,25 +4339,3 @@ def delete_sales_return(data, user):
         return errors, None
 
 
-def initiate_wholesaler_return(data, user):
-    """
-    Returns (errors, WholesalerReceiptReturns | None).
-    Creates the return, the paired adjustment, and decrements the
-    retailer receipt, all in one transaction.
-    """
-
-def cancel_wholesaler_return(data, user):
-    """
-    Returns (errors, WholesalerReceiptReturns | None).
-    Only callable while status == PENDING_CONFIRMATION. Writes a
-    compensating StockAdjustments(INCREMENT) and restores the
-    receipt quantity, then sets status=CANCELLED.
-    """
-
-def acknowledge_return_rejection(data, user):
-    """
-    Returns (errors, WholesalerReceiptReturns | None).
-    Only callable while status == REJECTED. Idempotent. Writes a
-    compensating StockAdjustments(INCREMENT) and restores the
-    receipt quantity.
-    """
