@@ -68,7 +68,6 @@ ENCRYPT_KEY=config("ENCRYPT_KEY")
 ALLOWED_HOSTS = ["*",'24b2-102-219-248-21.ngrok-free.app']
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
-# Application definition
 # DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880 # 5 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880
 
@@ -430,44 +429,57 @@ INTERNAL_IPS = [
 import logging
 import logging.config
 from django.utils.log import DEFAULT_LOGGING
+
 logger = logging.getLogger(__name__)
 
-LOG_LEVEL ="INFO"
+LOG_LEVEL = "INFO"
+
+# --- LOGGING FIX ---
+# Define the log directory inside the project folder and create it if it doesn't exist
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 
 logging.config.dictConfig({
-    "version":1,
-    "disable_existing_loggers":False,
-    "formatters":{
-        "console":{
-            "format":"%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "console": {
+            "format": "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
         },
-        "file":{"format":"%(asctime)s %(name)-12s %(levelname)-8s %(message)s"},
+        "file": {
+            "format": "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
+        },
         "django.server": DEFAULT_LOGGING["formatters"]["django.server"],
     },
-    "handlers":{
-        "console":{
-            "class":"logging.StreamHandler",
-            "formatter":"console"
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console"
         },
-        "file":{
-            "level":"INFO",
-            "class":"logging.FileHandler",
-            "formatter":"file",
-            "filename":"logs/wazi.log"
+        "file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "formatter": "file",
+            "filename": os.path.join(LOG_DIR, "wazi.log")  # Absolute path
         },
         "django.server": DEFAULT_LOGGING["handlers"]["django.server"],
     },
-    "loggers":{
-        "":{"level":"INFO", "handlers":["console","file"],"propagate":False},
-        "apps":{
-            "level":"INFO","handlers":["console"],"propagate":False
+    "loggers": {
+        "": {
+            "level": "INFO", 
+            "handlers": ["console", "file"], 
+            "propagate": False
         },
-         "django.server": DEFAULT_LOGGING["loggers"]["django.server"],
-         'daphne': {
-    'handlers': [
-        'console',
-    ],
-    'level': 'DEBUG'
-}
+        "apps": {
+            "level": "INFO", 
+            "handlers": ["console"], 
+            "propagate": False
+        },
+        "django.server": DEFAULT_LOGGING["loggers"]["django.server"],
+        "daphne": {
+            "handlers": ["console"],
+            "level": "DEBUG"
+        }
     }
 })

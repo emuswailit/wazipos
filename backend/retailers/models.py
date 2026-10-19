@@ -1270,6 +1270,14 @@ class Prescriptions(EntityRelatedModel):
         ("PARENT", "PARENT"),
         ("OTHER", "OTHER"),
     )
+    
+    # --- ADDED: AI Extraction Tracking ---
+    AI_STATUS_CHOICES = (
+        ("PENDING", "PENDING"),
+        ("PROCESSING", "PROCESSING"),
+        ("COMPLETED", "COMPLETED"),
+        ("FAILED", "FAILED"),
+    )
 
     created_by = models.ForeignKey(
         Users,
@@ -1307,6 +1315,15 @@ class Prescriptions(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    
+    # --- ADDED: AI Extraction Tracking ---
+    ai_extraction_status = models.CharField(
+        max_length=20, 
+        choices=AI_STATUS_CHOICES, 
+        default="PENDING",
+        help_text="Tracks the status of the DeepRead AI extraction."
+    )
+    
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -1339,11 +1356,16 @@ class PrescriptionItems(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    
+    # --- UPDATED: Made nullable for AI extraction ---
     prescribed_by = models.ForeignKey(
         Employees,
         related_name="prescription_items_prescribed",
         on_delete=models.CASCADE,
+        null=True,      # Added
+        blank=True,     # Added
     )
+    
     route = models.ForeignKey(
         Routes,
         related_name="prescription_items",
@@ -1395,6 +1417,27 @@ class PrescriptionItems(EntityRelatedModel):
         default="PIECE",
         max_length=20,
     )
+
+    # --- ADDED: AI Verification Fields ---
+    is_verified = models.CharField(
+        max_length=50, 
+        choices=TRUE_FALSE_OPTIONS, 
+        default="false",
+        help_text="Set to true when a human has verified the AI-extracted data."
+    )
+    verified_by = models.ForeignKey(
+        Employees,
+        related_name="prescription_items_verified",
+        on_delete=models.SET_NULL, # Keep the item even if the employee is deleted
+        null=True,
+        blank=True,
+    )
+    verified_at = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Timestamp of when the item was verified."
+    )
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)

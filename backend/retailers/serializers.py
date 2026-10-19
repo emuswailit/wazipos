@@ -1523,9 +1523,10 @@ class PrescriptionsSerializer(serializers.ModelSerializer):
             "status", "nature",
             "patient", "patient_name", "patient_gender",
             "patient_date_of_birth", "comment",
+            "ai_extraction_status", # ADDED
             "created", "updated",
         )
-        read_only_fields = ("id", "created_by", "created", "updated")
+        read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status")
 
 
 class RetailPrescriptionsSerializer(serializers.ModelSerializer):
@@ -1549,9 +1550,10 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
             "images", "items", "items_count",
             "patient", "patient_name", "patient_gender",
             "patient_date_of_birth", "patient_age", "comment",
+            "ai_extraction_status", # ADDED
             "key", "created", "updated",
         )
-        read_only_fields = ("id", "created_by", "created", "updated")
+        read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status")
         extra_kwargs = {"images": {"required": False}}
 
     def get_key(self, obj):
@@ -1614,6 +1616,7 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
     required_value = serializers.SerializerMethodField(read_only=True)
     balance_value = serializers.SerializerMethodField(read_only=True)
     key = serializers.SerializerMethodField(read_only=True)
+    verified_by_name = serializers.SerializerMethodField(read_only=True) # ADDED
 
     class Meta:
         model = models.PrescriptionItems
@@ -1632,12 +1635,21 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
             "issued_value", "balance_value",
             "administrations", "administration_progress",
             "is_divisible", "key",
+            "is_verified", "verified_by", "verified_by_name", "verified_at", # ADDED
             "created_by", "created", "updated",
         )
-        read_only_fields = ("id", "created_by", "created", "updated")
+        read_only_fields = (
+            "id", "created_by", "created", "updated",
+            "is_verified", "verified_by", "verified_by_name", "verified_at"
+        )
 
     def get_key(self, obj):
         return obj.id
+
+    def get_verified_by_name(self, obj):
+        if obj.verified_by and obj.verified_by.user:
+            return f"{obj.verified_by.user.first_name} {obj.verified_by.user.last_name}".strip()
+        return None
 
     def _unit_price(self, obj):
         return (

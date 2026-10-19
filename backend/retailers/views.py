@@ -1541,6 +1541,18 @@ def retailersShippinRatesAPIView(request):
 # Prescriptions — create (multipart)
 # ===========================================================================
 
+from .utils import deep_read_utils
+import datetime
+from django.contrib.gis.geos import fromstr
+from django.db import IntegrityError, transaction
+from rest_framework import exceptions, generics, permissions, status
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+
+from authentication.validators import authentication_models_validators
+from . import models, retail_permissions, serializers
+
+
 class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
     """Create new retail prescription."""
 
@@ -1557,9 +1569,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         retailer = None
         errors_messages = []
 
-        create_log("info", request.data)
-        create_log("info", request.FILES)
-
+        # --- 1. Extract Request Data ---
         dependant_id = request.POST.get("patient", None)
         origin_latitude = request.POST.get("origin_latitude", None)
         origin_longitude = request.POST.get("origin_longitude", None)
@@ -1579,6 +1589,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 srid=4326,
             )
 
+        # --- 2. Validation ---
         if dependant_id:
             dependant = authentication_models_validators.validate_dependant(
                 dependant_id
@@ -1624,7 +1635,6 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 f"{dependant}. Try again after 2 minutes if it is not a "
                 f"repetition"
             )
-            create_log("error", "Conflicting prescription detected")
             return Response(
                 data={
                     "response_code": 1,
@@ -1668,26 +1678,62 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
+        # --- 3. Save Prescription & Images ---
         try:
-            serializer.save(
-                created_by=request.user,
-                patient=dependant,
-                origin_point=origin_point,
-                destination_point=destination_point,
-            )
+            # Use atomic transaction to ensure prescription and images are saved together
+            with transaction.atomic():
+                serializer.save(
+                    created_by=request.user,
+                    patient=dependant,
+                    origin_point=origin_point,
+                    destination_point=destination_point,
+                )
+                item = models.Prescriptions.objects.get(id=serializer.data["id"])
+
+                saved_images = []
+                for file in files:
+                    img_obj = models.PrescriptionImages.objects.create(
+                        owner=request.user,
+                        image=file,
+                        prescription=item,
+                        entity=retailer,
+                    )
+                    saved_images.append(img_obj)
+                    
         except IntegrityError as exc:
             raise exceptions.ValidationError(exc)
 
-        item = models.Prescriptions.objects.get(id=serializer.data["id"])
+        # --- 4. DeepRead AI Extraction (Optional & Safe) ---
+        extracted_data = None
+        
+        # We use the first image for AI extraction. 
+        # Wrap in try/except so an AI failure doesn't break the API request.
+        try:
+            if saved_images:
+                first_image_file = saved_images[0].image
+                
+                # Seek to beginning because Django's ImageField might have left the pointer at the end
+                if hasattr(first_image_file, 'seek'):
+                    first_image_file.seek(0)
+                    
+                extracted_data = deep_read_utils.extract_prescription_data(
+                    first_image_file
+                )
 
-        for file in files:
-            models.PrescriptionImages.objects.create(
-                owner=request.user,
-                image=file,
-                prescription=item,
-                entity=retailer,
-            )
+                # If extraction was successful, auto-create the items
+                if extracted_data and extracted_data.get("medications"):
+                    deep_read_utils.map_extracted_medications_to_prescription_items(
+                        extracted_data, item, retailer, request.user
+                    )
+                    
+        except Exception as e:
+            # Log the error, but don't stop the request. 
+            # The prescription is already saved, the user can manually add items.
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"DeepRead AI Extraction failed for prescription {item.id}: {e}")
 
+        # --- 5. Return Response ---
         return Response(
             data={
                 "response_code": 0,
@@ -1695,11 +1741,12 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 "prescription": serializers.RetailPrescriptionsSerializer(
                     item, context={"request": request}
                 ).data,
+                # Send the AI data to the frontend so the user can verify/edit the extracted items
+                "ai_extracted_data": extracted_data, 
                 "errors": [],
             },
             status=status.HTTP_201_CREATED,
         )
-
 
 # ===========================================================================
 # Indent — close and generate orders

@@ -4339,3 +4339,40 @@ def delete_sales_return(data, user):
         return errors, None
 
 
+# ===========================================================================
+# Prescription Item Verification
+# ===========================================================================
+
+def verify_prescription_item(data, user):
+    """
+    Marks a specific prescription item as verified by the current employee.
+    Expects payload: {"prescription_item": <id>}
+    """
+    errors = []
+    item_id = data.get("prescription_item") or data.get("item_id")
+    
+    if not item_id:
+        errors.append("Prescription item ID is required")
+        return errors, None
+
+    item = models.PrescriptionItems.objects.filter(id=item_id).first()
+    if not item:
+        errors.append("Prescription item not found")
+        return errors, None
+
+    employee = Employees.objects.filter(
+        user=user, 
+        entity=item.entity,
+        is_active="true"
+    ).first()
+    
+    if not employee:
+        errors.append("You are not an active employee of this pharmacy")
+        return errors, None
+
+    item.is_verified = "true"
+    item.verified_by = employee
+    item.verified_at = timezone.now()
+    item.save(update_fields=["is_verified", "verified_by", "verified_at", "updated"])
+
+    return [], item

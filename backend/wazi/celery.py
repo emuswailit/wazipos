@@ -11,18 +11,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.development")
 
 app = Celery("wazi")
 
-# Using a string here means the worker doesn't have to serialize
-# the configuration object to child processes.
-# - namespace='CELERY' means all celery-related configuration keys
-#   should have a `CELERY_` prefix.
-
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
 app.conf.broker_url = "redis://127.0.0.1:6379/0"
 app.conf.enable_utc = False
 app.conf.update(timezone="Africa/Nairobi")
 
-# Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
 
 
@@ -32,7 +26,6 @@ def debug_task(self):
 
 
 app.conf.beat_schedule = {
-
     "process_wifi_payments": {
         "task": "payments.tasks.process_wifi_payments",
         "schedule": 30.0,
@@ -80,19 +73,16 @@ app.conf.beat_schedule = {
     },
 
     # ── Analytics ──────────────────────────────────────────────────
-    # Full pipeline once a day at midnight (Africa/Nairobi)
     "analytics-nightly-pipeline": {
         "task": "analytics.tasks.run_nightly_pipeline",
         "schedule": crontab(hour=0, minute=0),
         "args": None,
     },
-    # Periodic refresh — pushes alerts to any connected WebSocket clients
     "analytics-refresh-alerts": {
         "task": "analytics.tasks.load_analytics_alerts",
         "schedule": 120.0,
         "args": None,
     },
-    # Periodic refresh — pushes overview metrics to any connected clients
     "analytics-refresh-overview": {
         "task": "analytics.tasks.load_analytics_overview",
         "schedule": 300.0,
@@ -110,7 +100,6 @@ app.conf.beat_schedule = {
         "schedule": 120.0,
         "args": None,
     },
-    # retailer filtered
     "load_filtered_retailer_orders": {
         "task": "wholesalers.tasks.load_filtered_retailer_orders",
         "schedule": 120.0,
@@ -128,12 +117,18 @@ app.conf.beat_schedule = {
     },
 
     # ── Retailer variation metrics ─────────────────────────────────
-    # Recompute reorder thresholds, safety stock, EOQ, lead times,
-    # running totals on every RetailerVariations row. Runs nightly at
-    # 02:00 Africa/Nairobi, after the analytics pipeline has finished.
     "retailers-update-variation-metrics-daily": {
         "task": "retailers.tasks.update_variation_metrics",
         "schedule": crontab(hour=2, minute=0),
+        "args": None,
+    },
+
+    # ── DeepRead AI Prescription Safety Net ────────────────────────
+    # Scans for uploaded prescriptions that failed to extract items
+    # and retries them via DeepRead. Runs every 5 minutes.
+    "retry-pending-prescription-extractions": {
+        "task": "retailers.tasks.retry_pending_prescription_extractions",
+        "schedule": 300.0, 
         "args": None,
     },
 }

@@ -5,6 +5,8 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from decouple import config
 from uuid import UUID
+from datetime import timedelta
+from django.utils import timezone
 import json
 import logging
 
@@ -329,21 +331,6 @@ def settle_cashless_customer_order_payments():
 
 # =====================================================================
 # Retailer variations — performance metrics recalculation
-#
-# Recomputes on every RetailerVariations row, from the transient
-# receipts / orders / adjustments:
-#
-#   current_stock_balance     ← Sum(RetailerReceipts.current_unit_quantity)
-#   running_total_receipts    ← Sum(RetailerReceipts.received_unit_quantity)
-#   running_total_issues      ← Sum(CustomerOrderItems.total_quantity)
-#   lead_time                 ← median (receipt.created − order.created)
-#   safety_stock              ← z × σ_daily × √lead_time, floored
-#   reorder_level             ← safety_stock + avg_daily × lead_time
-#   economic_order_quantity   ← Wilson EOQ
-#   maximum_stock             ← reorder_level + eoq
-#   danger_stock              ← safety_stock × 0.5
-#
-# Idempotent. Safe to run more than once per day.
 # =====================================================================
 
 @app.task(
@@ -393,3 +380,80 @@ def update_variation_metrics_for_entity(entity_id):
     )
     print(f"variation metrics for {entity_id}:", result)
     return result
+
+
+# =====================================================================
+# DeepRead AI Prescription Processing
+# =====================================================================
+
+@app.task(
+    name="retailers.tasks.process_prescription_with_deepread",
+    time_limit=60 * 5, # 5 minute hard limit
+)
+def process_prescription_with_deepread(prescription_id, image_id):
+    """
+    Background task to extract items from a prescription image using DeepRead AI.
+    """
+    from .utils import deep_read_utils
+
+    logger.info(f"Starting DeepRead extraction for Prescription {prescription_id}")
+    
+    try:
+        prescription = models.Prescriptions.objects.get(id=prescription_id)
+        image_obj = models.PrescriptionImages.objects.get(id=image_id)
+        
+        # 1. Call the AI Utility
+        extracted_data = deep_read_utils.extract_prescription_data(image_obj.image)
+        
+        # 2. Map and Save the Items
+        if extracted_data and extracted_data.get("medications"):
+            deep_read_utils.map_extracted_medications_to_prescription_items(
+                extracted_data=extracted_data,
+                prescription=prescription,
+                retailer=prescription.entity,
+                user=prescription.created_by
+            )
+            logger.info(f"DeepRead successfully extracted {len(extracted_data['medications'])} items for Prescription {prescription_id}")
+            
+        # 3. Notify the frontend via WebSocket
+        load_user_prescriptions.delay()
+        
+        return {"status": "success", "prescription_id": str(prescription_id)}
+        
+    except Exception as e:
+        logger.error(f"DeepRead Task failed for Prescription {prescription_id}: {e}")
+        return {"status": "failed", "error": str(e)}
+
+
+@app.task(
+    name="retailers.tasks.retry_pending_prescription_extractions",
+    time_limit=60 * 10, # 10 minute hard limit
+)
+def retry_pending_prescription_extractions():
+    """
+    Safety net task. Runs periodically to find prescriptions that have images 
+    but no extracted items, and triggers the DeepRead AI for them.
+    """
+    # Look for prescriptions created in the last 24 hours that have no items
+    yesterday = timezone.now() - timedelta(days=1)
+    
+    pending_prescriptions = models.Prescriptions.objects.filter(
+        created__gte=yesterday,
+        status="QUEUING",
+        prescription_items__isnull=True # No items have been created yet
+    ).distinct()
+    
+    count = 0
+    for prescription in pending_prescriptions:
+        # Get the first image for this prescription
+        image = prescription.prescription_images.first()
+        if image:
+            # Trigger the DeepRead task
+            process_prescription_with_deepread.delay(
+                prescription_id=prescription.id,
+                image_id=image.id
+            )
+            count += 1
+            
+    logger.info(f"Sweeper found and triggered {count} pending prescription extractions.")
+    return f"Triggered {count} tasks"

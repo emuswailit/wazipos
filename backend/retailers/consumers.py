@@ -423,110 +423,66 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
             'retailer_dashboard': json.loads(self.retailer_dashboard),
         })
 
-
-# =====================================================================
-# Bodaboda assigned orders
-# =====================================================================
-
 class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
-    print("Am here at boda")
-
     async def connect(self):
         self.user = self.scope["user"]
         if not self.user.is_authenticated:
-            print("No user")
+            await self.close(code=4401)
             return
-        else:
-            print("user at boda", self.user)
 
-        await self.channel_layer.group_add(
-            'bodaboda-assigned-order',
-            self.channel_name,
-        )
+        self.group_name = f"bodaboda_{self.user.id}"
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        await self.helper_func()
 
-        # Broadcast result to the group
-        if self.bodaboda_assigned_order and len(self.bodaboda_assigned_order) > 0:
-            await self.send_json({
-                'bodaboda_assigned_order': json.loads(
-                    self.bodaboda_assigned_order
-                ),
-            })
-        else:
-            await self.send_json({
-                'bodaboda_assigned_order': None,
-            })
+        await self._send_snapshot()
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            'bodaboda-assigned-order',
-            self.channel_name,
-        )
-        await self.close()
-
-    @sync_to_async
-    def helper_func(self):
-        from entitylocations.models import BodaLocations
-
-        bodaboda = None
-        bodaboda_assigned_order = None
-        self.bodaboda_assigned_order = None
-        data = None
-
-        yesterday = dateutil.parser.parse(
-            str(date.today() - timedelta(days=1))
-        ).strftime("%Y-%m-%d %H:%M:%S")
-        print("Yesterday", yesterday)
-
-        if BodaLocations.objects.filter(owner=self.user).exists():
-            bodaboda = BodaLocations.objects.filter(
-                owner=self.user
-            ).first()
-
-            if CustomerOrders.objects.filter(
-                bodaboda=bodaboda,
-                created__gte=yesterday,
-                status="ASSIGNED",
-            ).exists():
-                bodaboda_assigned_order = (
-                    CustomerOrders.objects
-                    .filter(
-                        bodaboda=bodaboda,
-                        created__gte=yesterday,
-                        status="ASSIGNED",
-                    )
-                    .all()
-                )
-                orders = CustomerOrdersSerializer(
-                    bodaboda_assigned_order,
-                    many=True,
-                    context={'request': None},
-                ).data
-                self.bodaboda_assigned_order = json.dumps(
-                    orders, cls=UUIDEncoder
-                )
-            else:
-                self.bodaboda_assigned_order = None
-        else:
-            self.bodaboda_assigned_order = None
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def send_bodaboda_assigned_order(self, event):
-        # Call the helper async Function
-        await self.helper_func()
+        await self._send_snapshot()
 
-        # Broadcast result to the group
-        if self.bodaboda_assigned_order and len(self.bodaboda_assigned_order) > 0:
+    async def _send_snapshot(self):
+        orders = await self._fetch_orders()
+        if orders:
             await self.send_json({
-                'bodaboda_assigned_order': json.loads(
-                    self.bodaboda_assigned_order
-                ),
+                "type": "bodaboda.assigned_orders",
+                "bodaboda_assigned_order": orders,
             })
         else:
             await self.send_json({
-                'bodaboda_assigned_order': None,
+                "type": "bodaboda.assigned_orders",
+                "bodaboda_assigned_order": None,
             })
 
+    @sync_to_async
+    def _fetch_orders(self):
+        since = timezone.now() - timedelta(days=3)
+        boda_ids = list(
+            BodaLocations.objects
+            .filter(owner=self.user, is_active="true")
+            .values_list("id", flat=True)
+        )
+        if not boda_ids:
+            return None
+
+        qs = (
+            CustomerOrders.objects
+            .filter(
+                bodaboda_id__in=boda_ids,
+                status__in=["ASSIGNED", "DISPATCHED", "PICKED"],
+                updated__gte=since,
+            )
+            .order_by("-updated")
+        )
+        if not qs.exists():
+            return None
+
+        return json.loads(json.dumps(
+            CustomerOrdersSerializer(qs, many=True, context={"request": None}).data,
+            cls=UUIDEncoder,
+        ))
 
 # =====================================================================
 # Customer orders
@@ -973,3 +929,277 @@ class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
                 self.retailer_requisitions
             ),
         })
+
+
+class BodaLocationConsumer(AsyncJsonWebsocketConsumer):
+    async def receive_json(self, content, **kwargs):
+        lat = content.get("lat")
+        lng = content.get("lng")
+
+        # 1. validate
+        if not valid_coords(lat, lng):
+            await self.send_json({"type": "boda.error", "detail": "bad coords"})
+            return
+
+        lat, lng = float(lat), float(lng)
+
+        # 2. persist the current point (single-column update)
+        await self._save_point(lat, lng)
+
+        # 3. fan out to every live order this boda is on
+        await self._broadcast(lat, lng)
+
+    @database_sync_to_async
+    def _save_point(self, lat, lng):
+        BodaLocations.objects.filter(pk=self.boda.pk).update(
+            point=Point(lng, lat, srid=4326),   # lng first!
+            updated_at=timezone.now(),
+        )
+
+    async def _broadcast(self, lat, lng):
+        payload = {
+            "type": "boda.location",
+            "lat": lat,
+            "lng": lng,
+            "ts": timezone.now().isoformat(),
+        }
+        order_ids = await self._live_order_ids()
+        for order_id in order_ids:
+            await self.channel_layer.group_send(f"order_{order_id}", payload)
+
+    @database_sync_to_async
+    def _live_order_ids(self):
+        return list(
+            CustomerOrders.objects
+            .filter(
+                bodaboda_id=self.boda.id,
+                status__in=["ASSIGNED", "DISPATCHED", "PICKED"],
+            )
+            .values_list("id", flat=True)
+        )
+
+# orders/consumers.py
+import json
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.utils import timezone
+
+
+# Statuses during which live tracking is allowed
+LIVE_STATUSES = {"ASSIGNED", "DISPATCHED", "PICKED"}
+
+# Statuses that end the tracking session
+TERMINAL_STATUSES = {"DELIVERED", "CANCELLED", "COMPLETED"}
+
+
+class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Watcher socket for a single order.
+
+    Both the CUSTOMER and the RETAILER connect to the same URL:
+
+        /ws/orders/<order_id>/tracking/?token=<jwt>
+
+    The consumer:
+      1. Authenticates the user (via scope["user"] set by middleware).
+      2. Checks the user is allowed to watch this order.
+      3. Joins the per-order group  ->  "order_<order_id>".
+      4. Sends an initial snapshot of the driver's last known location.
+      5. Forwards every boda.location event from the driver to the client.
+      6. Forwards order.status events and closes on terminal statuses.
+      7. Responds to client pings for keepalive.
+    """
+
+    # ------------------------------------------------------------------ #
+    # Lifecycle
+    # ------------------------------------------------------------------ #
+    async def connect(self):
+        self.user = self.scope.get("user")
+        self.order_id = self.scope["url_route"]["kwargs"]["order_id"]
+        self.group_name = f"order_{self.order_id}"
+
+        # 1. Auth check
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=4401)   # unauthorized
+            return
+
+        # 2. Permission check + terminal-status check
+        verdict = await self._authorize()
+        if verdict == "not_found":
+            await self.close(code=4404)
+            return
+        if verdict == "forbidden":
+            await self.close(code=4403)
+            return
+        if verdict == "terminal":
+            # Order is already finished — connect, send final state, close.
+            await self.accept()
+            snapshot = await self._final_snapshot()
+            if snapshot:
+                await self.send_json(snapshot)
+            await self.close(code=4000)
+            return
+
+        # 3. Join group
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+        # 4. Initial snapshot so the map isn't blank until the next ping
+        snapshot = await self._snapshot()
+        if snapshot:
+            await self.send_json(snapshot)
+
+    async def disconnect(self, close_code):
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(
+                self.group_name, self.channel_name
+            )
+
+    # ------------------------------------------------------------------ #
+    # Incoming messages from the client
+    # ------------------------------------------------------------------ #
+    async def receive_json(self, content, **kwargs):
+        msg_type = content.get("type")
+
+        if msg_type == "ping":
+            await self.send_json({"type": "pong", "ts": timezone.now().isoformat()})
+            return
+
+        # Clients don't push location on this socket; ignore anything else.
+        await self.send_json({
+            "type": "error",
+            "detail": f"unsupported message type: {msg_type!r}",
+        })
+
+    # ------------------------------------------------------------------ #
+    # Channel-layer handlers (names must match the "type" key sent by the driver)
+    # ------------------------------------------------------------------ #
+    async def boda_location(self, event):
+        """Forwarded from BodaLocationConsumer when the driver moves."""
+        await self.send_json({
+            "type": "boda.location",
+            "lat": event["lat"],
+            "lng": event["lng"],
+            "ts": event.get("ts"),
+        })
+
+    async def order_status(self, event):
+        """Sent whenever the order status changes (view, signal, etc.)."""
+        status = event["status"]
+        await self.send_json({
+            "type": "order.status",
+            "status": status,
+            "ts": event.get("ts", timezone.now().isoformat()),
+        })
+
+        if status in TERMINAL_STATUSES:
+            # Nothing more to track — close cleanly.
+            await self.close(code=4000)
+
+    # ------------------------------------------------------------------ #
+    # Helpers
+    # ------------------------------------------------------------------ #
+    @database_sync_to_async
+    def _authorize(self):
+        """
+        Returns one of: "ok", "not_found", "forbidden", "terminal".
+        """
+        from orders.models import CustomerOrders
+
+        try:
+            order = CustomerOrders.objects.only(
+                "id", "status", "customer_id", "user_id", "owner_id",
+                "delivered_by_id",
+            ).get(pk=self.order_id)
+        except CustomerOrders.DoesNotExist:
+            return "not_found"
+
+        u = self.user
+        allowed = (
+            u.id == order.customer_id
+            or u.id == order.user_id
+            or u.id == order.owner_id
+            or u.id == order.delivered_by_id
+            or getattr(u, "is_staff", False)
+        )
+        if not allowed:
+            return "forbidden"
+
+        if order.status in TERMINAL_STATUSES:
+            return "terminal"
+
+        if order.status not in LIVE_STATUSES:
+            # e.g. RECEIVED / PROCESSING — not trackable yet
+            return "terminal"
+
+        return "ok"
+
+    @database_sync_to_async
+    def _snapshot(self):
+        """Last known driver location + order meta, for the initial render."""
+        from orders.models import CustomerOrders
+
+        order = (
+            CustomerOrders.objects
+            .select_related("bodaboda__boda__user")
+            .filter(pk=self.order_id)
+            .first()
+        )
+        if not order:
+            return None
+
+        boda = order.bodaboda
+        point = boda.point if boda else None
+
+        return {
+            "type": "boda.location",
+            "lat": point.y if point else None,
+            "lng": point.x if point else None,
+            "ts": (
+                boda.updated_at.isoformat()
+                if boda and hasattr(boda, "updated_at") and boda.updated_at
+                else None
+            ),
+            "driver": self._driver_info(boda),
+            "order": {
+                "id": order.id,
+                "status": order.status,
+                "destination": self._point_lat_lng(order.destination_point),
+                "origin": self._point_lat_lng(order.origin_point),
+            },
+        }
+
+    @database_sync_to_async
+    def _final_snapshot(self):
+        """Snapshot sent when the order is already in a terminal state."""
+        from orders.models import CustomerOrders
+
+        order = (
+            CustomerOrders.objects
+            .select_related("bodaboda__boda__user")
+            .filter(pk=self.order_id)
+            .first()
+        )
+        if not order:
+            return None
+        return {
+            "type": "order.status",
+            "status": order.status,
+            "ts": timezone.now().isoformat(),
+        }
+
+    @staticmethod
+    def _driver_info(boda):
+        if not boda:
+            return None
+        user = boda.boda.user
+        return {
+            "name": user.get_full_name() or user.first_name or "",
+            "phone": user.phone,
+        }
+
+    @staticmethod
+    def _point_lat_lng(p):
+        if not p:
+            return None
+        return {"lat": p.y, "lng": p.x}
