@@ -4376,3 +4376,35 @@ def verify_prescription_item(data, user):
     item.save(update_fields=["is_verified", "verified_by", "verified_at", "updated"])
 
     return [], item
+
+
+def get_retailers_by_county_and_categories(data, user):
+    """
+    Retrieves entities (retailers) located in a given county 
+    that have inventory (RetailerReceipts) in the specified categories.
+    """
+    county_id = data.get("county")
+    category_ids = data.get("categories", [])
+
+    if not county_id:
+        return ["County ID is required"], None
+
+    # Base queryset: active entities in the county
+    entities = Entities.objects.filter(
+        county_id=county_id,
+        is_active=True
+    )
+
+    if category_ids and isinstance(category_ids, list):
+        # Get unique entity IDs that have receipts for products in the selected categories
+        valid_entity_ids = (
+            RetailerReceipts.objects
+            .filter(product__category_id__in=category_ids)
+            .values_list("entity_id", flat=True)
+            .distinct()
+        )
+        
+        # Filter the entities to only those with matching inventory
+        entities = entities.filter(id__in=valid_entity_ids)
+
+    return [], entities

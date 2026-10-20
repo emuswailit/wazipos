@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 
 # ---------- Local apps ----------
 from authentication.models import Entities
-from authentication.serializers import CategoriesSerializer
+from authentication.serializers import CategoriesSerializer, EntitySerializer
 from authentication.validators import authentication_models_validators
 from authentication.validators.authentication_models_validators import (
     validate_entity,
@@ -484,7 +484,19 @@ def retailerReceiptsJointAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
-
+    elif action == "GetRetailersByCountyAndCategories":
+        errors, entities = retailer_utils.get_retailers_by_county_and_categories(
+            request.data, request.user
+        )
+        if errors:
+            return custom_errors_response(1, "Could not retrieve retailers", errors)
+            
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(entities, request)
+        serializer = EntitySerializer(
+            page, many=True, context={"request": request}
+        )
+        return paginator.get_paginated_response(serializer.data)
     elif action == "GetRetailerReceiptDetails":
         retailer_receipt = retailer_utils.get_retailer_receipt_details(
             request.data, request.user
