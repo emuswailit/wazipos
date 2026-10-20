@@ -677,7 +677,7 @@
         "fields": {
             "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
             "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
-            "code": "80118",
+            "code": "80109",
             "title": "MTWAPA",
             "point_type": "SUB_POST_OFFICE",
             "location": "SRID=4326;POINT(39.7500 -3.9500)",
