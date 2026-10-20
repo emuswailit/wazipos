@@ -4490,7 +4490,7 @@ def get_couriers(request_data, user):
     """
     Fetches entities of type Courier.
     """
-    query = models.Entity.objects.filter(
+    query =Entities.objects.filter(
         entity_type__iexact="Courier"  # 🌟 Changed from "COURIER"
     )
     
