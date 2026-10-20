@@ -25,7 +25,7 @@ from rest_framework import exceptions, status
 from rest_framework.response import Response
 
 # ---------- Local apps ----------
-from authentication.models import Entities, Users
+from authentication.models import Entities, Users,CollectionPoints
 from authentication.serializers import EntityMiniSerializer
 from authentication.utils.utils import (
     generate_document_number,
@@ -4505,7 +4505,7 @@ def get_collection_points(request_data, user):
     """
     courier_id = request_data.get("courier_id")
     
-    query = models.CollectionPoints.objects.filter(is_active=True)
+    query = CollectionPoints.objects.filter(is_active=True)
     
     # Filter by the courier
     if courier_id:
