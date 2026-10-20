@@ -4382,6 +4382,7 @@ def get_retailers_by_county_and_categories(data, user):
     """
     Retrieves entities (retailers) located in a given county 
     that have inventory (RetailerReceipts) in the specified categories.
+    Only includes GeneralRetailer, PharmaceuticalRetailer, and Grocery types.
     """
     county_id = data.get("county")
     category_ids = data.get("categories", [])
@@ -4389,10 +4390,14 @@ def get_retailers_by_county_and_categories(data, user):
     if not county_id:
         return ["County ID is required"], None
 
-    # Base queryset: active entities in the county
+    # Define the allowed entity types
+    allowed_types = ["GeneralRetailer", "PharmaceuticalRetailer", "Grocery"]
+
+    # Base queryset: active entities in the county with allowed types
     entities = Entities.objects.filter(
         county_id=county_id,
-        is_active=True
+        is_active=True,
+        entity_type__in=allowed_types
     )
 
     if category_ids and isinstance(category_ids, list):
