@@ -533,7 +533,7 @@ class CollectionPoints(EntityRelatedModel):
         # A code should be unique per entity, not globally
         constraints = [
             models.UniqueConstraint(
-                fields=["entity", "code"],
+                fields=["entity", "id","code"],
                 condition=models.Q(code__isnull=False),
                 name="unique_code_per_entity",
             ),
