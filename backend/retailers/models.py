@@ -7,6 +7,13 @@ from datetime import date, time as dt_time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 
+from django.contrib.gis.db import models as geomodel
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
+
+
+
 import requests
 
 # ---------- Third-party ----------
@@ -1476,11 +1483,58 @@ class PrescriptionItemAdministrations(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Retail Prescription Item Administrations"
 
+# retailers/models.py
 
-# ===========================================================================
-# Customer orders
-# ===========================================================================
 
+# =====================================================================
+# GLOBAL PRICING ENGINE
+# =====================================================================
+class ShippingConfiguration(models.Model):
+    """
+    Global pricing engine for dynamic distance-based shipping.
+    You only need ONE row in this table.
+    """
+    
+    base_dispatch_fee = models.DecimalField(
+        max_digits=7, decimal_places=2, default=100.00,
+        help_text="Flat fee to dispatch the package."
+    )
+    
+    local_rate_per_km = models.DecimalField(
+        max_digits=5, decimal_places=2, default=40.00,
+        help_text="Rate per km for intra-town delivery (Boda Boda)."
+    )
+    
+    intercounty_rate_per_km = models.DecimalField(
+        max_digits=5, decimal_places=2, default=10.00,
+        help_text="Rate per km for long-distance delivery to a Post Office."
+    )
+    
+    surcharge_per_kg = models.DecimalField(
+        max_digits=5, decimal_places=2, default=20.00,
+        help_text="Additional fee per kg for bulky items."
+    )
+    
+    # --- NEW: Value-Based Insurance ---
+    value_insurance_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.00,
+        help_text="Percentage of the order value charged for insurance/security (e.g., 2.00 for 2%)."
+    )
+    
+    max_value_insurance_fee = models.DecimalField(
+        max_digits=7, decimal_places=2, default=500.00,
+        help_text="Maximum cap for the value insurance fee (e.g., never charge more than KES 500 for this)."
+    )
+    
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Global Shipping Config (Active: {self.is_active})"
+
+
+# =====================================================================
+# CUSTOMER ORDERS
+# =====================================================================
 class CustomerOrders(EntityRelatedModel):
     """End-customer order. Terminal document in the chain."""
 
@@ -1513,173 +1567,82 @@ class CustomerOrders(EntityRelatedModel):
         RECEIVED = "RECEIVED", _("RECEIVED")
 
     entity = models.ForeignKey(Entities, on_delete=models.CASCADE)
-    order_number = models.ForeignKey(
-        DocumentNumbers,
-        related_name="customer_order_number",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
+    order_number = models.ForeignKey(DocumentNumbers, related_name="customer_order_number", on_delete=models.CASCADE, null=True, blank=True)
     payment_account_number = models.CharField(max_length=50, null=True, blank=True)
     reference_number = models.CharField(max_length=100, null=True, blank=True)
-    prescription = models.ForeignKey(
-        Prescriptions, null=True, blank=True, on_delete=models.CASCADE,
-    )
-    order_type = models.CharField(
-        max_length=100,
-        null=True,
-        blank=True,
-        default="NORMAL",
-        choices=OrderTypeOptions.choices,
-    )
+    prescription = models.ForeignKey("Prescriptions", null=True, blank=True, on_delete=models.CASCADE)
+    order_type = models.CharField(max_length=100, null=True, blank=True, default="NORMAL", choices=OrderTypeOptions.choices)
     draft_id = models.CharField(max_length=256, null=True, blank=True)
     city_name = models.CharField(max_length=256, null=True, blank=True)
     recipient_name = models.CharField(max_length=256, null=True, blank=True)
     recipient_phone = models.CharField(max_length=256, null=True, blank=True)
-    order_origin = models.CharField(
-        verbose_name=_("Order Origin"),
-        choices=OrderOriginOptions.choices,
-        max_length=20,
-    )
-    status = models.CharField(
-        verbose_name=_("Order Status"),
-        choices=OrderStatusOptions.choices,
-        max_length=20,
-        default=OrderStatusOptions.PROCESSING,
-    )
-    order_channel = models.CharField(
-        verbose_name=_("Order Source"),
-        choices=OrderChannelOptions.choices,
-        default="WEB",
-        max_length=20,
-    )
+    order_origin = models.CharField(verbose_name=_("Order Origin"), choices=OrderOriginOptions.choices, max_length=20)
+    status = models.CharField(verbose_name=_("Order Status"), choices=OrderStatusOptions.choices, max_length=20, default=OrderStatusOptions.PROCESSING)
+    order_channel = models.CharField(verbose_name=_("Order Source"), choices=OrderChannelOptions.choices, default="WEB", max_length=20)
+    
+    # --- SHIPPING & DESTINATION ---
     origin_point = geomodel.PointField(null=True, blank=True, srid=4326)
     destination_point = geomodel.PointField(null=True, blank=True, srid=4326)
-    order_tax_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
-    )
-    farness = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True,
-    )
-    shipping_cost = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
-    )
-    order_price_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True, default=0.00,
-    )
-    order_price_discount_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True,
-    )
-    order_net_price_total = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True,
-    )
-    paid_total = models.DecimalField(
-        max_digits=12, decimal_places=2, default=0.00,
-        help_text="Sum of successful CustomerOrderPayment amounts.",
-    )
-    balance_due = models.DecimalField(
-        max_digits=12, decimal_places=2, default=0.00,
-        help_text="order_net_price_total − paid_total. Never negative.",
-    )
-    is_quoted = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    is_settled = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    is_paid = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    is_delivered = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    employee = models.ForeignKey(
-        Employees,
-        on_delete=models.CASCADE,
-        related_name="order_employee",
-        null=True,
-        blank=True,
-    )
-    customer = models.ForeignKey(
-        Users,
-        related_name="customer_user",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        default=None,
-    )
-    delivered_by = models.ForeignKey(
-        Users,
-        related_name="retailerOrderDeliveredBy",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    bodaboda = models.ForeignKey(
-        BodaLocations,
-        related_name="customer_order_deliverer",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    selected_payment_method = models.ForeignKey(
-        "payments.PaymentMethods",
-        related_name="order_payment",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    is_processed = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    processed_by = models.ForeignKey(
-        Users,
-        related_name="retailerOrderProcessedBy",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    is_packed = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    packed_by = models.ForeignKey(
-        Users,
-        related_name="retailerOrderPackedBy",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
-    is_received = models.CharField(
-        max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",
-    )
-    received_by = models.ForeignKey(
-        Users,
-        related_name="retailerOrderReceivedBy",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
+    
     delivery_method = models.CharField(
         verbose_name=_("Delivery Method"),
         choices=DeliveryMethodOptions.choices,
         max_length=20,
     )
+    
+    delivery_county = models.ForeignKey("authentication.Counties", on_delete=models.SET_NULL, null=True, blank=True, related_name="customer_delivery_orders")
+    delivery_sub_county = models.ForeignKey("authentication.Constituencies", on_delete=models.SET_NULL, null=True, blank=True, related_name="customer_delivery_orders")
+    delivery_collection_point = models.ForeignKey(
+        "authentication.CollectionPoints",
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="customer_delivery_orders",
+        help_text="The specific collection point chosen for pickup."
+    )
+    
+    courier_entity = models.ForeignKey(
+        Entities,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_courier_orders",
+        help_text="The Courier Entity assigned to fulfill this order."
+    )
+    
+    farness = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    shipping_cost = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True, default=0.00)
+    # ------------------------------
+
+    order_tax_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True, default=0.00)
+    order_price_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True, default=0.00)
+    order_price_discount_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    order_net_price_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    
+    paid_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    
+    is_quoted = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    is_settled = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    is_paid = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    is_delivered = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    
+    employee = models.ForeignKey(Employees, on_delete=models.CASCADE, related_name="order_employee", null=True, blank=True)
+    customer = models.ForeignKey(Users, related_name="customer_user", on_delete=models.CASCADE, null=True, blank=True, default=None)
+    delivered_by = models.ForeignKey(Users, related_name="retailerOrderDeliveredBy", on_delete=models.CASCADE, null=True, blank=True)
+    bodaboda = models.ForeignKey("entitylocations.BodaLocations", related_name="customer_order_deliverer", on_delete=models.CASCADE, null=True, blank=True)
+    selected_payment_method = models.ForeignKey("payments.PaymentMethods", related_name="order_payment", on_delete=models.CASCADE, null=True, blank=True)
+    
+    is_processed = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    processed_by = models.ForeignKey(Users, related_name="retailerOrderProcessedBy", on_delete=models.CASCADE, null=True, blank=True)
+    is_packed = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    packed_by = models.ForeignKey(Users, related_name="retailerOrderPackedBy", on_delete=models.CASCADE, null=True, blank=True)
+    is_received = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    received_by = models.ForeignKey(Users, related_name="retailerOrderReceivedBy", on_delete=models.CASCADE, null=True, blank=True)
+    
     customer_name = models.CharField(max_length=256, null=True, blank=True)
     customer_phone = models.CharField(max_length=20, null=True, blank=True)
-    coupon = models.ForeignKey(
-        RetailerCoupon,
-        related_name="retailerOrderCoupon",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-    )
-    user = models.ForeignKey(
-        User,
-        related_name="retailerOrderUser",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-    )
+    coupon = models.ForeignKey("RetailerCoupon", related_name="retailerOrderCoupon", null=True, blank=True, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, related_name="retailerOrderUser", on_delete=models.CASCADE, null=True, blank=True)
+    
     paid_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
@@ -1688,9 +1651,7 @@ class CustomerOrders(EntityRelatedModel):
     due_date = models.DateField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(
-        User, related_name="retailerOrderOwner", on_delete=models.CASCADE,
-    )
+    owner = models.ForeignKey(User, related_name="retailerOrderOwner", on_delete=models.CASCADE)
 
     class Meta:
         verbose_name_plural = "Customer Orders"
@@ -1698,10 +1659,6 @@ class CustomerOrders(EntityRelatedModel):
     def __str__(self):
         number = self.order_number.id if self.order_number else "unsaved"
         return f"{self.entity.title}-{number}"
-
-    @property
-    def has_placement_items(self) -> bool:
-        return self.parent_order.filter(is_placement=True).exists()
 
     def recalculate(self, save=True):
         agg = self.parent_order.aggregate(
@@ -1714,6 +1671,7 @@ class CustomerOrders(EntityRelatedModel):
         self.order_price_total = _q(agg["gross"] or 0)
         self.order_tax_total = _q(agg["tax"] or 0)
         self.order_price_discount_total = _q(agg["discount"] or 0)
+        
         self.order_net_price_total = _q(
             (self.order_price_total or 0)
             + (self.order_tax_total or 0)
@@ -1730,6 +1688,7 @@ class CustomerOrders(EntityRelatedModel):
                 "order_net_price_total",
                 "updated",
             ])
+
 
 
 class CustomerOrderItems(EntityRelatedModel):

@@ -44,41 +44,33 @@ urlpatterns = [
         views.customerOrdersAdminAPIView,
         name="customer-orders-apiview",
     ),
+    
+    # --- Shipping Rates ---
     path(
         "rates/shipping",
         views.retailersShippinRatesAPIView,
         name="entity-shipping-rates-apiview",
     ),
+    path(
+        "shipping/calculate",
+        views.calculate_checkout_shipping,
+        name="calculate-checkout-shipping",
+    ),
 
+    # --- Prescriptions ---
     path(
         "prescriptions",
         views.remoteRetailPrescriptionsAPIView,
         name="customer-orders-apiview",
     ),
-    # Price Discounts urls
     path(
         "prescriptions/create",
         views.RetailPrescriptionsCreateAPIView.as_view(),
         name=views.RetailPrescriptionsCreateAPIView.name,
     ),
 
-
-        path(
-        "indents/current/",
-        views.RetailerIndentDetailView.as_view(),
-        name="retailer-indent-current",
-    ),
+    # --- Indents ---
     path(
-        "indents/<uuid:indent_id>/params/",
-        views.RetailerIndentParamsUpdateView.as_view(),
-        name="retailer-indent-params-update",
-    ),
-    path(
-        'procurement/ordering', 
-        views.RetailerCloseAndOrderIndentAPIView.as_view(), 
-        name='inventory-prediction-ordering'
-    ),
-        path(
         "indents/current/",
         views.RetailerIndentDetailView.as_view(),
         name="retailer-indent-current",
@@ -93,13 +85,18 @@ urlpatterns = [
         views.RetailerIndentItemCreateView.as_view(),
         name="retailer-indent-item-create",
     ),
-    # apps/retailers/urls.py
+    path(
+        'procurement/ordering', 
+        views.RetailerCloseAndOrderIndentAPIView.as_view(), 
+        name='inventory-prediction-ordering'
+    ),
 
-path(
-    "indent-items/<uuid:item_id>/params/",
-    views.RetailerIndentItemParamsUpdateView.as_view(),
-    name="retailer-indent-item-params-update",
-),
+    # --- Indent Items ---
+    path(
+        "indent-items/<uuid:item_id>/params/",
+        views.RetailerIndentItemParamsUpdateView.as_view(),
+        name="retailer-indent-item-params-update",
+    ),
     path(
         "indent-items/<uuid:item_id>/",
         views.RetailerIndentItemUpdateView.as_view(),
@@ -110,48 +107,11 @@ path(
         views.RetailerIndentItemDeleteView.as_view(),
         name="retailer-indent-item-delete",
     ),
-      path(
+
+    # --- Product Requests ---
+    path(
         "product-requests",
         views.productRequestsAPIView,
         name="retailer-product-requests",
     ),
-      # Phase 2: The Final Order Execution Lock (POST)
-    # Retailer passes the selected payload array to turn recommendations into real DB rows
- 
-    # path(
-    #     "discounts/price/<uuid:pk>",
-    #     views.RetailerPriceDiscountsDetail.as_view(),
-    #     name=views.RetailerPriceDiscountsDetail.name,
-    # ),
-    # path(
-    #     "discounts/price/<uuid:pk>/update",
-    #     views.RetailerPriceDiscountsDetail.as_view(),
-    #     name=views.RetailerPriceDiscountsDetail.name,
-    # ),
-    # path(
-    #     "discounts/price/create",
-    #     views.RetailerPriceDiscountsCreate.as_view(),
-    #     name=views.RetailerPriceDiscountsCreate.name,
-    # ),
-    # # Quantity Discounts urls
-    # path(
-    #     "discounts/quantity",
-    #     views.RetailerQuantityDiscountsList.as_view(),
-    #     name=views.RetailerQuantityDiscountsList.name,
-    # ),
-    # path(
-    #     "discounts/quantity/<uuid:pk>",
-    #     views.RetailerQuantityDiscountsDetail.as_view(),
-    #     name=views.RetailerQuantityDiscountsDetail.name,
-    # ),
-    # path(
-    #     "discounts/quantity/<uuid:pk>/update",
-    #     views.RetailerQuantityDiscountsUpdate.as_view(),
-    #     name=views.RetailerQuantityDiscountsUpdate.name,
-    # ),
-    # path(
-    #     "discounts/quantity/create",
-    #     views.RetailerQuantityDiscountsCreate.as_view(),
-    #     name=views.RetailerQuantityDiscountsCreate.name,
-    # ),
 ]

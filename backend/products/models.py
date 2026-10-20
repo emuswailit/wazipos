@@ -153,6 +153,12 @@ from core.models import EntityRelatedModel
 # =====================================================================
 # products/models.py (or wherever this model lives)
 
+from django.contrib.gis.db import models as geomodel
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
+# ... (keep your other imports: Preparation, Categories, Entities, etc.) ...
+
 class Products(EntityRelatedModel):
     """
     Model for all products in the system.
@@ -226,12 +232,38 @@ class Products(EntityRelatedModel):
         null=True, blank=True, default=None
     )
 
+    # --- NEW: Weight & Dimensions for Dynamic Shipping ---
+    weight_kg = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        default=Decimal('0.50'),
+        help_text="Actual physical weight in kilograms (e.g., 0.50 for 500g)."
+    )
+    length_cm = models.DecimalField(
+        max_digits=6, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Length in centimeters for volumetric weight calculation."
+    )
+    width_cm = models.DecimalField(
+        max_digits=6, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Width in centimeters for volumetric weight calculation."
+    )
+    height_cm = models.DecimalField(
+        max_digits=6, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Height in centimeters for volumetric weight calculation."
+    )
+    # ------------------------------------------------------
+
     # NOTE: `related_name="images"` on this M2M creates a reverse
-    # accessor `ProductImages.images` that returns products —
-    # confusing and almost certainly a leftover. Left as-is to
-    # avoid a migration in this fix. Rename in a separate change if
-    # you want; nothing in the serializer depends on the reverse
-    # accessor's name.
+    # accessor `ProductImages.images` that returns products — 
     images = models.ManyToManyField(
         ProductImages,
         related_name="images",
@@ -247,8 +279,6 @@ class Products(EntityRelatedModel):
             max_length=50, choices=EntityType.choices()
         ),
         blank=True,
-        # Uses the classmethod callable to guarantee immutability
-        # across row generation.
         default=EntityType.default_entities,
     )
 
@@ -267,30 +297,11 @@ class Products(EntityRelatedModel):
 
     @staticmethod
     def _safe_fk(model, pk):
-        """
-        Resolve a foreign key by raw id without triggering the ORM
-        descriptor.
-
-        Using `self.preparation` (the descriptor) executes an
-        internal `Model.objects.get(pk=self.preparation_id)` the
-        first time the attribute is read on an instance. If the
-        referenced row is gone, that raises
-        `Model.DoesNotExist`, and any caller — including DRF
-        during serialization — 500s.
-
-        Reading `<fk>_id` (a plain column) and using
-        `.filter(...).first()` returns None instead of raising.
-
-        Returns:
-            The referenced instance, or None if the FK is empty
-            or dangling.
-        """
         if not pk:
             return None
         try:
             return model.objects.filter(pk=pk).first()
         except Exception:
-            # Belt-and-braces: never let a lookup kill the caller.
             return None
 
     def _safe_preparation(self):
@@ -321,9 +332,6 @@ class Products(EntityRelatedModel):
 
     @property
     def check_is_drug(self):
-        # Reads the raw FK column; no query, no descriptor, no
-        # DoesNotExist. It only asks "is there a preparation_id
-        # set on this row?".
         return self.preparation_id is not None
 
     # ---------------------------------------------------------
@@ -331,13 +339,9 @@ class Products(EntityRelatedModel):
     # ---------------------------------------------------------
 
     def save(self, *args, **kwargs):
-        # Uppercase the title before persisting.
         if self.title:
             self.title = self.title.upper()
 
-        # Derive origin_country from the manufacturer's country.
-        # Read the FK defensively — a dangling manufacturer_id
-        # must not blow up the save.
         manufacturer = self._safe_manufacturer()
         if manufacturer is not None and manufacturer.country_id:
             self.origin_country_id = manufacturer.country_id
@@ -345,40 +349,3 @@ class Products(EntityRelatedModel):
         super().save(*args, **kwargs)
 
     objects = ProductsManager()
-
-# class EntityServices(EntityRelatedModel):
-#     title = models.CharField(max_length=256, null=True, blank=True)
-#     service_code = models.CharField(max_length=48, null=True, blank=True)
-#     price = models.DecimalField(default=0.00, max_digits=7, decimal_places=2 )
-#     description = models.CharField(max_length=48, null=True, blank=True)
-#     department = models.ForeignKey(
-#         Departments,
-#         related_name="service_creator",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     owner = models.ForeignKey(
-#         Users,
-#         related_name="service_creator",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     attendants = models.ManyToManyField("employees.Employees",blank=True)
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
-
-#     def save(self, *args, **kwargs):
-#         if self.title:
-#             self.title = self.title.upper()
-#         super(EntityServices, self).save(*args, **kwargs)
-#     class Meta:
-#         constraints = [
-#             models.UniqueConstraint(
-#                 fields=["entity", "department", "title"],
-#                 name="Title must be unique for each entity department",
-#             )
-#         ]
-#         verbose_name_plural = "Entity Services"
-

@@ -4,7 +4,9 @@
     "pk": "2f00d537-ba50-49da-b669-3c2052e9f0e9",
     "fields": {
       "title": "WAZIPOS",
-      "categories": ["a5e4e134-e665-456b-bf25-5c3016b63691"],
+      "categories": [
+        "a5e4e134-e665-456b-bf25-5c3016b63691"
+      ],
       "phone": "0722217348",
       "road": "Utalii lane",
       "building": "View Park Towers, 12th Flr",
@@ -21,7 +23,9 @@
     "pk": "3d1c8406-edf5-43ce-bfd7-c7a40cc36c15",
     "fields": {
       "title": "SAFARICOM LTD",
-      "categories": ["8c9fb75d-b617-4036-bf99-8c291970331e"],
+      "categories": [
+        "8c9fb75d-b617-4036-bf99-8c291970331e"
+      ],
       "phone": "254722002100",
       "road": "Waiyaki Way",
       "building": "Safaricom House",
@@ -29,6 +33,25 @@
       "town": "Nairobi",
       "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
       "registration": "",
+      "created": "2021-11-15 00:00:00",
+      "updated": "2021-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+    "fields": {
+      "title": "POSTAL CORPORATION OF KENYA",
+      "categories": [
+        "a5e4e134-e665-456b-bf25-5c3016b63691"
+      ],
+      "phone": "0703042000",
+      "road": "Haile Selassie Avenue",
+      "building": "General Post Office (GPO)",
+      "entity_type": "Courier",
+      "town": "Nairobi",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "PCK-001",
       "created": "2021-11-15 00:00:00",
       "updated": "2021-11-15 00:00:00"
     }

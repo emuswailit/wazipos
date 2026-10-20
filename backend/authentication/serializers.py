@@ -2560,4 +2560,189 @@ class EntityBranchSerializer(serializers.ModelSerializer):
     def get_account_provider_title(self, obj):
         return obj.account_provider.title
 
+from rest_framework import serializers
+from authentication.models import CollectionPoints
 
+class CollectionPointSerializer(serializers.ModelSerializer):
+    # Read-only display fields
+    county_title = serializers.SerializerMethodField(read_only=True)
+    entity_title = serializers.SerializerMethodField(read_only=True)
+    
+    # Extract coordinates for frontend mapping
+    latitude = serializers.SerializerMethodField(read_only=True)
+    longitude = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = CollectionPoints
+        fields = (
+            "id",
+            "title",
+            "code",
+            "point_type",
+            
+            # Relationships
+            "entity",
+            "entity_title",
+            "county",
+            "county_title",
+            
+            # Location & Map
+            "latitude",
+            "longitude",
+            "location", # Raw GeoJSON if needed
+            
+            # Details
+            "physical_address",
+            "landmark",
+            "phone_number",
+            "is_active",
+            "created",
+            "updated",
+        )
+        read_only_fields = (
+            "id", 
+            "entity", # Usually set by the backend based on the logged-in user's entity
+            "created", 
+            "updated",
+        )
+
+    def get_county_title(self, obj):
+        """Returns the title of the associated county."""
+        return obj.county.title if obj.county else None
+
+    def get_entity_title(self, obj):
+        """Returns the title of the entity that owns this collection point."""
+        return obj.entity.title if obj.entity else None
+
+    def get_latitude(self, obj):
+        """Extracts the latitude (Y) from the PointField."""
+        # Note: In GeoDjango, PointField(x, y) where x=Lng, y=Lat
+        return obj.location.y if obj.location else None
+
+    def get_longitude(self, obj):
+        """Extracts the longitude (X) from the PointField."""
+        return obj.location.x if obj.location else None
+
+
+from rest_framework import serializers
+from authentication import models
+from django.utils import timezone
+
+class EntityLocationHybridSerializer(serializers.ModelSerializer):
+    """
+    A hybrid serializer that returns the core Entity attributes, 
+    but flattens the associated Location data (point, farness, etc.).
+    
+    This is ideal for search results and maps where you need Entity
+    details AND the GPS location in a single flat object.
+    """
+    
+    # --- Location Attributes (Pulled from the related Locations model) ---
+    point = serializers.SerializerMethodField(read_only=True)
+    farness = serializers.SerializerMethodField(read_only=True)
+    is_pharmacy = serializers.SerializerMethodField(read_only=True)
+    
+    # --- Entity Attributes (From EntitySerializer) ---
+    entity_title = serializers.CharField(source="title", read_only=True)
+    entity_type = serializers.CharField(read_only=True)
+    categories_array = serializers.SerializerMethodField(read_only=True)
+    country_title = serializers.CharField(source="country.title", read_only=True, default="")
+    county_title = serializers.CharField(source="county.title", read_only=True, default="")
+    constituency_title = serializers.CharField(source="constituency.title", read_only=True, default="")
+    
+    owner_details = serializers.SerializerMethodField(read_only=True)
+    rating = serializers.SerializerMethodField(read_only=True)
+    images = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = models.Entities
+        fields = [
+            "id",
+            "entity_title", # Maps to 'title'
+            "entity_type",
+            "registration",
+            "phone",
+            "email",
+            "town",
+            "county",
+            "county_title",
+            "road",
+            "building",
+            "description",
+            
+            # Location Fields
+            "point",
+            "farness",
+            "is_pharmacy",
+            
+            # Extras
+            "categories_array",
+            "rating",
+            "images",
+            "owner_details",
+        ]
+        read_only_fields = fields # This serializer is read-only (for map fetching)
+
+    def _get_location(self, obj):
+        """
+        Helper to safely fetch the related location.
+        If an entity has multiple locations, we grab the first one.
+        """
+        # Note: Change 'locations' to your actual related_name if different
+        if hasattr(obj, "locations"):
+            return obj.locations.first()
+        return None
+
+    # ---------------------------------------------------------
+    # Location Method Fields
+    # ---------------------------------------------------------
+
+    def get_point(self, obj):
+        location = self._get_location(obj)
+        if location and location.point:
+            return {
+                "type": "Point",
+                "coordinates": [location.point.x, location.point.y] # [lng, lat]
+            }
+        return None
+
+    def get_farness(self, obj):
+        location = self._get_location(obj)
+        return location.farness if location else None
+
+    def get_is_pharmacy(self, obj):
+        # Uses the entity type directly
+        return obj.entity_type in ["PHARMACY", "PharmaceuticalRetailer", "PharmaceuticalWholesaler"]
+
+    # ---------------------------------------------------------
+    # Entity Method Fields
+    # ---------------------------------------------------------
+
+    def get_categories_array(self, obj):
+        if hasattr(obj, "categories") and obj.categories.exists():
+            # Assuming you have a CategoriesSerializer imported
+            return [{"id": c.id, "title": c.title} for c in obj.categories.all()]
+        return []
+
+    def get_owner_details(self, obj):
+        if obj.owner:
+            return {
+                "name": f"{obj.owner.first_name} {obj.owner.last_name}",
+                "phone": obj.owner.phone,
+                "email": obj.owner.email
+            }
+        return None
+
+    def get_rating(self, obj):
+        # If you have a Rating model
+        if hasattr(obj, "rating_set"):
+            reviews = obj.rating_set.all()
+            if reviews.exists():
+                return sum(r.rating for r in reviews) / reviews.count()
+        return 0.0
+
+    def get_images(self, obj):
+        # Adjust this to use your actual Image serializer if you have one
+        if hasattr(obj, "images"):
+            return [{"id": img.id, "url": img.image.url} for img in obj.images.all() if img.image]
+        return []

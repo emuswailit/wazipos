@@ -469,6 +469,86 @@ class Locations(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+# authentication/models.py (or wherever your location models live)
+
+from core.models import EntityRelatedModel
+from django.contrib.gis.db import models as geomodel
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+class CollectionPoints(EntityRelatedModel):
+    """
+    Represents a physical collection point (Post Office, Courier Depot, 
+    Retailer Hub, or Mtaani Agent) owned by a specific Entity.
+    """
+    
+    class PointType(models.TextChoices):
+        POST_OFFICE = "POST_OFFICE", _("Post Office (Postal Corp)")
+        COURIER_DEPOT = "COURIER_DEPOT", _("Courier Depot (Fargo, Sendy, etc.)")
+        RETAILER_HUB = "RETAILER_HUB", _("Retailer Pickup Hub")
+        MTAANI_AGENT = "MTAANI_AGENT", _("Mtaani / Agent Collection Point")
+        OTHER = "OTHER", _("Other")
+
+    title = models.CharField(
+        max_length=255, 
+        help_text="Official name (e.g., 'Nairobi GPO', 'Uber Depot - Westlands')"
+    )
+    code = models.CharField(
+        max_length=20, 
+        null=True, 
+        blank=True, 
+        help_text="Postal code or internal hub code (e.g., '00100')"
+    )
+    point_type = models.CharField(
+        max_length=30, 
+        choices=PointType.choices, 
+        default=PointType.POST_OFFICE
+    )
+    
+    # Location Hierarchy
+    county = models.ForeignKey(
+        "authentication.Counties", 
+        on_delete=models.CASCADE, 
+        related_name="collection_points"
+    )
+    
+    # Geospatial Routing
+    location = geomodel.PointField(
+        srid=4326, 
+        null=True, 
+        blank=True,
+        help_text="Exact GPS coordinates for distance-based shipping or map routing."
+    )
+    
+    # Contact & Operations
+    physical_address = models.CharField(max_length=255, null=True, blank=True)
+    landmark = models.CharField(max_length=255, null=True, blank=True)
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "Collection Points"
+        ordering = ["title"]
+        # A code should be unique per entity, not globally
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entity", "code"],
+                condition=models.Q(code__isnull=False),
+                name="unique_code_per_entity",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["title"]),
+            models.Index(fields=["point_type"]),
+            models.Index(fields=["county"]),
+        ]
+
+    def __str__(self):
+        code_str = f" ({self.code})" if self.code else ""
+        return f"{self.title}{code_str} - {self.entity.title}"
+
+    
+
 class SubLocations(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     

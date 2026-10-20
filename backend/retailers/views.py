@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 
 # ---------- Local apps ----------
 from authentication.models import Entities
-from authentication.serializers import CategoriesSerializer, EntitySerializer
+from authentication.serializers import CategoriesSerializer, EntityLocationHybridSerializer
 from authentication.validators import authentication_models_validators
 from authentication.validators.authentication_models_validators import (
     validate_entity,
@@ -444,6 +444,15 @@ def clientOrdersAPIView(request):
 # Joint retailer / wholesaler receipts
 # ===========================================================================
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions, exceptions
+from rest_framework.pagination import PageNumberPagination
+from authentication.serializers import EntityLocationHybridSerializer, CategoriesSerializer
+from authentication.validators.authentication_models_validators import validate_entity
+from core.responses import custom_success_message, custom_json_response, custom_error_response, custom_errors_response
+from . import models, retail_permissions, serializers, customer_order_responses
+from .utils import retailer_utils
+
 @api_view(["POST"])
 @permission_classes(
     [permissions.IsAuthenticated, retail_permissions.EntitySubscriptionPermission]
@@ -484,6 +493,7 @@ def retailerReceiptsJointAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif action == "GetRetailersByCountyAndCategories":
         errors, entities = retailer_utils.get_retailers_by_county_and_categories(
             request.data, request.user
@@ -493,10 +503,26 @@ def retailerReceiptsJointAPIView(request):
             
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(entities, request)
-        serializer = EntitySerializer(
+        serializer = EntityLocationHybridSerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
+
+    elif action == "GetAdjacentRetailersByLocation":
+        # 🌟 FIXED typo: GetAdjacenRetailersByLocation -> GetAdjacentRetailersByLocation
+        errors, entities = retailer_utils.get_adjacent_retailer_by_location(
+            request.data, request.user
+        )
+        if errors:
+            return custom_errors_response(1, "Could not retrieve retailers", errors)
+            
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(entities, request)
+        serializer = EntityLocationHybridSerializer(
+            page, many=True, context={"request": request}
+        )
+        return paginator.get_paginated_response(serializer.data)
+
     elif action == "GetRetailerReceiptDetails":
         retailer_receipt = retailer_utils.get_retailer_receipt_details(
             request.data, request.user
@@ -546,16 +572,18 @@ def retailerReceiptsJointAPIView(request):
             ).first()
             if not retailer_receipt:
                 continue
-            units_per_pack = int(retailer_receipt.units_per_pack or 0)
+            units_per_pack = int(retailer_receipt.units_per_pack or 1)
             current_qty = int(retailer_receipt.current_unit_quantity or 0)
+            
+            # 🌟 FIXED math: modulo gives the actual loose units (remainder)
+            loose_qty = current_qty % units_per_pack if units_per_pack > 0 else current_qty
+
             retailer_receipts_list.append({
                 "id": retailer_receipt.id,
                 "title": retailer_receipt.product.title,
                 "units_per_pack": units_per_pack,
                 "current_unit_quantity": current_qty,
-                "loose_units_quantity": (
-                    current_qty - (units_per_pack * units_per_pack)
-                ),
+                "loose_units_quantity": loose_qty, 
                 "unit_selling_price": float(
                     retailer_receipt.final_unit_selling_price
                 ),
@@ -606,7 +634,6 @@ def retailerReceiptsJointAPIView(request):
         )
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
-
 
 # ===========================================================================
 # Staff — indents / orders / prescriptions
@@ -2434,3 +2461,74 @@ def productRequestsAPIView(request):
 
     _, message, errors = result
     return custom_errors_response(1, message, errors)
+
+# retailers/views.py
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from decimal import Decimal
+from django.contrib.gis.geos import Point
+from authentication.models import Entities, CollectionPoints
+from .utils.shipping_utils import calculate_shipping_rate
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def calculate_checkout_shipping(request):
+    """
+    Payload:
+    {
+        "entity_id": "...",
+        "delivery_method": "PICKUP" or "DELIVERY",
+        "destination_lat": -1.28,    # If DELIVERY
+        "destination_lng": 36.82,    # If DELIVERY
+        "collection_point_id": "...",# If PICKUP
+        "order_value": 1500.00,
+        "items": [{"retailer_receipt_id": "...", "quantity": 2}]
+    }
+    """
+    entity_id = request.data.get("entity_id")
+    delivery_method = request.data.get("delivery_method")
+    order_items = request.data.get("items", [])
+    order_value = Decimal(str(request.data.get("order_value", 0)))
+
+    entity = Entities.objects.filter(id=entity_id).first()
+    if not entity or not entity.location:
+        return Response({"error": "Shop location not configured."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 1. Determine Destination Point
+    destination_point = None
+    is_pickup = (delivery_method == "PICKUP")
+
+    if is_pickup:
+        cp_id = request.data.get("collection_point_id")
+        collection_point = CollectionPoints.objects.filter(id=cp_id).first()
+        if not collection_point or not collection_point.location:
+            return Response({"error": "Invalid or unmapped collection point."}, status=status.HTTP_400_BAD_REQUEST)
+        destination_point = collection_point.location
+    else:
+        lat = request.data.get("destination_lat")
+        lng = request.data.get("destination_lng")
+        if not lat or not lng:
+            return Response({"error": "Destination coordinates required."}, status=status.HTTP_400_BAD_REQUEST)
+        destination_point = Point(float(lng), float(lat), srid=4326)
+
+    # 2. Calculate Rate
+    cost, distance_km, weight, errors = calculate_shipping_rate(
+        shop_location=entity.location,
+        destination_point=destination_point,
+        is_pickup=is_pickup,
+        order_items_data=order_items,
+        order_value=order_value
+    )
+
+    if errors:
+        return Response({"error": errors[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        "shipping_cost": cost,
+        "distance_km": distance_km,
+        "chargeable_weight_kg": weight,
+        "delivery_method": delivery_method
+    }, status=status.HTTP_200_OK)

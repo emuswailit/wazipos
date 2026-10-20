@@ -1216,6 +1216,21 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
     available_unit_quantity = serializers.IntegerField(read_only=True)
     is_consignment_open = serializers.BooleanField(read_only=True)
 
+    # --- NEW: Pull weight and dimensions directly from the Product ---
+    weight_kg = serializers.DecimalField(
+        max_digits=8, decimal_places=2, read_only=True, source="product.weight_kg"
+    )
+    length_cm = serializers.DecimalField(
+        max_digits=6, decimal_places=2, read_only=True, source="product.length_cm", allow_null=True
+    )
+    width_cm = serializers.DecimalField(
+        max_digits=6, decimal_places=2, read_only=True, source="product.width_cm", allow_null=True
+    )
+    height_cm = serializers.DecimalField(
+        max_digits=6, decimal_places=2, read_only=True, source="product.height_cm", allow_null=True
+    )
+    # ------------------------------------------------------------------
+
     entity_title = serializers.SerializerMethodField(read_only=True)
     title = serializers.SerializerMethodField(read_only=True)
     received_from_title = serializers.SerializerMethodField(read_only=True)
@@ -1260,6 +1275,11 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             "placement_sold_quantity",
             "placement_owed_total",
             "placement_margin_total",
+            
+            # --- NEW: Dimensions & Weight ---
+            "weight_kg", "length_cm", "width_cm", "height_cm",
+            # --------------------------------
+            
             "images",
             "created", "updated", "employee", "owner",
             "days_to_expiry", "expiry_status",
@@ -1275,6 +1295,7 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             "placement_sold_quantity", "placement_owed_total",
             "placement_margin_total",
             "is_consignment_open", "received_from_title", "images",
+            "weight_kg", "length_cm", "width_cm", "height_cm", # Read-only
         )
 
     def get_received_from_title(self, obj):
@@ -1375,7 +1396,7 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             return f"EXPIRES IN {expiry_days} DAY(S)"
         return None
 
-
+    
 # ===========================================================================
 # Retailer payments / discounts / movement / shipping rates
 # ===========================================================================

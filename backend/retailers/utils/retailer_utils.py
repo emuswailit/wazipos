@@ -4413,3 +4413,74 @@ def get_retailers_by_county_and_categories(data, user):
         entities = entities.filter(id__in=valid_entity_ids)
 
     return [], entities
+
+
+from django.contrib.gis.geos import Point
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.measure import D
+from django.db.models import Q
+from authentication.models import Entities
+
+def get_adjacent_retailer_by_location(data, user):
+    """
+    Retrieves entities based on a nested location payload, with an optional 
+    categories filter.
+    
+    Payload:
+    {
+        "action": "GetAdjacentRetailersByLocation",
+        "location": {
+            "latitude": -1.2847502,
+            "longitude": 36.7464919
+        },
+        "categories": ["uuid1", "uuid2"] # OPTIONAL
+    }
+    """
+    # 1. Extract from the nested 'location' object
+    location_data = data.get("location", {})
+    lat = location_data.get("latitude")
+    lng = location_data.get("longitude")
+
+    if lat is None or lng is None:
+        return ["Location coordinates (latitude and longitude) are required."], None
+
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (ValueError, TypeError):
+        return ["Invalid coordinate format."], None
+
+    # 2. Create the GeoDjango Point (Note: Point takes Longitude, Latitude)
+    user_location = Point(lng, lat, srid=4326)
+
+    # 3. Base Query: Active Entities with a valid Location
+    entities = Entities.objects.filter(
+        is_active=True, 
+        locations__point__isnull=False
+    )
+
+    # 4. Optional Category Filter
+    category_ids = data.get("categories", [])
+    if category_ids and isinstance(category_ids, list):
+        # Assumes Entity has a ManyToMany relationship with Categories
+        entities = entities.filter(categories__id__in=category_ids)
+
+    # 5. Annotate Distance, Filter Radius, and Sort
+    entities = (
+        entities
+        .annotate(distance=Distance("locations__point", user_location))
+        .filter(distance__lte=D(km=50)) # Adjust 50km radius as needed
+        .distinct() # Required because the category filter can duplicate rows
+        .order_by("distance")
+        .select_related("country", "county", "constituency")
+        .prefetch_related("categories") # Performance optimization
+    )
+
+    # 6. Dynamically attach 'farness' to the location instance
+    for entity in entities:
+        location = entity.locations.first()
+        if location and hasattr(entity, 'distance'):
+            # Convert meters (GeoDjango Distance object) to km and round
+            location.farness = round(entity.distance.km, 2)
+
+    return [], entities

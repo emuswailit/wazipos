@@ -313,6 +313,14 @@ class ProductsSerializer(serializers.ModelSerializer):
             "description",
             "owner",
             "units_per_pack",
+            
+            # --- NEW: Weight & Dimensions ---
+            "weight_kg",
+            "length_cm",
+            "width_cm",
+            "height_cm",
+            # ---------------------------------
+            
             "manufacturer_title",
             "country_of_origin",
             "preparation_title",
@@ -483,59 +491,3 @@ class ProductsSerializer(serializers.ModelSerializer):
             getattr(man, "country_id", None),
         )
         return country.title if country else ""
-
-    # def create(self, validated_data):
-    #     is_drug = False
-    #     preparation = validated_data.get("preparation", None)
-    #     manufacturer = validated_data.get("manufacturer", None)
-    #     category = validated_data.get("category", None)
-
-    #     if not manufacturer:
-    #         raise exceptions.ValidationError("Manufacurer is required")
-    #     if manufacturer.entity_type != "MANUFACTURING":
-    #         raise exceptions.ValidationError(
-    #             f"{manufacturer}  is not registered in the system as a manufacturer"
-    #         )
-
-    #         # if not manufacturer:
-    #         #     raise serializers.ValidationError(f"Manufacturer is required  ")
-    #         # else:
-    #         #     print("mANUFACYURER", manufacturer)
-    #         #     print("Category", category)
-    #         #     print("All", manufacturer.categories.all())
-
-    #         #     if manufacturer.categories.all().filter(id=category.id).exists():
-    #         #         raise exceptions.ValidationError("Category iko")
-    #         #     else:
-    #         #         raise exceptions.ValidationError("Category hakuna")
-
-    #         # if not category in manufacturer.categories.all():
-    #         #     raise exceptions.ValidationError(
-    #         #         f"Manufacturer category must match product category"
-    #         #     )
-
-    #     product = models.Products.objects.create(**validated_data)
-
-    #     return product
-# class EntityServicesSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         ordering = ['-checkin_time']
-#         model = models.EntityServices
-#         fields = ("id", "entity", "owner","department", "title","price","service_code",
-#                     "created",  'updated')
-
-#         read_only_fields = ("id", "entity", "created", "updated", )
-
-# class DrinkCategorySerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = models.DrinkCategory
-#         fields = (
-#             "id",
-#             "entity",
-#             "title",
-#             "description",
-#             "owner",
-#             "created",
-#             "updated",
-#         )
-#         read_only_fields = ("owner", "created", "updated", "entity", "id")

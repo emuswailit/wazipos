@@ -1,0 +1,1486 @@
+[
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000001",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00100",
+            "title": "G.P.O NAIROBI",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(36.8172 -1.2864)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000002",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00200",
+            "title": "CITY SQUARE",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8230 -1.2840)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000003",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00515",
+            "title": "BURUBURU",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8780 -1.2930)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000004",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00516",
+            "title": "DANDORA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.9100 -1.2550)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000005",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00610",
+            "title": "EASTLEIGH",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8480 -1.2760)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000006",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00521",
+            "title": "EMBAKASI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8900 -1.3160)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000007",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00500",
+            "title": "ENTERPRISE ROAD",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8300 -1.3030)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000008",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00601",
+            "title": "GIGIRI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8050 -1.2300)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000009",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00101",
+            "title": "JAMIA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8350 -1.2660)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000010",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00501",
+            "title": "J.K.I. AIRPORT",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.9278 -1.3192)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000011",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00607",
+            "title": "KAMITI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8700 -1.2200)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000012",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00625",
+            "title": "KANGEMI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7500 -1.2660)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000013",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00502",
+            "title": "KAREN",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7100 -1.3190)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000014",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00518",
+            "title": "KAYOLE",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.9100 -1.2800)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000015",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00202",
+            "title": "KENYATTA N.HOSPITAL",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8070 -1.3020)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000016",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00300",
+            "title": "KENYATTA UNIVERSITY",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.9280 -1.1810)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000017",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00603",
+            "title": "LANGATA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7600 -1.3600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000018",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00604",
+            "title": "LAWRENCE",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7900 -1.2800)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000019",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00600",
+            "title": "LOWER KABETE",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7400 -1.2400)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000020",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00505",
+            "title": "MAKONGENI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8500 -1.3000)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000021",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00611",
+            "title": "MATHARE VALLEY",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8500 -1.2600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000022",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00503",
+            "title": "MBAGATHI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7900 -1.3100)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000023",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00504",
+            "title": "MCHUMBI RD",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8000 -1.2900)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000024",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00519",
+            "title": "MILOLONGO",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8300 -1.2700)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000025",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00619",
+            "title": "MUTHAIGA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8300 -1.2400)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000026",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00506",
+            "title": "NYAYO STADIUM",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8250 -1.3050)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000027",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00223",
+            "title": "PARKLANDS",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8200 -1.2600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000028",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00500",
+            "title": "RUAI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.9700 -1.2800)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000029",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00618",
+            "title": "RUARAKA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8600 -1.2400)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000030",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00606",
+            "title": "SARIT CENTRE",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8000 -1.2600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000031",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00400",
+            "title": "TOM MBOYA ST.",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8250 -1.2850)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000032",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00517",
+            "title": "UHURU GARDENS",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8000 -1.3200)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000033",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00605",
+            "title": "UTHIRU",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7300 -1.2500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000034",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00621",
+            "title": "VILLAGE MARKET",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8100 -1.2300)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000035",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00507",
+            "title": "VIWANDANI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8500 -1.3100)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000036",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00800",
+            "title": "WESTLANDS",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.8000 -1.2600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000037",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
+            "code": "00508",
+            "title": "YAYA TOWERS",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7900 -1.2900)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000038",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80100",
+            "title": "MOMBASA G.P.O",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(39.6680 -4.0630)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000039",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80101",
+            "title": "BAMBURI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.7250 -3.9950)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000040",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80102",
+            "title": "CHANGAMWE",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6200 -4.0200)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000041",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80103",
+            "title": "COAST",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6600 -4.0500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000042",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80107",
+            "title": "GEN.HOSPITAL",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6700 -4.0400)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000043",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80104",
+            "title": "DOCKS",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6500 -4.0600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000044",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80122",
+            "title": "KENGELENI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6800 -4.0600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000045",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80107",
+            "title": "KILINDINI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6500 -4.0700)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000046",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80110",
+            "title": "LIKONI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6600 -4.0800)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000047",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80112",
+            "title": "MAKUPA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6400 -4.0500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000048",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80106",
+            "title": "MOMBASA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.6680 -4.0630)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000049",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80115",
+            "title": "MOI AIRPORT",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.5940 -4.0340)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000050",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80118",
+            "title": "MTWAPA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.7500 -3.9500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000051",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bbea0f75-1e20-4518-bd0b-60002dfc64c8",
+            "code": "80118",
+            "title": "NYALI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.7000 -4.0300)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000052",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "4e1ce52f-8231-4537-bf7c-78432781a0ab",
+            "code": "80200",
+            "title": "MALINDI",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(40.1170 -3.2190)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000053",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "42a2a2d0-3bed-409a-86ea-4ec75420b01f",
+            "code": "80201",
+            "title": "GARSEN",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(40.1200 -2.2700)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000054",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "5b4484dc-1ebf-4ce6-a5c4-605127011778",
+            "code": "80202",
+            "title": "LAMU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(40.9020 -2.2700)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000055",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "54089583-ed2b-4dea-b3f8-3daf6748a037",
+            "code": "80300",
+            "title": "VOI",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(38.5560 -3.3960)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000056",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "code": "80301",
+            "title": "MTITO ANDEI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(38.1700 -2.6900)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000057",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+            "code": "80401",
+            "title": "DIANI BEACH",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.5800 -4.3100)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000058",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "9ee621ed-09e1-43e0-b0f8-fa7e1b492a81",
+            "code": "80402",
+            "title": "LUNGA LUNGA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(39.1200 -4.5500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000059",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "5b4484dc-1ebf-4ce6-a5c4-605127011778",
+            "code": "80500",
+            "title": "LAMU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(40.9020 -2.2700)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000060",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "c120593a-528c-4b88-929d-95bfa548b0cb",
+            "code": "70100",
+            "title": "GARISSA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(39.6460 -0.4530)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000061",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "25226343-91dc-4090-b16a-6aebfdf3364c",
+            "code": "70200",
+            "title": "WAJIR",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(40.0580 1.7470)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000062",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "24a1c463-c790-4eba-9f5a-0e5c8746033a",
+            "code": "70300",
+            "title": "MANDERA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(41.8670 3.9360)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000063",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "849840bd-f62b-4a13-916f-143a3577a453",
+            "code": "60100",
+            "title": "EMBU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.4500 -0.5310)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000064",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "code": "60200",
+            "title": "MERU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.6500 0.0500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000065",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "7822576a-322f-4a79-89f8-0c98b0dc97ba",
+            "code": "60300",
+            "title": "ISIOLO",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.5820 0.3540)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000066",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "c6fbfee5-1d7e-4179-a19b-f99ce49193fc",
+            "code": "60400",
+            "title": "CHUKA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(37.6500 -0.3330)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000067",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "033664bf-a6ce-41c7-9bda-da0c99e8954f",
+            "code": "60600",
+            "title": "MAUA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(37.8660 0.2320)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000068",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "code": "10100",
+            "title": "NYERI",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(36.9510 -0.4170)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000069",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "1300dfd4-8b37-489d-82d5-cf97ff25125a",
+            "code": "10101",
+            "title": "KARATINA",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(37.1240 -0.4810)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000070",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "d3301866-f5e8-4e2b-8a35-d28bd89ac680",
+            "code": "10200",
+            "title": "MURANG'A",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.1520 -0.7210)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000071",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "55b7e10a-da30-446c-a2be-e6c92f86bc89",
+            "code": "10300",
+            "title": "KERUGOYA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.2810 -0.4990)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000072",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+            "code": "10400",
+            "title": "KITALE",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.0060 1.0150)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000073",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "d3243cbb-2375-4e41-a190-8d636691506d",
+            "code": "20100",
+            "title": "NAKURU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(36.0800 -0.3030)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000074",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+            "code": "20200",
+            "title": "KERICHO",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.2830 -0.3680)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000075",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "16dac0a0-ba95-42bb-bd0a-71d7377e15fe",
+            "code": "20201",
+            "title": "KERICHO",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(35.2830 -0.3680)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000076",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "21553394-7e87-406c-b49f-abbb7eec5509",
+            "code": "20300",
+            "title": "NAROK",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.8700 -1.0870)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000077",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "e8d8655e-77d9-4771-a74c-cf990c567ed9",
+            "code": "20400",
+            "title": "BOMET",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.3410 -0.7810)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000078",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "d3243cbb-2375-4e41-a190-8d636691506d",
+            "code": "20500",
+            "title": "NAIVASHA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(36.4360 -0.7160)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000079",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "2f55c1cf-96a3-46ef-bcc4-bc2a1ecb744c",
+            "code": "30100",
+            "title": "ELDORET",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.2700 0.5140)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000080",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "f47861dd-dae9-4afd-bcdb-105543d5c6c7",
+            "code": "30200",
+            "title": "KITALE",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.0060 1.0150)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000081",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "9cf8417b-2da7-47b3-b97c-dd02b17f614c",
+            "code": "30300",
+            "title": "KAPSABET",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.0980 0.2030)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000082",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "2d70f4e0-3c44-4fbd-a736-b2c27737602a",
+            "code": "30400",
+            "title": "KABARNET",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.7430 0.4910)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000083",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "846d37b5-c560-4dc1-93fc-9d21985b3ac5",
+            "code": "30500",
+            "title": "LODWAR",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.5970 3.1190)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000084",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "c52b27a3-9c81-459f-a08d-073194417ed8",
+            "code": "30600",
+            "title": "KAPENGURIA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.1110 1.2410)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000085",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "a941ae5e-b8b6-4663-9aeb-b0ca9899e4e4",
+            "code": "30700",
+            "title": "ITEN",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(35.5080 0.6700)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000086",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "cf07a928-f8ac-452e-a199-3a2399b619d5",
+            "code": "40100",
+            "title": "KISUMU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.7680 -0.0910)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000087",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "c4cd893f-5416-420a-89a1-50cbe13c1681",
+            "code": "40200",
+            "title": "KISII",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.7670 -0.6810)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000088",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "a3fc75c9-4559-4cff-9bfa-22642863db5d",
+            "code": "40300",
+            "title": "HOMA BAY",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.4570 -0.5270)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000089",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "7b331d27-0879-4de2-a460-6fce6dcdf775",
+            "code": "40400",
+            "title": "MIGORI",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.4720 -1.0630)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000090",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "7ab171a3-7a79-47f0-9b19-182a849c7c6b",
+            "code": "40500",
+            "title": "NYAMIRA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.9350 -0.5630)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000091",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "581d5c6f-13f2-4e72-a876-9a7a2a6f3b4b",
+            "code": "40600",
+            "title": "SIAYA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.2880 0.0610)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000092",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "c11afe90-1f48-4107-918c-31574167cd53",
+            "code": "50100",
+            "title": "KAKAMEGA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.7510 0.2820)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000093",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "a02057bb-40a3-4041-b5fc-618dacd97858",
+            "code": "50200",
+            "title": "BUNGOMA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.5580 0.5660)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000094",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "6920023d-4f77-457f-9445-dba4bb292071",
+            "code": "50300",
+            "title": "BUSIA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.1100 0.4600)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000095",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "a17ee622-e633-49e5-a8c1-f557e431f019",
+            "code": "50400",
+            "title": "VIHIGA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(34.7200 0.0500)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000096",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "233a1db0-d194-47f6-bdf2-4f84aef050df",
+            "code": "90100",
+            "title": "MACHAKOS",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.2630 -1.5170)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000097",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "code": "90200",
+            "title": "KITUI",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(38.0110 -1.3670)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000098",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "code": "90300",
+            "title": "MAKINDU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.8270 -2.2780)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000099",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "8b147896-50db-46c2-a487-f8a9654ae52f",
+            "code": "90400",
+            "title": "WOTE",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.6280 -1.7830)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000100",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "b62bd72e-b0c0-46c4-a5b2-bd19a2e1bd0c",
+            "code": "90500",
+            "title": "KITUI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(38.0110 -1.3670)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000101",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "dc64638a-3ee7-4a81-84e1-62d689e06796",
+            "code": "01000",
+            "title": "THIKA",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(37.0690 -1.0330)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000102",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "dc64638a-3ee7-4a81-84e1-62d689e06796",
+            "code": "00900",
+            "title": "KIAMBU",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(36.8350 -1.1710)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000103",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "dc64638a-3ee7-4a81-84e1-62d689e06796",
+            "code": "00902",
+            "title": "KIKUYU",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.6630 -1.2460)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000104",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "dc64638a-3ee7-4a81-84e1-62d689e06796",
+            "code": "00219",
+            "title": "KARURI",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7500 -1.1830)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000105",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bdcfce0f-311d-4eba-ba3e-201faf540788",
+            "code": "00208",
+            "title": "NGONG",
+            "office_type": "DEPARTMENTAL",
+            "location": "SRID=4326;POINT(36.6500 -1.3660)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.CollectionPoints",
+        "pk": "d9b1e1c1-1000-4000-8000-000000000106",
+        "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
+        "fields": {
+            "county_id": "bdcfce0f-311d-4eba-ba3e-201faf540788",
+            "code": "00209",
+            "title": "KAJIADO",
+            "office_type": "SUB_POST_OFFICE",
+            "location": "SRID=4326;POINT(36.7770 -1.8520)",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    }
+]
