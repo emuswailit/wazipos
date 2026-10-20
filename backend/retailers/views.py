@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 
 # ---------- Local apps ----------
 from authentication.models import Entities
-from authentication.serializers import CategoriesSerializer, EntityLocationHybridSerializer
+from authentication.serializers import CategoriesSerializer, EntityLocationHybridSerializer,CollectionPointSerializer
 from authentication.validators import authentication_models_validators
 from authentication.validators.authentication_models_validators import (
     validate_entity,
@@ -656,7 +656,7 @@ def retailerReceiptsJointAPIView(request):
         collection_points = retailer_utils.get_collection_points(
             request.data, request.user
         )
-        serializer = serializers.CollectionPointSerializer(
+        serializer = CollectionPointSerializer(
             collection_points, many=True, context={"request": request}
         )
         return customer_order_responses.custom_success_message(
