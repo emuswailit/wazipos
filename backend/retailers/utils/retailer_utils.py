@@ -4494,7 +4494,7 @@ def get_couriers(request_data, user):
         entity_type__iexact="Courier"  # 🌟 Changed from "COURIER"
     )
     
-    return query.order_by('entity_title')
+    return query.order_by('title')
 
 
 def get_collection_points(request_data, user):
