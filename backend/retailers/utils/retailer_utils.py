@@ -4425,16 +4425,6 @@ def get_adjacent_retailer_by_location(data, user):
     """
     Retrieves entities based on a nested location payload, with an optional 
     categories filter.
-    
-    Payload:
-    {
-        "action": "GetAdjacentRetailersByLocation",
-        "location": {
-            "latitude": -1.2847502,
-            "longitude": 36.7464919
-        },
-        "categories": ["uuid1", "uuid2"] # OPTIONAL
-    }
     """
     # 1. Extract from the nested 'location' object
     location_data = data.get("location", {})
@@ -4462,25 +4452,31 @@ def get_adjacent_retailer_by_location(data, user):
     # 4. Optional Category Filter
     category_ids = data.get("categories", [])
     if category_ids and isinstance(category_ids, list):
-        # Assumes Entity has a ManyToMany relationship with Categories
         entities = entities.filter(categories__id__in=category_ids)
 
     # 5. Annotate Distance, Filter Radius, and Sort
     entities = (
         entities
         .annotate(distance=Distance("locations__point", user_location))
-        .filter(distance__lte=D(km=50)) # Adjust 50km radius as needed
-        .distinct() # Required because the category filter can duplicate rows
+        .filter(distance__lte=D(km=50))
+        .distinct()
         .order_by("distance")
         .select_related("country", "county", "constituency")
-        .prefetch_related("categories") # Performance optimization
+        .prefetch_related("categories")
     )
 
     # 6. Dynamically attach 'farness' to the location instance
     for entity in entities:
-        location = entity.locations.first()
+        locations = entity.locations
+        
+        # 🌟 FIX: Handle both single objects (OneToOne/ForeignKey) and Managers (ManyToMany)
+        if hasattr(locations, "first"):
+            location = locations.first()
+        else:
+            location = locations
+
         if location and hasattr(entity, 'distance'):
-            # Convert meters (GeoDjango Distance object) to km and round
+            # Convert meters to km and assign to the location's farness field
             location.farness = round(entity.distance.km, 2)
 
     return [], entities
