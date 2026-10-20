@@ -632,6 +632,38 @@ def retailerReceiptsJointAPIView(request):
             0, "Categories retrieved successfully",
             serializer.data, "categories",
         )
+    elif action == "GetCouriers":
+        couriers = retailer_utils.get_couriers(
+            request.data, request.user
+        )
+        
+        # Reusing EntityLocationHybridSerializer since couriers are entities
+        serializer = EntityLocationHybridSerializer(
+            couriers, many=True, context={"request": request}
+        )
+        
+        return customer_order_responses.custom_success_message(
+            0, "Couriers retrieved successfully",
+            serializer.data, "couriers",
+        )
+    # 🌟 NEW: Get Collection Points
+    elif action == "GetCollectionPoints":
+        county = request.data.get("county")
+        courier_id = request.data.get("courier_id")  # 🌟 Reads courier_id
+        
+        if not county or not courier_id:
+            raise exceptions.ValidationError("County and courier_id are required")
+
+        collection_points = retailer_utils.get_collection_points(
+            request.data, request.user
+        )
+        serializer = serializers.CollectionPointSerializer(
+            collection_points, many=True, context={"request": request}
+        )
+        return customer_order_responses.custom_success_message(
+            0, "Collection points retrieved successfully",
+            serializer.data, "collection_points",
+        )
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
 

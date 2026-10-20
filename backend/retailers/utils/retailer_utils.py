@@ -4480,3 +4480,41 @@ def get_adjacent_retailer_by_location(data, user):
             location.farness = round(entity.distance.km, 2)
 
     return [], entities
+
+
+
+# utils/retailer_utils.py
+from django.db import models
+
+def get_couriers(request_data, user):
+    """
+    Fetches entities of type Courier.
+    """
+    query = models.Entity.objects.filter(
+        entity_type__iexact="Courier"  # 🌟 Changed from "COURIER"
+    )
+    
+    return query.order_by('entity_title')
+
+
+def get_collection_points(request_data, user):
+    """
+    Fetches collection points filtered by the user's selected county and courier.
+    """
+    county_id_or_name = request_data.get("county")
+    courier_id = request_data.get("courier_id")  # 🌟 Strictly courier_id
+    
+    query = models.CollectionPoint.objects.filter(
+        is_active=True
+    )
+    
+    if county_id_or_name:
+        query = query.filter(
+            models.Q(county__id=county_id_or_name) | 
+            models.Q(county__title__iexact=county_id_or_name)
+        )
+        
+    if courier_id:
+        query = query.filter(courier__id=courier_id)  # 🌟 Strictly courier_id
+        
+    return query.order_by('name')
