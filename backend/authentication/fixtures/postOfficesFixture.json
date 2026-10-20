@@ -383,7 +383,7 @@
         "fields": {
             "entity_id": "8b3e2c1a-9f4d-4b5a-8c7e-1d2f3a4b5c6d",
             "county_id": "ad7b6f5f-ca25-43c8-af9c-ff092253ff7b",
-            "code": "00500",
+            "code": "00520",
             "title": "RUAI",
             "point_type": "SUB_POST_OFFICE",
             "location": "SRID=4326;POINT(36.9700 -1.2800)",
