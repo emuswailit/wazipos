@@ -2623,7 +2623,6 @@ class CollectionPointSerializer(serializers.ModelSerializer):
         """Extracts the longitude (X) from the PointField."""
         return obj.location.x if obj.location else None
 
-
 from rest_framework import serializers
 from authentication import models
 from django.utils import timezone
@@ -2632,9 +2631,6 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
     """
     A hybrid serializer that returns the core Entity attributes, 
     but flattens the associated Location data (point, farness, etc.).
-    
-    This is ideal for search results and maps where you need Entity
-    details AND the GPS location in a single flat object.
     """
     
     # --- Location Attributes (Pulled from the related Locations model) ---
@@ -2646,6 +2642,7 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
     entity_title = serializers.CharField(source="title", read_only=True)
     entity_type = serializers.CharField(read_only=True)
     categories_array = serializers.SerializerMethodField(read_only=True)
+    
     country_title = serializers.CharField(source="country.title", read_only=True, default="")
     county_title = serializers.CharField(source="county.title", read_only=True, default="")
     constituency_title = serializers.CharField(source="constituency.title", read_only=True, default="")
@@ -2658,19 +2655,23 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
         model = models.Entities
         fields = [
             "id",
-            "entity_title", # Maps to 'title'
+            "entity_title", 
             "entity_type",
             "registration",
             "phone",
             "email",
             "town",
+            
+            # Location Fields
+            "country",
+            "country_title",
             "county",
             "county_title",
+            "constituency",        # 🌟 ADDED
+            "constituency_title",  # 🌟 ADDED
             "road",
             "building",
             "description",
-            
-            # Location Fields
             "point",
             "farness",
             "is_pharmacy",
@@ -2681,16 +2682,15 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
             "images",
             "owner_details",
         ]
-        read_only_fields = fields # This serializer is read-only (for map fetching)
+        read_only_fields = fields 
 
     def _get_location(self, obj):
-        """
-        Helper to safely fetch the related location.
-        If an entity has multiple locations, we grab the first one.
-        """
-        # Note: Change 'locations' to your actual related_name if different
+        """Helper to safely fetch the related location."""
         if hasattr(obj, "locations"):
-            return obj.locations.first()
+            # Handle both single object (OneToOne/FK) and Manager (ManyToMany)
+            if hasattr(obj.locations, "first"):
+                return obj.locations.first()
+            return obj.locations
         return None
 
     # ---------------------------------------------------------
@@ -2711,7 +2711,6 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
         return location.farness if location else None
 
     def get_is_pharmacy(self, obj):
-        # Uses the entity type directly
         return obj.entity_type in ["PHARMACY", "PharmaceuticalRetailer", "PharmaceuticalWholesaler"]
 
     # ---------------------------------------------------------
@@ -2720,7 +2719,6 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
 
     def get_categories_array(self, obj):
         if hasattr(obj, "categories") and obj.categories.exists():
-            # Assuming you have a CategoriesSerializer imported
             return [{"id": c.id, "title": c.title} for c in obj.categories.all()]
         return []
 
@@ -2734,7 +2732,6 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
         return None
 
     def get_rating(self, obj):
-        # If you have a Rating model
         if hasattr(obj, "rating_set"):
             reviews = obj.rating_set.all()
             if reviews.exists():
@@ -2742,7 +2739,6 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
         return 0.0
 
     def get_images(self, obj):
-        # Adjust this to use your actual Image serializer if you have one
         if hasattr(obj, "images"):
             return [{"id": img.id, "url": img.image.url} for img in obj.images.all() if img.image]
         return []
