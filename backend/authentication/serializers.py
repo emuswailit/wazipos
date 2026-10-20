@@ -2742,3 +2742,45 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
         if hasattr(obj, "images"):
             return [{"id": img.id, "url": img.image.url} for img in obj.images.all() if img.image]
         return []
+
+
+
+from rest_framework import serializers
+from . import models # Adjust to match your actual models import
+
+class CollectionPointSerializer(serializers.ModelSerializer):
+    # Map 'title' to 'name' for the frontend
+    title = serializers.CharField(source='title', read_only=True)
+    
+    # Derive address and coordinates from the model
+    address = serializers.SerializerMethodField()
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.CollectionPoints # Use 'CollectionPoint' if singular in your models.py
+        fields = [
+            'id',
+            'title',
+            'address',
+            'latitude',
+            'longitude',
+            'code',
+            'point_type',
+        ]
+
+    def get_address(self, obj):
+        # Since there is no explicit address field, we combine title and code
+        if obj.code:
+            return f"{obj.title} ({obj.code})"
+        return obj.title
+
+    def get_latitude(self, obj):
+        if obj.location:
+            return obj.location.y  # In SRID 4326, Y is Latitude
+        return None
+
+    def get_longitude(self, obj):
+        if obj.location:
+            return obj.location.x  # In SRID 4326, X is Longitude
+        return None
