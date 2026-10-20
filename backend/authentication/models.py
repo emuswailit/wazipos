@@ -525,7 +525,8 @@ class CollectionPoints(EntityRelatedModel):
     landmark = models.CharField(max_length=255, null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     is_active = models.BooleanField(default=True)
-
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
     class Meta:
         verbose_name_plural = "Collection Points"
         ordering = ["title"]
