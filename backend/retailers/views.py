@@ -648,11 +648,10 @@ def retailerReceiptsJointAPIView(request):
         )
     # 🌟 NEW: Get Collection Points
     elif action == "GetCollectionPoints":
-        county = request.data.get("county")
-        courier_id = request.data.get("courier_id")  # 🌟 Reads courier_id
+        courier_id = request.data.get("courier_id")
         
-        if not county or not courier_id:
-            raise exceptions.ValidationError("County and courier_id are required")
+        if not courier_id:
+            raise exceptions.ValidationError("courier_id is required")
 
         collection_points = retailer_utils.get_collection_points(
             request.data, request.user

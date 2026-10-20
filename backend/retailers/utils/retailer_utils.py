@@ -4497,24 +4497,27 @@ def get_couriers(request_data, user):
     return query.order_by('title')
 
 
+# utils/retailer_utils.py
+
 def get_collection_points(request_data, user):
     """
-    Fetches collection points filtered by the user's selected county and courier.
+    Fetches collection points filtered by courier. 
+    (County filtering is now optional).
     """
-    county_id_or_name = request_data.get("county")
-    courier_id = request_data.get("courier_id")  # 🌟 Strictly courier_id
+    courier_id = request_data.get("courier_id")
+    county_id_or_name = request_data.get("county") # Will be None now
     
-    query = models.CollectionPoint.objects.filter(
-        is_active=True
-    )
+    query = models.CollectionPoint.objects.filter(is_active=True)
     
+    # Only filter by county if it happens to be provided
     if county_id_or_name:
         query = query.filter(
             models.Q(county__id=county_id_or_name) | 
             models.Q(county__title__iexact=county_id_or_name)
         )
         
+    # Filter by the courier
     if courier_id:
-        query = query.filter(courier__id=courier_id)  # 🌟 Strictly courier_id
+        query = query.filter(courier__id=courier_id)
         
-    return query.order_by('name')
+    return query.order_by('title') # Changed to 'title' based on your fixture data
