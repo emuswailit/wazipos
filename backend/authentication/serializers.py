@@ -2749,9 +2749,7 @@ from rest_framework import serializers
 from . import models # Adjust to match your actual models import
 
 class CollectionPointSerializer(serializers.ModelSerializer):
-    # Map 'title' to 'name' for the frontend
-    title = serializers.CharField(source='title', read_only=True)
-    
+      
     # Derive address and coordinates from the model
     address = serializers.SerializerMethodField()
     latitude = serializers.SerializerMethodField()
