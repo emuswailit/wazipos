@@ -1553,6 +1553,7 @@ class CustomerOrders(EntityRelatedModel):
         WINDOWS = "WINDOWS", _("WINDOWS")
 
     class DeliveryMethodOptions(models.TextChoices):
+        COURIER = "COURIER", _("COURIER")
         DELIVERY = "DELIVERY", _("DELIVERY")
         PICKUP = "PICKUP", _("PICKUP")
 
