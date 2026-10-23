@@ -632,8 +632,8 @@ def retailerReceiptsJointAPIView(request):
             0, "Categories retrieved successfully",
             serializer.data, "categories",
         )
-    elif action == "GetCouriers":
-        couriers = retailer_utils.get_couriers(
+    elif action == "GetCourierEntities":
+        couriers = retailer_utils.get_courier_entities(
             request.data, request.user
         )
         
@@ -643,7 +643,21 @@ def retailerReceiptsJointAPIView(request):
         )
         
         return customer_order_responses.custom_success_message(
-            0, "Couriers retrieved successfully",
+            0, "Courier entities retrieved successfully",
+            serializer.data, "couriers",
+        )
+    elif action == "GetDeliveryEntities":
+        couriers = retailer_utils.get_delivery_entities(
+            request.data, request.user
+        )
+        
+        # Reusing EntityLocationHybridSerializer since couriers are entities
+        serializer = EntityLocationHybridSerializer(
+            couriers, many=True, context={"request": request}
+        )
+        
+        return customer_order_responses.custom_success_message(
+            0, "Delivery entities retrieved successfully",
             serializer.data, "couriers",
         )
     # 🌟 NEW: Get Collection Points

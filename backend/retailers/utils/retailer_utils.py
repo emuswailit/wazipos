@@ -4486,9 +4486,19 @@ def get_adjacent_retailer_by_location(data, user):
 # utils/retailer_utils.py
 from django.db import models
 
-def get_couriers(request_data, user):
+def get_courier_entities(request_data, user):
     """
-    Fetches entities of type Courier.
+    Fetches entities of type Courier, these are mainly intra city, short distance.
+    """
+    query =Entities.objects.filter(
+        entity_type__iexact="Courier"  # 🌟 Changed from "COURIER"
+    )
+    
+    return query.order_by('title')
+
+def get_delivery_entities(request_data, user):
+    """
+    Fetches entities of type Delivery, these are mainly long distance.
     """
     query =Entities.objects.filter(
         entity_type__iexact="Courier"  # 🌟 Changed from "COURIER"
