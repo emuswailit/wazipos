@@ -4501,7 +4501,7 @@ def get_delivery_entities(request_data, user):
     Fetches entities of type Delivery, these are mainly long distance.
     """
     query =Entities.objects.filter(
-        entity_type__iexact="Courier"  # 🌟 Changed from "COURIER"
+        entity_type__iexact="Delivery"  # 🌟 Changed from "COURIER"
     )
     
     return query.order_by('title')
