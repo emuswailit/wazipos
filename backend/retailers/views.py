@@ -690,22 +690,16 @@ def retailerReceiptsJointAPIView(request):
     elif action == "CalculateShippingRate":
         # 1. Try to derive origin from the entitylocations app
         entity_id = request.data.get("entity")
-        
-        # Fallback to whatever the frontend sent (if any)
         origin_lat = request.data.get("origin_latitude")
         origin_lng = request.data.get("origin_longitude")
 
         if entity_id:
             try:
-                # Fetch the location record for this retailer
                 location = Locations.objects.filter(entity_id=entity_id).first()
-                
                 if location and location.point:
-                    # GeoDjango PointField with SRID 4326 stores (longitude, latitude)
                     origin_lng = float(location.point.x) # Longitude
                     origin_lat = float(location.point.y) # Latitude
             except Exception as e:
-                # Log the error, but let it fall back to frontend coordinates
                 print(f"Error fetching entity location: {e}")
 
         dest_lat = request.data.get("destination_latitude")
@@ -719,7 +713,7 @@ def retailerReceiptsJointAPIView(request):
             raise exceptions.ValidationError("Origin and Destination coordinates are required")
 
         try:
-            # 2. Calculate distance using the exact retailer coordinates
+            # 2. Calculate distance
             distance_km = calculate_haversine_distance(
                 float(origin_lat), float(origin_lng), 
                 float(dest_lat), float(dest_lng)
@@ -729,10 +723,9 @@ def retailerReceiptsJointAPIView(request):
             config = ShippingConfiguration.objects.filter(is_active=True).first()
             
             if not config:
-                # Fallbacks if no config is set in DB
                 base_fee = 100.0
                 local_rate = 40.0
-                intercounty_rate = 10.0
+                intercounty_rate = 2.0  # Changed fallback to be cheaper (2 KES/km)
                 weight_surcharge = 20.0
                 insurance_pct = 0.0
                 max_insurance = 500.0
@@ -746,12 +739,20 @@ def retailerReceiptsJointAPIView(request):
 
             # 4. Apply Distance Rates based on Method
             if delivery_method == "COURIER":
+                # Intracity (Boda Boda) - short distance, higher rate per km
                 rate_per_km = local_rate
+                distance_fee = base_fee + (distance_km * rate_per_km)
+                
+                # Optional: Cap the courier fee so it never exceeds e.g., 600 KES
+                distance_fee = min(distance_fee, 600.0)
             else:
+                # Long-haul Delivery (Postal/G4S) - long distance, lower rate per km
                 rate_per_km = intercounty_rate
+                distance_fee = base_fee + (distance_km * rate_per_km)
+                
+                # 🌟 HARD CAP: Never charge more than 1,200 KES for long-haul (adjust as needed)
+                distance_fee = min(distance_fee, 1200.0)
 
-            distance_fee = base_fee + (distance_km * rate_per_km)
-            
             # 5. Weight Surcharge
             weight_fee = total_weight_kg * weight_surcharge
 
@@ -774,9 +775,6 @@ def retailerReceiptsJointAPIView(request):
             
         except ValueError:
             raise exceptions.ValidationError("Invalid coordinates or numeric formats")
-
-    raise exceptions.ValidationError(f"Action {action} is unknown")
-
 # ===========================================================================
 # Staff — indents / orders / prescriptions
 # ===========================================================================
