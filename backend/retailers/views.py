@@ -444,6 +444,8 @@ def clientOrdersAPIView(request):
 # Joint retailer / wholesaler receipts
 # ===========================================================================
 
+import math
+from decimal import Decimal
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, exceptions
 from rest_framework.pagination import PageNumberPagination
@@ -452,6 +454,18 @@ from authentication.validators.authentication_models_validators import validate_
 from core.responses import custom_success_message, custom_json_response, custom_error_response, custom_errors_response
 from . import models, retail_permissions, serializers, customer_order_responses
 from .utils import retailer_utils
+from .models import ShippingConfiguration
+
+# Helper function for distance calculation
+def calculate_haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate the great circle distance in kilometers between two points on the earth."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371  # Radius of earth in kilometers
+    return c * r
 
 @api_view(["POST"])
 @permission_classes(
@@ -509,7 +523,6 @@ def retailerReceiptsJointAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     elif action == "GetAdjacentRetailersByLocation":
-        # 🌟 FIXED typo: GetAdjacenRetailersByLocation -> GetAdjacentRetailersByLocation
         errors, entities = retailer_utils.get_adjacent_retailer_by_location(
             request.data, request.user
         )
@@ -575,7 +588,6 @@ def retailerReceiptsJointAPIView(request):
             units_per_pack = int(retailer_receipt.units_per_pack or 1)
             current_qty = int(retailer_receipt.current_unit_quantity or 0)
             
-            # 🌟 FIXED math: modulo gives the actual loose units (remainder)
             loose_qty = current_qty % units_per_pack if units_per_pack > 0 else current_qty
 
             retailer_receipts_list.append({
@@ -632,35 +644,31 @@ def retailerReceiptsJointAPIView(request):
             0, "Categories retrieved successfully",
             serializer.data, "categories",
         )
+        
     elif action == "GetCourierEntities":
         couriers = retailer_utils.get_courier_entities(
             request.data, request.user
         )
-        
-        # Reusing EntityLocationHybridSerializer since couriers are entities
         serializer = EntityLocationHybridSerializer(
             couriers, many=True, context={"request": request}
         )
-        
         return customer_order_responses.custom_success_message(
             0, "Courier entities retrieved successfully",
             serializer.data, "couriers",
         )
+        
     elif action == "GetDeliveryEntities":
         couriers = retailer_utils.get_delivery_entities(
             request.data, request.user
         )
-        
-        # Reusing EntityLocationHybridSerializer since couriers are entities
         serializer = EntityLocationHybridSerializer(
             couriers, many=True, context={"request": request}
         )
-        
         return customer_order_responses.custom_success_message(
             0, "Delivery entities retrieved successfully",
             serializer.data, "couriers",
         )
-    # 🌟 NEW: Get Collection Points
+        
     elif action == "GetCollectionPoints":
         courier_id = request.data.get("courier_id")
         
@@ -678,7 +686,81 @@ def retailerReceiptsJointAPIView(request):
             serializer.data, "collection_points",
         )
 
+    elif action == "CalculateShippingRate":
+        origin_lat = request.data.get("origin_latitude")
+        origin_lng = request.data.get("origin_longitude")
+        dest_lat = request.data.get("destination_latitude")
+        dest_lng = request.data.get("destination_longitude")
+        delivery_method = request.data.get("delivery_method", "COURIER")
+        
+        order_total = float(request.data.get("order_total", 0.0))
+        total_weight_kg = float(request.data.get("total_weight_kg", 0.0))
+
+        if origin_lat is None or origin_lng is None or dest_lat is None or dest_lng is None:
+            raise exceptions.ValidationError("Origin and Destination coordinates are required")
+
+        try:
+            # 1. Calculate distance
+            distance_km = calculate_haversine_distance(
+                float(origin_lat), float(origin_lng), 
+                float(dest_lat), float(dest_lng)
+            )
+
+            # 2. Fetch Pricing Engine Config
+            config = ShippingConfiguration.objects.filter(is_active=True).first()
+            
+            if not config:
+                # Fallbacks if no config is set in DB
+                base_fee = 100.0
+                local_rate = 40.0
+                intercounty_rate = 10.0
+                weight_surcharge = 20.0
+                insurance_pct = 0.0
+                max_insurance = 500.0
+            else:
+                base_fee = float(config.base_dispatch_fee)
+                local_rate = float(config.local_rate_per_km)
+                intercounty_rate = float(config.intercounty_rate_per_km)
+                weight_surcharge = float(config.surcharge_per_kg)
+                insurance_pct = float(config.value_insurance_percentage)
+                max_insurance = float(config.max_value_insurance_fee)
+
+            # 3. Apply Distance Rates based on Method
+            if delivery_method == "COURIER":
+                rate_per_km = local_rate
+            else:
+                rate_per_km = intercounty_rate
+
+            distance_fee = base_fee + (distance_km * rate_per_km)
+            
+            # 4. Weight Surcharge (if weight is provided)
+            weight_fee = total_weight_kg * weight_surcharge
+
+            # 5. Value Insurance (Percentage of order total, capped at max)
+            insurance_fee = min(
+                order_total * (insurance_pct / 100.0),
+                max_insurance
+            )
+
+            # 6. Calculate Total
+            total_shipping_cost = distance_fee + weight_fee + insurance_fee
+            
+            # Round to nearest whole number
+            final_cost = round(total_shipping_cost)
+
+            return custom_json_response(
+                0, 
+                "Shipping calculated successfully", 
+                "shipping_cost", 
+                final_cost
+            )
+            
+        except ValueError:
+            raise exceptions.ValidationError("Invalid coordinates or numeric formats")
+
     raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
 
 # ===========================================================================
 # Staff — indents / orders / prescriptions
