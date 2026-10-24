@@ -452,6 +452,7 @@ from rest_framework.pagination import PageNumberPagination
 from authentication.serializers import EntityLocationHybridSerializer, CategoriesSerializer
 from authentication.validators.authentication_models_validators import validate_entity
 from core.responses import custom_success_message, custom_json_response, custom_error_response, custom_errors_response
+from entitylocations.models import Locations
 from . import models, retail_permissions, serializers, customer_order_responses
 from .utils import retailer_utils
 from .models import ShippingConfiguration
@@ -687,8 +688,26 @@ def retailerReceiptsJointAPIView(request):
         )
 
     elif action == "CalculateShippingRate":
+        # 1. Try to derive origin from the entitylocations app
+        entity_id = request.data.get("entity")
+        
+        # Fallback to whatever the frontend sent (if any)
         origin_lat = request.data.get("origin_latitude")
         origin_lng = request.data.get("origin_longitude")
+
+        if entity_id:
+            try:
+                # Fetch the location record for this retailer
+                location = Locations.objects.filter(entity_id=entity_id).first()
+                
+                if location and location.point:
+                    # GeoDjango PointField with SRID 4326 stores (longitude, latitude)
+                    origin_lng = float(location.point.x) # Longitude
+                    origin_lat = float(location.point.y) # Latitude
+            except Exception as e:
+                # Log the error, but let it fall back to frontend coordinates
+                print(f"Error fetching entity location: {e}")
+
         dest_lat = request.data.get("destination_latitude")
         dest_lng = request.data.get("destination_longitude")
         delivery_method = request.data.get("delivery_method", "COURIER")
@@ -700,13 +719,13 @@ def retailerReceiptsJointAPIView(request):
             raise exceptions.ValidationError("Origin and Destination coordinates are required")
 
         try:
-            # 1. Calculate distance
+            # 2. Calculate distance using the exact retailer coordinates
             distance_km = calculate_haversine_distance(
                 float(origin_lat), float(origin_lng), 
                 float(dest_lat), float(dest_lng)
             )
 
-            # 2. Fetch Pricing Engine Config
+            # 3. Fetch Pricing Engine Config
             config = ShippingConfiguration.objects.filter(is_active=True).first()
             
             if not config:
@@ -725,7 +744,7 @@ def retailerReceiptsJointAPIView(request):
                 insurance_pct = float(config.value_insurance_percentage)
                 max_insurance = float(config.max_value_insurance_fee)
 
-            # 3. Apply Distance Rates based on Method
+            # 4. Apply Distance Rates based on Method
             if delivery_method == "COURIER":
                 rate_per_km = local_rate
             else:
@@ -733,19 +752,17 @@ def retailerReceiptsJointAPIView(request):
 
             distance_fee = base_fee + (distance_km * rate_per_km)
             
-            # 4. Weight Surcharge (if weight is provided)
+            # 5. Weight Surcharge
             weight_fee = total_weight_kg * weight_surcharge
 
-            # 5. Value Insurance (Percentage of order total, capped at max)
+            # 6. Value Insurance
             insurance_fee = min(
                 order_total * (insurance_pct / 100.0),
                 max_insurance
             )
 
-            # 6. Calculate Total
+            # 7. Calculate Total
             total_shipping_cost = distance_fee + weight_fee + insurance_fee
-            
-            # Round to nearest whole number
             final_cost = round(total_shipping_cost)
 
             return custom_json_response(
@@ -759,8 +776,6 @@ def retailerReceiptsJointAPIView(request):
             raise exceptions.ValidationError("Invalid coordinates or numeric formats")
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
-
-
 
 # ===========================================================================
 # Staff — indents / orders / prescriptions
