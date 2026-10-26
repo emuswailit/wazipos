@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 # Core responses and logging
 from core.responses import custom_success_message, custom_error_response
-from core.logs import create_log
+from utils.logging import create_log
 
 # Authentication Utils
 from authentication.utils.utils import (
@@ -17,7 +17,9 @@ from authentication.utils.utils import (
 
 # Payments & Subscriptions
 from payments.models import PaymentMethods
-from payments.utils import jambopay_mobile_checkout
+from intergrations.jambopay.jp_mobile_money_checkout import (
+    jambopay_mobile_checkout,
+)
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer
 

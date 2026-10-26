@@ -598,6 +598,7 @@ class EntityMiniSerializer(serializers.ModelSerializer):
             "email",
             "entity_type",
             "entity_ownership",
+            "monthly_subscription",
             "town",
             "postal_address",
             "country",
@@ -677,6 +678,7 @@ class EntitySerializer(serializers.ModelSerializer):
             "registration_fee",
             "commission_percentage",
             "registration_fee_paid",
+            "monthly_subscription",
             "offer_trial",
             "created",
             "updated",
@@ -2681,6 +2683,7 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
             "rating",
             "images",
             "owner_details",
+            "monthly_subscription",
         ]
         read_only_fields = fields 
 

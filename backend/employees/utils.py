@@ -1,5 +1,5 @@
 from rest_framework import exceptions
-from employees.models import Employees, Designations, Adverts, DeliveryPersons
+from employees.models import Employees, Designations, Adverts, Employees
 from core.utils import date_is_current_or_future
 from authentication.models import Users, Roles, Departments, Entities, Cadres
 from authentication.validators.authentication_models_validators import validate_entity
@@ -468,7 +468,7 @@ def create_delivery_person(data, user):
             'Roles to assign this user is required')
 
     try:
-        created = DeliveryPersons.objects.create(
+        created = Employees.objects.create(
             user=entered_user,
             is_active=data["delivery_person_details"]["user"],
             owner=user,
@@ -665,8 +665,8 @@ def get_entity_employees_by_id(data):
 
 def get_entity_delivery_persons(user, data):
 
-    if DeliveryPersons.objects.filter(entity=user.entity).exists():
-        return DeliveryPersons.objects.filter(entity=user.entity).all()
+    if Employees.objects.filter(entity=user.entity).exists():
+        return Employees.objects.filter(entity=user.entity).all()
     else:
         return []
 

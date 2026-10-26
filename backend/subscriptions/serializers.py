@@ -4,7 +4,7 @@ class SubscriptionPaymentsSerializer(serializers.ModelSerializer):
     entity_title=serializers.SerializerMethodField(read_only=True)
     class Meta:
         ordering = ["-id"]
-        model = models.SubscriptionPayments
+        model = models.SubscriptionPayment
         fields = (
             "id",
             "owner",

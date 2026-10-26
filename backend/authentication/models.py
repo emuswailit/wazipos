@@ -817,6 +817,7 @@ class Entities(models.Model):
     order_days = models.IntegerField(default=30,null=True,blank=True)
     registration_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     commission_percentage = models.DecimalField(max_digits=10, decimal_places=2, default=3.00)
+    monthly_subscription = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     is_active = models.BooleanField(default=True)
     trial_from = models.DateField(blank=True,null=True)
     trial_to = models.DateField(blank=True,null=True)
@@ -1814,6 +1815,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
         decodeJTW["entity_registration_paid"] = f"{entity_registration_paid}"
         decodeJTW["entity_trial_done"] = f"{entity_trial_done}"
         decodeJTW["entity_title"] = f"{self.entity.title}"
+        decodeJTW["monthly_subscription"] = f"{self.entity.monthly_subscription}"
         decodeJTW["marital_status"] = f"{self.marital_status}"
         decodeJTW["education_level"] = f"{self.education_level}"
         if self.country:

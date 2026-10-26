@@ -48,7 +48,7 @@ from authentication.models import (
 from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
 from core.models import EntityRelatedModel
 from drugs.models import Frequency, Preparation, Routes, Users
-from employees.models import DeliveryPersons, Employees
+from employees.models import  Employees
 from entitylocations.models import BodaLocations
 from wholesalers.models import (
     RetailerOrderItems,
@@ -1866,7 +1866,7 @@ class ShippingAddress(EntityRelatedModel):
         blank=True,
     )
     delivery_person = models.ForeignKey(
-        DeliveryPersons, on_delete=models.CASCADE, null=True, blank=True
+        Employees, on_delete=models.CASCADE, null=True, blank=True
     )
     country = models.ForeignKey(
         Countries, on_delete=models.CASCADE, null=True, blank=True
