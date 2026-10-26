@@ -17,7 +17,9 @@ from authentication.utils.utils import (
 
 # Payments & Subscriptions
 from payments.models import PaymentMethods
-from payments.utils import jambopay_mobile_checkout
+from intergrations.jambopay.jp_mobile_money_checkout import (
+    jambopay_mobile_checkout,
+)
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer
 
