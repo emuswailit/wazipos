@@ -184,6 +184,7 @@ class EntitiesAdmin(admin.ModelAdmin):
         "is_verified",
         "entity_type",
         "entity_ownership",
+        "monthly_subscription"
     )
     list_filter = ("title",)
     search_fields = ("title",)

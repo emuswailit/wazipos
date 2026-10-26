@@ -1,12 +1,12 @@
 import json
-from decouple import config  # 🌟 Import decouple
+from decouple import config
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, exceptions
 from django.contrib.auth import get_user_model
 
 # Core responses and logging
 from core.responses import custom_success_message, custom_error_response
-from utils.logging import create_log
+from core.logs import create_log
 
 # Authentication Utils
 from authentication.utils.utils import (
@@ -17,9 +17,7 @@ from authentication.utils.utils import (
 
 # Payments & Subscriptions
 from payments.models import PaymentMethods
-from intergrations.jambopay.jp_mobile_money_checkout import (
-    jambopay_mobile_checkout,
-)
+from payments.utils import jambopay_mobile_checkout
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer
 
@@ -34,17 +32,17 @@ def subscriptionsDispatcherAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
+    # 🌟 Get entity directly from the logged-in user
+    entity = request.user.entity
+    if not entity:
+        raise exceptions.ValidationError("User is not associated with any entity")
+
     # ==========================================
     # 🌟 1. GET ENTITY SUBSCRIPTIONS
     # ==========================================
     if action == "GetEntitySubscriptions":
-        entity_id = request.data.get("entity_id") or request.data.get("entity")
-        
-        if not entity_id:
-            raise exceptions.ValidationError("entity_id is required")
-
         subscriptions = Subscription.objects.filter(
-            entity_id=entity_id
+            entity=entity
         ).order_by('-created')[:10]
 
         if not subscriptions.exists():
@@ -67,21 +65,25 @@ def subscriptionsDispatcherAPIView(request):
     # 🌟 2. INITIATE SUBSCRIPTION PAYMENT
     # ==========================================
     elif action == "InitiateSubscriptionPayment":
-        entity_id = request.data.get("entity_id")
         phone_number = request.data.get("phone_number")
-        amount = request.data.get("amount")
 
-        if not entity_id or not phone_number or not amount:
-            raise exceptions.ValidationError("entity_id, phone_number, and amount are required")
+        if not phone_number:
+            raise exceptions.ValidationError("phone_number is required")
+
+        # 🌟 Fetch the amount from the entity's monthly_subscription attribute
+        amount = getattr(entity, "monthly_subscription", 0.00)
+        
+        if not amount or float(amount) <= 0:
+            return custom_error_response(1, "This entity does not have a valid subscription amount configured")
 
         # 1. Validate the mobile money payment method
         payment_method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
         if not payment_method:
             return custom_error_response(1, "Mobile Money payment method not configured")
 
-        # 2. Retrieve Platform Collection Till and Jambopay URL from .env using decouple
+        # 2. Retrieve Platform Collection Till and Jambopay URL from .env
         platform_account_number = config("WAZIPOS_SYSTEM_TILL", default="")
-        jambopay_base_url = config("JAMBOPAY_BASE_URL", default="") # Kept in case checkout uses it
+        jambopay_base_url = config("JAMBOPAY_BASE_URL", default="") 
         
         if not platform_account_number:
             return custom_error_response(1, "Platform collection till number is not configured in the environment")
@@ -96,9 +98,7 @@ def subscriptionsDispatcherAPIView(request):
             return custom_error_response(1, f"Invalid phone number: {str(e)}")
 
         # 4. Generate Reference Number
-        reference_number = generate_reference_number(
-            request.user.entity, request.user
-        )
+        reference_number = generate_reference_number(entity, request.user)
         
         payload = None
 
@@ -144,7 +144,7 @@ def subscriptionsDispatcherAPIView(request):
                 reference_number=reference_number,
                 psp_reference_number=result_json.get("ref"),
                 amount=float(amount),
-                entity_id=entity_id,
+                entity=entity,
                 owner=request.user,
             )
 
@@ -157,6 +157,7 @@ def subscriptionsDispatcherAPIView(request):
                 {
                     "payment_id": sub_payment.id,
                     "reference_number": reference_number,
+                    "amount": float(amount),
                 },
                 "payment"
             )
