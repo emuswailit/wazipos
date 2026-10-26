@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 # Core responses and logging
 from core.responses import custom_success_message, custom_error_response
-from core.logs import create_log
+from utils.logging import create_log
 
 # Authentication Utils
 from authentication.utils.utils import (
