@@ -1,5 +1,168 @@
-from django.shortcuts import render
+import json
+from decouple import config  # 🌟 Import decouple
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions, exceptions
+from django.contrib.auth import get_user_model
 
-# Create your views here.
-def index(request):
-    return render(request,"index.html")
+# Core responses and logging
+from core.responses import custom_success_message, custom_error_response
+from core.logs import create_log
+
+# Authentication Utils
+from authentication.utils.utils import (
+    generate_reference_number,
+    get_telco_by_phone_number,
+    use_reference_number,
+)
+
+# Payments & Subscriptions
+from payments.models import PaymentMethods
+from payments.utils import jambopay_mobile_checkout
+from .models import Subscription, SubscriptionPayment
+from .serializers import SubscriptionSerializer
+
+Users = get_user_model()
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def subscriptionsDispatcherAPIView(request):
+    try:
+        action = request.data["action"]
+    except KeyError:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    # ==========================================
+    # 🌟 1. GET ENTITY SUBSCRIPTIONS
+    # ==========================================
+    if action == "GetEntitySubscriptions":
+        entity_id = request.data.get("entity_id") or request.data.get("entity")
+        
+        if not entity_id:
+            raise exceptions.ValidationError("entity_id is required")
+
+        subscriptions = Subscription.objects.filter(
+            entity_id=entity_id
+        ).order_by('-created')[:10]
+
+        if not subscriptions.exists():
+            return custom_error_response(1, "No subscriptions found for this entity")
+
+        serializer = SubscriptionSerializer(
+            subscriptions, 
+            many=True, 
+            context={"request": request}
+        )
+
+        return custom_success_message(
+            0, 
+            "Subscriptions retrieved successfully", 
+            serializer.data, 
+            "subscriptions"
+        )
+
+    # ==========================================
+    # 🌟 2. INITIATE SUBSCRIPTION PAYMENT
+    # ==========================================
+    elif action == "InitiateSubscriptionPayment":
+        entity_id = request.data.get("entity_id")
+        phone_number = request.data.get("phone_number")
+        amount = request.data.get("amount")
+
+        if not entity_id or not phone_number or not amount:
+            raise exceptions.ValidationError("entity_id, phone_number, and amount are required")
+
+        # 1. Validate the mobile money payment method
+        payment_method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
+        if not payment_method:
+            return custom_error_response(1, "Mobile Money payment method not configured")
+
+        # 2. Retrieve Platform Collection Till and Jambopay URL from .env using decouple
+        platform_account_number = config("WAZIPOS_SYSTEM_TILL", default="")
+        jambopay_base_url = config("JAMBOPAY_BASE_URL", default="") # Kept in case checkout uses it
+        
+        if not platform_account_number:
+            return custom_error_response(1, "Platform collection till number is not configured in the environment")
+
+        if not jambopay_base_url:
+            return custom_error_response(1, "JamboPay Base URL is not configured in the environment")
+
+        # 3. Get Telco and format phone number
+        try:
+            telco, formatted_phone_number = get_telco_by_phone_number(phone_number)
+        except Exception as e:
+            return custom_error_response(1, f"Invalid phone number: {str(e)}")
+
+        # 4. Generate Reference Number
+        reference_number = generate_reference_number(
+            request.user.entity, request.user
+        )
+        
+        payload = None
+
+        # 5. Build JamboPay Payload based on Telco
+        if telco == "MPESA":
+            payload = json.dumps({
+                "orderId": reference_number,
+                "amount": float(amount),
+                "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c", 
+                "accountTo": platform_account_number, 
+                "description": "Subscription Topup",
+                "modeOfPayment": "MOBILE_MONEY",
+                "provider": "Mpesa",
+                "data": {
+                    "phoneNumber": formatted_phone_number,
+                    "serviceType": "TOPUP",
+                },
+            })
+        elif telco == "AIRTELMONEY":
+            payload = json.dumps({
+                "orderId": reference_number,
+                "amount": float(amount),
+                "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                "accountTo": platform_account_number, 
+                "currency": "KES",
+                "description": "Subscription Topup",
+                "modeOfPayment": "MOBILE_MONEY",
+                "provider": "AIRTELMONEY",
+                "data": {
+                    "phoneNumber": formatted_phone_number,
+                    "serviceType": "TOPUP",
+                },
+            })
+        else:
+            return custom_error_response(1, f"Unsupported Telco: {telco}")
+
+        # 6. Hit JamboPay 
+        errors, result_json = jambopay_mobile_checkout(payload)
+
+        if result_json:
+            # 7. Create the SubscriptionPayment record
+            sub_payment = SubscriptionPayment.objects.create(
+                reference_number=reference_number,
+                psp_reference_number=result_json.get("ref"),
+                amount=float(amount),
+                entity_id=entity_id,
+                owner=request.user,
+            )
+
+            # 8. Mark reference number as USED
+            use_reference_number(reference_number)
+
+            return custom_success_message(
+                0,
+                "STK push initiated successfully",
+                {
+                    "payment_id": sub_payment.id,
+                    "reference_number": reference_number,
+                },
+                "payment"
+            )
+        else:
+            create_log("error", f"Errors at subscription payment: {errors}")
+            return custom_error_response(1, f"Payment initiation failed: {errors}")
+
+    # ==========================================
+    # 🌟 3. UNKNOWN ACTION
+    # ==========================================
+    raise exceptions.ValidationError(f"Action {action} is unknown")

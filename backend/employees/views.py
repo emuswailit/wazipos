@@ -33,13 +33,11 @@ def advertsAPIView(request):
             return custom_success_message(
                 0, "Advert created successfully", serializer.data, 'advert'
             )
-
         else:
             return custom_error_response(1, "Advert could not be created")
 
     elif request.data["action"] == "GetAdverts":
         """Retrieve adverts for a particular entity"""
-
         designations = utils.get_entity_adverts(request.user)
 
         paginator = PageNumberPagination()
@@ -50,7 +48,6 @@ def advertsAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     elif request.data["action"] == "UpdateAdvert":
-
         designation = utils.update_advert(request.data, request.user)
         if designation:
             serializer = serializers.AdvertsSerializer(
@@ -61,6 +58,7 @@ def advertsAPIView(request):
             )
         else:
             return custom_error_response(1, "Advert could not be updated")
+            
     elif request.data["action"] == "AdvertDetails":
         advert = None
         try:
@@ -78,7 +76,6 @@ def advertsAPIView(request):
                 return custom_error_response(
                     1, "Advert could not be retrieved"
                 )
-
         except KeyError:
             raise exceptions.ValidationError("Advert ID are required")
 
@@ -106,13 +103,11 @@ def designationsAPIView(request):
             return custom_success_message(
                 0, "Employee created successfully", serializer.data, 'employee'
             )
-
         else:
             return custom_error_response(1, "Employee could not be created")
 
     elif request.data["action"] == "EntityDesignations":
         """Retrieve designations for a particular entity"""
-
         designations = utils.get_entity_designations(request.user)
 
         paginator = PageNumberPagination()
@@ -123,7 +118,6 @@ def designationsAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     elif request.data["action"] == "UpdateDesignation":
-
         designation = utils.update_designation(request.data, request.user)
         if designation:
             serializer = serializers.DesignationsSerializer(
@@ -134,6 +128,7 @@ def designationsAPIView(request):
             )
         else:
             return custom_error_response(1, "Designation could not be updated")
+            
     elif request.data["action"] == "DesignationDetails":
         designation = None
         try:
@@ -151,7 +146,6 @@ def designationsAPIView(request):
                 return custom_error_response(
                     1, "Desigantion could not be retrieved"
                 )
-
         except KeyError:
             raise exceptions.ValidationError("Designation ID are required")
 
@@ -170,11 +164,11 @@ def employeesAdminAPIView(request):
 
     if request.data["action"] == "CreateEmployee":
         errors = []
-        errors= utils.validate_employee_data(request.data, request.user)
+        errors = utils.validate_employee_data(request.data, request.user)
 
-        if len(errors)>0:
+        if len(errors) > 0:
             return custom_errors_response(
-                1, "Employee could not be created",errors
+                1, "Employee could not be created", errors
             )
         else:
             employee = utils.create_employee(request.data, request.user)
@@ -185,55 +179,45 @@ def employeesAdminAPIView(request):
                 return custom_success_message(
                     0, "Employee created successfully", serializer.data, 'employee'
                 )
-
             else:
                 return custom_error_response(1, "Employee could not be created")
-    if request.data["action"] == "CreateCorporateEmployee":
-       
-
+                
+    elif request.data["action"] == "CreateCorporateEmployee":
         errors, employee = utils.create_corporate_employee(request.data, request.user)
         if employee:
-            print("emo",employee)
             serializer = serializers.EmployeesSerializer(
                 employee, many=False, context={"request": request}
             )
             return custom_success_message(
                 0, "Employee created successfully", serializer.data, 'employee'
             )
-
         else:
             return custom_errors_response(
-                1, "Employee  could not be created",errors
-            )
-    if request.data["action"] == "CreateDeliveryPerson":
-
-        delivery_person = utils.create_delivery_person(
-            request.data, request.user)
-        if delivery_person:
-            serializer = serializers.DeliveryPersonSerializer(
-                delivery_person, many=False, context={"request": request}
-            )
-            return custom_success_message(
-                0, "Delivery person  created successfully", serializer.data, 'delivery_person'
+                1, "Employee could not be created", errors
             )
 
-        else:
-            return custom_error_response(1, "Delivery person could not be created")
+    # 🌟 UPDATED: Delivery Persons now fetched from Employees
     elif request.data["action"] == "GetEntityDeliveryPersons":
-        """Retrieve delivery people for a particualr entity"""
-
-        employees = utils.get_entity_delivery_persons(
-            request.user, request.data)
+        """Retrieve delivery staff for a particular entity"""
+        
+        entity_id = request.data.get("entity")
+        
+        # We query the Employees model directly using the new can_deliver flag
+        employees = models.Employees.objects.filter(
+            entity_id=entity_id,
+            can_deliver=True,
+            is_active="true"
+        )
 
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(employees, request)
         serializer = serializers.EmployeesSerializer(
-            page, many=True, context={"request": request, "delivery_persons": request.user}
+            page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
+
     elif request.data["action"] == "GetAllEmployees":
         """Retrieve all employees"""
-
         if not request.user.is_staff:
             raise exceptions.ValidationError(
                 'Not authorized to access this content')
@@ -246,9 +230,9 @@ def employeesAdminAPIView(request):
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
+        
     elif request.data["action"] == "RetrieveEntityEmployees":
-        """Retrieve employees for a particualr entity"""
-
+        """Retrieve employees for a particular entity"""
         employees = utils.get_entity_employees(request.user, request.data)
 
         paginator = PageNumberPagination()
@@ -257,9 +241,9 @@ def employeesAdminAPIView(request):
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
+        
     elif request.data["action"] == "RetrieveEntityEmployeesById":
-        """Retrieve employees for a particualr entity by ID"""
-
+        """Retrieve employees for a particular entity by ID"""
         employees = utils.get_entity_employees_by_id(request.data)
 
         paginator = PageNumberPagination()
@@ -268,9 +252,9 @@ def employeesAdminAPIView(request):
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
+        
     elif request.data["action"] == "RetrieveOwnedEmployees":
-        """Retrieve employees for a particualr user"""
-
+        """Retrieve employees for a particular user"""
         employees = utils.get_owned_employees(request.user)
 
         paginator = PageNumberPagination()
@@ -279,8 +263,8 @@ def employeesAdminAPIView(request):
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
+        
     elif request.data["action"] == "UpdateEmployee":
-
         errors, employee = utils.update_employee(request.data, request.user)
         if employee:
             serializer = serializers.EmployeesSerializer(
@@ -290,12 +274,12 @@ def employeesAdminAPIView(request):
                 0, "Employee updated successfully", serializer.data, 'employee'
             )
         else:
-            return custom_errors_response(1, "Employee could not be updated",errors)
+            return custom_errors_response(1, "Employee could not be updated", errors)
+            
     elif request.data["action"] == "EmployeeDetails":
         employee = None
         try:
             employee_id = request.data["employee"]
-            print('empid', employee_id)
             if employee_id:
                 if models.Employees.objects.filter(id=employee_id).exists():
                     employee = models.Employees.objects.filter(
@@ -310,7 +294,6 @@ def employeesAdminAPIView(request):
                     return custom_error_response(
                         1, "No employee exists for supplied ID"
                     )
-
         except KeyError:
             raise exceptions.ValidationError("Employee ID are required")
     
@@ -322,7 +305,6 @@ def employeesAdminAPIView(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def employeesJointAPIView(request):
-    print("user", request.user)
     try:
         action = request.data["action"]
     except KeyError:
@@ -345,13 +327,12 @@ def employeesJointAPIView(request):
                 return custom_error_response(
                     1, "Employee could not be retrieved"
                 )
-
         except KeyError:
             raise exceptions.ValidationError("Employee ID are required")
+            
     elif request.data["action"] == "CurrentUserEmployment":
         employee = None
         try:
-
             if models.Employees.objects.filter(user=request.user, is_active='true').exists():
                 employee = models.Employees.objects.filter(
                     user=request.user, is_active='true').first()
@@ -365,9 +346,9 @@ def employeesJointAPIView(request):
                 return custom_error_response(
                     1, f"You are not actively employed currently."
                 )
-
         except KeyError:
             raise exceptions.ValidationError("Employee ID are required")
+            
     else:
         raise exceptions.ValidationError(
             f'Action { request.data["action"]} is unknown')
@@ -376,18 +357,18 @@ def employeesJointAPIView(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def agentsOnlyAPIView(request):
-    
     if not request.user.is_agent:
         raise exceptions.ValidationError("Not authorized")
     else:
         pass
+        
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-
-
+    # ... [rest of your agents logic] ...
+    
     else:
         raise exceptions.ValidationError(
             f'Action { request.data["action"]} is unknown')

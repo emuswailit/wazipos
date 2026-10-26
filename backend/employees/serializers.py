@@ -68,19 +68,6 @@ class DesignationsSerializer(serializers.ModelSerializer):
         if not created:
             raise exceptions.ValidationError("instance alreaady exists..")
         return instance
-        # validators = [
-        #     UniqueTogetherValidator(
-        #         queryset=models.Designations.objects.all(),
-        #         fields=['title', 'entity']
-        #     )
-        # ]
-
-    # def get_entity_details(self, obj):
-    #     entity = None
-
-    #     entity = Entities.objects.get(id=obj.entity.id)
-
-    #     return EntitySerializer(entity, context=self.context).data
 
     def get_cadre_title(self, obj):
         if obj.cadre:
@@ -97,7 +84,6 @@ class EmployeesSerializer(serializers.ModelSerializer):
     Employees serializer
     """
 
-    # current_employment = serializers.SerializerMethodField(read_only=True)
     user_id = serializers.SerializerMethodField(read_only=True)
     current_branch_title = serializers.SerializerMethodField(read_only=True)
     user_title = serializers.SerializerMethodField(read_only=True)
@@ -140,6 +126,7 @@ class EmployeesSerializer(serializers.ModelSerializer):
             "images",
             "is_active",
             "is_authorized",
+            "can_deliver", # 🌟 Added to handle deliveries
             "user_id",
             "user_title",
             "counter_discount_limit",
@@ -162,11 +149,13 @@ class EmployeesSerializer(serializers.ModelSerializer):
 
     def get_title(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
+
     def get_advert_title(self, obj):
         if obj.advert:
             return f"{obj.advert.title}"
         else:
             return ""
+
     def get_current_branch_title(self, obj):
         if obj.current_branch:
             return f"{obj.current_branch.title}"
@@ -178,8 +167,10 @@ class EmployeesSerializer(serializers.ModelSerializer):
     
     def get_user_title(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
+
     def get_email(self, obj):
         return f"{obj.user.email} "
+
     def get_phone(self, obj):
         return f"{obj.user.phone}"
 
@@ -205,24 +196,22 @@ class EmployeesSerializer(serializers.ModelSerializer):
         basic_salary = 0.00
         if models.Salaries.objects.filter(employee=obj).exists():
             salary = models.Salaries.objects.filter(employee=obj).first()
-            basic_salary=salary.basic_salary
+            basic_salary = salary.basic_salary
         return basic_salary
     
     def get_house_allowance(self, obj):
         house_allowance = 0.00
         if models.Salaries.objects.filter(employee=obj).exists():
             salary = models.Salaries.objects.filter(employee=obj).first()
-            house_allowance=salary.house_allowance
+            house_allowance = salary.house_allowance
         return house_allowance
     
     def get_other_allowance(self, obj):
         other_allowance = 0.00
         if models.Salaries.objects.filter(employee=obj).exists():
             salary = models.Salaries.objects.filter(employee=obj).first()
-            other_allowance=salary.other_allowance
+            other_allowance = salary.other_allowance
         return other_allowance
-    
-
 
     def get_entity_title(self, obj):
         return obj.entity.title
@@ -245,46 +234,10 @@ class EmployeesSerializer(serializers.ModelSerializer):
         else:
             return ""
 
-    # def get_designation_details(self, obj):
-    #     designation = None
-    #     if (
-    #         obj.designation
-    #         and models.Designations.objects.filter(id=obj.designation.id).count() > 0
-    #     ):
-    #         designation = models.Designations.objects.get(id=obj.designation.id)
-    #         return DesignationsSerializer(designation, context=self.context).data
-    #     else:
-    #         return None
-
-    # def get_salary_details(self, obj):
-    #     designation = None
-    #     if models.Salaries.objects.filter(employee=obj).count() > 0:
-    #         designation = models.Salaries.objects.filter(employee=obj).first()
-    #         return SalariesSerializer(designation, context=self.context).data
-    #     else:
-    #         return None
-
-    # def get_entity_details(self, obj):
-    #     return EntitySerializer(obj.entity, context=self.context).data
-
-    # def get_department_details(self, obj):
-    #     designation = None
-    #     if (
-    #         obj.department
-    #         and models.Departments.objects.filter(id=obj.department_id).count() > 0
-    #     ):
-    #         designation = models.Departments.objects.filter(
-    #             id=obj.department_id
-    #         ).first()
-    #         return DepartmentsSerializer(designation, context=self.context).data
-    #     else:
-    #         return None
-
     @transaction.atomic
     def create(self, validated_data):
         employee_profile = None
         roles = None
-        # entity = validated_data.get('entity', None)
         # Remove roles from the other data
         employee_roles = validated_data.pop("employee_roles", None)
         advert = validated_data.get("advert", None)
@@ -345,7 +298,6 @@ class EmployeesSerializer(serializers.ModelSerializer):
         created.designation.save()
 
         # Setting of employee roles
-
         if employee_roles:
             created.employee_roles.set(employee_roles)
             default_role = Roles.objects.get(value="CLIENT")
@@ -359,87 +311,19 @@ class EmployeesSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         owner = self.context.get("user")
-
         new_roles = validated_data.pop("employee_roles", None)
 
-        print("uPDATING ", owner)
-        print("roles ", new_roles)
-        print(
-            "user ",
-        )
+        # Handle the update of can_deliver if it's passed
+        if "can_deliver" in validated_data:
+            instance.can_deliver = validated_data["can_deliver"]
 
-        print(
-            "Roles updated",
-            update_employee_roles(instance, new_roles, owner),
-        )
-        print("Ux", instance.user.roles.all())
-        print("Ex", instance.employee_roles.all())
-
-        # if employee_roles:
-        #     #    Clear roles then add new ones
-        #     instance.user.roles.clear()
-        #     instance.user.roles.set(instance.employee_roles.all())
-        #     instance.user.entity = owner.entity
-        #     instance.user.save()
-
-        # else:
-        #     # Clear all roles
-        #     instance.user.roles.clear()
-        #     instance.user.entity = owner.entity
-        #     instance.user.save()
-
-        # Switch user to new entity
-        # entity = validated_data.get("entity", None)
-        # if entity == owner.entity:
-        #     if owner.entity.is_verified:
-        #         instance.entity = owner.entity
-        #         instance.save()
-        #     else:
-        #         raise exceptions.ValidationError(f"Selected entity is not verified")
-        # Update hire date
-        # hire_date = validated_data.get("hire_date", None)
-        # if hire_date:
-        #     instance.hire_date = hire_date
-        #     instance.save()
-
-        # # Update terminal date
-        # terminal_date = validated_data.get("terminal_date", None)
-        # if terminal_date and terminal_date < instance.hire_date:
-        #     raise exceptions.ValidationError(
-        #         "Terminal date cannot be a before hire date"
-        #     )
-
-        # if terminal_date:
-        #     instance.terminal_date = terminal_date
-        #     instance.save()
-
+        update_employee_roles(instance, new_roles, owner)
+        instance.save()
+        
         return instance
 
 
-class DeliveryPersonsSerializer(serializers.ModelSerializer):
-    """
-    Delivery person serializer
-    """
-
-    class Meta:
-        model = models.DeliveryPersons
-        fields = (
-            "id",
-            "entity",
-            "user",
-            "is_active",
-            "owner",
-            "created",
-            "updated",
-        )
-
-        read_only_fields = (
-            "id",
-            "owner",
-            "entity",
-            "created",
-            "updated",
-        )
+# ❌ DELETED: DeliveryPersonsSerializer has been removed
 
 
 class SalariesSerializer(serializers.ModelSerializer):
@@ -514,30 +398,6 @@ class AdvertsSerializer(serializers.ModelSerializer):
         if not created:
             raise exceptions.ValidationError("instance alreaady exists..")
         return instance
-
-    # def create(self, validated_data):
-    #     closes = validated_data.get('closes', None)
-    #     if closes < datetime.date.today():
-    #         raise exceptions.ValidationError(
-    #             "Closing date is in the past")
-
-    #     designation = validated_data.get('designation', None)
-    #     vacancies = validated_data.get('vacancies', None)
-    #     if vacancies > designation.total_slots:
-    #         raise exceptions.ValidationError(
-    #             "Advertised vacancies cannot be more than designation available slots")
-    #     if closes and closes < datetime.date.today():
-    #         raise exceptions.ValidationError(
-    #             "Closing date cannot be a past date")
-
-    #     instance, created = models.Adverts.objects.get_or_create(
-    #         **validated_data)
-    #     if not created:
-    #         raise exceptions.ValidationError('instance alreaady exists..')
-    #     if instance:
-    #         instance.designation.advertised_slots = instance.designation.advertised_slots + vacancies
-    #         instance.designation.save()
-    #     return instance
 
     def get_entity_title(self, obj):
         entity_title = ""

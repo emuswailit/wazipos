@@ -7,8 +7,6 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
-
-
 class Designations(EntityRelatedModel):
     TENURE_CHOICES = (
         ("CONTRACTUAL", "CONTRACTUAL"),
@@ -101,13 +99,6 @@ class Employees(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    # facility_sub_store = models.ForeignKey(
-    #     "logistics.FacilitySubStore",
-    #     on_delete=models.CASCADE,
-    #     related_name="employees_facility_sub_store",
-    #     null=True,
-    #     blank=True,
-    # )
     user = models.ForeignKey(Users, on_delete=models.CASCADE)
     advert = models.ForeignKey(Adverts, on_delete=models.CASCADE, null=True, blank=True)
     hire_date = models.DateField(null=True, blank=True)
@@ -118,17 +109,31 @@ class Employees(EntityRelatedModel):
     is_authorized = models.CharField(
         choices=ACTIVE_CHOICES, default="false", max_length=5
     )
+    
+    # 🌟 NEW: Flag to indicate if this employee can fulfil deliveries
+    can_deliver = models.BooleanField(
+        default=False, 
+        help_text="Check if this employee is allowed to fulfil deliveries (e.g., riders, drivers, clerks)."
+    )
+    
     terminal_date = models.DateField(null=True, blank=True)
     owner = models.ForeignKey(
         Users, related_name="employee_created_by", on_delete=models.CASCADE
     )
-    # assigned_routes = models.ManyToManyField("transport.OperationRoutes",blank=True)
-    assigned_branches = models.ManyToManyField(EntityBranches,blank=True)
-    current_branch = models.ForeignKey(EntityBranches,blank=True, null=True,on_delete=models.DO_NOTHING,related_name="current_assigned_outlet")
+    assigned_branches = models.ManyToManyField(EntityBranches, blank=True)
+    current_branch = models.ForeignKey(
+        EntityBranches, 
+        blank=True, 
+        null=True, 
+        on_delete=models.DO_NOTHING, 
+        related_name="current_assigned_outlet"
+    )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name}"
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -136,50 +141,6 @@ class Employees(EntityRelatedModel):
                 name="One can be employed only once in an organisation",
             ),
         ]
-
-
-class DeliveryPersons(EntityRelatedModel):
-    """
-    A profile should only have one instance of employee. Only entity should be changed when user moves to another entity
-    """
-
-    ACTIVE_CHOICES = (
-        ("true", "true"),
-        ("false", "false"),
-    )
-    entity = models.ForeignKey(Entities, on_delete=models.CASCADE)
-    user = models.ForeignKey(Users, on_delete=models.CASCADE)
-    is_active = models.CharField(choices=ACTIVE_CHOICES, default="true", max_length=5)
-    owner = models.ForeignKey(
-        Users, related_name="delivery_person_created_by", on_delete=models.CASCADE
-    )
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "entity"], name="One can be courier once in an entity"
-            ),
-        ]
-
-    # class Meta:
-    #     unique_together = ("user", "entity")
-
-    # def save(self, *args, **kwargs):
-    #     print("Niko hapa")
-    #     if len(self.employee_roles.all()) > 0:
-    #         all_user = self.user.roles.all()
-    #         entity_user_roles = self.employee_roles.roles.all()
-    #         print("all_user_roles", all_user_roles)
-    #         print("entity_user_roles", entity_user_roles)
-    #     super(Employees, self).save(*args, **kwargs)
-
-    # class Meta:
-    #     unique_together = ('entity', 'profile',)
-
-    # def __str__(self):
-    #     return f"{self.designation.title}"
 
 
 class Salaries(EntityRelatedModel):

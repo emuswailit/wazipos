@@ -14,7 +14,7 @@ django_asgi_app = get_asgi_application()
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.security.websocket import AllowedHostsOriginValidator
 
-
+from subscriptions.routing import subscriptions_websocket_urlpatterns
 from authentication.routing import authentication_websocket_urlpatterns
 from chats.routing import chats_websocket_urlpatterns
 from messaging.routing import messaging_websocket_urlpatterns
@@ -33,7 +33,8 @@ routes = (
     + authentication_websocket_urlpatterns
     + messaging_websocket_urlpatterns
     + products_websocket_urlpatterns
-    + analytics_websocket_urlpatterns    # NEW
+    + analytics_websocket_urlpatterns 
+    + subscriptions_websocket_urlpatterns    
 )
 
 
