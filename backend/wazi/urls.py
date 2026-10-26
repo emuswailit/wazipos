@@ -42,7 +42,7 @@ urlpatterns = [
     ## Swagger out
     # Swagger
     path("", schema_view.with_ui("swagger", cache_timeout=0), name="schema-swagger-ui"),
-    # path("",include("subscriptions.urls")),
+    path("api/v1/subscriptions/",include("subscriptions.urls")),
     # re_path(r'^.*$', index),
     # path("", index),
     path("redoc/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
