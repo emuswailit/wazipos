@@ -248,7 +248,7 @@ def subscriptionsDispatcherAPIView(request):
                 try:
                     tx_result = requests.get(transaction_url, headers=poll_headers)
                     
-                    if tx_result:
+                    if tx_result and not tx_result==None:
                         tx_data = tx_result.json()
                  
                         
@@ -275,7 +275,6 @@ def subscriptionsDispatcherAPIView(request):
                     "reference_number": reference_number,
                     "amount": amount,
                     "status": final_status,
-                    "description": tx_data.description,
                     "jambopay_response": tx_data
                 },
                 "payment"
