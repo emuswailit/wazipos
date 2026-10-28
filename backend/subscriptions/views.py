@@ -7,6 +7,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, exceptions
 from django.contrib.auth import get_user_model
 
+# 🌟 Import pagination
+from rest_framework.pagination import PageNumberPagination
+
 # Core responses and logging
 from core.responses import custom_success_message, custom_error_response
 from utils.logging import create_log
@@ -34,32 +37,45 @@ def subscriptionsDispatcherAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-    # 🌟 Get entity directly from the logged-in user
     entity = request.user.entity
     if not entity:
         raise exceptions.ValidationError("User is not associated with any entity")
 
     # ==========================================
-    # 🌟 1. GET ENTITY SUBSCRIPTIONS
+    # 🌟 1. GET ENTITY SUBSCRIPTIONS (PAGINATED)
     # ==========================================
     if action == "GetEntitySubscriptions":
         subscriptions = Subscription.objects.filter(
             entity=entity
-        ).order_by('-created')[:10]
+        ).order_by('-created')
 
-        if not subscriptions.exists():
+        # 🌟 Setup Pagination
+        paginator = PageNumberPagination()
+        # Allow frontend to request a specific page size, default to 10
+        paginator.page_size = request.data.get("page_size", 10) 
+        
+        # Paginate the queryset
+        paginated_subscriptions = paginator.paginate_queryset(subscriptions, request)
+
+        if not paginated_subscriptions and paginator.page.paginator.count == 0:
             return custom_error_response(1, "No subscriptions found for this entity")
 
         serializer = SubscriptionSerializer(
-            subscriptions, 
+            paginated_subscriptions, 
             many=True, 
             context={"request": request}
         )
 
+        # 🌟 Return the standard paginated payload wrapped in custom_success_message
         return custom_success_message(
             0, 
             "Subscriptions retrieved successfully", 
-            serializer.data, 
+            {
+                "results": serializer.data,
+                "count": paginator.page.paginator.count,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+            }, 
             "subscriptions"
         )
 
@@ -67,6 +83,7 @@ def subscriptionsDispatcherAPIView(request):
     # 🌟 2. INITIATE SUBSCRIPTION PAYMENT
     # ==========================================
     elif action == "InitiateSubscriptionPayment":
+        # ... (Keep your existing payment logic exactly as it is) ...
         mobile_money_phone = request.data.get("phone_number")
         errors = []
 
@@ -183,7 +200,7 @@ def subscriptionsDispatcherAPIView(request):
 
         create_log("info", f"result from json: {result_json}")
 
-        # 8. Create SubscriptionPayment Record
+        # 8. Create SubscriptionPayment Record & Poll for Status
         try:
             sub_payment = SubscriptionPayment.objects.create(
                 reference_number=reference_number,
@@ -191,13 +208,13 @@ def subscriptionsDispatcherAPIView(request):
                 amount=Decimal(str(amount)),
                 entity=entity,
                 owner=request.user,
-                status="PENDING", # 🌟 Explicitly set status
+                status="PENDING",
             )
             create_log("info", f"sub_payment created: {sub_payment.id}")
             
             use_reference_number(reference_number)
 
-            # 🌟 9. Poll JamboPay for transaction status (max 30 seconds)
+            # 9. Poll JamboPay for transaction status (max 30 seconds)
             max_wait_time = 30
             poll_interval = 3
             start_time = time.time()
@@ -227,11 +244,10 @@ def subscriptionsDispatcherAPIView(request):
                             final_status = current_status
                             status_description = tx_data.get("description", "")
                             
-                            # 🌟 Update the DB record so the WebSocket can read it
                             sub_payment.status = final_status 
                             sub_payment.save()
                             
-                            break # Exit loop immediately if completed
+                            break
                             
                 except Exception as poll_error:
                     create_log("error", f"Polling error for {order_id}: {str(poll_error)}")
@@ -259,7 +275,4 @@ def subscriptionsDispatcherAPIView(request):
             create_log("error", str(e))
             return custom_error_response(1, f"Failed to create payment record: {str(e)}")
 
-    # ==========================================
-    # 🌟 3. UNKNOWN ACTION
-    # ==========================================
     raise exceptions.ValidationError(f"Action {action} is unknown")
