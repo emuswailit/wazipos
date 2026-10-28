@@ -243,7 +243,7 @@ def subscriptionsDispatcherAPIView(request):
             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
 
             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
-
+            create_log("info",f"URL: {transaction_url}")
             while time.time() - start_time < max_wait_time:
                 try:
                     tx_result = requests.get(transaction_url, headers=poll_headers)
