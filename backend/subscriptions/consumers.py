@@ -3,6 +3,8 @@
 import json
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from utils.logging import create_log
+## Create log
 
 # Make sure to import the exact model and serializer names you are using
 from .models import Subscription, SubscriptionPayment
@@ -120,6 +122,7 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
         payment = SubscriptionPayment.objects.filter(
             reference_number=self.reference_number
         ).first()
+        create_log("SubscriptionPayment ref",self.reference_number)
 
         if payment:
             # 🌟 Using your exact serializer name here
