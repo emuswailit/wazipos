@@ -10,6 +10,7 @@ class SubscriptionPaymentsSerializer(serializers.ModelSerializer):
             "owner",
             "entity",
             "status",
+            "description",
             "entity_title",
             "operator_reference_number",
             "provider_reference_number",

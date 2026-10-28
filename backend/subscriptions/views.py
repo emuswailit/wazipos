@@ -254,8 +254,9 @@ def subscriptionsDispatcherAPIView(request):
                         current_status = str(tx_data.get("status", "")).upper()
                         
                         if is_completed:
-                            final_status = current_status
+                            final_status = tx_data.get("status", "")
                             status_description = tx_data.get("description", "")
+                            sub_payment.status = status_description 
                             sub_payment.status = final_status 
                             sub_payment.save()
                             break 

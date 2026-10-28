@@ -25,6 +25,7 @@ class SubscriptionPayment(EntityRelatedModel):
         ("CANCELLED", "CANCELLED"),
     )
 
+    description = models.CharField(max_length=120, null=True, blank=True)
     reference_number = models.CharField(max_length=120, null=True, blank=True)
     psp_reference_number = models.CharField(max_length=120, null=True, blank=True)
     operator_reference_number = models.CharField(max_length=120, null=True, blank=True)
