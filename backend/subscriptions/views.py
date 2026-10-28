@@ -218,7 +218,7 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"from jp errors {errors}")
             return custom_error_response(1, "Payment failed at JamboPay")
 
-        # 8. Create Record & Poll (Exactly 3 times)
+        # 8. Create Record & Poll (3 attempts over 30 seconds)
         try:
             sub_payment = SubscriptionPayment.objects.create(
                 reference_number=reference_number,
@@ -231,16 +231,16 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"sub_payment created: {sub_payment.id}")
             use_reference_number(reference_number)
 
-            # POLLING LOGIC: 3 attempts within 10 seconds
+            # POLLING LOGIC: 3 attempts, 10 seconds apart (max 30 seconds)
             max_attempts = 3
-            poll_interval = 3 
-            tx_data = result_json # Fallback to checkout response if poll fails
+            poll_interval = 10 
+            tx_data = result_json
             
             order_id = result_json.get("orderId", reference_number) 
             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
 
-            create_log("info", f"Starting 3 poll attempts for URL: {transaction_url}")
+            create_log("info", f"Starting poll attempts for URL: {transaction_url}")
 
             for attempt in range(max_attempts):
                 try:
@@ -251,33 +251,31 @@ def subscriptionsDispatcherAPIView(request):
                         tx_data = tx_result.json()
                         create_log("info", f"tx_data : {tx_data}")
                         
-                        is_completed = tx_data.get("completed", False)
+                        current_status = str(tx_data.get("status", "")).upper()
                         
-                        if is_completed:
-                            final_status = str(tx_data.get("status", "")).upper()
-                            status_description = tx_data.get("description", "")
-                            
-                            sub_payment.description = status_description 
-                            sub_payment.status = final_status 
+                        # If status is no longer PENDING, update DB and break
+                        if current_status and current_status != "PENDING":
+                            sub_payment.description = tx_data.get("description", "")
+                            sub_payment.status = current_status
                             if tx_data.get("providerRef"):
                                 sub_payment.provider_reference_number = tx_data.get("providerRef")
-                                
+                            
                             sub_payment.save()
-                            break
+                            break 
                             
                 except Exception as poll_error:
                     create_log("error", f"Polling error for {order_id}: {str(poll_error)}")
                 
+                # Don't sleep on the very last attempt
                 if attempt < max_attempts - 1:
                     time.sleep(poll_interval)
 
-            # 🌟 Ensure 'status' and 'description' exist in the final tx_data for the payload
-            if "status" not in tx_data or tx_data.get("status") is None:
+            # Fallback if it timed out and status is still pending/missing
+            if tx_data.get("status") is None or str(tx_data.get("status")).upper() == "PENDING":
                 tx_data["status"] = "PENDING"
-            if "description" not in tx_data or tx_data.get("description") is None:
                 tx_data["description"] = "User did not enter PIN or request timed out."
 
-            # 🌟 Return with jambopay_response
+            # Return the exact requested payload
             return custom_success_message(
                 0,
                 "STK push initiated successfully",
@@ -287,7 +285,7 @@ def subscriptionsDispatcherAPIView(request):
                     "amount": amount,
                     "status": tx_data['status'],
                     "description": tx_data['description'],
-                    "jambopay_response": tx_data  # <--- Included here
+                    "jambopay_response": tx_data
                 },
                 "payment"
             )
