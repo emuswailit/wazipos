@@ -152,6 +152,20 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
             'subscriptions': json.loads(self.subscriptions),
         })
 
+# subscriptions/consumers.py
+
+import json
+import requests
+from decouple import config
+from asgiref.sync import sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.core.serializers.json import DjangoJSONEncoder
+
+from utils.logging import create_log
+from .models import Subscription, SubscriptionPayment
+from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
+
+
 
 class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
@@ -203,7 +217,7 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
         create_log("info", f"SubscriptionPayment ref: {self.reference_number}")
 
         if payment:
-            # 🌟 NEW: Poll JamboPay if the payment is still PENDING
+            # 🌟 Poll JamboPay if the payment is still PENDING
             if payment.status == "PENDING":
                 try:
                     # 1. Authenticate with JamboPay
@@ -224,23 +238,24 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                         
                         tx_result = requests.get(transaction_url, headers=poll_headers)
                         
-                        if tx_result and not tx_result==None:
+                        if tx_result.status_code == 200:
                             tx_data = tx_result.json()
                             
-                            # 3. Apply the same check as the poller in the view
-                            # is_completed = tx_data.get("completed", False)
-                            if tx_data:
+                            # 3. Update DB only if JamboPay says the transaction is completed
+                            if tx_data and tx_data.get("completed") is True:
                                 final_status = str(tx_data.get("status", "")).upper()
                                 status_description = tx_data.get("description", "")
+                                provider_ref = tx_data.get("providerRef")
                                 
-                                payment.description = status_description
+                                # Update the Django model
                                 payment.status = final_status
+                                payment.description = status_description
                                 
-                                if tx_data.get("providerRef"):
-                                    payment.provider_reference_number = tx_data.get("providerRef")
+                                if provider_ref:
+                                    payment.provider_reference_number = provider_ref
                                     
                                 payment.save()
-                                create_log("info", f"Updated payment via WS check: {final_status}")
+                                create_log("info", f"Updated payment via WS with JamboPay response: {final_status} - {status_description}")
                 except Exception as e:
                     create_log("error", f"WS Poller error: {str(e)}")
 
@@ -251,10 +266,11 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
             ).data
             self.payment_data = json.dumps(payment_details, cls=DjangoJSONEncoder)
         else:
-            # 🌟 FIXED: The original code crashed here by referencing `self.payment_data.status`
+            # Fallback if payment record isn't found
             self.payment_data = json.dumps({
                 "reference_number": self.reference_number,
-                "status": "NOT_FOUND"
+                "status": "NOT_FOUND",
+                "description": "Payment record could not be found."
             })
 
     async def send_payment_status(self, event):
