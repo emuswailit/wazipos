@@ -5,10 +5,8 @@ from decimal import Decimal
 from decouple import config
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, exceptions
-from django.contrib.auth import get_user_model
-
-# 🌟 Import pagination
 from rest_framework.pagination import PageNumberPagination
+from django.contrib.auth import get_user_model
 
 # Core responses and logging
 from core.responses import custom_success_message, custom_error_response
@@ -24,7 +22,7 @@ from authentication.utils.utils import (
 # Payments & Subscriptions
 from payments.models import PaymentMethods, UserAccounts
 from .models import Subscription, SubscriptionPayment
-from .serializers import SubscriptionSerializer
+from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
 
 Users = get_user_model()
 
@@ -37,24 +35,21 @@ def subscriptionsDispatcherAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
+    # 🌟 Get entity directly from the logged-in user
     entity = request.user.entity
     if not entity:
         raise exceptions.ValidationError("User is not associated with any entity")
 
     # ==========================================
-    # 🌟 1. GET ENTITY SUBSCRIPTIONS (PAGINATED)
+    # 🌟 1. GET ENTITY SUBSCRIPTIONS
     # ==========================================
     if action == "GetEntitySubscriptions":
         subscriptions = Subscription.objects.filter(
             entity=entity
         ).order_by('-created')
 
-        # 🌟 Setup Pagination
         paginator = PageNumberPagination()
-        # Allow frontend to request a specific page size, default to 10
         paginator.page_size = request.data.get("page_size", 10) 
-        
-        # Paginate the queryset
         paginated_subscriptions = paginator.paginate_queryset(subscriptions, request)
 
         if not paginated_subscriptions and paginator.page.paginator.count == 0:
@@ -66,7 +61,6 @@ def subscriptionsDispatcherAPIView(request):
             context={"request": request}
         )
 
-        # 🌟 Return the standard paginated payload wrapped in custom_success_message
         return custom_success_message(
             0, 
             "Subscriptions retrieved successfully", 
@@ -80,22 +74,52 @@ def subscriptionsDispatcherAPIView(request):
         )
 
     # ==========================================
-    # 🌟 2. INITIATE SUBSCRIPTION PAYMENT
+    # 🌟 2. GET ENTITY SUBSCRIPTION PAYMENTS (NEW)
+    # ==========================================
+    elif action == "GetEntitySubscriptionPayments":
+        payments = SubscriptionPayment.objects.filter(
+            entity=entity
+        ).order_by('-created')
+
+        paginator = PageNumberPagination()
+        paginator.page_size = request.data.get("page_size", 10) 
+        paginated_payments = paginator.paginate_queryset(payments, request)
+
+        if not paginated_payments and paginator.page.paginator.count == 0:
+            return custom_error_response(1, "No subscription payments found for this entity")
+
+        serializer = SubscriptionPaymentsSerializer(
+            paginated_payments, 
+            many=True, 
+            context={"request": request}
+        )
+
+        return custom_success_message(
+            0, 
+            "Subscription payments retrieved successfully", 
+            {
+                "results": serializer.data,
+                "count": paginator.page.paginator.count,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+            }, 
+            "payments"
+        )
+
+    # ==========================================
+    # 🌟 3. INITIATE SUBSCRIPTION PAYMENT
     # ==========================================
     elif action == "InitiateSubscriptionPayment":
-        # ... (Keep your existing payment logic exactly as it is) ...
         mobile_money_phone = request.data.get("phone_number")
         errors = []
 
         if not mobile_money_phone:
             return custom_error_response(1, "phone_number is required")
 
-        # 1. Validate Mobile Money Method
         payment_method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
         if not payment_method:
             return custom_error_response(1, "Mobile Money payment method not configured")
 
-        # 2. Check for Entity Admin's Collection Account
         if not UserAccounts.objects.filter(owner=entity.administrator).exists():
             return custom_error_response(1, "Entity admin has no collection account")
 
@@ -103,7 +127,6 @@ def subscriptionsDispatcherAPIView(request):
             owner=entity.administrator
         ).first()
 
-        # 3. Get Telco and Amount
         try:
             telco, formatted_phone_number = get_telco_by_phone_number(mobile_money_phone)
         except Exception as e:
@@ -113,11 +136,9 @@ def subscriptionsDispatcherAPIView(request):
         if amount <= 0:
             return custom_error_response(1, "This entity does not have a valid subscription amount configured")
 
-        # 4. Generate Reference
         reference_number = generate_reference_number(entity, request.user)
         payload = None
 
-        # 5. Build Payload
         if telco == "MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
@@ -151,8 +172,6 @@ def subscriptionsDispatcherAPIView(request):
             })
         else:
             return custom_error_response(1, f"Unsupported telco: {telco}")
-
-        create_log("info", f"just before checkout {payload}")
 
         # 6. Authenticate with JamboPay
         the_data = {
@@ -198,9 +217,7 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"from jp errors {errors}")
             return custom_error_response(1, "Payment failed at JamboPay")
 
-        create_log("info", f"result from json: {result_json}")
-
-        # 8. Create SubscriptionPayment Record & Poll for Status
+        # 8. Create Record & Poll
         try:
             sub_payment = SubscriptionPayment.objects.create(
                 reference_number=reference_number,
@@ -211,10 +228,9 @@ def subscriptionsDispatcherAPIView(request):
                 status="PENDING",
             )
             create_log("info", f"sub_payment created: {sub_payment.id}")
-            
             use_reference_number(reference_number)
 
-            # 9. Poll JamboPay for transaction status (max 30 seconds)
+            # Poll JamboPay (30 seconds max)
             max_wait_time = 30
             poll_interval = 3
             start_time = time.time()
@@ -226,10 +242,7 @@ def subscriptionsDispatcherAPIView(request):
             order_id = result_json.get("orderId", reference_number) 
             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
 
-            poll_headers = {
-                "Authorization": f"Bearer {token}",
-                "Accept": "*/*",
-            }
+            poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
 
             while time.time() - start_time < max_wait_time:
                 try:
@@ -243,11 +256,9 @@ def subscriptionsDispatcherAPIView(request):
                         if is_completed:
                             final_status = current_status
                             status_description = tx_data.get("description", "")
-                            
                             sub_payment.status = final_status 
                             sub_payment.save()
-                            
-                            break
+                            break 
                             
                 except Exception as poll_error:
                     create_log("error", f"Polling error for {order_id}: {str(poll_error)}")
