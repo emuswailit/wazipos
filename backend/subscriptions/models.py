@@ -1,6 +1,6 @@
 from django.db import models
 from authentication.models import Users
-from core.models  import EntityRelatedModel
+from core.models import EntityRelatedModel
 from payments.models import PaymentServicesProvider
 
 TRUE_FALSE_OPTIONS = (
@@ -16,12 +16,29 @@ SUSCRIPTION_TYPE_OPTIONS = (
 class SubscriptionPayment(EntityRelatedModel):
 
     """Entity subscription payment"""
+    
+    # 🌟 Add Status Choices
+    STATUS_CHOICES = (
+        ("PENDING", "PENDING"),
+        ("SUCCESS", "SUCCESS"),
+        ("FAILED", "FAILED"),
+        ("CANCELLED", "CANCELLED"),
+    )
 
     reference_number = models.CharField(max_length=120, null=True, blank=True)
     psp_reference_number = models.CharField(max_length=120, null=True, blank=True)
     operator_reference_number = models.CharField(max_length=120, null=True, blank=True)
     provider_reference_number = models.CharField(max_length=120, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    # 🌟 Add the new status field
+    status = models.CharField(
+        max_length=50, 
+        choices=STATUS_CHOICES, 
+        default="PENDING",
+        help_text="Current state of the payment transaction."
+    )
+    
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(
@@ -29,13 +46,14 @@ class SubscriptionPayment(EntityRelatedModel):
     )
 
     def __str__(self):
-        return self.entity.title
+        return f"{self.entity.title} - {self.status}"
+
 
 class Subscription(EntityRelatedModel):
 
     """Entity subscription"""
     payment = models.ForeignKey(
-        SubscriptionPayment, related_name="subscription_payment", on_delete=models.CASCADE,null=True,blank=True
+        SubscriptionPayment, related_name="subscription_payment", on_delete=models.CASCADE, null=True, blank=True
     )
     months = models.IntegerField()
     start_date = models.DateTimeField()
@@ -54,28 +72,3 @@ class Subscription(EntityRelatedModel):
 
     def __str__(self):
         return self.entity.title
-# class Subscription(EntityRelatedModel):
-
-#     """Entity subscription"""
-#     plan = models.ForeignKey(
-#         Plans, related_name="subscription_plan", on_delete=models.CASCADE,null=True,blank=True
-#     )
-#     title = models.TextField(max_length=100)
-#     payment_service_provider=models.ForeignKey(
-#         PaymentServicesProvider, related_name="subscription_payment_provider", on_delete=models.CASCADE,null=True,blank=True
-#     )
-#     operator_reference_number = models.CharField(max_length=120, null=True, blank=True)
-#     provider_reference_number = models.CharField(max_length=120, null=True, blank=True)
-#     description = models.TextField(max_length=100, null=True, blank=True)
-#     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-#     expires = models.DateTimeField()
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
-#     owner = models.ForeignKey(
-#         Users, related_name="subscription_owner", on_delete=models.CASCADE
-#     )
-
-#     def __str__(self):
-#         return self.entity.title
-
-

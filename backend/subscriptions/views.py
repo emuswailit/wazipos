@@ -45,7 +45,7 @@ def subscriptionsDispatcherAPIView(request):
     if action == "GetEntitySubscriptions":
         subscriptions = Subscription.objects.filter(
             entity=entity
-        ).order_by('-created')[:20]
+        ).order_by('-created')[:10]
 
         if not subscriptions.exists():
             return custom_error_response(1, "No subscriptions found for this entity")
@@ -183,7 +183,7 @@ def subscriptionsDispatcherAPIView(request):
 
         create_log("info", f"result from json: {result_json}")
 
-        # 8. Create SubscriptionPayment Record & Poll for Status
+        # 8. Create SubscriptionPayment Record
         try:
             sub_payment = SubscriptionPayment.objects.create(
                 reference_number=reference_number,
@@ -191,6 +191,7 @@ def subscriptionsDispatcherAPIView(request):
                 amount=Decimal(str(amount)),
                 entity=entity,
                 owner=request.user,
+                status="PENDING", # 🌟 Explicitly set status
             )
             create_log("info", f"sub_payment created: {sub_payment.id}")
             
@@ -203,7 +204,7 @@ def subscriptionsDispatcherAPIView(request):
             
             final_status = "PENDING"
             status_description = "Waiting for PIN entry."
-            tx_data = result_json # Fallback to the initial checkout response
+            tx_data = result_json
             
             order_id = result_json.get("orderId", reference_number) 
             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
@@ -225,6 +226,11 @@ def subscriptionsDispatcherAPIView(request):
                         if is_completed:
                             final_status = current_status
                             status_description = tx_data.get("description", "")
+                            
+                            # 🌟 Update the DB record so the WebSocket can read it
+                            sub_payment.status = final_status 
+                            sub_payment.save()
+                            
                             break # Exit loop immediately if completed
                             
                 except Exception as poll_error:
@@ -244,11 +250,11 @@ def subscriptionsDispatcherAPIView(request):
                     "amount": amount,
                     "status": final_status,
                     "description": status_description,
-                    # 🌟 RAW JAMBOPAY RESPONSE
-                    "jambopay_response": tx_data 
+                    "jambopay_response": tx_data
                 },
                 "payment"
             )
+            
         except Exception as e:
             create_log("error", str(e))
             return custom_error_response(1, f"Failed to create payment record: {str(e)}")
