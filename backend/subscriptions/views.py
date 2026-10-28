@@ -19,7 +19,7 @@ from authentication.utils.utils import (
     use_reference_number,
 )
 
-# Payments & Subscriptions
+# Payments & Subscriptions Models/Serializers
 from payments.models import PaymentMethods, UserAccounts
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
@@ -35,13 +35,13 @@ def subscriptionsDispatcherAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-    # 🌟 Get entity directly from the logged-in user
+    # Get entity directly from the logged-in user
     entity = request.user.entity
     if not entity:
         raise exceptions.ValidationError("User is not associated with any entity")
 
     # ==========================================
-    # 🌟 1. GET ENTITY SUBSCRIPTIONS
+    # 1. GET ENTITY SUBSCRIPTIONS
     # ==========================================
     if action == "GetEntitySubscriptions":
         subscriptions = Subscription.objects.filter(
@@ -74,7 +74,7 @@ def subscriptionsDispatcherAPIView(request):
         )
 
     # ==========================================
-    # 🌟 2. GET ENTITY SUBSCRIPTION PAYMENTS (NEW)
+    # 2. GET ENTITY SUBSCRIPTION PAYMENTS
     # ==========================================
     elif action == "GetEntitySubscriptionPayments":
         payments = SubscriptionPayment.objects.filter(
@@ -107,7 +107,7 @@ def subscriptionsDispatcherAPIView(request):
         )
 
     # ==========================================
-    # 🌟 3. INITIATE SUBSCRIPTION PAYMENT
+    # 3. INITIATE SUBSCRIPTION PAYMENT
     # ==========================================
     elif action == "InitiateSubscriptionPayment":
         mobile_money_phone = request.data.get("phone_number")
@@ -139,6 +139,7 @@ def subscriptionsDispatcherAPIView(request):
         reference_number = generate_reference_number(entity, request.user)
         payload = None
 
+        # 5. Build Payload
         if telco == "MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
@@ -230,11 +231,9 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"sub_payment created: {sub_payment.id}")
             use_reference_number(reference_number)
 
-            # 🌟 POLLING LOGIC: 3 attempts within 10 seconds
+            # POLLING LOGIC: 3 attempts within 10 seconds
             max_attempts = 3
-            poll_interval = 3  # 3 seconds between checks
-            final_status = "PENDING"
-            status_description = "Waiting for PIN entry."
+            poll_interval = 3 
             tx_data = result_json
             
             order_id = result_json.get("orderId", reference_number) 
@@ -246,15 +245,12 @@ def subscriptionsDispatcherAPIView(request):
             for attempt in range(max_attempts):
                 try:
                     tx_result = requests.get(transaction_url, headers=poll_headers)
-                    
-                    # 🌟 Fixed logging to pass a string, not the raw Response object
                     create_log("info", f"Poll attempt {attempt + 1} - HTTP Status: {tx_result.status_code}")
                     
                     if tx_result.status_code == 200:
                         tx_data = tx_result.json()
                         create_log("info", f"tx_data : {tx_data}")
                         
-                        # 🌟 Only update and break if the transaction is actually completed
                         is_completed = tx_data.get("completed", False)
                         
                         if is_completed:
@@ -263,23 +259,24 @@ def subscriptionsDispatcherAPIView(request):
                             
                             sub_payment.description = status_description 
                             sub_payment.status = final_status 
-                            # Save provider reference if provided by JamboPay
                             if tx_data.get("providerRef"):
                                 sub_payment.provider_reference_number = tx_data.get("providerRef")
                                 
                             sub_payment.save()
-                            break # Stop polling, we have the final answer
+                            break
                             
                 except Exception as poll_error:
                     create_log("error", f"Polling error for {order_id}: {str(poll_error)}")
                 
-                # Don't sleep on the very last attempt
                 if attempt < max_attempts - 1:
                     time.sleep(poll_interval)
 
-            if final_status == "PENDING":
-                status_description = "User did not enter PIN or request timed out."
+            # Fallback if it timed out and no status returned yet
+            if tx_data.get("status") is None:
+                tx_data["status"] = "PENDING"
+                tx_data["description"] = "User did not enter PIN or request timed out."
 
+            # Return the exact requested payload
             return custom_success_message(
                 0,
                 "STK push initiated successfully",
@@ -287,8 +284,8 @@ def subscriptionsDispatcherAPIView(request):
                     "payment_id": sub_payment.id,
                     "reference_number": reference_number,
                     "amount": amount,
-                    "status": final_status,
-                    "description": status_description,
+                    "status": tx_data['status'],
+                    "description": tx_data['description'],
                     "jambopay_response": tx_data
                 },
                 "payment"
@@ -298,4 +295,7 @@ def subscriptionsDispatcherAPIView(request):
             create_log("error", str(e))
             return custom_error_response(1, f"Failed to create payment record: {str(e)}")
 
+    # ==========================================
+    # 4. UNKNOWN ACTION
+    # ==========================================
     raise exceptions.ValidationError(f"Action {action} is unknown")
