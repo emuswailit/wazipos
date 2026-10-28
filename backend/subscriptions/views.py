@@ -247,6 +247,7 @@ def subscriptionsDispatcherAPIView(request):
             while time.time() - start_time < max_wait_time:
                 try:
                     tx_result = requests.get(transaction_url, headers=poll_headers)
+                    create_log("info", tx_result)
                     
                     if tx_result and not tx_result==None:
                         tx_data = tx_result.json()
