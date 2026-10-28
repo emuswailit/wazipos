@@ -230,41 +230,52 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"sub_payment created: {sub_payment.id}")
             use_reference_number(reference_number)
 
-            # Poll JamboPay (30 seconds max)
-            max_wait_time = 30
-            poll_interval = 3
-            start_time = time.time()
-            
+            # 🌟 POLLING LOGIC: 3 attempts within 10 seconds
+            max_attempts = 3
+            poll_interval = 3  # 3 seconds between checks
             final_status = "PENDING"
             status_description = "Waiting for PIN entry."
             tx_data = result_json
             
             order_id = result_json.get("orderId", reference_number) 
             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
-
             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
-            create_log("info",f"URL: {transaction_url}")
-            while time.time() - start_time < max_wait_time:
+
+            create_log("info", f"Starting 3 poll attempts for URL: {transaction_url}")
+
+            for attempt in range(max_attempts):
                 try:
                     tx_result = requests.get(transaction_url, headers=poll_headers)
-                    create_log("info", tx_result)
                     
-                    if tx_result and not tx_result==None:
+                    # 🌟 Fixed logging to pass a string, not the raw Response object
+                    create_log("info", f"Poll attempt {attempt + 1} - HTTP Status: {tx_result.status_code}")
+                    
+                    if tx_result.status_code == 200:
                         tx_data = tx_result.json()
-                        create_log("info",f"tx_data : {tx_data}")
-                 
+                        create_log("info", f"tx_data : {tx_data}")
                         
-                        final_status = tx_data.get("status", "")
-                        status_description = tx_data.get("description", "")
-                        sub_payment.description = status_description 
-                        sub_payment.status = final_status 
-                        sub_payment.save()
-                        break 
+                        # 🌟 Only update and break if the transaction is actually completed
+                        is_completed = tx_data.get("completed", False)
+                        
+                        if is_completed:
+                            final_status = str(tx_data.get("status", "")).upper()
+                            status_description = tx_data.get("description", "")
+                            
+                            sub_payment.description = status_description 
+                            sub_payment.status = final_status 
+                            # Save provider reference if provided by JamboPay
+                            if tx_data.get("providerRef"):
+                                sub_payment.provider_reference_number = tx_data.get("providerRef")
+                                
+                            sub_payment.save()
+                            break # Stop polling, we have the final answer
                             
                 except Exception as poll_error:
                     create_log("error", f"Polling error for {order_id}: {str(poll_error)}")
                 
-                time.sleep(poll_interval)
+                # Don't sleep on the very last attempt
+                if attempt < max_attempts - 1:
+                    time.sleep(poll_interval)
 
             if final_status == "PENDING":
                 status_description = "User did not enter PIN or request timed out."
@@ -277,6 +288,7 @@ def subscriptionsDispatcherAPIView(request):
                     "reference_number": reference_number,
                     "amount": amount,
                     "status": final_status,
+                    "description": status_description,
                     "jambopay_response": tx_data
                 },
                 "payment"
