@@ -137,7 +137,7 @@ app.conf.beat_schedule = {
     # or the user closes their browser. Runs every five seconds.
     "check-pending-subscription-payments": {
         "task": "subscriptions.tasks.check_pending_subscription_payments",
-        "schedule": 5.0,
+        "schedule": 3.0,
         "args": None,
     },
 }
