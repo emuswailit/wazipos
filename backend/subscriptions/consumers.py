@@ -1,6 +1,7 @@
 # subscriptions/consumers.py
 
 import json
+import asyncio
 import requests
 from decouple import config
 from asgiref.sync import sync_to_async
@@ -67,8 +68,6 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
     async def send_subscriptions(self, event):
         # Re-fetch data when a signal/webhook triggers an update
         await self.helper_func()
-
-        # Broadcast the fresh result to the connected client
         await self.send_json({
             'subscriptions': json.loads(self.subscriptions),
         })
@@ -77,7 +76,7 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
 class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
     Listens to a specific payment reference to track its success/failure in real-time.
-    Used by the SubscriptionFormModal while waiting for the STK push to complete.
+    Polls JamboPay every 5 seconds until the status changes from PENDING.
     """
 
     async def connect(self):
@@ -100,19 +99,49 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
         )
         await self.accept()
 
-        # 4. Fetch initial payment status and send it
-        await self.helper_func()
-        await self.send_json({
-            'payment': json.loads(self.payment_data),
-        })
+        # 4. Start the background polling task
+        self.polling_task = asyncio.create_task(self.poll_payment_loop())
 
     async def disconnect(self, close_code):
+        # Cancel the polling task if it's still running
+        if hasattr(self, 'polling_task'):
+            self.polling_task.cancel()
+
         if hasattr(self, 'group_name'):
             await self.channel_layer.group_discard(
                 self.group_name,
                 self.channel_name,
             )
         await self.close()
+
+    async def poll_payment_loop(self):
+        """
+        Continuously checks the payment status every 5 seconds.
+        Stops when the status is no longer PENDING.
+        """
+        try:
+            while True:
+                # 1. Fetch latest from JamboPay and update DB
+                await self.helper_func()
+                
+                # 2. Send the payload to the frontend
+                payment_dict = json.loads(self.payment_data)
+                await self.send_json({'payment': payment_dict})
+                
+                # 3. Stop polling if we have a final status
+                status = payment_dict.get("status", "").upper()
+                if status and status != "PENDING":
+                    create_log("info", f"Polling stopped for {self.reference_number}. Final status: {status}")
+                    break
+                
+                # 4. Wait 5 seconds before the next poll
+                await asyncio.sleep(5)
+                
+        except asyncio.CancelledError:
+            # Task was cancelled because the user disconnected
+            pass 
+        except Exception as e:
+            create_log("error", f"WebSocket polling loop error: {str(e)}")
 
     @sync_to_async
     def helper_func(self):
@@ -121,11 +150,10 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
             reference_number=self.reference_number
         ).first()
         
-        create_log("info", f"SubscriptionPayment ref: {self.reference_number}")
         tx_data = None
 
         if payment:
-            # Poll JamboPay if the payment is still PENDING
+            # Only poll JamboPay if the DB still says PENDING
             if payment.status == "PENDING":
                 try:
                     # 1. Authenticate with JamboPay
@@ -151,36 +179,39 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 tx_data = tx_result.json()
                                 
                                 # 3. Update DB with whatever JamboPay returns
-                                if tx_data and not tx_data["status"] == "PENDING":
-                                    # final_status = str(tx_data.get("status", "")).upper()
-                                    # status_description = tx_data.get("description", "")
-                                    # provider_ref = tx_data.get("providerRef")
+                                if tx_data and not tx_data == None:
+                                    final_status = str(tx_data.get("status", "")).upper()
+                                    status_description = tx_data.get("description", "")
+                                    provider_ref = tx_data.get("providerRef")
                                     
-                              
-                                    payment.status = tx_data["status"]
-                    
-                                    payment.description = tx_data["description"]
+                                    if final_status:
+                                        payment.status = final_status
+                                    if status_description:
+                                        payment.description = status_description
                                     
-                 
-                                    payment.provider_reference_number = tx_data["providerRef"]
+                                    if provider_ref:
+                                        payment.provider_reference_number = provider_ref
                                         
                                     payment.save()
-                                    create_log("info", f"Updated payment via WS with JamboPay response: {tx_data["status"]} - {tx_data["description"]}")
+                                    create_log("info", f"Updated payment via WS: {final_status} - {status_description}")
                             except ValueError:
                                 create_log("error", "JamboPay returned a non-JSON response during polling.")
                 except Exception as e:
                     create_log("error", f"WS Poller error: {str(e)}")
-            else:
-                pass
 
-            # 🌟 RECONSTRUCT EXACT SAME PAYLOAD AS VIEW (LOG 1)
+            # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
             self.payment_data = json.dumps({
                 "payment_id": str(payment.id),
                 "reference_number": payment.reference_number,
                 "amount": float(payment.amount),
                 "status": payment.status,
                 "description": payment.description,
-                "jambopay_response": tx_data 
+                "jambopay_response": tx_data if tx_data else {
+                    "orderId": payment.reference_number,
+                    "ref": payment.psp_reference_number,
+                    "status": payment.status,
+                    "description": payment.description
+                }
             }, cls=DjangoJSONEncoder)
             
         else:
@@ -195,10 +226,10 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
             })
 
     async def send_payment_status(self, event):
-        # Re-fetch data when the JamboPay webhook triggers an update
+        """
+        Triggered by JamboPay Webhooks (if they happen to hit before the socket closes).
+        """
         await self.helper_func()
-
-        # Broadcast the fresh result to the connected client
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
