@@ -28,8 +28,26 @@ class SubscriptionAdmin(admin.ModelAdmin):
         return obj.entity.title if obj.entity else "—"
 
 
+from django.contrib import admin
+from . import models
+
 @admin.register(models.SubscriptionPayment)
 class SubscriptionPaymentAdmin(admin.ModelAdmin):
-    list_display = ("id", "amount","psp_reference_number","provider_reference_number","reference_number", "created", "updated")
+    list_display = (
+        "id", 
+        "entity_title", # 🌟 Added here
+        "amount",
+        "psp_reference_number",
+        "provider_reference_number",
+        "reference_number", 
+        "created", 
+        "updated"
+    )
     list_filter = ("amount", "created", "updated")
-    search_fields = ("amount",)
+    # 🌟 Added entity__title so you can search by the retailer's name
+    search_fields = ("amount", "entity__title", "reference_number", "psp_reference_number")
+    
+    # 🌟 Custom method to display the entity title and allow sorting
+    @admin.display(description="Entity Title", ordering="entity__title")
+    def entity_title(self, obj):
+        return obj.entity.title if obj.entity else "—"
