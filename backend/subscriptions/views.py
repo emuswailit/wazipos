@@ -253,13 +253,12 @@ def subscriptionsDispatcherAPIView(request):
                         is_completed = tx_data.get("completed", False)
                         current_status = str(tx_data.get("status", "")).upper()
                         
-                        if is_completed:
-                            final_status = tx_data.get("status", "")
-                            status_description = tx_data.get("description", "")
-                            sub_payment.status = status_description 
-                            sub_payment.status = final_status 
-                            sub_payment.save()
-                            break 
+                        final_status = tx_data.get("status", "")
+                        status_description = tx_data.get("description", "")
+                        sub_payment.description = status_description 
+                        sub_payment.status = final_status 
+                        sub_payment.save()
+                        break 
                             
                 except Exception as poll_error:
                     create_log("error", f"Polling error for {order_id}: {str(poll_error)}")
