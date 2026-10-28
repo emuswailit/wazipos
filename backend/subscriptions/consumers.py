@@ -238,7 +238,7 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                         
                         tx_result = requests.get(transaction_url, headers=poll_headers)
                         
-                        if tx_result.status_code == 200:
+                        if tx_result and not tx_result==None:
                             tx_data = tx_result.json()
                             
                             # 3. Update DB only if JamboPay says the transaction is completed
