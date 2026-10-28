@@ -138,7 +138,7 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
             # Fallback if payment record isn't found
             self.payment_data = json.dumps({
                 "reference_number": self.reference_number,
-                "status": "NOT_FOUND"
+                "status": self.payment_data.status
             })
 
     async def send_payment_status(self, event):
