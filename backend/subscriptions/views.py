@@ -145,7 +145,7 @@ def subscriptionsDispatcherAPIView(request):
                 "amount": amount,
                 "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
                 "accountTo": administrator_account.account_number,
-                "description": "Subscription payment",
+                "description": "TOPUP",
                 "modeOfPayment": "MOBILE_MONEY",
                 "provider": "Mpesa",
                 "data": {
@@ -248,10 +248,9 @@ def subscriptionsDispatcherAPIView(request):
                 try:
                     tx_result = requests.get(transaction_url, headers=poll_headers)
                     
-                    if tx_result.status_code == 200:
+                    if tx_result:
                         tx_data = tx_result.json()
-                        is_completed = tx_data.get("completed", False)
-                        current_status = str(tx_data.get("status", "")).upper()
+                 
                         
                         final_status = tx_data.get("status", "")
                         status_description = tx_data.get("description", "")
@@ -276,7 +275,7 @@ def subscriptionsDispatcherAPIView(request):
                     "reference_number": reference_number,
                     "amount": amount,
                     "status": final_status,
-                    "description": status_description,
+                    "description": tx_data.description,
                     "jambopay_response": tx_data
                 },
                 "payment"
