@@ -77,6 +77,82 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
+# subscriptions/consumers.py
+
+import json
+import requests
+from decouple import config
+from asgiref.sync import sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.core.serializers.json import DjangoJSONEncoder
+
+from utils.logging import create_log
+from .models import Subscription, SubscriptionPayment
+from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
+
+
+class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Listens for live changes to the entity's subscription status.
+    Used by the frontend to instantly update the UI when a payment succeeds.
+    """
+
+    async def connect(self):
+        self.user = self.scope.get("user")
+        
+        # 1. Ensure the user is authenticated
+        if not self.user or not self.user.is_authenticated:
+            await self.close()
+            return
+
+        # 2. Add to the subscriptions group
+        self.group_name = 'subscriptions'
+        
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name,
+        )
+        await self.accept()
+
+        # 3. Fetch initial data and send it
+        await self.helper_func()
+        await self.send_json({
+            'subscriptions': json.loads(self.subscriptions),
+        })
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name,
+            )
+        await self.close()
+
+    @sync_to_async
+    def helper_func(self):
+        # Fetch the last 10 subscriptions for the user's entity
+        subscriptions_qs = Subscription.objects.filter(
+            entity=self.user.entity,
+        ).order_by('-created')[:10]
+
+        subscriptions_data = SubscriptionSerializer(
+            subscriptions_qs,
+            many=True,
+            context={'request': None},
+        ).data
+        
+        self.subscriptions = json.dumps(subscriptions_data, cls=DjangoJSONEncoder)
+
+    async def send_subscriptions(self, event):
+        # Re-fetch data when a signal/webhook triggers an update
+        await self.helper_func()
+
+        # Broadcast the fresh result to the connected client
+        await self.send_json({
+            'subscriptions': json.loads(self.subscriptions),
+        })
+
+
 class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
     Listens to a specific payment reference to track its success/failure in real-time.
@@ -124,21 +200,61 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
             reference_number=self.reference_number
         ).first()
         
-        # 🌟 FIXED: Passed "info" as the log level
         create_log("info", f"SubscriptionPayment ref: {self.reference_number}")
 
         if payment:
-            # 🌟 Ensure this matches your exact serializer name
+            # 🌟 NEW: Poll JamboPay if the payment is still PENDING
+            if payment.status == "PENDING":
+                try:
+                    # 1. Authenticate with JamboPay
+                    the_data = {
+                        "client_id": config("JAMBOPAY_CLIENT_ID"),
+                        "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+                        "grant_type": config("JAMBOPA_GRANT_TYPE"),
+                    }
+                    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                    auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
+                    token = auth_res.json().get("access_token") if auth_res.json() else None
+                    
+                    if token:
+                        # 2. Check the transaction status
+                        order_id = payment.reference_number
+                        transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
+                        poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
+                        
+                        tx_result = requests.get(transaction_url, headers=poll_headers)
+                        
+                        if tx_result.status_code == 200:
+                            tx_data = tx_result.json()
+                            
+                            # 3. Apply the same check as the poller in the view
+                            is_completed = tx_data.get("completed", False)
+                            if is_completed:
+                                final_status = str(tx_data.get("status", "")).upper()
+                                status_description = tx_data.get("description", "")
+                                
+                                payment.description = status_description
+                                payment.status = final_status
+                                
+                                if tx_data.get("providerRef"):
+                                    payment.provider_reference_number = tx_data.get("providerRef")
+                                    
+                                payment.save()
+                                create_log("info", f"Updated payment via WS check: {final_status}")
+                except Exception as e:
+                    create_log("error", f"WS Poller error: {str(e)}")
+
+            # Serialize the (possibly updated) payment
             payment_details = SubscriptionPaymentsSerializer(
                 payment,
                 context={'request': None},
             ).data
             self.payment_data = json.dumps(payment_details, cls=DjangoJSONEncoder)
         else:
-            # Fallback if payment record isn't found
+            # 🌟 FIXED: The original code crashed here by referencing `self.payment_data.status`
             self.payment_data = json.dumps({
                 "reference_number": self.reference_number,
-                "status": self.payment_data.status
+                "status": "NOT_FOUND"
             })
 
     async def send_payment_status(self, event):
