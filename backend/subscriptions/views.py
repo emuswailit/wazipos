@@ -45,7 +45,7 @@ def subscriptionsDispatcherAPIView(request):
     if action == "GetEntitySubscriptions":
         subscriptions = Subscription.objects.filter(
             entity=entity
-        ).order_by('-created')[:10]
+        ).order_by('-created')[:20]
 
         if not subscriptions.exists():
             return custom_error_response(1, "No subscriptions found for this entity")
