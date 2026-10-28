@@ -3,7 +3,7 @@ from . import models
 class SubscriptionPaymentsSerializer(serializers.ModelSerializer):
     entity_title=serializers.SerializerMethodField(read_only=True)
     class Meta:
-        ordering = ["-id"]
+        ordering = ["-created"]
         model = models.SubscriptionPayment
         fields = (
             "id",
