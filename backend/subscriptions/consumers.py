@@ -151,25 +151,27 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 tx_data = tx_result.json()
                                 
                                 # 3. Update DB with whatever JamboPay returns
-                                if tx_data and not tx_data == None:
-                                    final_status = str(tx_data.get("status", "")).upper()
-                                    status_description = tx_data.get("description", "")
-                                    provider_ref = tx_data.get("providerRef")
+                                if tx_data and not tx_data["status"] == "PENDING":
+                                    # final_status = str(tx_data.get("status", "")).upper()
+                                    # status_description = tx_data.get("description", "")
+                                    # provider_ref = tx_data.get("providerRef")
                                     
-                                    if final_status:
-                                        payment.status = final_status
-                                    if status_description:
-                                        payment.description = status_description
+                              
+                                    payment.status = tx_data["status"]
+                    
+                                    payment.description = tx_data["description"]
                                     
-                                    if provider_ref:
-                                        payment.provider_reference_number = provider_ref
+                 
+                                    payment.provider_reference_number = tx_data["providerRef"]
                                         
                                     payment.save()
-                                    create_log("info", f"Updated payment via WS with JamboPay response: {final_status} - {status_description}")
+                                    create_log("info", f"Updated payment via WS with JamboPay response: {tx_data["status"]} - {tx_data["description"]}")
                             except ValueError:
                                 create_log("error", "JamboPay returned a non-JSON response during polling.")
                 except Exception as e:
                     create_log("error", f"WS Poller error: {str(e)}")
+            else:
+                pass
 
             # 🌟 RECONSTRUCT EXACT SAME PAYLOAD AS VIEW (LOG 1)
             self.payment_data = json.dumps({
