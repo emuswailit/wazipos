@@ -150,16 +150,16 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                             try:
                                 tx_data = tx_result.json()
                                 
-                                # 3. Update DB only if JamboPay says the transaction is completed
-                                ## Update
-                                if tx_data and not tx_data==None:
+                                # 3. Update DB with whatever JamboPay returns
+                                if tx_data and not tx_data == None:
                                     final_status = str(tx_data.get("status", "")).upper()
                                     status_description = tx_data.get("description", "")
                                     provider_ref = tx_data.get("providerRef")
                                     
-                                    # Update the Django model
-                                    payment.status = final_status
-                                    payment.description = status_description
+                                    if final_status:
+                                        payment.status = final_status
+                                    if status_description:
+                                        payment.description = status_description
                                     
                                     if provider_ref:
                                         payment.provider_reference_number = provider_ref
@@ -171,19 +171,14 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                 except Exception as e:
                     create_log("error", f"WS Poller error: {str(e)}")
 
-            # 🌟 RECONSTRUCT LOG 1 (HTTP Response Format)
+            # 🌟 RECONSTRUCT EXACT SAME PAYLOAD AS VIEW (LOG 1)
             self.payment_data = json.dumps({
                 "payment_id": str(payment.id),
                 "reference_number": payment.reference_number,
                 "amount": float(payment.amount),
                 "status": payment.status,
                 "description": payment.description,
-                "jambopay_response": tx_data if tx_data else {
-                    "orderId": payment.reference_number,
-                    "ref": payment.psp_reference_number,
-                    "status": payment.status,
-                    "description": payment.description
-                }
+                "jambopay_response": tx_data 
             }, cls=DjangoJSONEncoder)
             
         else:
