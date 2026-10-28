@@ -251,6 +251,7 @@ def subscriptionsDispatcherAPIView(request):
                     
                     if tx_result and not tx_result==None:
                         tx_data = tx_result.json()
+                        create_log("info",f"tx_data : {tx_data}")
                  
                         
                         final_status = tx_data.get("status", "")
