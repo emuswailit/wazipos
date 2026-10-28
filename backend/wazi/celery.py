@@ -131,4 +131,13 @@ app.conf.beat_schedule = {
         "schedule": 300.0, 
         "args": None,
     },
+
+    # ── Subscription Payments Reconciliation ───────────────────────
+    # Checks for PENDING subscription payments in case webhooks fail
+    # or the user closes their browser. Runs every five seconds.
+    "check-pending-subscription-payments": {
+        "task": "subscriptions.tasks.check_pending_subscription_payments",
+        "schedule": 5.0,
+        "args": None,
+    },
 }
