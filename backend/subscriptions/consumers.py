@@ -151,6 +151,7 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 tx_data = tx_result.json()
                                 
                                 # 3. Update DB only if JamboPay says the transaction is completed
+                                ## Update
                                 if tx_data and not tx_data==None:
                                     final_status = str(tx_data.get("status", "")).upper()
                                     status_description = tx_data.get("description", "")
