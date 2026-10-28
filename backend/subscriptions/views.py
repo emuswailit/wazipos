@@ -218,7 +218,7 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"from jp errors {errors}")
             return custom_error_response(1, "Payment failed at JamboPay")
 
-        # 8. Create Record & Poll
+        # 8. Create Record & Poll (Exactly 3 times)
         try:
             sub_payment = SubscriptionPayment.objects.create(
                 reference_number=reference_number,
@@ -234,7 +234,7 @@ def subscriptionsDispatcherAPIView(request):
             # POLLING LOGIC: 3 attempts within 10 seconds
             max_attempts = 3
             poll_interval = 3 
-            tx_data = result_json
+            tx_data = result_json # Fallback to checkout response if poll fails
             
             order_id = result_json.get("orderId", reference_number) 
             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
@@ -271,12 +271,13 @@ def subscriptionsDispatcherAPIView(request):
                 if attempt < max_attempts - 1:
                     time.sleep(poll_interval)
 
-            # Fallback if it timed out and no status returned yet
-            if tx_data.get("status") is None:
+            # 🌟 Ensure 'status' and 'description' exist in the final tx_data for the payload
+            if "status" not in tx_data or tx_data.get("status") is None:
                 tx_data["status"] = "PENDING"
+            if "description" not in tx_data or tx_data.get("description") is None:
                 tx_data["description"] = "User did not enter PIN or request timed out."
 
-            # Return the exact requested payload
+            # 🌟 Return with jambopay_response
             return custom_success_message(
                 0,
                 "STK push initiated successfully",
@@ -286,7 +287,7 @@ def subscriptionsDispatcherAPIView(request):
                     "amount": amount,
                     "status": tx_data['status'],
                     "description": tx_data['description'],
-                    "jambopay_response": tx_data
+                    "jambopay_response": tx_data  # <--- Included here
                 },
                 "payment"
             )
