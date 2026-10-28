@@ -4,10 +4,11 @@ import json
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from utils.logging import create_log
-## Create log
 
 # Make sure to import the exact model and serializer names you are using
 from .models import Subscription, SubscriptionPayment
+# 🌟 CHECK: Is it SubscriptionPaymentSerializer or SubscriptionPaymentsSerializer?
+# Ensure the name matches exactly what is in serializers.py
 from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
 
 # Use Django's built-in JSON encoder for safety with UUIDs and Datetimes
@@ -122,10 +123,12 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
         payment = SubscriptionPayment.objects.filter(
             reference_number=self.reference_number
         ).first()
-        create_log("SubscriptionPayment ref",self.reference_number)
+        
+        # 🌟 FIXED: Passed "info" as the log level
+        create_log("info", f"SubscriptionPayment ref: {self.reference_number}")
 
         if payment:
-            # 🌟 Using your exact serializer name here
+            # 🌟 Ensure this matches your exact serializer name
             payment_details = SubscriptionPaymentsSerializer(
                 payment,
                 context={'request': None},

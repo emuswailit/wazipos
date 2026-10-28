@@ -80,13 +80,10 @@ def subscriptionsDispatcherAPIView(request):
         if not payment_method:
             return custom_error_response(1, "Mobile Money payment method not configured")
 
-        # 2. Check for Entity Admin's Collection Account
-        if not UserAccounts.objects.filter(owner=entity.administrator).exists():
-            return custom_error_response(1, "Entity admin has no collection account")
-
-        administrator_account = UserAccounts.objects.filter(
-            owner=entity.administrator
-        ).first()
+        # 2. Retrieve Platform Collection Till from .env using decouple
+        platform_account_number = config("WAZIPOS_SYSTEM_TILL", default="")
+        if not platform_account_number:
+            return custom_error_response(1, "Platform collection till number is not configured in the environment")
 
         # 3. Get Telco and Amount
         try:
@@ -111,7 +108,7 @@ def subscriptionsDispatcherAPIView(request):
                     "https://webhook.site/"
                     "7911487f-fc9e-46b0-a812-3adfa008375c"
                 ),
-                "accountTo": administrator_account.account_number,
+                "accountTo": platform_account_number, # 🌟 Using ENV variable
                 "description": "Subscription payment",
                 "modeOfPayment": "MOBILE_MONEY",
                 "provider": "Mpesa",
@@ -120,7 +117,7 @@ def subscriptionsDispatcherAPIView(request):
                     "serviceType": "TOPUP",
                 },
             })
-            create_log("info", f"subscription payment {payload}")
+            create_log("info", f"subscription payment payload: {payload}")
             
         elif telco == "AIRTELMONEY":
             payload = json.dumps({
@@ -130,7 +127,7 @@ def subscriptionsDispatcherAPIView(request):
                     "https://webhook.site/"
                     "55963e0b-b692-42b6-a682-0223eaf7fbff"
                 ),
-                "accountTo": administrator_account.account_number,
+                "accountTo": platform_account_number, # 🌟 Using ENV variable
                 "currency": "KES",
                 "description": "TOPUP",
                 "modeOfPayment": "MOBILE_MONEY",
@@ -149,7 +146,7 @@ def subscriptionsDispatcherAPIView(request):
         the_data = {
             "client_id": config("JAMBOPAY_CLIENT_ID"),
             "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE"), # Note: kept the exact typo from your snippet
+            "grant_type": config("JAMBOPA_GRANT_TYPE"), # Kept exactly as in your snippet
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         
@@ -181,15 +178,13 @@ def subscriptionsDispatcherAPIView(request):
                 headers=headers,
             )
             result_json = result.json()
-            create_log("info", f"result_json {result_json}")
+            create_log("info", f"result_json from jambopay: {result_json}")
         except Exception as e:
             return custom_error_response(1, f"JamboPay Checkout failed: {str(e)}")
 
         if not result_json or "ref" not in result_json:
             create_log("info", f"from jp errors {errors}")
             return custom_error_response(1, "Payment failed at JamboPay")
-
-        create_log("result from json", result_json)
 
         # 8. Create SubscriptionPayment Record & Return Success
         try:
@@ -200,7 +195,8 @@ def subscriptionsDispatcherAPIView(request):
                 entity=entity,
                 owner=request.user,
             )
-            create_log("sub_payment",sub_payment)
+            create_log("info", f"Created sub_payment ID: {sub_payment.id}")
+            
             use_reference_number(reference_number)
 
             return custom_success_message(
@@ -216,7 +212,6 @@ def subscriptionsDispatcherAPIView(request):
         except Exception as e:
             create_log("error", str(e))
             return custom_error_response(1, f"Failed to create payment record: {str(e)}")
-
     # ==========================================
     # 🌟 3. UNKNOWN ACTION
     # ==========================================
