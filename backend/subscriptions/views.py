@@ -189,6 +189,8 @@ def subscriptionsDispatcherAPIView(request):
             create_log("info", f"from jp errors {errors}")
             return custom_error_response(1, "Payment failed at JamboPay")
 
+        create_log("result from json", result_json)
+
         # 8. Create SubscriptionPayment Record & Return Success
         try:
             sub_payment = SubscriptionPayment.objects.create(
@@ -198,6 +200,7 @@ def subscriptionsDispatcherAPIView(request):
                 entity=entity,
                 owner=request.user,
             )
+            create_log("sub_payment",sub_payment)
             use_reference_number(reference_number)
 
             return custom_success_message(
