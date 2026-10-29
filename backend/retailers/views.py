@@ -1561,12 +1561,14 @@ KNOWN_ACTIONS = {
     "GetAdjacentPharmacies",
 }
 
+# Inside your views.py
+
 def _paginated_prescriptions_response(queryset, request):
     """Shared paginated response for the two 'retrieve prescriptions' actions."""
+    # If the util returns None, treat it as an empty list
     if queryset is None:
-        return custom_errors_response(
-            1, "No prescriptions found", None
-        )
+        queryset = models.Prescriptions.objects.none()
+        
     paginator = PageNumberPagination()
     page = paginator.paginate_queryset(queryset, request)
     serializer = serializers.RetailPrescriptionsSerializer(
