@@ -3,6 +3,7 @@
 # ---------- Standard library ----------
 import datetime
 from decimal import Decimal
+from core.constants import EntityType
 
 
 # ---------- Third-party ----------
@@ -1527,6 +1528,25 @@ def calculate_haversine_distance(lat1, lon1, lat2, lon2):
     r = 6371  # Radius of earth in kilometers
     return c * r
 
+import math
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions, exceptions
+from rest_framework.pagination import PageNumberPagination
+from entitylocations.models import Locations
+from core.responses import custom_success_message, custom_errors_response
+# ... (your other imports) ...
+
+# Helper function for distance calculation
+def calculate_haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate the great circle distance in kilometers between two points on the earth."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371  # Radius of earth in kilometers
+    return c * r
+
 KNOWN_ACTIONS = {
     "UpdateRetailPrescription",
     "GetRetailPrescriptionDetails",
@@ -1538,7 +1558,7 @@ KNOWN_ACTIONS = {
     "RetrieveUserRetailPrescriptions",
     "GetRelatedEntityInventoryForProduct",
     "CreateRetailPrescriptionItem",
-    "GetAdjacentPharmacies",  # <--- ADDED HERE
+    "GetAdjacentPharmacies",
 }
 
 def _paginated_prescriptions_response(queryset, request):
@@ -1745,7 +1765,7 @@ def remoteRetailPrescriptionsAPIView(request):
                 1, "Retail prescription item not created", errors
             )
 
-        # --- NEW ACTION ADDED HERE ---
+        # --- GetAdjacentPharmacies Action ---
         if action == "GetAdjacentPharmacies":
             lat = request.data.get("latitude")
             lng = request.data.get("longitude")
@@ -1753,9 +1773,9 @@ def remoteRetailPrescriptionsAPIView(request):
             if not lat or not lng:
                 raise exceptions.ValidationError("Latitude and longitude are required")
 
-            # Fetch locations for entities that are pharmacies/retailers
+            # ONLY query for PharmaceuticalRetailer (Removed "PHARMACEUTICALRETAILER")
             locations = Locations.objects.filter(
-                entity__entity_type__in=["PHARMACY", "PharmaceuticalRetailer"]
+                entity__entity_type="PharmaceuticalRetailer"
             ).select_related("entity")
 
             results = []
@@ -1769,7 +1789,7 @@ def remoteRetailPrescriptionsAPIView(request):
                     float(loc.point.y), float(loc.point.x)
                 )
                 
-                # Optional: only include pharmacies within 50km
+                # Only include pharmacies within 50km
                 if dist <= 50.0:
                     results.append({
                         "entity": loc.entity,
@@ -1789,6 +1809,7 @@ def remoteRetailPrescriptionsAPIView(request):
                     "town": getattr(r["entity"], "town", ""),
                     "phone": getattr(r["entity"], "phone", ""),
                     "distance_km": round(r["distance"], 1),
+                    "rating": getattr(r["entity"], "rating", None), # Added rating
                 }
                 for r in results
             ]
@@ -1901,6 +1922,8 @@ from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
 
+
+
 class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
     """Create new retail prescription."""
     name = "retail-prescription-create"
@@ -1963,7 +1986,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
 
         retailer = authentication_models_validators.validate_entity(pharmacy_id)
         
-        # FIX: Ensure `retailer` actually exists before checking entity_type
+        # Ensure `retailer` actually exists before checking entity_type
         if not retailer:
             errors_messages.append("Retailer entity not found")
             return Response(
@@ -1976,8 +1999,9 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        if retailer.entity_type != "PHARMACY":
-            errors_messages.append("Selected entity is not a pharmacy")
+        # FIX: Use EntityType enum instead of hardcoded string
+        if retailer.entity_type != EntityType.PHARMACEUTICAL_RETAILER.value:
+            errors_messages.append("Selected entity is not a pharmaceutical retailer")
             return Response(
                 data={
                     "response_code": 1,
@@ -1988,7 +2012,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        # FIX: Use timezone.now() instead of datetime.datetime.now() for USE_TZ=True
+        # Use timezone.now() instead of datetime.datetime.now() for USE_TZ=True
         minutes_ago = timezone.now() - datetime.timedelta(minutes=2)
         if models.Prescriptions.objects.filter(
             created_by=request.user,
@@ -2050,7 +2074,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                     origin_point=origin_point,
                     destination_point=destination_point,
                 )
-                # FIX: Use serializer.instance instead of redundant DB query
+                # Use serializer.instance instead of redundant DB query
                 item = serializer.instance
 
                 saved_images = []
