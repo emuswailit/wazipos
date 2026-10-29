@@ -53,7 +53,6 @@ def check_pending_subscription_payments():
     create_log("info", "Starting pending subscription payments check...")
 
     # 1. Get payments that are PENDING and were created in the last 30 minutes
-    # (No point checking old ones, they likely timed out).
     thirty_mins_ago = timezone.now() - timedelta(minutes=30)
     pending_payments = SubscriptionPayment.objects.filter(
         status="PENDING",
@@ -109,8 +108,12 @@ def check_pending_subscription_payments():
                     # If successful, create the Subscription record
                     if current_status == "SUCCESS":
                         create_subscription_from_payment(payment)
+                        
+                        # 🌟 NEW: Broadcast to the general subscriptions group 
+                        # so the SubscriptionBanner updates even if the payment modal is closed.
+                        broadcast_subscription_update()
 
-                    # Broadcast the update to the frontend WebSocket
+                    # Broadcast the update to the specific payment WebSocket (for the modal)
                     broadcast_payment_status(order_id, payment)
 
         except Exception as e:
@@ -140,8 +143,6 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
             if Subscription.objects.filter(payment=payment).exists():
                 return
 
-            # You may need to adjust these defaults based on your business logic
-            # e.g., pulling `months` from the payment amount or entity config.
             months = 1 
             if payment.amount >= 5000: months = 6
             elif payment.amount >= 10000: months = 12
@@ -166,7 +167,7 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
 
 def broadcast_payment_status(reference_number: str, payment: SubscriptionPayment):
     """
-    Helper to broadcast the updated payment status to the WebSocket group.
+    Helper to broadcast the updated payment status to the specific payment WebSocket group.
     """
     try:
         channel_layer = get_channel_layer()
@@ -179,3 +180,21 @@ def broadcast_payment_status(reference_number: str, payment: SubscriptionPayment
         )
     except Exception as e:
         create_log("error", f"Failed to broadcast WS message for {reference_number}: {str(e)}")
+
+
+def broadcast_subscription_update():
+    """
+    Helper to broadcast a signal to all connected clients to re-fetch their subscription.
+    Triggered when a new subscription is created via background task.
+    """
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "subscriptions",
+            {
+                "type": "send_subscriptions",
+                "message": "Subscription updated from background task"
+            }
+        )
+    except Exception as e:
+        create_log("error", f"Failed to broadcast subscriptions update WS message: {str(e)}")

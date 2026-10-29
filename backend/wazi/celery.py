@@ -146,7 +146,7 @@ app.conf.beat_schedule = {
     # over WebSockets to ensure the frontend stays in sync.
     "push-hourly-subscriptions": {
         "task": "subscriptions.tasks.push_hourly_subscriptions",
-        "schedule": 3600.0, # Every 1 hour
+        "schedule": 60.0, # Every 1 minute
         "args": None,
     },
 }

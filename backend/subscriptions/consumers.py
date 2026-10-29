@@ -84,10 +84,10 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        # Fetch the last 10 subscriptions for the user's entity
+        # FIX: Fetch ONLY the most recent subscription for the user's entity
         subscriptions_qs = Subscription.objects.filter(
             entity=self.user.entity,
-        ).order_by('-created')[:10]
+        ).order_by('-created')[:1]
 
         subscriptions_data = SubscriptionSerializer(
             subscriptions_qs,
