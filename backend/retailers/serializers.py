@@ -1549,9 +1549,10 @@ class PrescriptionsSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status")
 
-
 class RetailPrescriptionsSerializer(serializers.ModelSerializer):
-    images = PrescriptionImageSerializer(many=True, read_only=True)
+    # FIX: Added source="prescription_images" to map the related_name correctly
+    images = PrescriptionImageSerializer(source="prescription_images", many=True, read_only=True)
+    
     items = serializers.SerializerMethodField(read_only=True)
     items_count = serializers.SerializerMethodField(read_only=True)
     entity_title = serializers.SerializerMethodField(read_only=True)
@@ -1571,7 +1572,7 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
             "images", "items", "items_count",
             "patient", "patient_name", "patient_gender",
             "patient_date_of_birth", "patient_age", "comment",
-            "ai_extraction_status", # ADDED
+            "ai_extraction_status",
             "key", "created", "updated",
         )
         read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status")
@@ -1601,9 +1602,9 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
 
     def get_patient_age(self, obj):
         from core.date_utils import get_age_in_years
-
         return get_age_in_years(f"{obj.patient_date_of_birth}")
 
+    
 
 class PrescriptionItemAdministrationsSerializer(serializers.ModelSerializer):
     key = serializers.SerializerMethodField(read_only=True)
