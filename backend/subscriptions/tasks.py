@@ -17,6 +17,30 @@ from .models import Subscription, SubscriptionPayment
 
 
 @shared_task
+def push_hourly_subscriptions():
+    """
+    Broadcast to all connected clients to re-fetch their subscription data.
+    Runs every hour via Celery Beat.
+    
+    Why? This ensures that if a user leaves their app open for days, 
+    the subscription status (e.g., active -> expired) updates automatically
+    without needing a page refresh.
+    """
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "subscriptions",
+            {
+                "type": "send_subscriptions",
+                "message": "Hourly push from Celery task"
+            }
+        )
+        create_log("info", "Hourly subscription push broadcasted to all connected clients.")
+    except Exception as e:
+        create_log("error", f"Failed to broadcast hourly subscription push: {str(e)}")
+
+
+@shared_task
 def check_pending_subscription_payments():
     """
     Background task to reconcile PENDING payments with JamboPay.

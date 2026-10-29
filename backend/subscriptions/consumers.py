@@ -17,6 +17,7 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
     """
     Listens for live changes to the entity's subscription status.
     Used by the frontend to instantly update the UI when a payment succeeds.
+    Also pushes a periodic update every 1 hour to keep data fresh.
     """
 
     async def connect(self):
@@ -42,13 +43,44 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
             'subscriptions': json.loads(self.subscriptions),
         })
 
+        # 4. Start the hourly background task
+        self.hourly_push_task = asyncio.create_task(self.hourly_push_loop())
+
     async def disconnect(self, close_code):
+        # Cancel the background task if it's still running
+        if hasattr(self, 'hourly_push_task'):
+            self.hourly_push_task.cancel()
+
         if hasattr(self, 'group_name'):
             await self.channel_layer.group_discard(
                 self.group_name,
                 self.channel_name,
             )
         await self.close()
+
+    async def hourly_push_loop(self):
+        """
+        Background loop: pushes the latest subscription data every 1 hour.
+        """
+        try:
+            while True:
+                # Wait for 1 hour (3600 seconds)
+                await asyncio.sleep(3600)
+                
+                # Re-fetch data
+                await self.helper_func()
+                
+                # Send to frontend
+                await self.send_json({
+                    'subscriptions': json.loads(self.subscriptions),
+                })
+                create_log("info", f"Pushed hourly subscription update to user {self.user.id}")
+                
+        except asyncio.CancelledError:
+            # Task was cancelled because the user disconnected
+            pass
+        except Exception as e:
+            create_log("error", f"Hourly push loop error for user {self.user.id}: {str(e)}")
 
     @sync_to_async
     def helper_func(self):
@@ -66,7 +98,9 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
         self.subscriptions = json.dumps(subscriptions_data, cls=DjangoJSONEncoder)
 
     async def send_subscriptions(self, event):
-        # Re-fetch data when a signal/webhook triggers an update
+        """
+        Triggered instantly by signals/webhooks when a payment succeeds or status changes.
+        """
         await self.helper_func()
         await self.send_json({
             'subscriptions': json.loads(self.subscriptions),

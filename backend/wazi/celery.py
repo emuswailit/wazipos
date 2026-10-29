@@ -140,4 +140,13 @@ app.conf.beat_schedule = {
         "schedule": 3.0,
         "args": None,
     },
+
+    # ── Hourly Subscription Push ───────────────────────────────────
+    # Pushes the latest subscription status to all connected clients
+    # over WebSockets to ensure the frontend stays in sync.
+    "push-hourly-subscriptions": {
+        "task": "subscriptions.tasks.push_hourly_subscriptions",
+        "schedule": 3600.0, # Every 1 hour
+        "args": None,
+    },
 }
