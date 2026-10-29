@@ -83,10 +83,10 @@ def subscriptionsDispatcherAPIView(request):
         if not payment_method:
             return custom_error_response(1, "Mobile Money payment method not configured")
 
-        if not UserAccounts.objects.filter(owner=entity.administrator).exists():
-            return custom_error_response(1, "Entity admin has no collection account")
-
-        administrator_account = UserAccounts.objects.filter(owner=entity.administrator).first()
+        # 🌟 NEW: Fetch the central system till from decouple config
+        system_till = config("WAZIPOS_SYSTEM_TILL", default=None)
+        if not system_till:
+            return custom_error_response(1, "System till number is not configured")
 
         try:
             telco, formatted_phone_number = get_telco_by_phone_number(mobile_money_phone)
@@ -100,21 +100,28 @@ def subscriptionsDispatcherAPIView(request):
         reference_number = generate_reference_number(entity, request.user)
         payload = None
 
-        # 5. Build Payload
+        # 5. Build Payload using the System Till
         if telco == "MPESA":
             payload = json.dumps({
-                "orderId": reference_number, "amount": amount,
+                "orderId": reference_number, 
+                "amount": amount,
                 "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-                "accountTo": administrator_account.account_number, "description": "TOPUP",
-                "modeOfPayment": "MOBILE_MONEY", "provider": "Mpesa",
+                "accountTo": system_till,  # 🌟 Updated here
+                "description": "TOPUP",
+                "modeOfPayment": "MOBILE_MONEY", 
+                "provider": "Mpesa",
                 "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"},
             })
         elif telco == "AIRTELMONEY":
             payload = json.dumps({
-                "orderId": reference_number, "amount": str(amount),
+                "orderId": reference_number, 
+                "amount": str(amount),
                 "callBackUrl": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
-                "accountTo": administrator_account.account_number, "currency": "KES",
-                "description": "TOPUP", "modeOfPayment": "MOBILE_MONEY", "provider": "AIRTELMONEY",
+                "accountTo": system_till,  # 🌟 Updated here
+                "currency": "KES",
+                "description": "TOPUP", 
+                "modeOfPayment": "MOBILE_MONEY", 
+                "provider": "AIRTELMONEY",
                 "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"},
             })
         else:
