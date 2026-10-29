@@ -440,10 +440,6 @@ def clientOrdersAPIView(request):
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
 
-# ===========================================================================
-# Joint retailer / wholesaler receipts
-# ===========================================================================
-
 import math
 from decimal import Decimal
 from rest_framework.decorators import api_view, permission_classes
@@ -687,6 +683,63 @@ def retailerReceiptsJointAPIView(request):
             serializer.data, "collection_points",
         )
 
+    # --- NEW ACTION ADDED HERE ---
+    elif action == "GetAdjacentPharmacies":
+        lat = request.data.get("latitude")
+        lng = request.data.get("longitude")
+
+        if not lat or not lng:
+            raise exceptions.ValidationError("Latitude and longitude are required")
+
+        try:
+            # Fetch locations for entities that are pharmacies/retailers
+            locations = Locations.objects.filter(
+                entity__entity_type__in=["PharmaceuticalRetailer"]
+            ).select_related("entity")
+
+            results = []
+            for loc in locations:
+                if not loc.point:
+                    continue
+                
+                # Use the existing Haversine helper
+                dist = calculate_haversine_distance(
+                    float(lat), float(lng),
+                    float(loc.point.y), float(loc.point.x)
+                )
+                
+                # Optional: only include pharmacies within 50km
+                if dist <= 50.0:
+                    results.append({
+                        "entity": loc.entity,
+                        "distance": dist
+                    })
+            
+            # Sort by closest and limit to top 30
+            results.sort(key=lambda x: x["distance"])
+            results = results[:30]
+            
+            # Format for the frontend EntityAutocomplete
+            pharmacies_data = [
+                {
+                    "remote_id": str(r["entity"].id),
+                    "title": r["entity"].title,
+                    "entity_type": r["entity"].entity_type,
+                    "town": getattr(r["entity"], "town", ""),
+                    "phone": getattr(r["entity"], "phone", ""),
+                    "distance_km": round(r["distance"], 1),
+                }
+                for r in results
+            ]
+            
+            return custom_success_message(
+                0, "Nearby pharmacies retrieved successfully",
+                pharmacies_data, "pharmacies",
+            )
+
+        except Exception as e:
+            return custom_errors_response(1, "Failed to fetch nearby pharmacies", [str(e)])
+
     elif action == "CalculateShippingRate":
         # 1. Try to derive origin from the entitylocations app
         entity_id = request.data.get("entity")
@@ -775,6 +828,8 @@ def retailerReceiptsJointAPIView(request):
             
         except ValueError:
             raise exceptions.ValidationError("Invalid coordinates or numeric formats")
+
+
 # ===========================================================================
 # Staff — indents / orders / prescriptions
 # ===========================================================================
