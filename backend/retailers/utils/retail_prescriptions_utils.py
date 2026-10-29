@@ -13,6 +13,7 @@ from utils.logging import create_log
 from authentication.utils.utils import generate_reference_number, use_reference_number, get_telco_by_phone_number,generate_document_number
 from .retailer_utils import process_customer_order_payment
 from payments.validators import payments_models_validators
+from core.constants import EntityType 
 
 @transaction.atomic
 def make_prescription_order_payment(data,user):
@@ -243,12 +244,15 @@ def update_retail_prescription_item(data,user):
     return errors, prescription_item
 
 
+
 def get_entity_retail_prescriptions(data, user):
     """Get retail prescriptions for entity"""
-    if user.entity.entity_type=="PHARMACY":
+    # Safely check if the user's entity type is a Pharmaceutical Retailer
+    if getattr(user.entity, "entity_type", None) == EntityType.PHARMACEUTICAL_RETAILER.value:
         return models.Prescriptions.objects.filter(entity=user.entity).all()
     else:
         return []
+
     
 def get_user_retail_prescriptions(data, user):
     """Get retail prescriptions for user"""
