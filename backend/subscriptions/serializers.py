@@ -28,7 +28,7 @@ class SubscriptionPaymentsSerializer(serializers.ModelSerializer):
     
 class SubscriptionSerializer(serializers.ModelSerializer):
     entity_title=serializers.SerializerMethodField(read_only=True)
-    entity_montyhly_subscription=serializers.SerializerMethodField(read_only=True)
+    entity_monthly_subscription=serializers.SerializerMethodField(read_only=True)
     class Meta:
         ordering = ["-id"]
         model = models.Subscription
@@ -37,7 +37,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "owner",
             "entity",
             "entity_title",
-            "entity_montyhly_subscription",
+            "entity_monthly_subscription",
             "months",
             "start_date",
             "end_date",
@@ -52,5 +52,5 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     def get_entity_title(self,obj):
         return obj.entity.title
     
-    def get_entity_montyhly_subscription(self,obj):
-        return obj.entity.entity_montyhly_subscription
+    def get_entity_monthly_subscription(self,obj):
+        return obj.entity.monthly_subscription
