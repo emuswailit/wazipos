@@ -7,15 +7,6 @@ from datetime import date, time as dt_time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 
-from django.contrib.gis.db import models as geomodel
-from django.db import models
-from django.utils.translation import gettext_lazy as _
-from decimal import Decimal
-
-
-
-import requests
-
 # ---------- Third-party ----------
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -30,7 +21,7 @@ from django.core.files import File
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Q, Sum
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.text import slugify
@@ -48,7 +39,7 @@ from authentication.models import (
 from core.constants import TRUE_FALSE_OPTIONS, UNITS_OF_ISSUE_CHOICES
 from core.models import EntityRelatedModel
 from drugs.models import Frequency, Preparation, Routes, Users
-from employees.models import  Employees
+from employees.models import Employees
 from entitylocations.models import BodaLocations
 from wholesalers.models import (
     RetailerOrderItems,
@@ -79,17 +70,19 @@ def _q(value) -> Decimal:
 
 def prescription_image_upload_to(instance, filename):
     # `prescription` is nullable — guard against AttributeError at upload time.
+    # `instance.id` is None on the first save, so use a UUID fragment to
+    # guarantee uniqueness instead.
     if instance.prescription_id and instance.prescription.patient_name:
         slug = slugify(instance.prescription.patient_name)
     else:
         slug = "prescription"
 
     if "." in filename:
-        basename, file_extension = filename.rsplit(".", 1)
+        _basename, file_extension = filename.rsplit(".", 1)
     else:
         file_extension = "jpg"
 
-    return f"{slug}-{instance.id}.{file_extension}"
+    return f"{slug}-{uuid.uuid4().hex[:12]}.{file_extension}"
 
 
 def compress_image(image):
@@ -227,6 +220,9 @@ class RetailerReviews(EntityRelatedModel):
         User, related_name="review_owner", on_delete=models.CASCADE
     )
 
+    def __str__(self):
+        return f"{self.variation_id} · {self.rating}/5"
+
 
 # ===========================================================================
 # Wholesaler invoices
@@ -275,6 +271,9 @@ class WholesalerInvoices(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Wholesaler Invoices"
 
+    def __str__(self):
+        return self.invoice_number or f"Invoice {self.pk}"
+
 
 class WholesalerInvoiceItems(EntityRelatedModel):
     wholesaler_invoice = models.ForeignKey(WholesalerInvoices, on_delete=models.CASCADE)
@@ -298,6 +297,9 @@ class WholesalerInvoiceItems(EntityRelatedModel):
     owner = models.ForeignKey(
         User, related_name="wholesaler_invoice_owner", on_delete=models.CASCADE
     )
+
+    def __str__(self):
+        return f"{self.product.title} × {self.purchased_unit_quantity}"
 
 
 # ===========================================================================
@@ -405,7 +407,7 @@ class RetailerReceipts(EntityRelatedModel):
     unit_of_receipt = models.CharField(
         verbose_name=_("Unit of Receipt"),
         choices=UnitsOfReceipt.choices,
-        default="PIECE",
+        default="Piece",
         max_length=20,
     )
 
@@ -553,7 +555,7 @@ class RetailQuantityDiscounts(EntityRelatedModel):
     title = models.CharField(max_length=100)
     retailer_receipt = models.ForeignKey(
         RetailerReceipts,
-        related_name="quantity_discout_product",
+        related_name="quantity_discount_product",  # fixed typo
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -572,6 +574,9 @@ class RetailQuantityDiscounts(EntityRelatedModel):
         related_name="quantity_discount_owner",
         on_delete=models.CASCADE,
     )
+
+    def __str__(self):
+        return self.title
 
 
 # ===========================================================================
@@ -1123,7 +1128,7 @@ class OutOfStock(EntityRelatedModel):
     retailer_indent = models.ForeignKey(
         RetailerIndent,
         on_delete=models.CASCADE,
-        related_name="requisitioning_customer",
+        related_name="requisitioning_indent",
         null=True,
         blank=True,
     )
@@ -1143,6 +1148,9 @@ class OutOfStock(EntityRelatedModel):
         related_name="os_added_by",
         on_delete=models.CASCADE,
     )
+
+    def __str__(self):
+        return f"{self.product.title} × {self.required_quantity}"
 
 
 class OrderEstimate(EntityRelatedModel):
@@ -1180,6 +1188,9 @@ class OrderEstimate(EntityRelatedModel):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.product_id} · est. {self.required_estimate}"
+
 
 class RetailersShippingRates(EntityRelatedModel):
     distance_in_km_from = models.FloatField()
@@ -1209,6 +1220,9 @@ class RetailersShippingRates(EntityRelatedModel):
 
     class Meta:
         unique_together = ("entity", "distance_in_km_from", "distance_in_km_to")
+
+    def __str__(self):
+        return f"{self.distance_in_km_from}-{self.distance_in_km_to} km · {self.shipping_cost}"
 
 
 # ===========================================================================
@@ -1277,8 +1291,7 @@ class Prescriptions(EntityRelatedModel):
         ("PARENT", "PARENT"),
         ("OTHER", "OTHER"),
     )
-    
-    # --- ADDED: AI Extraction Tracking ---
+
     AI_STATUS_CHOICES = (
         ("PENDING", "PENDING"),
         ("PROCESSING", "PROCESSING"),
@@ -1291,10 +1304,15 @@ class Prescriptions(EntityRelatedModel):
         related_name="prescription_created_by",
         on_delete=models.CASCADE,
     )
+    owner = models.ForeignKey(
+        User,
+        related_name="prescriptions_owned",
+        on_delete=models.CASCADE,
+    )
     interpreted_by = models.ForeignKey(
         Employees,
         related_name="prescription_interpreted_by",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
     )
@@ -1322,20 +1340,29 @@ class Prescriptions(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    
-    # --- ADDED: AI Extraction Tracking ---
+
     ai_extraction_status = models.CharField(
-        max_length=20, 
-        choices=AI_STATUS_CHOICES, 
+        max_length=20,
+        choices=AI_STATUS_CHOICES,
         default="PENDING",
-        help_text="Tracks the status of the DeepRead AI extraction."
+        db_index=True,
+        help_text="Tracks the status of the DeepRead AI extraction.",
     )
-    
+    ai_extraction_error = models.TextField(
+        null=True, blank=True,
+        help_text="Last error message from the extraction pipeline, if any.",
+    )
+    ai_extracted_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp the extraction last completed (success or failure).",
+    )
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name_plural = "Retail Prescriptions"
+        ordering = ["-created"]
 
     def __str__(self):
         return f"{self.patient_name} created on {self.created}"
@@ -1363,16 +1390,15 @@ class PrescriptionItems(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    
-    # --- UPDATED: Made nullable for AI extraction ---
+
     prescribed_by = models.ForeignKey(
         Employees,
         related_name="prescription_items_prescribed",
-        on_delete=models.CASCADE,
-        null=True,      # Added
-        blank=True,     # Added
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
-    
+
     route = models.ForeignKey(
         Routes,
         related_name="prescription_items",
@@ -1387,15 +1413,15 @@ class PrescriptionItems(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    dose = models.CharField(max_length=128)
-    days = models.PositiveIntegerField()
+    dose = models.CharField(max_length=128, null=True, blank=True)
+    days = models.PositiveIntegerField(null=True, blank=True)
     is_divisible = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
     interpreted_by = models.ForeignKey(
         Employees,
         related_name="prescription_items_interpreted",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
     )
@@ -1407,42 +1433,41 @@ class PrescriptionItems(EntityRelatedModel):
     created_by = models.ForeignKey(
         Employees,
         related_name="prescription_items_created",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
     )
     retailer_receipt = models.ForeignKey(
         RetailerReceipts,
         related_name="prescription_items",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,   # preserve history when receipt is deleted
         null=True,
         blank=True,
     )
     unit_of_issue = models.CharField(
         verbose_name=_("Unit of Issue"),
         choices=UnitOfIssue.choices,
-        default="PIECE",
+        default="Piece",
         max_length=20,
     )
 
-    # --- ADDED: AI Verification Fields ---
     is_verified = models.CharField(
-        max_length=50, 
-        choices=TRUE_FALSE_OPTIONS, 
+        max_length=50,
+        choices=TRUE_FALSE_OPTIONS,
         default="false",
-        help_text="Set to true when a human has verified the AI-extracted data."
+        db_index=True,
+        help_text="Set to true when a human has verified the AI-extracted data.",
     )
     verified_by = models.ForeignKey(
         Employees,
         related_name="prescription_items_verified",
-        on_delete=models.SET_NULL, # Keep the item even if the employee is deleted
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
     )
     verified_at = models.DateTimeField(
-        null=True, 
-        blank=True,
-        help_text="Timestamp of when the item was verified."
+        null=True, blank=True,
+        help_text="Timestamp of when the item was verified.",
     )
 
     created = models.DateTimeField(auto_now_add=True)
@@ -1451,14 +1476,19 @@ class PrescriptionItems(EntityRelatedModel):
 
     class Meta:
         verbose_name_plural = "Retail Prescription Items"
+        ordering = ["created"]
 
     def __str__(self):
         return f"{self.pk}"
 
     def save(self, *args, **kwargs):
-        self.balance_unit_quantity = (
-            self.required_unit_quantity - self.issued_unit_quantity
+        self.balance_unit_quantity = max(
+            0,
+            (self.required_unit_quantity or 0)
+            - (self.issued_unit_quantity or 0),
         )
+        if self.is_verified == "true" and self.verified_at is None:
+            self.verified_at = timezone.now()
         super().save(*args, **kwargs)
 
 
@@ -1482,8 +1512,12 @@ class PrescriptionItemAdministrations(EntityRelatedModel):
 
     class Meta:
         verbose_name_plural = "Retail Prescription Item Administrations"
-
-# retailers/models.py
+        constraints = [
+            models.UniqueConstraint(
+                fields=["prescription_item", "administration_date", "administration_time"],
+                name="uniq_administration_slot",
+            ),
+        ]
 
 
 # =====================================================================
@@ -1494,39 +1528,42 @@ class ShippingConfiguration(models.Model):
     Global pricing engine for dynamic distance-based shipping.
     You only need ONE row in this table.
     """
-    
+
     base_dispatch_fee = models.DecimalField(
         max_digits=7, decimal_places=2, default=100.00,
         help_text="Flat fee to dispatch the package."
     )
-    
+
     local_rate_per_km = models.DecimalField(
         max_digits=5, decimal_places=2, default=40.00,
         help_text="Rate per km for intra-town delivery (Boda Boda)."
     )
-    
+
     intercounty_rate_per_km = models.DecimalField(
         max_digits=5, decimal_places=2, default=10.00,
         help_text="Rate per km for long-distance delivery to a Post Office."
     )
-    
+
     surcharge_per_kg = models.DecimalField(
         max_digits=5, decimal_places=2, default=20.00,
         help_text="Additional fee per kg for bulky items."
     )
-    
-    # --- NEW: Value-Based Insurance ---
+
     value_insurance_percentage = models.DecimalField(
         max_digits=5, decimal_places=2, default=0.00,
         help_text="Percentage of the order value charged for insurance/security (e.g., 2.00 for 2%)."
     )
-    
+
     max_value_insurance_fee = models.DecimalField(
         max_digits=7, decimal_places=2, default=500.00,
         help_text="Maximum cap for the value insurance fee (e.g., never charge more than KES 500 for this)."
     )
-    
+
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Shipping Configuration"
+        verbose_name_plural = "Shipping Configuration"
 
     def __str__(self):
         return f"Global Shipping Config (Active: {self.is_active})"
@@ -1568,10 +1605,16 @@ class CustomerOrders(EntityRelatedModel):
         RECEIVED = "RECEIVED", _("RECEIVED")
 
     entity = models.ForeignKey(Entities, on_delete=models.CASCADE)
-    order_number = models.ForeignKey(DocumentNumbers, related_name="customer_order_number", on_delete=models.CASCADE, null=True, blank=True)
+    order_number = models.ForeignKey(
+        DocumentNumbers,
+        related_name="customer_order_number",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     payment_account_number = models.CharField(max_length=50, null=True, blank=True)
     reference_number = models.CharField(max_length=100, null=True, blank=True)
-    prescription = models.ForeignKey("Prescriptions", null=True, blank=True, on_delete=models.CASCADE)
+    prescription = models.ForeignKey("Prescriptions", null=True, blank=True, on_delete=models.SET_NULL)
     order_type = models.CharField(max_length=100, null=True, blank=True, default="NORMAL", choices=OrderTypeOptions.choices)
     draft_id = models.CharField(max_length=256, null=True, blank=True)
     city_name = models.CharField(max_length=256, null=True, blank=True)
@@ -1580,26 +1623,31 @@ class CustomerOrders(EntityRelatedModel):
     order_origin = models.CharField(verbose_name=_("Order Origin"), choices=OrderOriginOptions.choices, max_length=20)
     status = models.CharField(verbose_name=_("Order Status"), choices=OrderStatusOptions.choices, max_length=20, default=OrderStatusOptions.PROCESSING)
     order_channel = models.CharField(verbose_name=_("Order Source"), choices=OrderChannelOptions.choices, default="WEB", max_length=20)
-    
-    # --- SHIPPING & DESTINATION ---
+
     origin_point = geomodel.PointField(null=True, blank=True, srid=4326)
     destination_point = geomodel.PointField(null=True, blank=True, srid=4326)
-    
+
     delivery_method = models.CharField(
         verbose_name=_("Delivery Method"),
         choices=DeliveryMethodOptions.choices,
         max_length=20,
     )
-    
-    delivery_county = models.ForeignKey("authentication.Counties", on_delete=models.SET_NULL, null=True, blank=True, related_name="customer_delivery_orders")
-    delivery_sub_county = models.ForeignKey("authentication.Constituencies", on_delete=models.SET_NULL, null=True, blank=True, related_name="customer_delivery_orders")
+
+    delivery_county = models.ForeignKey(
+        "authentication.Counties", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="customer_delivery_orders",
+    )
+    delivery_sub_county = models.ForeignKey(
+        "authentication.Constituencies", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="customer_delivery_orders",
+    )
     delivery_collection_point = models.ForeignKey(
         "authentication.CollectionPoints",
         on_delete=models.SET_NULL, null=True, blank=True,
         related_name="customer_delivery_orders",
         help_text="The specific collection point chosen for pickup."
     )
-    
+
     courier_entity = models.ForeignKey(
         Entities,
         on_delete=models.SET_NULL,
@@ -1608,42 +1656,41 @@ class CustomerOrders(EntityRelatedModel):
         related_name="assigned_courier_orders",
         help_text="The Courier Entity assigned to fulfill this order."
     )
-    
+
     farness = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
     shipping_cost = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True, default=0.00)
-    # ------------------------------
 
     order_tax_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True, default=0.00)
     order_price_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True, default=0.00)
     order_price_discount_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
     order_net_price_total = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
-    
+
     paid_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    
+
     is_quoted = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
     is_settled = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
     is_paid = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
     is_delivered = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
-    
+
     employee = models.ForeignKey(Employees, on_delete=models.CASCADE, related_name="order_employee", null=True, blank=True)
     customer = models.ForeignKey(Users, related_name="customer_user", on_delete=models.CASCADE, null=True, blank=True, default=None)
     delivered_by = models.ForeignKey(Users, related_name="retailerOrderDeliveredBy", on_delete=models.CASCADE, null=True, blank=True)
     bodaboda = models.ForeignKey("entitylocations.BodaLocations", related_name="customer_order_deliverer", on_delete=models.CASCADE, null=True, blank=True)
     selected_payment_method = models.ForeignKey("payments.PaymentMethods", related_name="order_payment", on_delete=models.CASCADE, null=True, blank=True)
-    
+
     is_processed = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
     processed_by = models.ForeignKey(Users, related_name="retailerOrderProcessedBy", on_delete=models.CASCADE, null=True, blank=True)
     is_packed = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
     packed_by = models.ForeignKey(Users, related_name="retailerOrderPackedBy", on_delete=models.CASCADE, null=True, blank=True)
     is_received = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
     received_by = models.ForeignKey(Users, related_name="retailerOrderReceivedBy", on_delete=models.CASCADE, null=True, blank=True)
-    
+
     customer_name = models.CharField(max_length=256, null=True, blank=True)
     customer_phone = models.CharField(max_length=20, null=True, blank=True)
     coupon = models.ForeignKey("RetailerCoupon", related_name="retailerOrderCoupon", null=True, blank=True, on_delete=models.CASCADE)
     user = models.ForeignKey(User, related_name="retailerOrderUser", on_delete=models.CASCADE, null=True, blank=True)
-    
+
     paid_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
@@ -1656,6 +1703,7 @@ class CustomerOrders(EntityRelatedModel):
 
     class Meta:
         verbose_name_plural = "Customer Orders"
+        ordering = ["-created"]
 
     def __str__(self):
         number = self.order_number.id if self.order_number else "unsaved"
@@ -1672,7 +1720,7 @@ class CustomerOrders(EntityRelatedModel):
         self.order_price_total = _q(agg["gross"] or 0)
         self.order_tax_total = _q(agg["tax"] or 0)
         self.order_price_discount_total = _q(agg["discount"] or 0)
-        
+
         self.order_net_price_total = _q(
             (self.order_price_total or 0)
             + (self.order_tax_total or 0)
@@ -1691,7 +1739,6 @@ class CustomerOrders(EntityRelatedModel):
             ])
 
 
-
 class CustomerOrderItems(EntityRelatedModel):
     """One line on a customer order — the actual sale event."""
 
@@ -1703,7 +1750,9 @@ class CustomerOrderItems(EntityRelatedModel):
     retailer_receipt = models.ForeignKey(
         RetailerReceipts,
         related_name="orderItemRetailerReceipt",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,   # preserve history when receipt is deleted
+        null=True,
+        blank=True,
     )
     unit_of_issue = models.CharField(
         verbose_name=_("Unit of Issue"),
@@ -1771,7 +1820,9 @@ class CustomerOrderItems(EntityRelatedModel):
         verbose_name_plural = "Customer Order Items"
 
     def __str__(self):
-        return f"{self.retailer_receipt.product.title} × {self.total_quantity}"
+        if self.retailer_receipt:
+            return f"{self.retailer_receipt.product.title} × {self.total_quantity}"
+        return f"Order item {self.pk}"
 
     def recalculate(self):
         qty = Decimal(str(self.total_quantity or 0))
@@ -1846,6 +1897,9 @@ class CustomerOrderPayments(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Customer Order Payments"
 
+    def __str__(self):
+        return f"{self.customer_order_id} · {self.amount}"
+
 
 class ShippingAddress(EntityRelatedModel):
     customer_order = models.ForeignKey(
@@ -1883,6 +1937,9 @@ class ShippingAddress(EntityRelatedModel):
         User, related_name="shipping_address_owner", on_delete=models.CASCADE
     )
 
+    def __str__(self):
+        return f"{self.contact_person_name or 'address'} · {self.city or ''}"
+
 
 class CustomerOrderFailedPayments(EntityRelatedModel):
     customer_order = models.OneToOneField(
@@ -1912,6 +1969,9 @@ class CustomerOrderFailedPayments(EntityRelatedModel):
 
     class Meta:
         verbose_name_plural = "Customer Order Failed Payments"
+
+    def __str__(self):
+        return f"{self.customer_order_id} · {self.response_code}"
 
 
 class RetailerPayments(EntityRelatedModel):
@@ -1944,6 +2004,9 @@ class RetailerPayments(EntityRelatedModel):
         related_name="retailer_payment_created_by",
         on_delete=models.CASCADE,
     )
+
+    def __str__(self):
+        return f"{self.reference} · {self.amount} ({self.status})"
 
 
 class CustomerOrderPayment(EntityRelatedModel):
@@ -2028,6 +2091,9 @@ class CustomerOrderPayment(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Customer Order Payments"
 
+    def __str__(self):
+        return f"{self.reference_number or self.pk} · {self.amount}"
+
 
 class CustomerOrderSettlement(EntityRelatedModel):
     receiving_entity = models.ForeignKey(
@@ -2049,6 +2115,9 @@ class CustomerOrderSettlement(EntityRelatedModel):
     amount = models.DecimalField(max_digits=7, decimal_places=2)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.reference_number} · {self.amount}"
 
 
 # ===========================================================================
@@ -2087,41 +2156,14 @@ class ProductMovement(EntityRelatedModel):
     owner = models.ForeignKey(
         Users,
         related_name="product_movement_owner",
-        on_delete=models.DO_NOTHING,
+        on_delete=models.PROTECT,   # audit trail must survive employee/user deletion
     )
     transaction_date = models.DateTimeField()
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
-
-# class PurchasesReturns(EntityRelatedModel):
-#     class Meta:
-#         verbose_name_plural = "Purchases Returns"
-
-#     draft_id = models.CharField(max_length=256, null=True, blank=True)
-#     retailer_receipt = models.ForeignKey(
-#         RetailerReceipts,
-#         related_name="purchase_return_inventory",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     retailer_order = models.ForeignKey(
-#         RetailerOrders,
-#         related_name="purchase_return_inventory",
-#         on_delete=models.CASCADE,
-#         null=True,
-#         blank=True,
-#     )
-#     quantity = models.IntegerField(default=0)
-#     justification = models.CharField(max_length=256)
-#     owner = models.ForeignKey(
-#         Users,
-#         related_name="purchases_returned_by",
-#         on_delete=models.CASCADE,
-#     )
-#     created = models.DateTimeField(auto_now_add=True)
-#     updated = models.DateTimeField(auto_now=True)
+    def __str__(self):
+        return f"{self.product_id} {self.direction or '?'} {self.quantity}"
 
 
 class SalesReturns(EntityRelatedModel):
@@ -2153,6 +2195,9 @@ class SalesReturns(EntityRelatedModel):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.retailer_receipt_id} × {self.quantity}"
+
 
 class StockAdjustments(EntityRelatedModel):
     """
@@ -2169,8 +2214,8 @@ class StockAdjustments(EntityRelatedModel):
     carry a non-null `sales_return`. The application layer enforces
     this by only writing such rows from create_sales_return /
     update_sales_return / delete_sales_return, never from the public
-    CreateStockAdjustment action. Add the CheckConstraint below if
-    your DB supports it for a hard guarantee.
+    CreateStockAdjustment action. The CheckConstraint below provides
+    a hard guarantee at the DB layer.
     """
 
     class Meta:
@@ -2250,6 +2295,9 @@ class StockAdjustments(EntityRelatedModel):
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.direction} {self.quantity} ({self.return_intent})"
 
 
 # ===========================================================================
@@ -2521,7 +2569,10 @@ class RetailerProductRequestItem(EntityRelatedModel):
 
         if self.status == self.Status.CANCELLED:
             pass
-        elif self.confirmed_quantity >= self.requested_quantity:
+        elif (
+            self.requested_quantity > 0
+            and self.confirmed_quantity >= self.requested_quantity
+        ):
             self.status = self.Status.FULFILLED
         elif self.confirmed_quantity > 0:
             self.status = self.Status.PARTIALLY_FULFILLED
@@ -2878,22 +2929,42 @@ class RetailerProductRequestResponse(EntityRelatedModel):
 def generate_administration_schedule(prescription_item):
     """
     Create `doses_per_day * days` administration rows for a prescription item.
-    Doses are evenly spaced across 24 hours, starting from day+1.
-    Uses integer minutes to avoid float drift.
+
+    Doses are evenly spaced across a 24-hour day. The old code used
+    `range(1, doses_per_day + 1)` and `total_minutes = interval * dose_index`,
+    which produced `hour=24` (invalid) for the final dose of every frequency
+    (e.g. 2x/day → 12:00, 24:00 → ValueError). The silent try/except in the
+    signal handler hid this. Fix: iterate `0..doses_per_day-1` so the last
+    dose lands before 24:00, plus a defensive `hour % 24` clamp.
     """
-    doses_per_day = int(prescription_item.frequency.numerical)
+    frequency = getattr(prescription_item, "frequency", None)
+    if frequency is None:
+        return
+
+    try:
+        doses_per_day = int(getattr(frequency, "numerical", 0) or 0)
+    except (TypeError, ValueError):
+        return
+
     if doses_per_day <= 0:
         return
 
-    interval_minutes = (24 * 60) // doses_per_day
+    interval_minutes = (24 * 60) // doses_per_day  # int, deterministic
+
+    days = int(prescription_item.days or 0)
+    if days <= 0:
+        return
+
     rows = []
     today = date.today()
 
-    for day_offset in range(1, prescription_item.days + 1):
+    for day_offset in range(1, days + 1):
         administration_date = today + timedelta(days=day_offset)
-        for dose_index in range(1, doses_per_day + 1):
+        for dose_index in range(doses_per_day):  # 0..n-1, never hits 24:00
             total_minutes = interval_minutes * dose_index
             hour, minute = divmod(total_minutes, 60)
+            if hour >= 24:
+                hour = hour % 24
             rows.append(
                 PrescriptionItemAdministrations(
                     prescription_item=prescription_item,
@@ -2904,7 +2975,8 @@ def generate_administration_schedule(prescription_item):
                 )
             )
 
-    PrescriptionItemAdministrations.objects.bulk_create(rows)
+    if rows:
+        PrescriptionItemAdministrations.objects.bulk_create(rows)
 
 
 @receiver(post_save, sender=PrescriptionItems)
@@ -2913,7 +2985,7 @@ def on_prescription_item_created(sender, instance, created, **kwargs):
         return
     if not instance.days or not instance.frequency:
         return
-    if not instance.frequency.numerical:
+    if not getattr(instance.frequency, "numerical", None):
         return
 
     try:

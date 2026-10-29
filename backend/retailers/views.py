@@ -1481,190 +1481,261 @@ def customerOrdersAPIView(request):
 # Prescriptions (remote API)
 # ===========================================================================
 
+import logging
+
+from rest_framework import exceptions, permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
+
+from retailers import retail_permissions 
+from retailers import serializers
+from retailers.utils import  retail_prescriptions_utils
+from retailers.serializers import RetailerReceiptsSerializer
+# from your response helpers:
+# from core.responses import custom_success_message, custom_errors_response
+
+logger = logging.getLogger(__name__)
+
+
+# Explicit action list — caught by tests, not at runtime by accident.
+KNOWN_ACTIONS = {
+    "UpdateRetailPrescription",
+    "GetRetailPrescriptionDetails",
+    "MakePrescriptionOrderPayment",
+    "UpdateRetailPrescriptionItem",
+    "RemoveRetailPrescriptionItem",
+    "CreateOrUpdatePrescriptionOrderItem",
+    "RetrieveEntityRetailPrescriptions",
+    "RetrieveUserRetailPrescriptions",
+    "GetRelatedEntityInventoryForProduct",
+    "CreateRetailPrescriptionItem",
+}
+
+
+def _paginated_prescriptions_response(queryset, request):
+    """Shared paginated response for the two 'retrieve prescriptions' actions."""
+    if queryset is None:
+        return custom_errors_response(
+            1, "No prescriptions found", None
+        )
+    paginator = PageNumberPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    serializer = serializers.RetailPrescriptionsSerializer(
+        page, many=True,
+        context={"request": request, "user": request.user},
+    )
+    return paginator.get_paginated_response(serializer.data)
+
+
 @api_view(["POST"])
-@permission_classes(
-    [
-        retail_permissions.EntitySubscriptionPermission,
-        permissions.IsAuthenticated,
-    ]
-)
+@permission_classes([
+    retail_permissions.EntitySubscriptionPermission,
+    permissions.IsAuthenticated,
+])
 def remoteRetailPrescriptionsAPIView(request):
-    try:
-        action = request.data["action"]
-    except KeyError:
+    """
+    Action-dispatch endpoint for retail prescriptions.
+
+    Expected payload: {"action": "<KNOWN_ACTIONS member>", ...action args}
+    All business logic lives in `retail_prescriptions_utils`; this view is
+    strictly a thin dispatcher, serializer, and envelope wrapper.
+    """
+    # --- 1. Validate action ---
+    if not isinstance(request.data, dict):
+        raise exceptions.ValidationError(
+            "Request body must be a JSON object."
+        )
+
+    action = request.data.get("action")
+    if not action:
         raise exceptions.ValidationError("Action is not supplied")
 
-    if action == "UpdateRetailPrescription":
-        errors, prescription = (
-            retail_prescriptions_utils.update_retail_prescription(
-                request.data, request.user
-            )
-        )
-        if prescription:
-            serializer = serializers.RetailPrescriptionsSerializer(
-                prescription, many=False, context={"request": request}
-            )
-            return custom_success_message(
-                0, "Retail prescription created successfully",
-                serializer.data, "prescription",
-            )
-        return custom_errors_response(
-            1, "Retail prescription not created", errors
-        )
+    if action not in KNOWN_ACTIONS:
+        raise exceptions.ValidationError(f"Action {action} is unknown")
 
-    elif action == "GetRetailPrescriptionDetails":
-        errors, prescription = (
-            retail_prescriptions_utils.get_retail_prescription_details(
-                request.data, request.user
+    # --- 2. Dispatch ---
+    try:
+        if action == "UpdateRetailPrescription":
+            errors, prescription = (
+                retail_prescriptions_utils.update_retail_prescription(
+                    request.data, request.user
+                )
             )
-        )
-        if prescription:
-            serializer = serializers.RetailPrescriptionsSerializer(
-                prescription, many=False, context={"request": request}
+            if prescription:
+                serializer = serializers.RetailPrescriptionsSerializer(
+                    prescription, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Retail prescription created successfully",
+                    serializer.data, "prescription",
+                )
+            return custom_errors_response(
+                1, "Retail prescription not created", errors
             )
-            return custom_success_message(
-                0, "Retail prescription details retrieved successfully",
-                serializer.data, "prescription",
-            )
-        return custom_errors_response(
-            1, "Retail prescription not retrieved", errors
-        )
 
-    elif action == "MakePrescriptionOrderPayment":
-        errors, customer_order = (
-            retail_prescriptions_utils.make_prescription_order_payment(
-                request.data, request.user
+        if action == "GetRetailPrescriptionDetails":
+            errors, prescription = (
+                retail_prescriptions_utils.get_retail_prescription_details(
+                    request.data, request.user
+                )
             )
-        )
-        if customer_order:
-            serializer = serializers.CustomerOrdersSerializer(
-                customer_order, many=False, context={"request": request}
+            if prescription:
+                serializer = serializers.RetailPrescriptionsSerializer(
+                    prescription, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Retail prescription details retrieved successfully",
+                    serializer.data, "prescription",
+                )
+            return custom_errors_response(
+                1, "Retail prescription not retrieved", errors
             )
-            return custom_success_message(
-                0, "Prescription order updated successfully",
-                serializer.data, "customer_order",
-            )
-        return custom_errors_response(
-            1, "Prescription order not updated", errors
-        )
 
-    elif action == "UpdateRetailPrescriptionItem":
-        errors, prescription_item = (
-            retail_prescriptions_utils.update_retail_prescription_item(
-                request.data, request.user
+        if action == "MakePrescriptionOrderPayment":
+            errors, customer_order = (
+                retail_prescriptions_utils.make_prescription_order_payment(
+                    request.data, request.user
+                )
             )
-        )
-        if prescription_item:
-            serializer = serializers.PrescriptionItemsSerializer(
-                prescription_item, many=False, context={"request": request}
+            if customer_order:
+                serializer = serializers.CustomerOrdersSerializer(
+                    customer_order, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Prescription order updated successfully",
+                    serializer.data, "customer_order",
+                )
+            return custom_errors_response(
+                1, "Prescription order not updated", errors
             )
-            return custom_success_message(
-                0, "Retail prescription item updated successfully",
-                serializer.data, "prescription_item",
-            )
-        return custom_errors_response(
-            1, "Retail prescription item not updated", errors
-        )
 
-    elif action == "RemoveRetailPrescriptionItem":
-        errors, prescription = (
-            retail_prescriptions_utils.remove_retail_prescription_item(
-                request.data, request.user
+        if action == "UpdateRetailPrescriptionItem":
+            errors, prescription_item = (
+                retail_prescriptions_utils.update_retail_prescription_item(
+                    request.data, request.user
+                )
             )
-        )
-        if prescription:
-            serializer = serializers.RetailPrescriptionsSerializer(
-                prescription, many=False, context={"request": request}
+            if prescription_item:
+                serializer = serializers.PrescriptionItemsSerializer(
+                    prescription_item, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Retail prescription item updated successfully",
+                    serializer.data, "prescription_item",
+                )
+            return custom_errors_response(
+                1, "Retail prescription item not updated", errors
             )
-            return custom_success_message(
-                0, "Retail prescription updated successfully",
-                serializer.data, "prescription",
-            )
-        return custom_errors_response(
-            1, "Retail prescription not updated", errors
-        )
 
-    elif action == "CreateOrUpdatePrescriptionOrderItem":
-        errors, prescription = (
-            retail_prescriptions_utils.create_or_update_prescription_order_item(
-                request.data, request.user
+        if action == "RemoveRetailPrescriptionItem":
+            errors, prescription = (
+                retail_prescriptions_utils.remove_retail_prescription_item(
+                    request.data, request.user
+                )
             )
-        )
-        if prescription:
-            serializer = serializers.RetailPrescriptionsSerializer(
-                prescription, many=False, context={"request": request}
+            if prescription:
+                serializer = serializers.RetailPrescriptionsSerializer(
+                    prescription, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Retail prescription updated successfully",
+                    serializer.data, "prescription",
+                )
+            return custom_errors_response(
+                1, "Retail prescription not updated", errors
             )
-            return custom_success_message(
-                0, "Prescription order item created successfully",
-                serializer.data, "prescription",
-            )
-        return custom_errors_response(
-            1, "Retail prescription order not updated", errors
-        )
 
-    elif action == "RetrieveEntityRetailPrescriptions":
-        customer_orders = (
-            retail_prescriptions_utils.get_entity_retail_prescriptions(
-                request.data, request.user
+        if action == "CreateOrUpdatePrescriptionOrderItem":
+            errors, prescription = (
+                retail_prescriptions_utils.create_or_update_prescription_order_item(
+                    request.data, request.user
+                )
             )
-        )
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(customer_orders, request)
-        serializer = serializers.RetailPrescriptionsSerializer(
-            page, many=True,
-            context={"request": request, "user": request.user},
-        )
-        return paginator.get_paginated_response(serializer.data)
+            if prescription:
+                serializer = serializers.RetailPrescriptionsSerializer(
+                    prescription, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Prescription order item created successfully",
+                    serializer.data, "prescription",
+                )
+            return custom_errors_response(
+                1, "Retail prescription order not updated", errors
+            )
 
-    elif action == "RetrieveUserRetailPrescriptions":
-        customer_orders = (
-            retail_prescriptions_utils.get_user_retail_prescriptions(
-                request.data, request.user
+        if action == "RetrieveEntityRetailPrescriptions":
+            prescriptions = (
+                retail_prescriptions_utils.get_entity_retail_prescriptions(
+                    request.data, request.user
+                )
             )
-        )
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(customer_orders, request)
-        serializer = serializers.RetailPrescriptionsSerializer(
-            page, many=True,
-            context={"request": request, "user": request.user},
-        )
-        return paginator.get_paginated_response(serializer.data)
+            return _paginated_prescriptions_response(prescriptions, request)
 
-    elif action == "GetRelatedEntityInventoryForProduct":
-        retailer_receipts = (
-            retail_prescriptions_utils.get_related_inventory_for_product(
-                request.data, request.user
+        if action == "RetrieveUserRetailPrescriptions":
+            prescriptions = (
+                retail_prescriptions_utils.get_user_retail_prescriptions(
+                    request.data, request.user
+                )
             )
-        )
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(retailer_receipts, request)
-        serializer = RetailerReceiptsSerializer(
-            page, many=True,
-            context={"request": request, "user": request.user},
-        )
-        return paginator.get_paginated_response(serializer.data)
+            return _paginated_prescriptions_response(prescriptions, request)
 
-    elif action == "CreateRetailPrescriptionItem":
-        errors, prescription = (
-            retail_prescriptions_utils.create_retail_prescription_item(
-                request.data, request.user
+        if action == "GetRelatedEntityInventoryForProduct":
+            retailer_receipts = (
+                retail_prescriptions_utils.get_related_inventory_for_product(
+                    request.data, request.user
+                )
             )
-        )
-        if prescription:
-            serializer = serializers.RetailPrescriptionsSerializer(
-                prescription, many=False, context={"request": request}
+            if retailer_receipts is None:
+                return custom_errors_response(
+                    1, "No related inventory found", None
+                )
+            paginator = PageNumberPagination()
+            page = paginator.paginate_queryset(retailer_receipts, request)
+            serializer = RetailerReceiptsSerializer(
+                page, many=True,
+                context={"request": request, "user": request.user},
             )
-            return custom_success_message(
-                0, "Retail prescription item created successfully",
-                serializer.data, "prescription",
+            return paginator.get_paginated_response(serializer.data)
+
+        if action == "CreateRetailPrescriptionItem":
+            errors, prescription = (
+                retail_prescriptions_utils.create_retail_prescription_item(
+                    request.data, request.user
+                )
             )
-        if errors:
+            if prescription:
+                serializer = serializers.RetailPrescriptionsSerializer(
+                    prescription, many=False, context={"request": request}
+                )
+                return custom_success_message(
+                    0, "Retail prescription item created successfully",
+                    serializer.data, "prescription",
+                )
+            # FIX: always return an error response — never fall through.
             return custom_errors_response(
                 1, "Retail prescription item not created", errors
             )
 
-    raise exceptions.ValidationError(f"Action {action} is unknown")
+    except exceptions.APIException:
+        # DRF exceptions already carry the right HTTP status; re-raise.
+        raise
+    except Exception:
+        # Anything from the utils layer that isn't an APIException
+        # gets logged with the action + user, and returned as a 400 with
+        # the safe, generic message (no stack trace to the client).
+        logger.exception(
+            "remoteRetailPrescriptionsAPIView failed: action=%s user_id=%s",
+            action, getattr(request.user, "id", None),
+        )
+        return custom_errors_response(
+            1,
+            "An unexpected error occurred while processing the request.",
+            None,
+        )
 
+    # Unreachable: KNOWN_ACTIONS was checked above. Kept as a safety net in
+    # case a handler is deleted without updating KNOWN_ACTIONS.
+    raise exceptions.ValidationError(f"Action {action} is not implemented")
 
 # ===========================================================================
 # Shipping rates
@@ -1731,14 +1802,28 @@ from rest_framework.response import Response
 from authentication.validators import authentication_models_validators
 from . import models, retail_permissions, serializers
 
+# retailers/views.py (or wherever your view lives)
+
+import datetime
+import logging
+from django.utils import timezone
+from django.contrib.gis.geos import fromstr
+from django.db import IntegrityError, transaction
+from rest_framework import generics, status, exceptions
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+# ... (your other imports like models, serializers, retail_permissions, deep_read_utils, authentication_models_validators) ...
+
+logger = logging.getLogger(__name__)
 
 class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
     """Create new retail prescription."""
-
     name = "retail-prescription-create"
     permission_classes = (
         retail_permissions.EntitySubscriptionPermission,
-        permissions.IsAuthenticated,
+        IsAuthenticated,
     )
     serializer_class = serializers.RetailPrescriptionsSerializer
     parser_classes = (MultiPartParser, FormParser)
@@ -1749,7 +1834,9 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         errors_messages = []
 
         # --- 1. Extract Request Data ---
+        # `patient` is now optional since the frontend supports guest/walk-in prescriptions
         dependant_id = request.POST.get("patient", None)
+        
         origin_latitude = request.POST.get("origin_latitude", None)
         origin_longitude = request.POST.get("origin_longitude", None)
         destination_latitude = request.POST.get("destination_latitude", None)
@@ -1757,22 +1844,26 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
 
         origin_point = None
         if origin_latitude and origin_longitude:
-            origin_point = fromstr(
-                f"POINT({origin_longitude} {origin_latitude})", srid=4326
-            )
+            origin_point = fromstr(f"POINT({origin_longitude} {origin_latitude})", srid=4326)
 
         destination_point = None
         if destination_latitude and destination_longitude:
-            destination_point = fromstr(
-                f"POINT({destination_longitude} {destination_latitude})",
-                srid=4326,
-            )
+            destination_point = fromstr(f"POINT({destination_longitude} {destination_latitude})", srid=4326)
 
         # --- 2. Validation ---
         if dependant_id:
-            dependant = authentication_models_validators.validate_dependant(
-                dependant_id
-            )
+            dependant = authentication_models_validators.validate_dependant(dependant_id)
+            if not dependant:
+                errors_messages.append("Invalid patient ID provided.")
+                return Response(
+                    data={
+                        "response_code": 1,
+                        "response_message": "Retail prescription not created",
+                        "errors": errors_messages,
+                        "status": status.HTTP_200_OK,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
         pharmacy_id = request.POST.get("entity", None)
         if not pharmacy_id:
@@ -1787,10 +1878,22 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        retailer = authentication_models_validators.validate_entity(
-            pharmacy_id
-        )
-        if retailer and not retailer.entity_type == "PHARMACY":
+        retailer = authentication_models_validators.validate_entity(pharmacy_id)
+        
+        # FIX: Ensure `retailer` actually exists before checking entity_type
+        if not retailer:
+            errors_messages.append("Retailer entity not found")
+            return Response(
+                data={
+                    "response_code": 1,
+                    "response_message": "Retail prescription not created",
+                    "errors": errors_messages,
+                    "status": status.HTTP_200_OK,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        if retailer.entity_type != "PHARMACY":
             errors_messages.append("Selected entity is not a pharmacy")
             return Response(
                 data={
@@ -1802,7 +1905,8 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=2)
+        # FIX: Use timezone.now() instead of datetime.datetime.now() for USE_TZ=True
+        minutes_ago = timezone.now() - datetime.timedelta(minutes=2)
         if models.Prescriptions.objects.filter(
             created_by=request.user,
             created__gte=minutes_ago,
@@ -1810,9 +1914,8 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
             status="QUEUING",
         ).exists():
             errors_messages.append(
-                f"Prescription created minutes ago already exists for "
-                f"{dependant}. Try again after 2 minutes if it is not a "
-                f"repetition"
+                f"Prescription created minutes ago already exists. "
+                f"Try again after 2 minutes if it is not a repetition."
             )
             return Response(
                 data={
@@ -1844,9 +1947,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
             default_errors = serializer.errors
             for field_name, field_errors in default_errors.items():
                 for field_error in field_errors:
-                    errors_messages.append(
-                        "%s: %s" % (field_name, field_error)
-                    )
+                    errors_messages.append("%s: %s" % (field_name, field_error))
             return Response(
                 data={
                     "response_code": 1,
@@ -1859,15 +1960,15 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
 
         # --- 3. Save Prescription & Images ---
         try:
-            # Use atomic transaction to ensure prescription and images are saved together
             with transaction.atomic():
                 serializer.save(
                     created_by=request.user,
-                    patient=dependant,
+                    patient=dependant, # Will be None if no ID was passed
                     origin_point=origin_point,
                     destination_point=destination_point,
                 )
-                item = models.Prescriptions.objects.get(id=serializer.data["id"])
+                # FIX: Use serializer.instance instead of redundant DB query
+                item = serializer.instance
 
                 saved_images = []
                 for file in files:
@@ -1885,42 +1986,47 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         # --- 4. DeepRead AI Extraction (Optional & Safe) ---
         extracted_data = None
         
-        # We use the first image for AI extraction. 
-        # Wrap in try/except so an AI failure doesn't break the API request.
         try:
             if saved_images:
                 first_image_file = saved_images[0].image
                 
-                # Seek to beginning because Django's ImageField might have left the pointer at the end
                 if hasattr(first_image_file, 'seek'):
                     first_image_file.seek(0)
+                
+                # Mark as processing
+                item.ai_extraction_status = "PROCESSING"
+                item.save(update_fields=["ai_extraction_status"])
                     
-                extracted_data = deep_read_utils.extract_prescription_data(
-                    first_image_file
-                )
+                extracted_data = deep_read_utils.extract_prescription_data(first_image_file)
 
                 # If extraction was successful, auto-create the items
                 if extracted_data and extracted_data.get("medications"):
                     deep_read_utils.map_extracted_medications_to_prescription_items(
                         extracted_data, item, retailer, request.user
                     )
+                
+                # Mark as completed
+                item.ai_extraction_status = "COMPLETED"
+                item.ai_extracted_at = timezone.now()
+                item.save(update_fields=["ai_extraction_status", "ai_extracted_at"])
                     
         except Exception as e:
-            # Log the error, but don't stop the request. 
-            # The prescription is already saved, the user can manually add items.
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"DeepRead AI Extraction failed for prescription {item.id}: {e}")
+            # Mark as failed
+            item.ai_extraction_status = "FAILED"
+            item.ai_extraction_error = str(e)
+            item.ai_extracted_at = timezone.now()
+            item.save(update_fields=["ai_extraction_status", "ai_extraction_error", "ai_extracted_at"])
 
         # --- 5. Return Response ---
         return Response(
             data={
                 "response_code": 0,
                 "response_message": "Retail prescription successfully created",
+                # Refresh to ensure we serialize the newly created AI items
                 "prescription": serializers.RetailPrescriptionsSerializer(
                     item, context={"request": request}
                 ).data,
-                # Send the AI data to the frontend so the user can verify/edit the extracted items
                 "ai_extracted_data": extracted_data, 
                 "errors": [],
             },
