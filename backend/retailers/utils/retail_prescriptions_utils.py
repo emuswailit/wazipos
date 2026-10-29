@@ -252,8 +252,8 @@ def get_entity_retail_prescriptions(data, user):
     
 def get_user_retail_prescriptions(data, user):
     """Get retail prescriptions for user"""
-    if models.Prescriptions.objects.filter(created_by=user).exists():
-        return models.Prescriptions.objects.filter(created_by=user).all()
+    if models.Prescriptions.objects.filter(owner=user).exists():
+        return models.Prescriptions.objects.filter(owner=user).all()
     else:
         return []
     
