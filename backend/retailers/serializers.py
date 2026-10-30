@@ -1711,8 +1711,12 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
         return obj.product.title if obj.product else ""
 
     def get_preparation_title(self, obj):
+        # Safely check if product exists first
+        if not obj.product:
+            return ""
+            
+        # Then check if preparation exists
         return obj.product.preparation.title if obj.product.preparation else ""
-
     def get_frequency_title(self, obj):
         return obj.frequency.title if obj.frequency else ""
 
