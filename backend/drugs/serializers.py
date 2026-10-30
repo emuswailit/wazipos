@@ -196,6 +196,10 @@ class DrugSubClassSerializer(serializers.ModelSerializer):
         else:
             return ""
 
+from rest_framework import serializers
+from django.db import transaction
+from . import models # assuming your models are imported like this
+
 class GenericsSerializer(serializers.ModelSerializer):
     drug_class = serializers.PrimaryKeyRelatedField(
         queryset=models.DrugClass.objects.all(),
@@ -230,10 +234,12 @@ class GenericsSerializer(serializers.ModelSerializer):
         read_only_fields = ["owner", "created", "updated"]
 
     def get_drug_class_titles(self, obj):
-        return list(obj.drug_class.values_list("title", flat=True))
+        # JOIN the values into a comma-separated string
+        return ", ".join(obj.drug_class.values_list("title", flat=True))
 
     def get_drug_sub_class_titles(self, obj):
-        return list(obj.drug_sub_class.values_list("title", flat=True))
+        # JOIN the values into a comma-separated string
+        return ", ".join(obj.drug_sub_class.values_list("title", flat=True))
 
     def validate_title(self, value):
         if value:
