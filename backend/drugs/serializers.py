@@ -449,6 +449,13 @@ class PreparationSerializer(serializers.ModelSerializer):
         many=True,
         required=False,
     )
+    
+    # Explicitly define formulation to ensure it's writable
+    formulation = serializers.PrimaryKeyRelatedField(
+        queryset=models.Formulation.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = models.Preparation
@@ -475,27 +482,35 @@ class PreparationSerializer(serializers.ModelSerializer):
         ]
 
     # ---------------------------------------------------------
-    # FK helpers
+    # Write helpers
+    # ---------------------------------------------------------
+
+    def to_internal_value(self, data):
+        """
+        Alias 'formulation_id' to 'formulation' so the frontend 
+        can send either key without breaking the save.
+        """
+        data = data.copy()
+        if 'formulation_id' in data and 'formulation' not in data:
+            data['formulation'] = data.pop('formulation_id')
+        return super().to_internal_value(data)
+
+    # ---------------------------------------------------------
+    # Read helpers
     # ---------------------------------------------------------
 
     @staticmethod
     def _safe_formulation(obj):
         """
-        Resolve obj.formulation without triggering the FK
-        descriptor. Returns None if the FK is empty or points at
-        a deleted row.
+        Resolve obj.formulation safely without extra queries.
         """
-        fid = getattr(obj, "formulation_id", None)
-        if not fid:
+        if not getattr(obj, "formulation_id", None):
             return None
         try:
-            return models.Formulation.objects.filter(pk=fid).first()
+            # Uses the ORM relation (fast if select_related('formulation') is used)
+            return obj.formulation
         except Exception:
             return None
-
-    # ---------------------------------------------------------
-    # Fields
-    # ---------------------------------------------------------
 
     def get_gen_array(self, obj):
         """Full nested generics objects for read-heavy consumers."""
