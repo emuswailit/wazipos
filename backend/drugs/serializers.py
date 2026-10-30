@@ -438,23 +438,27 @@ class GenericsDisplaySerializer(serializers.ModelSerializer):
 
 
 class PreparationSerializer(serializers.ModelSerializer):
-    gen_array = serializers.SerializerMethodField(read_only=True)
-    formulation_title = serializers.SerializerMethodField(read_only=True)
-    generics_string = serializers.SerializerMethodField(read_only=True)
-    long_title = serializers.SerializerMethodField(read_only=True)
-    key = serializers.SerializerMethodField(read_only=True)
+    # Maps frontend 'formulation_id' directly to the model's 'formulation' field
+    formulation_id = serializers.PrimaryKeyRelatedField(
+        queryset=models.Formulation.objects.all(),
+        required=False,
+        allow_null=True,
+        source='formulation'
+    )
+
+    # Simple field mappings
+    key = serializers.CharField(source='id', read_only=True)
+    
+    # Read-only method fields for derived data
+    gen_array = serializers.SerializerMethodField()
+    formulation_title = serializers.SerializerMethodField()
+    generics_string = serializers.SerializerMethodField()
+    long_title = serializers.SerializerMethodField()
 
     generics = serializers.PrimaryKeyRelatedField(
         queryset=models.Generics.objects.all(),
         many=True,
         required=False,
-    )
-    
-    # Explicitly define formulation to ensure it's writable
-    formulation = serializers.PrimaryKeyRelatedField(
-        queryset=models.Formulation.objects.all(),
-        required=False,
-        allow_null=True,
     )
 
     class Meta:
@@ -465,6 +469,7 @@ class PreparationSerializer(serializers.ModelSerializer):
             "title",
             "long_title",
             "formulation",
+            "formulation_id",
             "description",
             "formulation_title",
             "generics_string",
@@ -473,7 +478,7 @@ class PreparationSerializer(serializers.ModelSerializer):
             "created",
             "updated",
         )
-        read_only_fields = ("owner", "gen_array")
+        read_only_fields = ("owner",)
         validators = [
             UniqueTogetherValidator(
                 queryset=models.Preparation.objects.all(),
@@ -481,65 +486,20 @@ class PreparationSerializer(serializers.ModelSerializer):
             )
         ]
 
-    # ---------------------------------------------------------
-    # Write helpers
-    # ---------------------------------------------------------
-
-    def to_internal_value(self, data):
-        """
-        Alias 'formulation_id' to 'formulation' so the frontend 
-        can send either key without breaking the save.
-        """
-        data = data.copy()
-        if 'formulation_id' in data and 'formulation' not in data:
-            data['formulation'] = data.pop('formulation_id')
-        return super().to_internal_value(data)
-
-    # ---------------------------------------------------------
-    # Read helpers
-    # ---------------------------------------------------------
-
-    @staticmethod
-    def _safe_formulation(obj):
-        """
-        Resolve obj.formulation safely without extra queries.
-        """
-        if not getattr(obj, "formulation_id", None):
-            return None
-        try:
-            # Uses the ORM relation (fast if select_related('formulation') is used)
-            return obj.formulation
-        except Exception:
-            return None
-
     def get_gen_array(self, obj):
-        """Full nested generics objects for read-heavy consumers."""
         generics = obj.generics.all()
-        if not generics:
-            return []
-        return GenericsSerializer(
-            generics, context=self.context, many=True
-        ).data
+        return GenericsSerializer(generics, many=True, context=self.context).data if generics else []
 
     def get_generics_string(self, obj):
-        """Comma-joined titles — used in product listings."""
-        generics = obj.generics.all()
-        if not generics:
-            return ""
-        return ", ".join(g.title for g in generics if g.title)
+        return ", ".join(g.title for g in obj.generics.all() if g.title)
 
     def get_formulation_title(self, obj):
-        f = self._safe_formulation(obj)
-        return f.title if f else ""
+        return obj.formulation.title if obj.formulation else ""
 
     def get_long_title(self, obj):
-        f = self._safe_formulation(obj)
-        if f is None:
+        if not obj.formulation:
             return obj.title or ""
-        return f"{obj.title}-{f.title}"
-
-    def get_key(self, obj):
-        return obj.id
+        return f"{obj.title}-{obj.formulation.title}"
 
 
 class PreparationDisplaySerializer(serializers.ModelSerializer):
