@@ -196,6 +196,216 @@ class DrugSubClassSerializer(serializers.ModelSerializer):
         else:
             return ""
 
+from rest_framework import serializers
+from django.db import transaction
+from . import models # assuming your models are imported like this
+
+class GenericsSerializer(serializers.ModelSerializer):
+    drug_class = serializers.PrimaryKeyRelatedField(
+        queryset=models.DrugClass.objects.all(),
+        many=True,
+        required=False,
+    )
+    drug_sub_class = serializers.PrimaryKeyRelatedField(
+        queryset=models.DrugSubClass.objects.all(),
+        many=True,
+        required=False,
+    )
+
+    # Read-only convenience fields
+    drug_class_titles = serializers.SerializerMethodField()
+    drug_sub_class_titles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.Generics
+        fields = [
+            "id",
+            "title",
+            "description",
+            "synonym",
+            "drug_class",
+            "drug_sub_class",
+            "drug_class_titles",
+            "drug_sub_class_titles",
+            "owner",
+            "created",
+            "updated",
+        ]
+        read_only_fields = ["owner", "created", "updated"]
+
+    def get_drug_class_titles(self, obj):
+        # JOIN the values into a comma-separated string
+        return ", ".join(obj.drug_class.values_list("title", flat=True))
+
+    def get_drug_sub_class_titles(self, obj):
+        # JOIN the values into a comma-separated string
+        return ", ".join(obj.drug_sub_class.values_list("title", flat=True))
+
+    def validate_title(self, value):
+        if value:
+            return value.strip().upper()
+        return value
+
+    def validate(self, attrs):
+        # On PATCH, fall back to the instance's current M2M values
+        if self.instance:
+            classes = attrs.get("drug_class", list(self.instance.drug_class.all()))
+            subclasses = attrs.get(
+                "drug_sub_class", list(self.instance.drug_sub_class.all())
+            )
+        else:
+            classes = attrs.get("drug_class", [])
+            subclasses = attrs.get("drug_sub_class", [])
+
+        class_ids = {c.id for c in classes}
+        subclass_parent_ids = {sc.drug_class_id for sc in subclasses}
+        missing = subclass_parent_ids - class_ids
+
+        if missing:
+            missing_titles = list(
+                models.DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
+            )
+            raise serializers.ValidationError({
+                "drug_class": (
+                    "Every subclass's parent class must also be selected. "
+                    f"Missing: {missing_titles}"
+                )
+            })
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        classes = validated_data.pop("drug_class", [])
+        subclasses = validated_data.pop("drug_sub_class", [])
+
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            validated_data.setdefault("owner", request.user)
+
+        instance = models.Generics.objects.create(**validated_data)
+        instance.drug_class.set(classes)
+        instance.drug_sub_class.set(subclasses)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        classes = validated_data.pop("drug_class", None)
+        subclasses = validated_data.pop("drug_sub_class", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if classes is not None:
+            instance.drug_class.set(classes)
+        if subclasses is not None:
+            instance.drug_sub_class.set(subclasses)
+
+        return instance
+
+
+class GenericsSerializer(serializers.ModelSerializer):
+    drug_class = serializers.PrimaryKeyRelatedField(
+        queryset= models.DrugClass.objects.all(),
+        many=True,
+        required=False,
+    )
+    drug_sub_class = serializers.PrimaryKeyRelatedField(
+        queryset=models.DrugSubClass.objects.all(),
+        many=True,
+        required=False,
+    )
+
+    # Read-only convenience fields
+    drug_class_titles = serializers.SerializerMethodField()
+    drug_sub_class_titles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = models.Generics
+        fields = [
+            "id",
+            "title",
+            "description",
+            "synonym",
+            "drug_class",
+            "drug_sub_class",
+            "drug_class_titles",
+            "drug_sub_class_titles",
+            "owner",
+            "created",
+            "updated",
+        ]
+        read_only_fields = ["owner", "created", "updated"]
+
+    def get_drug_class_titles(self, obj):
+        return list(obj.drug_class.values_list("title", flat=True))
+
+    def get_drug_sub_class_titles(self, obj):
+        return list(obj.drug_sub_class.values_list("title", flat=True))
+
+    def validate_title(self, value):
+        if value:
+            return value.strip().upper()
+        return value
+
+    def validate(self, attrs):
+        # On PATCH, fall back to the instance's current M2M values
+        if self.instance:
+            classes = attrs.get("drug_class", list(self.instance.drug_class.all()))
+            subclasses = attrs.get(
+                "drug_sub_class", list(self.instance.drug_sub_class.all())
+            )
+        else:
+            classes = attrs.get("drug_class", [])
+            subclasses = attrs.get("drug_sub_class", [])
+
+        class_ids = {c.id for c in classes}
+        subclass_parent_ids = {sc.drug_class_id for sc in subclasses}
+        missing = subclass_parent_ids - class_ids
+
+        if missing:
+            missing_titles = list(
+                 models.DrugClass.objects.filter(id__in=missing).values_list("title", flat=True)
+            )
+            raise serializers.ValidationError({
+                "drug_class": (
+                    "Every subclass's parent class must also be selected. "
+                    f"Missing: {missing_titles}"
+                )
+            })
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        classes = validated_data.pop("drug_class", [])
+        subclasses = validated_data.pop("drug_sub_class", [])
+
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            validated_data.setdefault("owner", request.user)
+
+        instance = models.Generics.objects.create(**validated_data)
+        instance.drug_class.set(classes)
+        instance.drug_sub_class.set(subclasses)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        classes = validated_data.pop("drug_class", None)
+        subclasses = validated_data.pop("drug_sub_class", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if classes is not None:
+            instance.drug_class.set(classes)
+        if subclasses is not None:
+            instance.drug_sub_class.set(subclasses)
+
+        return instance
 
 
 
