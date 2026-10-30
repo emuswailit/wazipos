@@ -122,31 +122,39 @@ class FrequencySerializer(serializers.HyperlinkedModelSerializer):
         )
 
 
+from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
+from . import models
+
 class DrugClassSerializer(serializers.ModelSerializer):
- 
+    # 🌟 Declare the method field so DRF knows to call get_category_title
+    category_title = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.DrugClass
         fields = (
             "id",
+            "category",         # 🌟 Added
+            "category_title",   # 🌟 Added
             "title",
             "description",
             "owner",
             "image",
             "created",
             "updated",
-            
         )
 
-        read_only_fields = ("id", "created", "updated", "owner",)
+        read_only_fields = ("id", "created", "updated", "owner")
+        
         validators = [
             UniqueTogetherValidator(
-                queryset=models.DrugClass.objects.all(), fields=["title"]
+                queryset=models.DrugClass.objects.all(), 
+                fields=["title"]
             )
         ]
 
     def get_category_title(self, obj):
-        category_title=""
+        category_title = ""
         if obj.category:
             category_title = obj.category.title
         return category_title
