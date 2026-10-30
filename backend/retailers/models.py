@@ -120,6 +120,17 @@ class UnitOfIssue(models.TextChoices):
     Millilitre = "Millilitre", _("Millilitre")
     Piece = "Piece", _("Piece")
     Pack = "Pack", _("Pack")
+    
+    # 🌟 New additions
+    Box = "Box", _("Box")
+    Carton = "Carton", _("Carton")
+    Bottle = "Bottle", _("Bottle")
+    Tube = "Tube", _("Tube")
+    Sachet = "Sachet", _("Sachet")
+    Ampoule = "Ampoule", _("Ampoule")
+    Vial = "Vial", _("Vial")
+    Roll = "Roll", _("Roll")
+    Dozen = "Dozen", _("Dozen")
 
 
 class IndentItemSource(models.TextChoices):
