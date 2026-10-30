@@ -438,22 +438,11 @@ class GenericsDisplaySerializer(serializers.ModelSerializer):
 
 
 class PreparationSerializer(serializers.ModelSerializer):
-    # Maps frontend 'formulation_id' directly to the model's 'formulation' field
-    formulation_id = serializers.PrimaryKeyRelatedField(
-        queryset=models.Formulation.objects.all(),
-        required=False,
-        allow_null=True,
-        source='formulation'
-    )
-
-    # Simple field mappings
-    key = serializers.CharField(source='id', read_only=True)
-    
-    # Read-only method fields for derived data
-    gen_array = serializers.SerializerMethodField()
-    formulation_title = serializers.SerializerMethodField()
-    generics_string = serializers.SerializerMethodField()
-    long_title = serializers.SerializerMethodField()
+    gen_array = serializers.SerializerMethodField(read_only=True)
+    formulation_title = serializers.SerializerMethodField(read_only=True)
+    generics_string = serializers.SerializerMethodField(read_only=True)
+    long_title = serializers.SerializerMethodField(read_only=True)
+    key = serializers.SerializerMethodField(read_only=True)
 
     generics = serializers.PrimaryKeyRelatedField(
         queryset=models.Generics.objects.all(),
@@ -469,7 +458,6 @@ class PreparationSerializer(serializers.ModelSerializer):
             "title",
             "long_title",
             "formulation",
-            "formulation_id",
             "description",
             "formulation_title",
             "generics_string",
@@ -478,7 +466,7 @@ class PreparationSerializer(serializers.ModelSerializer):
             "created",
             "updated",
         )
-        read_only_fields = ("owner",)
+        read_only_fields = ("owner", "gen_array")
         validators = [
             UniqueTogetherValidator(
                 queryset=models.Preparation.objects.all(),
@@ -486,20 +474,57 @@ class PreparationSerializer(serializers.ModelSerializer):
             )
         ]
 
+    # ---------------------------------------------------------
+    # FK helpers
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def _safe_formulation(obj):
+        """
+        Resolve obj.formulation without triggering the FK
+        descriptor. Returns None if the FK is empty or points at
+        a deleted row.
+        """
+        fid = getattr(obj, "formulation_id", None)
+        if not fid:
+            return None
+        try:
+            return models.Formulation.objects.filter(pk=fid).first()
+        except Exception:
+            return None
+
+    # ---------------------------------------------------------
+    # Fields
+    # ---------------------------------------------------------
+
     def get_gen_array(self, obj):
+        """Full nested generics objects for read-heavy consumers."""
         generics = obj.generics.all()
-        return GenericsSerializer(generics, many=True, context=self.context).data if generics else []
+        if not generics:
+            return []
+        return GenericsSerializer(
+            generics, context=self.context, many=True
+        ).data
 
     def get_generics_string(self, obj):
-        return ", ".join(g.title for g in obj.generics.all() if g.title)
+        """Comma-joined titles — used in product listings."""
+        generics = obj.generics.all()
+        if not generics:
+            return ""
+        return ", ".join(g.title for g in generics if g.title)
 
     def get_formulation_title(self, obj):
-        return obj.formulation.title if obj.formulation else ""
+        f = self._safe_formulation(obj)
+        return f.title if f else ""
 
     def get_long_title(self, obj):
-        if not obj.formulation:
+        f = self._safe_formulation(obj)
+        if f is None:
             return obj.title or ""
-        return f"{obj.title}-{obj.formulation.title}"
+        return f"{obj.title}-{f.title}"
+
+    def get_key(self, obj):
+        return obj.id
 
 
 class PreparationDisplaySerializer(serializers.ModelSerializer):
