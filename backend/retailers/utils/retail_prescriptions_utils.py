@@ -293,8 +293,9 @@ def create_retail_prescription_item(data,user):
         if Products.objects.filter(id=data["product"]).exists():
             product =Products.objects.filter(id=data["product"]).first()
     else:
-        errors.append("Product ID is required")
-        return errors,None
+        pass
+        # errors.append("Product ID is required")
+        # return errors,None
     
     if "preparation" in data and not data['preparation']=="":
 
