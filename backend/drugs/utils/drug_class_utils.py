@@ -85,7 +85,7 @@ def update_drug_class(data, user):
 
     title = None
     description = None
-    body_system = None
+    category = None
 
     if "title" in data["drug_class_details"]:
         if data["drug_class_details"]["title"]:
@@ -93,12 +93,12 @@ def update_drug_class(data, user):
     if "description" in data["drug_class_details"]:
         if data["drug_class_details"]["description"]:
             description = data["drug_class_details"]["description"]
-    if "body_system" in data["drug_class_details"]:
-        if data["drug_class_details"]["body_system"]:
-            body_system_id = data["drug_class_details"]["body_system"]
-            if Category.objects.filter(id=body_system_id).exists():
-                body_system = Category.objects.filter(
-                    id=body_system_id).first()
+    if "category" in data["drug_class_details"]:
+        if data["drug_class_details"]["category"]:
+            category_id = data["drug_class_details"]["category"]
+            if Category.objects.filter(id=category_id).exists():
+                category = Category.objects.filter(
+                    id=category_id).first()
             else:
                 raise exceptions.ValidationError(
                     'Body system with supplied ID does not exist')
@@ -111,8 +111,8 @@ def update_drug_class(data, user):
         if description:
             drug_class.description = description
             drug_class.save()
-        if body_system:
-            drug_class.body_system = body_system
+        if category:
+            drug_class.category = category
             drug_class.save()
 
         return drug_class
