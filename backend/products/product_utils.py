@@ -6,7 +6,7 @@ from .models import Products
 from authentication.models import Categories, Entities
 from drugs.models import Preparation
 from django.db.models import Q
-
+from utils.logging import create_log
 
 def validate_product_data(data):
     errors = []
@@ -149,6 +149,7 @@ def get_all_products(user):
         return queryset.none()
         
     entity_type = str(user.entity.entity_type).strip()
+    create_log("info",f"User entity typr { str(user.entity.entity_type).strip()}")
     
     if entity_type:
         # 🌟 Use __overlap for ArrayField. It checks if the array contains the entity_type.
