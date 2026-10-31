@@ -2629,7 +2629,7 @@ class EntitySerializer(serializers.ModelSerializer):
             "registration_fee", "commission_percentage", "registration_fee_paid", 
             "monthly_subscription", "offer_trial", "created", "updated", 
            "description", "country_title", "county_title", 
-            "constituency_title", "plan", "plan_title", "postal_address", 
+            "constituency_title", "plan", "postal_address", 
             "postal_code", "postal_town",
             # Location Attributes
             "point", "farness", "is_pharmacy",
