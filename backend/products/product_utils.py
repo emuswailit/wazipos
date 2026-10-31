@@ -141,22 +141,21 @@ def get_all_products(user):
     if user.is_staff:
         # Return all products for admin user
         return Products.objects.filter(active=True)
-    else:
-        return Products.objects.filter(active=True)
-    # queryset = Products.objects.filter(active=True)
-    
-    # # Safely check if the user has an entity
-    # if not user.entity:
-    #     return queryset.none()
+    else:    
+        queryset = Products.objects.filter(active=True)
         
-    # entity_type = str(user.entity.entity_type).strip()
-    # create_log("info",f"User entity typr { str(user.entity.entity_type).strip()}")
-    
-    # if entity_type:
-    #     # 🌟 Use __overlap for ArrayField. It checks if the array contains the entity_type.
-    #     queryset = queryset.filter(allowed_entities__overlap=[entity_type])
+        # Safely check if the user has an entity
+        if not user.entity:
+            return queryset.none()
+            
+        entity_type = str(user.entity.entity_type).strip()
+        create_log("info",f"User entity typr { str(user.entity.entity_type).strip()}")
         
-    # return queryset
+        if entity_type:
+            # 🌟 Use __overlap for ArrayField. It checks if the array contains the entity_type.
+            queryset = queryset.filter(allowed_entities__overlap=[entity_type])
+            
+        return queryset
     
 def get_client_products(user):
     print
