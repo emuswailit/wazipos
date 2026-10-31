@@ -144,6 +144,7 @@ def get_all_products(user):
         # Return all product for admin user
         return Products.objects.filter(active=True)
     else:
+        return Products.objects.filter(active=True)
         # Return only products for caegories assigned to user
 
         authorized_products = []
