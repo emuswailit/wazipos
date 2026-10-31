@@ -783,7 +783,6 @@ def create_sub_category(data, user):
         raise exceptions.ValidationError(e)
 
 
-# 🌟 UPDATED VALIDATION FUNCTION
 def validate_create_local_entity_data(data, user):
     errors = []
     
@@ -791,21 +790,32 @@ def validate_create_local_entity_data(data, user):
     if not entity_details:
         return ["Entity details are required"]
 
+    KENYA_COUNTRY_ID = "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f"
+    
+    # Get country from payload, or fallback to the user's country, or Kenya
+    country_id = entity_details.get("country") or getattr(user, "country_id", None) or KENYA_COUNTRY_ID
+
+    # Core required fields for ALL entities
     required_fields = {
         "title": "Entity title",
         "entity_type": "Entity type",
         "entity_ownership": "Entity ownership",
-        "town": "Town name",
-        "road": "Road name",
-        "building": "Building name",
     }
+
+    # 🌟 Only require town, road, and building for entities in Kenya
+    if country_id == KENYA_COUNTRY_ID:
+        required_fields.update({
+            "town": "Town name",
+            "road": "Road name",
+            "building": "Building name",
+        })
 
     for field, label in required_fields.items():
         value = entity_details.get(field)
         if value is None or (isinstance(value, str) and value.strip() == ""):
             errors.append(f"{label} cannot be empty")
 
-    # Validate GPS Coordinates
+    # Validate GPS Coordinates (Optional, but both must be present if one is)
     latitude = entity_details.get("latitude")
     longitude = entity_details.get("longitude")
     if (latitude is not None and longitude is None) or (latitude is None and longitude is not None):
@@ -813,8 +823,6 @@ def validate_create_local_entity_data(data, user):
 
     # Validate uniqueness
     title = entity_details.get("title", "")
-    country_id = entity_details.get("country") or getattr(user, "country_id", None)
-    
     if title and country_id:
         if Entities.objects.filter(title=title, country_id=country_id).exists():
             errors.append("Entity with this title already exists in the system for your country")
