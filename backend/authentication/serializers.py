@@ -619,6 +619,16 @@ class EntityMiniSerializer(serializers.ModelSerializer):
             return ""
 
 
+from datetime import datetime
+from django.contrib.gis.geos import Point
+from entitylocations.models import Locations
+from rest_framework import serializers
+from authentication import models
+from authentication import utils
+# Note: Ensure you have the following serializers imported from your serializers file:
+# CategoriesSerializer, EntityImagesSerializer, EntityLogosSerializer, 
+# EntityLicencesSerializer, DepartmentsSerializer
+
 class EntitySerializer(serializers.ModelSerializer):
     categories_array = serializers.SerializerMethodField(read_only=True)
     country_title = serializers.SerializerMethodField()
@@ -626,288 +636,195 @@ class EntitySerializer(serializers.ModelSerializer):
     constituency_title = serializers.SerializerMethodField()
     plan_title = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
-
-    # is_favorite = serializers.SerializerMethodField()
-    # is_current = serializers.SerializerMethodField()
     departments = serializers.SerializerMethodField()
-    # branches = serializers.SerializerMethodField()
-    # entity_code = serializers.SerializerMethodField(read_only=True)
+    owner_details = serializers.SerializerMethodField()
+    
+    # Nested read-only fields
     images = EntityImagesSerializer(many=True, read_only=True, required=False)
     logos = EntityLogosSerializer(many=True, read_only=True, required=False)
     licences = EntityLicencesSerializer(many=True, read_only=True, required=False)
-    owner_details = serializers.SerializerMethodField()
+
+    # 🌟 Added write-only fields for GPS and Bank Code mapping
+    code = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
+    latitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
+    longitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = models.Entities
-
         fields = [
-            "id",
-            "entity_code",
-            "bank_code",
-            "title",
-            "rating",
-            "administrator",
-            "owner",
-            "registration",
-            "phone",
-            "phone1",
-            "phone2",
-            "phone3",
-            "email",
-            "entity_type",
-            "entity_ownership",
-            "categories",
-            # "is_favorite",
-            # "is_current",
-            "town",
-            "country",
-            "county",
-            "sub_county",
-            "constituency",
-            "road",
-            "building",
-            "images",
-            "logos",
-            "licences",
-            # "branches",
-            "owner",
-            "is_subscribed",
-            "is_verified",
-            "trial_from",
-            "trial_to",
-            "registration_fee",
-            "commission_percentage",
-            "registration_fee_paid",
-            "monthly_subscription",
-            "offer_trial",
-            "created",
-            "updated",
-            "departments",
-            "description",
-            "categories_array",
-            "owner_details",
-            "country_title",
-            "county_title",
-            "constituency_title",
-            "plan",
-            "plan_title",
-            "postal_address",
-            "postal_code",
-            "postal_town",
+            "id", "entity_code", "bank_code", "title", "rating", "administrator",
+            "owner", "owner_details", "registration", "phone", "phone1", "phone2", 
+            "phone3", "email", "entity_type", "entity_ownership", "categories",
+            "categories_array", "town", "country", "county", "sub_county", 
+            "constituency", "road", "building", "images", "logos", "licences",
+            "is_subscribed", "is_verified", "trial_from", "trial_to", 
+            "registration_fee", "commission_percentage", "registration_fee_paid", 
+            "monthly_subscription", "offer_trial", "created", "updated", 
+            "departments", "description", "country_title", "county_title", 
+            "constituency_title", "plan", "plan_title", "postal_address", 
+            "postal_code", "postal_town",
+            # 🌟 Include the new write-only fields here
+            "code", "latitude", "longitude"
+        ]
         
-        ]
         read_only_fields = [
-            "is_subscribed",
-            "offer_trial",
-            "owner",
-            "rating",
-            "categories_array",
-            "entity_code"
+            "is_subscribed", "offer_trial", "owner", "rating", 
+            "categories_array", "entity_code"
         ]
+        
+        # 🌟 Cleaned up and merged extra_kwargs
         extra_kwargs = {
-            "licences": {
-                "required": False,
-            }
+            "licences": {"required": False},
+            "images": {"required": False},
+            "logos": {"required": False},
+            "plan": {"required": False, "allow_null": True},
         }
 
-        extra_kwargs = {
-            "images": {
-                "required": False,
-            },
-              "logos": {
-                "required": False,
-            },
-        }
+    # ========================================================
+    # Read Methods
+    # ========================================================
 
     def get_categories_array(self, obj):
         categories = obj.categories.all()
         if categories.count() > 0:
-            return CategoriesSerializer(
-                categories, context=self.context, many=True
-            ).data
-        else:
-            return None
-    # def get_entity_code(self,obj):
-    #     if not obj.entity_code:
-    #         code = obj.generate_entity_code()
-    #         obj.entity_code = code
-    #         obj.save()
-    #         return code
-    #     else:
-    #         obj.entity_code = ""
-    #         obj.save()
-    #         obj.entity_code = obj.generate_entity_code()
-    #         obj.save()
-    #         return obj.entity_code
-
-    # def get_current_licences(self, obj):
-    #     licences = obj.licences.all()
-    #     if licences.count() > 0:
-    #         return EntityLicencesSerializer(
-    #             licences, context=self.context, many=True
-    #         ).data
-    #     else:
-    #         return None
-
-    def validate(self, attrs):
-        user = self.context.get("user")
-        entity_type = attrs.get("entity_type", "")
-
-        if utils.admin_can_create_entity(user, entity_type):
-            raise exceptions.ValidationError(
-                f"Admin users not allowed to create facility of type: {entity_type}"
-            )
-        return attrs
+            return CategoriesSerializer(categories, context=self.context, many=True).data
+        return None
 
     def get_rating(self, obj):
         rating = 0
-        reviewsCount = 0
-        ratings = 0
-        reviews = None
-        if Rating.objects.filter(entity=obj).exists():
-            reviewsCount = Rating.objects.filter(entity=obj).count()
-            reviews = Rating.objects.filter(entity=obj).all()
-
-            for review in reviews:
-                ratings += review.rating
-            rating = ratings / reviewsCount
-
+        if Rating.objects.filter(entity=obj).exists(): # Assuming Rating model is imported
+            reviews = Rating.objects.filter(entity=obj)
+            ratings = sum(review.rating for review in reviews)
+            rating = ratings / reviews.count()
         return rating
-
-    # def get_is_licenced(self, obj):
-    #     return (
-    #         models.EntityLicences.objects.filter(
-    #             entity=obj, is_verified=True, valid_to__gte=datetime.today()
-    #         ).count()
-    #         > 0
-    #     )
-
-    # def get_is_favorite(self, obj):
-    #     user_favorites = []
-    #     user = self.context["request"].user
-
-    #     user_favorites = user.favorite_entities.all()
-    #     if obj in user_favorites:
-    #         return "true"
-    #     else:
-    #         return "false"
-
-    # def get_is_current(self, obj):
-    #     user = self.context["request"].user
-
-    #     if obj == user.entity:
-    #         return "true"
-    #     else:
-    #         return "false"
 
     def get_owner_details(self, obj):
         if obj.owner:
-            return f"{obj.owner.first_name} {obj.owner.last_name}- {obj.owner.phone}"
-        else:
-            return ""
+            return f"{obj.owner.first_name} {obj.owner.last_name} - {obj.owner.phone}"
+        return ""
 
     def get_county_title(self, obj):
-        if obj.county:
-            return f"{obj.county.title}"
-        else:
-            return ""
-    
+        return obj.county.title if obj.county else ""
+
     def get_constituency_title(self, obj):
-        if obj.constituency:
-            return f"{obj.constituency.title}"
-        else:
-            return ""
+        return obj.constituency.title if obj.constituency else ""
 
     def get_plan_title(self, obj):
-        if obj.plan:
-            return f"{obj.plan.title}"
-        else:
-            return ""
+        return obj.plan.title if obj.plan else ""
 
     def get_country_title(self, obj):
-        if obj.country:
-            return f"{obj.country.title}"
-        else:
-            return ""
-
-    # def get_country_details(self, obj):
-    #     return CountriesSerializer(obj.country, context=self.context, many=False).data
-
-    # def get_county_details(self, obj):
-    #     if obj.county:
-    #         return CountiesSerializer(obj.county, context=self.context, many=False).data
-    #     else:
-    #         return None
-
-    def get_current_licence(self, obj):
-        curr_licence = None
-        if (
-            models.EntityLicences.objects.filter(
-                entity=obj, is_verified=True, valid_to__gte=datetime.today()
-            ).count()
-            > 0
-        ):
-            curr_licence = models.EntityLicences.objects.filter(
-                entity=obj, is_verified=True, valid_to__gte=datetime.today()
-            ).first()
-            return EntityLicencesSerializer(
-                curr_licence, context=self.context, many=False
-            ).data
-
-    # def create(self, validated_data):
-    #     created = None
-    #     user = self.context.get("user")
-    #     title = validated_data.get("title", None)
-    #     owner_id = validated_data.get("owner", None)
-    #     categories = validated_data.pop("categories", None)
-
-    #     if user and title:
-    #         if models.Entities.objects.filter(title=title.upper(),owner_id=owner_id).count() > 0:
-    #             raise exceptions.ValidationError(f"Entity named {title} already exists")
-    #     created = models.Entities.objects.create(**validated_data)
-    #     created.categories.set(categories)
-
-    #     # RESERVE ALLOTMENT OF ROLES UNTIL FACILITY IS VERIFIED
-    #     # if created:
-    #     #     role = models.Roles.objects.create(entity_id=created.id, level=created.entity_type,
-    #     #                                        title=f"{created.entity_type} SUPER ADMIN", value=f"{created.entity_type}_SUPER_ADMIN")
-    #     #     user.roles.add(role)
-
-    #     # If user is not admin, switch them to this facility
-    #     if not user.is_staff:
-    #         pass
-    #         # user.entity = created
-    #     else:
-    #         # Automatically verify entities created by admin
-    #         user.entity.is_verified = True
-    #         user.entity.save()
-    #     user.save()
-    #     return created
-
-    def get_isSelected(self, obj):
-        user_pk = self.context.get("user_pk")
+        return obj.country.title if obj.country else ""
 
     def get_departments(self, obj):
-        departments = None
         departments = models.Departments.objects.filter(entity=obj)
-        if departments:
-            return DepartmentsSerializer(
-                departments, context=self.context, many=True
-            ).data
-        else:
-            return None
+        if departments.exists():
+            return DepartmentsSerializer(departments, context=self.context, many=True).data
+        return None
 
-    # def get_branches(self, obj):
-    #     branches = []
-    #     if  models.EntityBranches.objects.filter(entity=obj).exists():
-    #         branches = models.EntityBranches.objects.filter(entity=obj)
-    #         return EntityBranchSerializer(
-    #             branches, context=self.context, many=True
-    #         ).data
-    #     else:
-    #         return []
+    # ========================================================
+    # Validation
+    # ========================================================
 
+    def validate(self, attrs):
+        user = self.context.get("request").user if "request" in self.context else self.context.get("user")
+        entity_type = attrs.get("entity_type", "")
+        
+        if hasattr(utils, "admin_can_create_entity"):
+            if utils.admin_can_create_entity(user, entity_type):
+                raise serializers.ValidationError(
+                    f"Admin users not allowed to create facility of type: {entity_type}"
+                )
+        return attrs
 
+    # ========================================================
+    # Create & Update (Handling Complex Logic)
+    # ========================================================
+
+    def create(self, validated_data):
+        # 1. Pop custom and M2M fields
+        categories = validated_data.pop("categories", [])
+        code_val = validated_data.pop("code", None)
+        latitude = validated_data.pop("latitude", None)
+        longitude = validated_data.pop("longitude", None)
+        
+        # 2. Handle Owner Fallback
+        request_user = self.context.get("request").user if "request" in self.context else self.context.get("user")
+        owner = validated_data.pop("owner", None) or request_user
+
+        # 3. Handle Bank Code Mapping
+        entity_type = validated_data.get("entity_type")
+        if entity_type == "Bank" and code_val:
+            validated_data["bank_code"] = code_val
+        elif entity_type != "Bank":
+            validated_data["bank_code"] = None
+
+        # 4. Handle Empty Plan
+        if not validated_data.get("plan"):
+            validated_data["plan"] = None
+
+        # 5. Create Entity
+        entity = models.Entities.objects.create(owner=owner, **validated_data)
+
+        # 6. Attach Categories
+        if categories:
+            entity.categories.set(categories)
+
+        # 7. Create GPS Location
+        if latitude is not None and longitude is not None:
+            try:
+                point = Point(float(longitude), float(latitude), srid=4326)
+                Locations.objects.create(entity=entity, point=point, farness="")
+            except Exception as e:
+                print(f"Failed to save location for entity {entity.id}: {e}")
+
+        return entity
+
+    def update(self, instance, validated_data):
+        # 1. Pop custom and M2M fields
+        categories = validated_data.pop("categories", None)
+        code_val = validated_data.pop("code", None)
+        latitude = validated_data.pop("latitude", None)
+        longitude = validated_data.pop("longitude", None)
+        
+        # 2. Handle Owner Mapping
+        owner = validated_data.pop("owner", None)
+        if owner:
+            instance.owner = owner
+
+        # 3. Handle Bank Code Mapping
+        entity_type = validated_data.get("entity_type", instance.entity_type)
+        if entity_type == "Bank" and code_val:
+            instance.bank_code = code_val
+        elif entity_type != "Bank":
+            instance.bank_code = None
+
+        # 4. Handle Empty Plan
+        if "plan" in validated_data and not validated_data["plan"]:
+            validated_data["plan"] = None
+
+        # 5. Update standard fields dynamically
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # 6. Update Categories
+        if categories is not None:
+            instance.categories.set(categories)
+
+        # 7. Update/Create GPS Location
+        if latitude is not None and longitude is not None:
+            try:
+                point = Point(float(longitude), float(latitude), srid=4326)
+                Locations.objects.update_or_create(
+                    entity=instance,
+                    defaults={"point": point, "farness": ""}
+                )
+            except Exception as e:
+                print(f"Failed to update location for entity {instance.id}: {e}")
+
+        return instance
+
+    
 class ClustersSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Clusters

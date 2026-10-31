@@ -17,9 +17,6 @@ from employees.serializers import EmployeesSerializer
 from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
 from authentication.utils import utils
 from payments.models import UserAccounts,PaymentServicesProvider
-from django.utils.dateparse import parse_datetime
-from core.utils import generate_password
-from django.utils import timezone
 from rest_framework.decorators import (
     api_view,
     permission_classes,
@@ -3077,78 +3074,68 @@ class SendOTPAPIView(generics.GenericAPIView):
                         status=status.HTTP_200_OK,
                     )
 
+from rest_framework import generics, status
+from django.http import JsonResponse
+from authentication import models
+from core.utils import generate_and_send_user_credentials # 🌟 Import the utility
+
 class SendEmailPasswordAPIView(generics.GenericAPIView):
 
     def post(self, request):
         print("DT", request.data)
-        user =None
-        email=None
-        if not "email" in request.data or request.data["email"]=="":
+        
+        if not "email" in request.data or request.data["email"] == "":
             return JsonResponse(
-                            data={
-                                "response_code": 1,
-                                "response_message": "Email address is required"
-                    
-                            },
-                            status=status.HTTP_200_OK,
-                        )
-        else:
-            email_input = request.data["email"]
-            print("email_input",email_input)
-            # validated_email = check_email_validity(email_input)
+                data={
+                    "response_code": 1,
+                    "response_message": "Email address is required"
+                },
+                status=status.HTTP_200_OK,
+            )
+            
+        email_input = request.data["email"]
+        print("email_input", email_input)
 
-            # print("validated_email",validated_email)
-
-            if email_input:
-                # from core.utils import generate_password
-                if models.Users.objects.filter(email=email_input).exists():
-                    user =  models.Users.objects.filter(email=email_input).first()
-                    create_log("user",user)
-                    password = generate_password()
-                    print("user",user)
-                    print("password",password)
-                    user.set_password(password)
-                    user.save()
-
-                    email_body = f"Your Wazipos pawword is {password}"
-                   
+        if email_input:
+            if models.Users.objects.filter(email=email_input).exists():
+                user = models.Users.objects.filter(email=email_input).first()
+                create_log("user", user)
                 
-                    data = {
-                            "email_body": email_body,
-                            "to_email": user.email,
-                            "email_subject": "Wazipos Password  Reset",
-                        }
-
-                    utils.Util.send_email(data)
-                    return JsonResponse(
-                                data={
-                                    "response_code": 1,
-                                    "response_message": "Your password has been sent to email"
-                        
-                                },
-                                status=status.HTTP_200_OK,
-                            )
-
-                else:
-                    return JsonResponse(
-                        data={
-                            "response_code": 1,
-                            "response_message": "No user with provided"
+                # 🌟 CALL THE OUTSOURCED FUNCTION HERE
+                # action="reset" ensures the correct email/SMS template is used
+                password, notification_errors = generate_and_send_user_credentials(user, action="reset")
                 
-                        },
-                        status=status.HTTP_200_OK,
-                    )
+                response_data = {
+                    "response_code": 0, # Changed to 0 for success
+                    "response_message": "Your password has been sent to your email/SMS."
+                }
+                
+                # If email or SMS failed, let the frontend know
+                if notification_errors:
+                    response_data["response_message"] = "Password reset, but notifications failed."
+                    response_data["errors"] = notification_errors
+
+                return JsonResponse(
+                    data=response_data,
+                    status=status.HTTP_200_OK,
+                )
+
             else:
                 return JsonResponse(
-                        data={
-                            "response_code": 1,
-                            "response_message": "Email is nt valid"
-                
-                        },
-                        status=status.HTTP_200_OK,
-                    )
-
-
+                    data={
+                        "response_code": 1,
+                        "response_message": "No user with provided email"
+                    },
+                    status=status.HTTP_200_OK,
+                )
+        else:
+            return JsonResponse(
+                data={
+                    "response_code": 1,
+                    "response_message": "Email is not valid"
+                },
+                status=status.HTTP_200_OK,
+            )
 
 class SendPasswordAPIView(generics.GenericAPIView):
 
@@ -4574,167 +4561,129 @@ def register_user(request):
     )
 
 
-# @login_required
-# def entity_admin(request):
-#     entity = request.user.entity
-#     return render(request, "entities/entity_admin.html", context={entity: entity})
+from authentication import models
+from authentication.serializers import SimpleUsersSerializer, UsersSerializer
+from employees.models import Employees
+from core.utils import generate_and_send_user_credentials 
 
-# view for registering users
 class SimpleRegisterView(APIView):
     def post(self, request):
         
-        if not "email" in request.data or  request.data.get("email")==None or request.data["email"]=="":
+        if not "email" in request.data or request.data.get("email") == None or request.data["email"] == "":
             print("Email is required")
             return Response(
-            {"response_code":1,"response_message": "Email is required"}, status=status.HTTP_200_OK
-                )
+                {"response_code": 1, "response_message": "Email is required"}, 
+                status=status.HTTP_200_OK
+            )
         else:
             try:
-                email =validate_email(request.data.get("email"))
+                email = validate_email(request.data.get("email"))
                 if models.Users.objects.filter(email=request.data.get("email")).exists():
                     return Response(
-            {"response_code":1,"response_message": "Email already in use"}, status=status.HTTP_200_OK
-                )
-
+                        {"response_code": 1, "response_message": "Email already in use"}, 
+                        status=status.HTTP_200_OK
+                    )
             except EmailNotValidError as e:
                 print(str(e))
-                print("Email is invalid.")  
-                print("Email is invalid.")
+                return Response(
+                    {"response_code": 1, "response_message": "Email is invalid."}, 
+                    status=status.HTTP_200_OK
+                )
 
-        # request.data._mutable = True
-        ## REmoved above
-        # data = request.data.copy()
-        # role_str =data.pop("roles")
-
-        # roles_list = role_str[0].split(',')
-        # print(role_str)
-        # print(roles_list)
         serializer = SimpleUsersSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         user_data = serializer.data
 
-        # Retrieve user from database ffffff
+        # Retrieve user from database
         user = models.Users.objects.get(email=user_data["email"])
-        user.is_verified="true"
+        user.is_verified = "true"
         user.save()
+        
         data = request.data.copy()
-        role_str =data.pop("roles_string")
+        role_str = data.pop("roles_string", None)
 
-        if "," in role_str:
-            roles_list = role_str[0].split(',')
-            for role_id in roles_list:
-                print("role_id",f"{role_id}")
-                role = models.Roles.objects.get(id=role_id)
-                if role:
-                    if  role  in user.roles.all():
-                        pass
-                    else:
-                        user.roles.add(role)
-        else:
-            role = models.Roles.objects.get(id=role_str)
-            if role:
-                if  role  in user.roles.all():
-                    pass
+        if role_str:
+            try:
+                if isinstance(role_str, list) and len(role_str) > 0 and "," in role_str[0]:
+                    roles_list = role_str[0].split(',')
+                elif isinstance(role_str, str) and "," in role_str:
+                    roles_list = role_str.split(',')
                 else:
-                    user.roles.add(role)
+                    roles_list = [role_str] if isinstance(role_str, str) else role_str
+
+                for role_id in roles_list:
+                    role = models.Roles.objects.filter(id=role_id).first()
+                    if role and role not in user.roles.all():
+                        user.roles.add(role)
+            except Exception as e:
+                print(f"Role assignment error: {str(e)}")
+                # We can note this in the response, but usually we don't want to fail the whole registration
 
         user.save()
 
-        employee = Employees.objects.create(user=user, entity=user.entity,owner=request.user, is_active='true')
+        employee = Employees.objects.create(user=user, entity=user.entity, owner=request.user, is_active='true')
         employee.save()
 
-        #Get token
-        # token = RefreshToken.for_user(user).access_token
-        # print("token",token)
-        # # Get current site
-        # current_site = get_current_site(request).domain
-        # relativeLink = reverse("email-verify")
+        # 🌟 CALL THE OUTSOURCED FUNCTION AND CAPTURE ERRORS
+        password, notification_errors = generate_and_send_user_credentials(user)
 
-        # # generate absolute url
-        # absurl = (
-        #     "http://" + current_site + relativeLink + "?token=" + str(token)
-        # )
-        # email_body = (
-        #     "Hi "
-        #     + user.first_name
-        #     + " "
-        #     + user.last_name
-        #     + " Use link below to verify your email \n"
-        #     + absurl
-        # )
-        # data = {
-        #     "email_body": email_body,
-        #     "to_email": user.email,
-        #     "email_subject": "Verify your email address",
-        # }
+        # Build the response payload
+        response_data = {
+            "response_code": 0,
+            "response_message": "User successfully created",
+            "user": UsersSerializer(user, context={'request': request}).data
+        }
 
-        # send_email(data)
+        # 🌟 If there are errors sending SMS or Email, attach them to the response
+        if notification_errors:
+            response_data["response_message"] = "User created, but notifications failed."
+            response_data["notification_errors"] = notification_errors
+            # Note: We still return 201 Created because the User was created successfully in the DB
 
-        # Send password via email
-
-        password = generate_password()
-        print("user",user)
-        print("password",password)
-        user.set_password(password)
-        user.save()
-
-        email_body = f"Your Wazipos account has been created. Your password is {password} . Please do not share your password."
-        
-    
-        data = {
-                "email_body": email_body,
-                "to_email": user.email,
-                "email_subject": "Succesful Wazipos Account Creation",
-            }
-
-        utils.Util.send_email(data)
-
-        # Send sms
-        telco, phone_number = get_telco_by_phone_number(user.phone)
-        message =f"Wazipos password is {password}.Do not share your password with any other person."
-        payload = {
-                "contact" : phone_number,
-                "message" : message,
-                "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-            }
-        
-        errors, sent = send_swift_sms(payload)
         return Response(
-                data={
-                    "response_code": 0,
-                    "response_message": "User succesfully created",
-                    "user": UsersSerializer(user,context={'request': request}).data
-                  
-                },
-                status=status.HTTP_201_CREATED,
-            )
+            data=response_data,
+            status=status.HTTP_201_CREATED,
+        )
+
+from rest_framework import generics, status
+from rest_framework.response import Response
+from django.db import transaction
+from django.http import JsonResponse
+from django.urls import reverse
+from django.contrib.sites.shortcuts import get_current_site
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.db import IntegrityError
+from rest_framework import exceptions
+
+# 🌟 Import the new utility
+from core.utils import generate_and_send_user_credentials
+
+# ... (keep your other imports: models, serializers, utils, config, etc.)
 
 class CorporateRegisterView(CreateModelMixin, generics.GenericAPIView):
     """
-    Register User user by admin
+    Register User by admin
     """
-   
-
     serializer_class = CorporateRegisterSerializer
     renderer_classes = (UserRenderer,)
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = (app_permissions.AdminsOnlyPermissions,)
 
     @transaction.atomic
-            
     def post(self, request):
-        psp =None
-        user_obj=None
+        psp = None
+        user_obj = None
         agent = None
         errors_messages = []
         jambopay_profile = None
-        create_log("info",f"Validated ddata: {request.data}")
         entity = None
-        is_entity_administrator= request.data["is_entity_administrator"]
-      
-        entity_id= request.data["entity"]
+        
+        create_log("info", f"Validated data: {request.data}")
+        
+        is_entity_administrator = request.data.get("is_entity_administrator", "false")
+        entity_id = request.data.get("entity")
+        
         if models.Entities.objects.filter(id=entity_id).exists():
             entity = models.Entities.objects.filter(id=entity_id).first()
         else:
@@ -4749,113 +4698,46 @@ class CorporateRegisterView(CreateModelMixin, generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        if models.Users.objects.filter(phone =request.data["phone"]).exists():
+        if models.Users.objects.filter(phone=request.data.get("phone")).exists():
             errors_messages.append("Phone number provided is already in use")
-        # if not request.user.is_staff:
-        #     if not models.Agents.objects.filter(user=request.user).exists():
-        #         errors_messages.append("You are not authorized")
-        #         create_log("error","No agent exists for user")
-
 
         if models.Agents.objects.filter(user=request.user).exists():
-            agent=models.Agents.objects.filter(user=request.user).first()
-            
-            create_log("info",f"Agent: {agent}")
-        if len(errors_messages)>0:
+            agent = models.Agents.objects.filter(user=request.user).first()
+            create_log("info", f"Agent: {agent}")
+
+        if len(errors_messages) > 0:
             return JsonResponse(
-                        {
-                                "response_code": 1,
-                                "response_message": "User not created",
-                                "errors": errors_messages,
-                            
-                            },
-                
-                        )
-        password = generate_password()
+                {
+                    "response_code": 1,
+                    "response_message": "User not created",
+                    "errors": errors_messages,
+                },
+            )
 
-        user_obj = None
-
-        
         user = request.data
-
-        # files = request.FILES.getlist("documents")
-        # if files:
-        #     request.data.pop("documents")
-        #     serializer_context = {
-        #         "request": request,
-        #     }
-
-        #     serializer = serializers.UsersSerializer(
-        #         data=request.data, context=serializer_context
-        #     )
-            # serializer.is_valid(raise_exception=   True)
-            # if serializer.is_valid():
-            #     try:
-            #         serializer.save(owner=request.user,
-            #                         entity=request.user.entity)
-            #     except IntegrityError as exc:
-            #         raise exceptions.ValidationError(exc)
-            #     item = models.Users.objects.get(id=serializer.data["id"])
-            #     errors_messages = []
-
-                # uploaded_files = []
-                # for file in files:
-                #     content = models.UserDocuments.objects.create(
-                #         owner=request.user,
-                #         image=file,
-                #         product=item,
-                #         entity=request.user.entity,
-                #     )
-                #     uploaded_files.append(content)
-
-                # item.documents.add(*uploaded_files)
-                # item.save()
-                # context = serializer.data
-                # arr =[]
-                # context["images"] = [file.id for file in uploaded_files]
-                # context["images"] = [file.id for file in uploaded_files]
-                # context["images"] = [image for image in uploaded_files]
-                # ls= serializers.UserDocumentsSerializer(item.images,context={'request': request}, many=True).data,
-                # context["images"] =arr
-
-                
-                # return Response(
-                #     data={
-                #         "response_code": 0,
-                #         "response_message": "User succesfully created",
-                #         "product": serializers.UsersSerializer(item,context={'request': request}).data,
-                #         "errors": errors_messages,
-                #     },
-                #     status=status.HTTP_201_CREATED,
-                # )
         files = request.FILES.getlist("documents")
         if files:
             request.data.pop("documents")
-            serializer_context = {
-                "request": request,
-            }
-        serializer = self.serializer_class(data=user, context={"request": request, "user":request.user})
+
+        serializer = self.serializer_class(data=user, context={"request": request, "user": request.user})
       
-        # serializer.is_valid(raise_exception=   True)
         if serializer.is_valid():
-           
-            profile = None
-            serializer.save(owner=request.user,entity=entity)
+            serializer.save(owner=request.user, entity=entity)
             user_data = serializer.data
            
             create_log("info", f"Serializer data: {user_data}")
-            # Retrieve user from database
-            # user = models.Users.objects.get(email=user_data["email"])
+            
             user_obj = models.Users.objects.get(phone=user_data["phone"])
-            user_obj.set_password(password)
-
        
             if agent:
-                user_obj.creating_agent=agent
+                user_obj.creating_agent = agent
                 user_obj.save()
-            user_obj.accepted_terms="true"
-            user_obj.iprs_verified="true"
+                
+            user_obj.accepted_terms = "true"
+            user_obj.iprs_verified = "true"
             user_obj.save()
+
+            # Handle File Uploads
             if files:
                 uploaded_files = []
                 for file in files:
@@ -4871,135 +4753,102 @@ class CorporateRegisterView(CreateModelMixin, generics.GenericAPIView):
 
                 user_obj.documents.add(*uploaded_files)
                 user_obj.save()
-                context = serializer.data
-                arr =[]
 
-        
-                # context["documents"] = [file.id for file in uploaded_files]
-                # context["documents"] = [file.id for file in uploaded_files]
-                context["documents"] = [image for image in uploaded_files]
-                ls= UserDocumentsSerializer(user_obj.documents,context={'request': request}, many=True).data,
-                context["documents"] =arr
-
-            if user_obj.is_entity_administrator=="true":
+            # Jambopay Wallet Setup (if admin)
+            if user_obj.is_entity_administrator == "true":
                 jambopay_profile = get_jambopay_main_profile(user_obj.phone)
-                if jambopay_profile:
-                ## Create wallet
-                    pass
-                else:
+                if not jambopay_profile:
                     document = models.UserDocuments.objects.filter(owner=user_obj.owner).first()
                     profile_data = {
-                    "firstName": user_obj.first_name,
-                    "lastName": user_obj.last_name,
-                    "identityNumber": document.document_number,
-                    "identityType": document.document_type,
-                    "phoneNumber": user_obj.phone,
-                    "gender": user_obj.gender,
-                    "dateOfBirth": user_obj.date_of_birth.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                    "county": user_obj.county.title,
-                    "physicalAddress": user_obj.constituency.title,
-                    "email": user_obj.email,
-                 }
+                        "firstName": user_obj.first_name,
+                        "lastName": user_obj.last_name,
+                        "identityNumber": document.document_number if document else "",
+                        "identityType": document.document_type if document else "",
+                        "phoneNumber": user_obj.phone,
+                        "gender": user_obj.gender,
+                        "dateOfBirth": user_obj.date_of_birth.strftime("%Y-%m-%dT%H:%M:%S%z") if user_obj.date_of_birth else "",
+                        "county": user_obj.county.title if user_obj.county else "",
+                        "physicalAddress": user_obj.constituency.title if user_obj.constituency else "",
+                        "email": user_obj.email,
+                    }
                     jambopay_profile = create_jambopay_profile(profile_data)
 
-          
-   
                 if jambopay_profile:
-                    data=json.dumps({
-                                        "currency": "KES",
-                                        "phoneNumber": user_obj.phone, 
-                                        "name": f"{user_obj.first_name} {user_obj.last_name}",
-                                        "description": f"Wallet account for {user_obj.first_name} {user_obj.last_name}",
-                                        "accountNo": config("WAZIPOS_JAMBOPAY_WHITELABEL_ACCOUNT"), 
-                                        "accountType": "Individual"
-                                    })
+                    data = json.dumps({
+                        "currency": "KES",
+                        "phoneNumber": user_obj.phone, 
+                        "name": f"{user_obj.first_name} {user_obj.last_name}",
+                        "description": f"Wallet account for {user_obj.first_name} {user_obj.last_name}",
+                        "accountNo": config("WAZIPOS_JAMBOPAY_WHITELABEL_ACCOUNT"), 
+                        "accountType": "Individual"
+                    })
 
-                    errors, account =create_white_label_account(data)
-                    create_log("info", f"Jambopay waller account: {account}")
-                    create_log("info", f"Jambopay wallet errors: {errors}")
+                    jambopay_errors, account = create_white_label_account(data)
+                    create_log("info", f"Jambopay wallet account: {account}")
+                    create_log("info", f"Jambopay wallet errors: {jambopay_errors}")
                     
                     if account:
-                        psp=None
-                        if  PaymentServicesProvider.objects.filter(psp_title="JAMBOPAY").exists():
-                            psp= PaymentServicesProvider.objects.filter(psp_title="JAMBOPAY").first()
+                        if PaymentServicesProvider.objects.filter(psp_title="JAMBOPAY").exists():
+                            psp = PaymentServicesProvider.objects.filter(psp_title="JAMBOPAY").first()
                         else:
-                            errors.append("No such payment services provider")
+                            errors_messages.append("No such payment services provider")
+                            
                         user_account = UserAccounts.objects.create(
-                        psp=psp,
-                        account_number=account["accountNo"],
-                        account_name=account["name"],
-                        account_phone=user_obj.phone,
-                        account_type="WALLET",
-                        currency=account["currency"],
-                        entity=user_obj.entity,
-                        owner=user_obj
-                    )
+                            psp=psp,
+                            account_number=account["accountNo"],
+                            account_name=account["name"],
+                            account_phone=user_obj.phone,
+                            account_type="WALLET",
+                            currency=account["currency"],
+                            entity=user_obj.entity,
+                            owner=user_obj
+                        )
                         create_log("info", f"User account: {user_account}")
                     else:
                         user_obj.delete()
-                        for error in errors:
+                        for error in jambopay_errors:
                             errors_messages.append(error)
                         return JsonResponse(
-                data={
-                    "response_code": 1,
-                    "response_message": "User not created",
-                    "errors": errors_messages,
-                    "status": status.HTTP_200_OK,
-                },
-                status=status.HTTP_200_OK,
-            )
-
+                            data={
+                                "response_code": 1,
+                                "response_message": "User not created",
+                                "errors": errors_messages,
+                                "status": status.HTTP_200_OK,
+                            },
+                            status=status.HTTP_200_OK,
+                        )
             else:
-                create_log("info", "Wallet not created, use is not entity administrator")
-                pass
+                create_log("info", "Wallet not created, user is not entity administrator")
 
-            # Generate token
+            # 🌟 CALL THE OUTSOURCED FUNCTION HERE
+            # This handles: password generation, hashing, saving, email dispatch, and SMS dispatch
+            password, notification_errors = generate_and_send_user_credentials(user_obj)
+
+            # Add any notification failures to the response
+            errors_messages.extend(notification_errors)
+
+            # Generate token (for email verification link, though you may no longer need it)
             token = RefreshToken.for_user(user_obj).access_token
-            # Get current site
-            # TODO: Ensure current site settings have been updated in the django admin panel
             current_site = get_current_site(request).domain
-            # current_site = 'wazipos.com'
             relativeLink = reverse("email-verify")
-            # generate absolute url
-            absurl = (
-                "https://" + current_site + relativeLink + "?token=" + str(token)
-            )
-            email_body = (
-                f"Your Wazipos account has been created. Your password is {password} . Please do not share your password."
-            )
-            # message = f"Your account for {user.entity} has been created at JAMBOPAY. Your password is {password}"
-            # time_otp = sms_utils.generate_otp(user_obj)
-            message =f"Your Wazipos account has been created. Your password is {password} . Please do not share your password."
-            payload = {
-                    "contact" : user_obj.phone,
-                    "message" : message,
-                    "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                    "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                }
-        
-            errors, sent = send_swift_sms(payload)
-            data = {
-                "email_body": email_body,
-                "to_email": user_obj.email,
-                "email_subject": "Verify your email address",
-            }
+            absurl = "https://" + current_site + relativeLink + "?token=" + str(token)
+            
+            # Determine response message based on notification success
+            response_message = "User successfully created"
+            if notification_errors:
+                response_message = "User created, but notifications failed."
 
-            utils.Util.send_email(data)
-
-            errors_messages = []
-            # sent = sms_utils.send_sms_code(user)
-            # sent = sms_utils.send_password(user, request.data['password'])
             return JsonResponse(
                 data={
                     "response_code": 0,
-                    "response_message": "User succesfully created",
+                    "response_message": response_message,
                     "user": serializer.data,
                     "errors": errors_messages,
                 },
                 status=status.HTTP_201_CREATED,
             )
         else:
-            default_errors = serializer.errors  # default errors dict
+            default_errors = serializer.errors
             errors_messages = []
             for field_name, field_errors in default_errors.items():
                 for field_error in field_errors:
@@ -5015,7 +4864,6 @@ class CorporateRegisterView(CreateModelMixin, generics.GenericAPIView):
                 },
                 status=status.HTTP_200_OK,
             )
-
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])

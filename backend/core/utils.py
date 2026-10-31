@@ -6,8 +6,6 @@ import string
 import datetime
 from rest_framework import exceptions
 
-
-
 """
 Pure helpers for the inventory prediction pipeline.
 
@@ -30,6 +28,13 @@ from django.db.models import Min, Sum
 from django.utils import timezone
 from sklearn.linear_model import LinearRegression
 
+# =========================================================
+# 🌟 IMPORTS FOR CREDENTIAL DISPATCH
+# =========================================================
+from utils.mailing import send_email
+from core.phone_number_utils import get_telco_by_phone_number
+from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+
 
 # =========================================================
 # JSON encoder
@@ -48,8 +53,9 @@ class UUIDEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-
-# core/utils.py
+# =========================================================
+# General Helpers
+# =========================================================
 
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -70,6 +76,7 @@ def _q(value, places=2):
     quantizer = Decimal("1").scaleb(-places)
     return value.quantize(quantizer, rounding=ROUND_HALF_UP)
 
+
 def random_string_generator(size=10, chars=string.ascii_lowercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
@@ -77,6 +84,65 @@ def random_string_generator(size=10, chars=string.ascii_lowercase + string.digit
 def generate_password(size=8, chars=string.ascii_lowercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
+
+# =========================================================
+# 🌟 NEW FUNCTION: Password Generation & Notifications
+# =========================================================
+
+def generate_and_send_user_credentials(user, action="created"):
+    """
+    Generates a random password for a user, saves it, 
+    and sends the credentials via Email and SMS.
+    Returns (password, errors_list).
+    """
+    errors = []
+    password = generate_password()
+    user.set_password(password)
+    user.save()
+
+    # 1. Send Email
+    if user.email:
+        if action == "reset":
+            email_body = f"Your Wazipos password has been reset. Your new password is {password}. Please do not share your password."
+            email_subject = "Wazipos Password Reset"
+        else:
+            email_body = f"Your Wazipos account has been created. Your password is {password}. Please do not share your password."
+            email_subject = "Successful Wazipos Account Creation"
+
+        email_data = {
+            "email_body": email_body,
+            "to_email": user.email,
+            "email_subject": email_subject,
+        }
+        try:
+            send_email(email_data)
+        except Exception as e:
+            errors.append(f"Email dispatch failed: {str(e)}")
+
+    # 2. Send SMS (Optional for reset, but usually good practice)
+    if user.phone:
+        try:
+            telco, phone_number = get_telco_by_phone_number(user.phone)
+            if action == "reset":
+                message = f"Your Wazipos password has been reset. New password: {password}. Do not share."
+            else:
+                message = f"Wazipos password is {password}. Do not share your password with any other person."
+                
+            payload = {
+                "contact": phone_number,
+                "message": message,
+                "callback": "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
+                "sender_name": config("JAMBOPAY_SWIFT_SENDER_NAME")
+            }
+            send_swift_sms(payload)
+        except Exception as e:
+            errors.append(f"SMS dispatch failed: {str(e)}")
+
+    return password, errors
+
+# =========================================================
+# Date & String Validators
+# =========================================================
 
 def date_is_current_or_future(date):
     current_date = datetime.datetime.now()
@@ -101,6 +167,10 @@ def from_and_to_dates_valid(entered_from, entered_to):
 def titlecase(s):
     return re.sub(r"[A-Za-z]+('[A-Za-z]+)?", lambda word: word.group(0).capitalize(), s)
 
+
+# =========================================================
+# Token & Reference Generators
+# =========================================================
 
 def generate_token():
     token_data = {

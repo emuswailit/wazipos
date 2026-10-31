@@ -717,6 +717,43 @@ class Organizations(models.Model):
 
 
             
+import uuid
+import re
+import random
+from datetime import datetime, date, timedelta
+
+from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+
+# 🌟 Import your password generator and logger
+from core.utils import generate_password
+# from core.utils import create_log # Uncomment if create_log is in core.utils
+
+from authentication.models import (
+    Categories, 
+    EntityImages, 
+    EntityLogos, 
+    EntityLicences, 
+    EntityDocuments, 
+    Plans, 
+    Agents,
+    Countries,
+    Counties,
+    SubCounties,
+    Constituencies,
+    Organizations,
+    EntityType # Assuming this is imported or defined above
+)
+
+
+TRUE_FALSE_OPTIONS = (
+    ("true", "true"),
+    ("false", "false"),
+)
+
 class Entities(models.Model):
 
     ENTITY_OWNERSHIP = (
@@ -756,8 +793,8 @@ class Entities(models.Model):
         choices=ENTITY_LEVELS, default=0
     )
     entity_type = models.CharField(
-    max_length=50,
-    choices=EntityType.choices(),
+        max_length=50,
+        choices=EntityType.choices(),
     )
     entity_code = models.CharField(max_length=7, null=True, blank=True)
     bank_code = models.CharField(max_length=7, null=True, blank=True)
@@ -808,9 +845,6 @@ class Entities(models.Model):
     offer_trial = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
-    # offer_tial = models.CharField(
-    #     max_length=50, choices=TRUE_FALSE_OPTIONS, default="false",null=True,blank=True
-    # )
     trial_done = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
@@ -881,8 +915,6 @@ class Entities(models.Model):
         code = first_letter+random_others
         code = code.replace(" ","")
         sames = Entities.objects.filter(entity_code=code).count()
-        # if self.entity_code == code:
-        #     sames.append(self)
 
         if sames >0:
             count = sames + 1
@@ -909,17 +941,6 @@ class Entities(models.Model):
             self.title = self.title.upper()
         if not self.entity_code or self.entity_code=="":
             self.entity_code = self.generate_entity_code()
-        # if not self.owner.is_staff:
-        #     if Clusters.objects.filter(value="SuperAdmin").exists():
-        #         cluster= Clusters.objects.filter(value="SuperAdmin").first()
-        #         create_log("info", f"Cluster: {cluster}")
-        #         create_log("info", f"Entity: {cluster}")
-        #         role_value= f"{self.entity_type}+cluster.value"
-        #         role_title= re.sub(r'([A-Z])', r' \1', self.entity_type).strip()+ cluster.title
-        #         admin_role= Roles.objects.create(value=role_value,cluster=cluster,title=role_title, entity=self, owner=self.owner)   
-        #         self.owner.roles.add(admin_role)
-        #     else:
-        #         return
 
         super(Entities, self).save(*args, **kwargs)
 
@@ -931,10 +952,10 @@ class Entities(models.Model):
             # Current subscription has not elapsed
             self.paid_until = self.paid_until + timedelta(days=days)
         else:
-            # Current Fsubscription has elapsed
+            # Current subscription has elapsed
             self.paid_until = date.today() + timedelta(days=days)
 
-    def has_paid(self, current_date=datetime.date.today()):
+    def has_paid(self, current_date=date.today()):
         if self.paid_until is None:
             self.is_subscribed = False
             return False
@@ -943,6 +964,7 @@ class Entities(models.Model):
 
     def get_is_subscribed(self):
         return self.is_subscribed
+
     def get_registration_fee_paid(self):
         self.registration_fee_paid="false"
         if self.entity_type=="RETAIL":
@@ -954,36 +976,92 @@ class Entities(models.Model):
         return self.registration_fee_paid
 
 
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth import get_user_model
+from core.utils import generate_password, send_email # 🌟 Import send_email
+from decouple import config
+from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.phone_number_utils import get_telco_by_phone_number
+
 @receiver(post_save, sender=Entities)
 def create_entity_system_user(sender, instance, created, **kwargs):
     if created:
+        Users = get_user_model() # Safe here
+        
         phone = instance.entity_code
-        password = str(instance.id).replace("-", "")
+        password = generate_password(size=8) 
+        
         if Users.objects.filter(phone=instance.entity_code).exists():
             existing = Users.objects.filter(phone=instance.entity_code).count()
             phone = instance.entity_code + str(existing + 1)
-        create_log("info", f"Password {password}")
+            
+        create_log("info", f"System User Password {password}")
+        
         try:
-            user =Users.objects.create(
+            # 1. Create the System User
+            user = Users.objects.create(
                 email=str(instance.title).lower().replace(" ", "") + "@wazipos.com",
                 first_name=instance.title,
                 last_name="System User",
-                entity_code =instance.entity_code,
-                phone=instance.entity_code,
+                entity_code=instance.entity_code,
+                phone=phone, 
                 is_verified=True,
                 user_type="Cron",
                 country=instance.country,
                 is_active=True, 
                 entity=instance,
-                date_of_birth=instance.created,  # Use created date as a placeholder for DOB
+                date_of_birth=instance.created,
             )
-            user.set_password(password)  # Set a default password
+            user.set_password(password)
             user.save()
+            
             create_log("info", f"System user created for entity {instance.title} with code {password}")
+
+            # 🌟 2. Send Credentials to the Owner
+            if instance.owner:
+                owner = instance.owner
+                
+                # Send Email
+                if owner.email:
+                    email_body = (
+                        f"Hello {owner.first_name},\n\n"
+                        f"The entity '{instance.title}' has been created.\n"
+                        f"You can now log in using the System User account:\n"
+                        f"Phone: {phone}\n"
+                        f"Password: {password}\n\n"
+                        f"Please do not share these credentials."
+                    )
+                    try:
+                        send_email({
+                            "email_body": email_body,
+                            "to_email": owner.email,
+                            "email_subject": f"System Account Created for {instance.title}",
+                        })
+                    except Exception as e:
+                        create_log("error", f"Failed to send email to owner: {e}")
+
+                # Send SMS
+                if owner.phone:
+                    try:
+                        telco, owner_phone = get_telco_by_phone_number(owner.phone)
+                        message = (
+                            f"Entity '{instance.title}' created. "
+                            f"System Login - Phone: {phone}, Password: {password}. "
+                            f"Do not share."
+                        )
+                        payload = {
+                            "contact": owner_phone,
+                            "message": message,
+                            "callback": "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
+                            "sender_name": config("JAMBOPAY_SWIFT_SENDER_NAME")
+                        }
+                        send_swift_sms(payload)
+                    except Exception as e:
+                        create_log("error", f"Failed to send SMS to owner: {e}")
+
         except Exception as e:
-            create_log("error",f"Error creating system user for entity {instance.title}: {e}")  
-
-
+            create_log("error", f"Error creating system user for entity {instance.title}: {e}")
 
 class EntityBranches(EntityRelatedModel):
     class Meta:

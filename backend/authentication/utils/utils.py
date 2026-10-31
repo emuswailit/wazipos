@@ -44,12 +44,12 @@ from core.validators import date_is_past_now
 from decouple import config
 from .. import models
 
+# 🌟 ADDED IMPORTS FOR LOCATIONS AND GIS
+from django.contrib.gis.geos import Point
+from entitylocations.models import Locations
 
 
 Users = get_user_model()
-
-
-
 
 
 def send_sms_messages(data, user):
@@ -89,6 +89,7 @@ def send_sms_messages(data, user):
     #     return [], sent
     if len(errors)>0:
         return errors, False   
+
 
 def validate_user_roles_data(data, owner):
     user_obj = None
@@ -209,8 +210,6 @@ def create_super_admin_role(instance):
         return instance
 
 
-
-
 def add_default_role_to_user(user):
     default_role = Roles.objects.filter(value="CLIENT").first()
     if default_role:
@@ -232,7 +231,6 @@ def add_admin_role_to_user(user):
 
 
 # Categories
-
 
 def get_all_categories():
     return Categories.objects.exclude(title="DEFAULT")
@@ -273,7 +271,6 @@ def get_all_users(user):
 
 # Entities
 
-
 def get_all_entities(user):
     entities = []
     entities = Entities.objects.all().exclude(entity_type="DEFAULT")
@@ -294,7 +291,6 @@ def get_user_entities(user):
     if Entities.objects.filter(owner=user).exists():
         entities = Entities.objects.filter(owner=user)
 
-
     # else:
 
     #     # Retrieve entities where user is employed
@@ -303,6 +299,7 @@ def get_user_entities(user):
     #         for employment in employments:
     #             entities.append(employment.entity)
     return entities
+
 
 def update_user_details(data, user):
     errors = []
@@ -328,7 +325,6 @@ def update_user_details(data, user):
 
     return [],user
 
-    
 
 def update_user_password(data,user):
     pw = None
@@ -355,7 +351,8 @@ def update_user_password(data,user):
         user.set_password(new_pw)
         user.save()
         return [],user
-    
+
+
 def verify_iprs(data,user):
  
     errors =[]
@@ -394,15 +391,12 @@ def verify_iprs(data,user):
         return errors,None
 
 
-    
-
-
-
 def get_entity_followers(user):
    
     # Only the owner of an entity can pull data on followers
 
     return user.entity.followers.all()
+
 
 def get_entity_users(user):
     # Only the owner of an entity can pull data on followers
@@ -410,6 +404,8 @@ def get_entity_users(user):
         return Users.objects.filter(entity=user.entity).all()
     else:
         return []
+
+
 def get_entity_users_admin(user, data):
     errors =[]
     entity = None
@@ -427,6 +423,7 @@ def get_entity_users_admin(user, data):
         return Users.objects.filter(entity=entity).all()
     else:
         return []
+
 
 def search_manufacturers(data, user):
     return Entities.objects.filter(
@@ -461,6 +458,7 @@ def get_user_favorite_entities(user):
 
     return entities
 
+
 def get_facilitator_entities(user):
     
     entities = []
@@ -469,23 +467,12 @@ def get_facilitator_entities(user):
 
     return entities
 
+
 RETAIL_ENTITY_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer")
 
 
 def get_retail_entities(user, data):
     qs = Entities.objects.filter(entity_type__in=RETAIL_ENTITY_TYPES)
-
-    # if not user.is_staff:
-    #     qs = qs.filter(is_verified=True)
-
-    # county = data.get("county") or None
-
-    # if county:
-    #     qs = qs.filter(county_id=county)
-
-    # sub_county is intentionally NOT filtered here — the frontend
-    # narrows the list client-side. The payload may still carry a
-    # stale `sub_county` key from earlier versions; it's ignored.
     return qs
 
 
@@ -500,6 +487,7 @@ def get_agent_entities(user):
             is_verified="true",
         )
     return entities
+
 
 def get_wholesale_entities(user):
     wholesales=[]
@@ -518,7 +506,6 @@ def get_wholesale_entities(user):
                 if user_entity_category in wholesale_categories:
                     if not wholesale in wholesalers_in_category:
                         wholesalers_in_category.append(wholesale)
-
 
     return wholesalers_in_category
 
@@ -667,6 +654,7 @@ def validate_create_sub_category_data(data, user):
     else:
         return
 
+
 def create_town(data, user):
     errors =[]
     town = None
@@ -795,88 +783,43 @@ def create_sub_category(data, user):
         raise exceptions.ValidationError(e)
 
 
+# 🌟 UPDATED VALIDATION FUNCTION
 def validate_create_local_entity_data(data, user):
     errors = []
-    country = None
-    county = None
-    organization = None
-    title = ""
-    # Only verified users can create entities
-    # if user.is_staff:
-    #     raise exceptions.ValidationError("Not authorized")
-
-
-
-    try:
-        entity_details = data["entity_details"]
-
-    except KeyError:
-        errors.append("Entity details are required")
-    try:
-        title = data["entity_details"]["title"]
-        if data["entity_details"]["title"] == "":
-            errors.append("Title cannot be empty")
-
-    except KeyError:
-        errors.append("Entity title is required")
-
-    try:
-        entity_type = data["entity_details"]["entity_type"]
-        if data["entity_details"]["entity_type"] == "":
-            errors.append("Entity type cannot be empty")
-        # if data["entity_details"]["entity_type"] == "RETAIL" and user.is_staff:
-        #     errors.append("Staff user cannot create retail entity")
-
-    except KeyError:
-        errors.append("Entity type is required")
-
-    try:
-        entity_ownership = data["entity_details"]["entity_ownership"]
-        if data["entity_details"]["entity_ownership"] == "":
-            errors.append("Entity ownership cannot be empty")
-
-    except KeyError:
-        errors.append("Entity ownership is required")
-
-    try:
-        town = data["entity_details"]["town"]
-        if data["entity_details"]["town"] == "":
-            errors.append("Town name cannot be empty")
-
-    except KeyError:
-        errors.append("Town name is required")
-
-    try:
-        road = data["entity_details"]["road"]
-        if data["entity_details"]["road"] == "":
-            errors.append("Road name cannot be empty")
-
-    except KeyError:
-        errors.append("Road name is required")
     
-    try:
-        building = data["entity_details"]["building"]
-        if data["entity_details"]["building"] == "":
-            errors.append("Building name cannot be empty")
+    entity_details = data.get("entity_details")
+    if not entity_details:
+        return ["Entity details are required"]
 
-    except KeyError:
-        errors.append("Building name is required")
-    # try:
-    #     plan = data["entity_details"]["plan"]
-    #     if data["entity_details"]["plan"] == "":
-    #         errors.append("Plan ID cannot be empty")
+    required_fields = {
+        "title": "Entity title",
+        "entity_type": "Entity type",
+        "entity_ownership": "Entity ownership",
+        "town": "Town name",
+        "road": "Road name",
+        "building": "Building name",
+    }
 
-    # except KeyError:
-    #     errors.append("Plan ID is required")
+    for field, label in required_fields.items():
+        value = entity_details.get(field)
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            errors.append(f"{label} cannot be empty")
 
-    if Entities.objects.filter(title=title, country=user.country).exists():
-        errors.append(
-            "Entity with this title already exists in the system for your country"
-        )
-    if len(errors) > 0:
-        return errors
-    else:
-        return []
+    # Validate GPS Coordinates
+    latitude = entity_details.get("latitude")
+    longitude = entity_details.get("longitude")
+    if (latitude is not None and longitude is None) or (latitude is None and longitude is not None):
+        errors.append("Both latitude and longitude must be provided together if setting a location.")
+
+    # Validate uniqueness
+    title = entity_details.get("title", "")
+    country_id = entity_details.get("country") or getattr(user, "country_id", None)
+    
+    if title and country_id:
+        if Entities.objects.filter(title=title, country_id=country_id).exists():
+            errors.append("Entity with this title already exists in the system for your country")
+
+    return errors
 
 
 def validate_create_international_entity_data(data):
@@ -889,14 +832,6 @@ def validate_create_international_entity_data(data):
 
     except KeyError:
         errors.append("Entity details are required")
-
-    # if 'entity_type' in data['entity_details'] and data['entity_details']["entity_type"] == 'BANK':
-    #     if not 'entity_code' in data['entity_details'] or data['entity_details']["entity_code"] == "":
-    #         errors.append('Entity code is required for banks')
-    #     else:
-    #         entity_code = data['entity_details']["entity_code"]
-    # else:
-    #     pass
 
     if "country" in data["entity_details"]:
         country_id = data["entity_details"]["country"]
@@ -937,62 +872,167 @@ def validate_create_international_entity_data(data):
     else:
         return
 
+
+from django.db import transaction
+from django.contrib.gis.geos import Point
+from entitylocations.models import Locations
+from authentication.models import Entities, Categories, Agents 
+from payments.models import PayoutAccounts
+
 @transaction.atomic
 def create_local_entity(data, user):
-    is_verified = "false"
-    is_active = False
-    organization=None
-    # latitude = None
-    # longitude = None
-    # if 'latitude' in data['entity_details'] and data['entity_details']['latitude']:
-    #     latitude = latitude = None
-    # if 'longitude' in data['entity_details'] and data['entity_details']['longitude']:
-    #     longitude = longitude = None
-    if user.is_staff:
-        is_verified = "true"
-        is_active = True
+    entity_details = data.get("entity_details", {})
+    if not entity_details:
+        raise exceptions.ValidationError("Entity details are required.")
 
-    if "organization" in data and not data["organization"]=="":
-        organization = authentication_models_validators.validate_organization(data["organization"])
+    # 1. Pop special/M2M fields out so Django doesn't crash
+    category_ids = entity_details.pop("categories", [])
+    owner_id = entity_details.pop("owner", None)
+    
+    # 2. Extract Bank details
+    code_value = entity_details.pop("code", None)
+    bank_id = entity_details.pop("bank", None)
+    account_name = entity_details.pop("account_name", None)
+    account_number = entity_details.pop("account_number", None)
+    
+    # 3. Extract Location
+    latitude = entity_details.pop("latitude", None)
+    longitude = entity_details.pop("longitude", None)
+    
+    # 4. Remove non-model or empty fields
+    entity_details.pop("expanded", None)
+    plan_value = entity_details.pop("plan", "")
+    if plan_value == "":
+        entity_details["plan"] = None
+
+    # 5. Fix Data Types
+    if "entity_level" in entity_details:
+        try:
+            entity_details["entity_level"] = int(entity_details["entity_level"])
+        except (ValueError, TypeError):
+            entity_details["entity_level"] = 0
+
+    # 6. Owner & Agent Logic
+    agent_obj = Agents.objects.filter(user=user).first()
+    assigned_agent_id = agent_obj.id if agent_obj else None
+    assigned_owner_id = owner_id if owner_id else user.id
+
+    # 7. Bank Code Mapping
+    entity_type = entity_details.get("entity_type")
+    if entity_type == "Bank" and code_value:
+        entity_details["bank_code"] = code_value
+    elif entity_type != "Bank":
+        entity_details["bank_code"] = None
+
+    # 🌟 8. CREATE ENTITY
+    # entity_details still contains: building, country, county, entity_ownership, 
+    # entity_type, entity_level, road, title, town. All of them are passed automatically!
+    entity = Entities.objects.create(
+        owner_id=assigned_owner_id,
+        agent_id=assigned_agent_id,
+        **entity_details
+    )
+
+    # 9. Attach Categories
+    if category_ids and isinstance(category_ids, list):
+        entity.categories.set(category_ids)
+
+    # 10. Create Payout Account (If Bank details were provided)
+    if bank_id and account_number:
+        try:
+            PayoutAccounts.objects.create(
+                entity=entity,                 
+                account_entity_id=bank_id,     
+                account_name=account_name or entity.title, 
+                account_number=account_number,
+                account_type="BANK",
+                owner=user,                    
+                is_active="true"
+            )
+        except Exception as e:
+            print(f"Failed to create payout account for entity {entity.id}: {e}")
+
+    # 11. Create Location
+    if latitude is not None and longitude is not None:
+        try:
+            point = Point(float(longitude), float(latitude), srid=4326)
+            Locations.objects.create(
+                entity=entity,
+                point=point,
+                farness="", 
+            )
+        except Exception as e:
+            print(f"Failed to create location for entity {entity.id}: {e}")
+
+    return entity
+
+
+# 🌟 CONSOLIDATED UPDATE FUNCTION
+@transaction.atomic
+def update_entity(data, user):
+    entity_details = data.get("entity_details", {})
+    entity_id = entity_details.pop("id", None)
+
+    if not entity_id:
+        raise exceptions.ValidationError("Entity ID is required for update.")
 
     try:
-        created = Entities.objects.create(
-            title=data["entity_details"]["title"],
-            entity_type=data["entity_details"]["entity_type"],
-            entity_ownership=data["entity_details"]["entity_ownership"],
-            entity_level=data["entity_details"]["entity_level"],
-            road=str(data["entity_details"]["road"]).upper(),
-            building=str(data["entity_details"]["building"]).upper(),
-            town=str(data["entity_details"]["town"]).upper(),
-            county_id=data["entity_details"]["county"],
-            country_id=data["entity_details"]["country"],
-            owner=user,
-            is_active = is_active,
-            is_verified = is_verified,
-            organization=organization
-        )
-        if created:
-            # if data["entity_details"]["identifier_document_number"]:
-            #     user.identifier_document_number = data["entity_details"]["identifier_document_number"]
-            #     user.save()
-            if (
-                "categories" in data["entity_details"]
-                and data["entity_details"]["categories"]
-            ):
-                for id in data["entity_details"]["categories"]:
-                    if Categories.objects.filter(id=id).exists():
-                        category = Categories.objects.filter(id=id).first()
-                        created.categories.add(category)
-            employee = Employees.objects.create(
-                entity=created, user=created.owner, is_active = "true", owner=user
+        entity = Entities.objects.get(id=entity_id)
+    except Entities.DoesNotExist:
+        raise exceptions.ValidationError("Entity not found.")
+
+    # Check permissions
+    if not user.is_staff and entity.owner != user:
+         raise exceptions.ValidationError("Not authorized to update this entity.")
+
+    # 1. Handle Categories
+    category_ids = entity_details.pop("categories", None)
+    if category_ids is not None and isinstance(category_ids, list):
+        entity.categories.set(category_ids)
+
+    # 2. Handle Owner
+    owner_id = entity_details.pop("owner", None)
+    if owner_id:
+        entity.owner_id = owner_id
+
+    # 3. Handle Bank Code
+    code_value = entity_details.pop("code", None)
+    entity_type = entity_details.get("entity_type", entity.entity_type)
+    
+    if entity_type == "Bank" and code_value:
+        entity.bank_code = code_value
+    elif entity_type != "Bank":
+        entity.bank_code = None
+
+    # 4. Handle Location
+    latitude = entity_details.pop("latitude", None)
+    longitude = entity_details.pop("longitude", None)
+
+    # 5. Update standard fields dynamically
+    entity_details.pop("expanded", None)
+    entity_details.pop("plan", None) 
+    
+    for attr, value in entity_details.items():
+        if hasattr(entity, attr):
+            setattr(entity, attr, value)
+            
+    entity.save()
+
+    # 6. Update or Create Location
+    if latitude is not None and longitude is not None:
+        try:
+            point = Point(float(longitude), float(latitude), srid=4326)
+            Locations.objects.update_or_create(
+                entity=entity,
+                defaults={
+                    'point': point,
+                    'farness': "", 
+                }
             )
+        except Exception as e:
+            print(f"Failed to update location for entity {entity.id}: {e}")
 
-            return created
-
-        else:
-            return None
-    except Exception as e:
-        raise exceptions.ValidationError(e)
+    return entity
 
 
 @transaction.atomic
@@ -1213,106 +1253,6 @@ def create_international_entity(data, user):
             return created
         else:
             return None
-    except Exception as e:
-        raise exceptions.ValidationError(e)
-
-
-@transaction.atomic
-def update_entity(data, user):
-    entity = None
-
-    try:
-        entity_id = data["entity"]
-        if data["entity"] == "":
-            raise exceptions.ValidationError("Entity ID must be valid UUID")
-        if Entities.objects.filter(id=entity_id).exists():
-            entity = Entities.objects.get(id=entity_id)
-            if user.is_staff:
-                pass
-            elif user == entity.owner:
-                pass
-            else:
-                raise exceptions.ValidationError("Not authorized")
-
-    except KeyError:
-        raise exceptions.ValidationError("Entity ID is required")
-
-    title = None
-    entity_type = None
-    entity_ownership = None
-    entity_level = None
-    town = ""
-    road = ""
-    building = ""
-    county = ""
-    country = ""
-    categories = []
-
-    if "title" in data["entity_details"]:
-        if data["entity_details"]["title"]:
-            title = data["entity_details"]["title"]
-    if "entity_type" in data["entity_details"] and not data["entity_details"]["entity_type"]=="":
-        
-        entity_type = data["entity_details"]["entity_type"]
-        entity.entity_type=entity_type
-        entity.save()
-    if "entity_level" in data["entity_details"] and not data["entity_details"]["entity_level"]=="":
-        
-        entity_level = data["entity_details"]["entity_level"]
-        entity.entity_level=entity_level
-        entity.save()
-
-    if "entity_ownership" in data["entity_details"] and not data["entity_details"]["entity_ownership"]=="":
-        entity_ownership = data["entity_details"]["entity_ownership"]
-        entity.entity_ownership = entity_ownership
-        entity.save()
-
-    if "town" in data["entity_details"]:
-        if data["entity_details"]["town"]:
-            town = data["entity_details"]["town"]
-
-    if "road" in data["entity_details"]:
-        if data["entity_details"]["road"]:
-            road = data["entity_details"]["road"]
-
-    if "building" in data["entity_details"]:
-        if data["entity_details"]["building"]:
-            building = data["entity_details"]["building"]
-    if "county" in data["entity_details"]:
-        if data["entity_details"]["county"]:
-            county = data["entity_details"]["county"]
-    if "country" in data["entity_details"]:
-        if data["entity_details"]["country"]:
-            country = data["entity_details"]["country"]
-    if "categories" in data["entity_details"]:
-        if data["entity_details"]["categories"]:
-            categories = data["entity_details"]["categories"]
-
-    try:
-        if title:
-            entity.title = title
-            entity.save()
-        if town:
-            entity.town = town
-            entity.save()
-        if road:
-            entity.road = road
-            entity.save()
-        if building:
-            entity.building = building
-            entity.save()
-        if county:
-            entity.county_id = county
-            entity.save()
-        if country:
-            entity.country_id = country
-            entity.save()
-        if len(categories) > 0:
-            entity.categories.clear()
-            for cat in categories:
-                category = authentication_models_validators.verify_category_exists(cat)
-                entity.categories.add(category)
-        return entity
     except Exception as e:
         raise exceptions.ValidationError(e)
 
@@ -1646,10 +1586,6 @@ def update_entity_categories(data):
             entity.categories.add(category_obj)
 
 
-
-
-
-
 @transaction.atomic
 def verify_entity_branch(data, user):
     errors=[]
@@ -1764,128 +1700,9 @@ def verify_entity(data, user):
                 entity.owner.save()
 
                 return [], entity
-
-            #     if len(categoriesArr) > 0:
-            #         for cat in categoriesArr:
-            #             entity.categories.add(cat)
-                
-
-                
-            # entity = create_super_admin_role(entity)
-            # default_psp =PaymentServicesProvider.objects.filter(psp_title="JAMBOPAY").first()
-            # print("PSP", default_psp)
-            # if EntityPSPCollectionAccount.objects.filter(entity=entity,psp=default_psp).exists():
-            #     print("Existing PSP Account")
-            #     return [], entity
-            # else:
-            #     print("Create PSP Account")
-            #     if models.UserDocuments.objects.filter(owner=entity.owner).exists():
-                    # document = models.UserDocuments.objects.filter(owner=entity.owner).first()
-                    # data = {
-                    #         "firstName": entity.owner.first_name,
-                    #         "lastName": entity.owner.last_name,
-                    #         "identityNumber": document.document_number,
-                    #         "identityType": document.document_type,
-                    #         "phoneNumber": entity.owner.phone,
-                    #         "gender": entity.owner.gender,
-                    #         "dateOfBirth": entity.owner.date_of_birth.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                    #         "county": entity.owner.county.title,
-                    #         "physicalAddress": entity.owner.constituency.title,
-                    #         "email": entity.owner.email,
-                    #     }
-                    # print(entity.owner.phone)
-                
-                    # errors, profile= create_jambopay_profile(data)
-                    # if profile:
-                    #     print("profile",profile)
-                    #     data=json.dumps({
-                    #                 "currency": "KES",
-                    #                 "phoneNumber": entity.owner.phone, 
-                    #                 "name": entity.title,
-                    #                 "description": f"Sales collection accounf for {entity.title}",
-                    #                 "accountNo": config("WAZIPOS_JAMBOPAY_WHITELABEL_ACCOUNT"), 
-                    #                 "accountType": "Individual"
-                    #             })
-
-                    #     errors, account =create_white_label_account(data)
-                    #     if account:
-                    #         print("Profile exists")
-                    #         created =  EntityPSPCollectionAccount.objects.create(
-                                                            
-                    #             psp=default_psp,
-                    #             account_number=account["accountNo"],
-                    #             account_name=account["name"],
-                    #             account_type="WALLET",
-                    #             entity=entity,
-                    #             owner=user
-
-                    #         )
-
-                    #         if created:
-                    #             return [], entity
-                    #         else:
-                    #             return ["Collection account not created"], None
-                    # else:
-                    #     for e in errors:
-                    #         if e=="A Profile with given phone number already exist":
-                    #             data=json.dumps({
-                    #                 "currency": "KES",
-                    #                 "phoneNumber": entity.owner.phone, 
-                    #                 "name": entity.title,
-                    #                 "description": f"Sales collection accounf for {entity.title}",
-                    #                 "accountNo": config("WAZIPOS_JAMBOPAY_WHITELABEL_ACCOUNT"), 
-                    #                 "accountType": "Individual"
-                    #             })
-
-                    #             errors, account =create_white_label_account(data)
-                    #             if account:
-                    #                 print("Profile exists")
-                    #                 created =  EntityPSPCollectionAccount.objects.create(
-                                                                
-                    #                     psp=default_psp,
-                    #                     account_number=account["accountNo"],
-                    #                     account_name=account["name"],
-                    #                     account_type="WALLET",
-                    #                     entity=entity,
-                    #                     owner=user
-
-                    #                 )
-
-                    #                 if created:
-                    #                     return [], entity
-                    #                 else:
-                    #                     return ["Collection account not created"], None
-
-                    #     # return errors, None
-                    #     # errors, accounts=get_jambopay_profile_accounts(data)
-                    #     # if accounts:
-                    #     #     print("Accounts",accounts)
-                    #     # else:
-                    #     #     return errors, None
-                
-                    # if len(errors)>0:
-                    #     return errors, None
-                    # else:
-                    #     pass
-
-
-                # data = entity.owner.phone
-                # errors, accounts=get_jambopay_profile_accounts(data)
-
-                
-                #     return errors, None
-                # return ["No account"], None
-            # else:
-            #     
-            #     if accounts:
-            #         pass
-            #     else:
-            #         return errors, None
-
-            # return entity
-
         except KeyError:
             raise exceptions.ValidationError("Entity ID is required")
+
 
 @transaction.atomic
 def update_entity_administrator(data, user):
@@ -1913,8 +1730,6 @@ def update_entity_administrator(data, user):
                 return errors, None
 
 
-
-
     if entity.administrator:
         if entity.administrator==employee.user:
             errors.append(f"{entity.administrator} is already set as administrator at {entity}")
@@ -1928,8 +1743,6 @@ def update_entity_administrator(data, user):
         return errors, None
 
 
-
-    
 @transaction.atomic
 def create_corporate_employee(data, user):
     errors = []
@@ -1967,8 +1780,10 @@ def create_corporate_employee(data, user):
                 errors.append(str(e))
                 return errors, None
             
+
 def get_organizations(user):
     return models.Organizations.objects.all()
+
 
 def create_corporate_organization(data, user):
     errors = []
@@ -2108,6 +1923,7 @@ def create_corporate_wallet(data, user):
         errors.append("Entity has no administrator")
         return errors, None
 
+
 def get_entity_employees(data):
     errors =[]
     entity = None
@@ -2123,6 +1939,7 @@ def get_entity_employees(data):
             employees = Employees.objects.filter(entity=entity,is_active="true").all()
        
     return employees
+
 
 def remove_favorite_entity(data, user):
     try:
@@ -2347,16 +2164,6 @@ def remove_employee_from_entity(data, logged_in_user):
         return employee.user
 
 
-# Users
-# def get_entity_followers(user):
-#     users = []
-#     user_favorites = []
-#     customers = []
-#     users = Users.objects.all()
-
-#     return user.entity.followers.all()
-
-
 def validate_user_data(data):
     errors = []
     try:
@@ -2391,28 +2198,6 @@ def search_users(data, user):
         | Q(last_name__icontains=data["searchQuery"])
     ).distinct()
 
-# def search_users(data, user):
-#     # Staff users can search through alll users in the system
-#     if user.is_staff:
-#         return Users.objects.filter(
-#             Q(first_name__icontains=data["searchQuery"])
-#             | Q(phone__icontains=data["searchQuery"])
-#             | Q(last_name__icontains=data["searchQuery"])
-#         ).distinct()
-#     else:
-#         # Other users can only search through users who follow their current entity
-#         if user.entity.followers:
-#             return (
-#                 user.entity.followers.all()
-#                 .filter(
-#                     Q(first_name__icontains=data["searchQuery"])
-#                     | Q(phone__icontains=data["searchQuery"])
-#                     | Q(last_name__icontains=data["searchQuery"])
-#                 )
-#                 .distinct()
-#             )
-#         else:
-#             return []
 
 def users_pending_verification(user):
     ready_users = []
@@ -2464,8 +2249,6 @@ def get_user_profile(data, user):
 
 
 # Cadres
-
-
 def get_cadres():
     return models.Cadres.objects.all()
 
@@ -2852,34 +2635,12 @@ def update_dependant(data, user):
 
 
 # Departments
-
-
 def get_entity_departments(data, user):
     entity_id = None
     if "entity" in data:
         entity_id = data["entity"]
     entity = authentication_models_validators.validate_entity(entity_id)
     return models.Departments.objects.filter(entity=entity)
-
-
-# def validate_department_data(data, user):
-#     errors = []
-
-#     try:
-#         department_details = data["department_details"]
-#     except KeyError:
-#         errors.append("Department details are required")
-#     try:
-#         title = data["department_details"]["title"]
-#         if models.Departments.objects.filter(title=title).exists():
-#             raise exceptions.ValidationError("Department with same tite already exists")
-#     except KeyError:
-#         errors.append("Department title is required")
-
-#     if len(errors) > 0:
-#         raise exceptions.ValidationError(errors)
-#     else:
-#         return
 
 
 def create_department(data, user):
@@ -2918,6 +2679,7 @@ def create_department(data, user):
     except Exception as e:
         raise exceptions.ValidationError(e)
 
+
 def update_department(data,user):
     department_id=None
     department =None
@@ -2941,8 +2703,6 @@ def update_department(data,user):
 
 
 #  Roles
-
-
 def get_entity_roles(data, user):
     roles = []
     try:
@@ -2954,6 +2714,7 @@ def get_entity_roles(data, user):
     except KeyError:
         raise exceptions.ValidationError("Entity ID is required")
     
+
 def get_entity_roles_by_id(data, user):
     
     roles = []
@@ -2974,6 +2735,7 @@ def get_entity_roles_by_id(data, user):
     except KeyError:
         raise exceptions.ValidationError("Entity ID is required")
 
+
 def get_plans(data, user):
     plans = []
     try:
@@ -2984,34 +2746,6 @@ def get_plans(data, user):
 
     except KeyError:
         raise exceptions.ValidationError("Entity ID is required")
-
-
-# def validate_role_data(data, user):
-#     errors = []
-#     if not user.entity.is_verified:
-#         raise exceptions.ValidationError("Entity is not verified")
-#     try:
-#         role_details = data["role_details"]
-#     except KeyError:
-#         errors.append("Role details are required")
-#     try:
-#         title = data["role_details"]["title"]
-#     except KeyError:
-#         errors.append("Role title is required")
-
-#     try:
-#         cluster_id = data["role_details"]["cluster"]
-#         if Clusters.objects.filter(id=cluster_id).exists():
-#             pass
-#         else:
-#             errors.append("No cluster with the given ID exists")
-#     except KeyError:
-#         errors.append("Cluster is required")
-
-#     if len(errors) > 0:
-#         raise exceptions.ValidationError(errors)
-#     else:
-#         return []
 
 
 def create_entity_role(data, user):
@@ -3100,57 +2834,9 @@ def update_role(data, user):
         raise exceptions.ValidationError("Role ID is required")
 
 
-
-
-# @transaction.atomic
-# def update_department(data, user):
-#     role = None
-
-#     try:
-#         department_id = data["department_details"]["id"]
-#         if data["department_details"]["id"] == "":
-#             raise exceptions.ValidationError("Department ID must be valid UUID")
-#         if Departments.objects.filter(id=department_id).exists():
-#             role = Departments.objects.get(id=department_id)
-#             if user.is_staff:
-#                 pass
-#             elif user == role.owner:
-#                 pass
-#             else:
-#                 raise exceptions.ValidationError("Not authorized")
-#         else:
-#             raise exceptions.ValidationError(
-#                 "Department for supplied ID does not exist"
-#             )
-
-#     except KeyError:
-#         raise exceptions.ValidationError("Department ID is required")
-
-#     title = None
-#     description = None
-
-#     if "title" in data["department_details"]:
-#         if data["department_details"]["title"]:
-#             title = data["department_details"]["title"]
-#     if "description" in data["department_details"]:
-#         if data["department_details"]["description"]:
-#             description = data["department_details"]["description"]
-
-#     try:
-#         if title:
-#             role.title = title
-#             role.save()
-#         if description:
-#             role.description = description
-#             role.save()
-
-#         return role
-#     except Exception as e:
-#         raise exceptions.ValidationError(e)
-
-
 def get_countries():
     return models.Countries.objects.all()
+
 
 def get_postal_offices():
     return models.PostalAddresses.objects.all()
@@ -3184,8 +2870,6 @@ def get_cluster_details(data):
 
 
 # Counties
-# utils.py
-
 def get_counties():
     return (
         models.Counties.objects
@@ -3193,6 +2877,7 @@ def get_counties():
         .prefetch_related("sub_counties")
         .order_by("title")
     )
+
 
 def get_sub_counties(data):
     return models.SubCounties.objects.filter(county_id=data['county'])
@@ -3255,6 +2940,7 @@ def get_user_documents(data, user):
     except KeyError:
         raise exceptions.ValidationError("User ID is required")
     
+
 def get_entity_documents(data, user):
     user = None
 
@@ -3339,36 +3025,6 @@ def verify_user(data, user):
                 user_to_verify.iprs_verified="true"
                 user_to_verify.save()
                 return [], user_to_verify
-            #     user_to_verify.is_verified = "true"
-            #     user_to_verify.verified_by = user
-            #     user_to_verify.verified_at = now.strftime("%YYYY/%MM/%DD %H:%M:%S")
-            #     user_to_verify.save()
-            #     if JambopayUserProfiles.objects.filter(user=user_to_verify).exists():
-            #         return [],user_to_verify
-            #     else:
-            #         data = {
-            #                 "firstName": user_to_verify.first_name,
-            #                 "lastName": user_to_verify.last_name,
-            #                 "identityNumber": user_to_verify.identifier_number,
-            #                 "identityType": user_to_verify.identifier_type,
-            #                 "phoneNumber": user_to_verify.phone,
-            #                 "gender": user_to_verify.gender,
-            #                 "dateOfBirth": user_to_verify.date_of_birth.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            #                 "county": user_to_verify.county.title,
-            #                 "physicalAddress": user_to_verify.county.title,
-            #                 "email": user_to_verify.email,
-            #             }
-
-            #         errors, result_json =create_jambopay_profile(data)
-            #         if result_json:
-                        
-            #             created = JambopayUserProfiles.objects.create(user=user_to_verify,psp=default_psp)
-            #             return [], user_to_verify
-            #         else:
-            #             return errors, None
-
-            # else:
-            #     errors.append("User has no verified KYC documents")
 
 
 @transaction.atomic
@@ -3429,7 +3085,6 @@ def delete_image(data, user):
 
     except KeyError:
         raise exceptions.ValidationError("Image ID is required")
-
 
 
 def generate_document_number(entity, user,document):
@@ -3517,6 +3172,7 @@ def generate_document_number(entity, user,document):
     print("Doc Num", obj.document_number)
     return obj
 
+
 @transaction.atomic
 def generate_reference_number(entity, user):
     print("ENTITY AT GEN", entity)
@@ -3546,28 +3202,6 @@ def generate_reference_number(entity, user):
             reference_number=my_ref, owner=user, entity=entity
         )
         return obj.reference_number
-    
-
-    # if models.ReferenceNumbers.objects.filter(entity=entity, is_used=False).exists():
-    #     """Retrieve existing unused token"""
-    #     top_ref = models.ReferenceNumbers.objects.filter(
-    #         entity=entity, is_used=False, owner=user
-    #     ).first()
-    #     return top_ref.reference_number
-    # else:
-    #     if entity and len(entity.title) > 2:
-    #         """Create new reference number"""
-    #         prefix = entity.title[:2]
-    #         if models.ReferenceNumbers.objects.filter(entity=entity).exists():
-    #             references_count = models.ReferenceNumbers.objects.filter(entity=entity).count()
-
-    #         ref = str(references_count + 1).zfill(8)
-    #         my_ref = prefix + ref
-    #         obj = models.ReferenceNumbers.objects.create(
-    #             reference_number=my_ref, owner=user, entity=entity
-    #         )
-    #         return obj.reference_number
-
 
 
 @transaction.atomic
@@ -3600,40 +3234,6 @@ def generate_batch_reference_number(data, user):
             reference_numbers.append({"id": x + 1, "name": obj.reference_number})
         return reference_numbers
 
-    # if models.ReferenceNumbers.objects.filter(
-    #     entity=entity, is_used=False, owner=user
-    # ).exists():
-    #     print("Refs ziko")
-    #     refs = models.ReferenceNumbers.objects.filter(
-    #         entity=entity, is_used=False, owner=user
-    #     ).all()
-    #     for index, ref in enumerate(refs):
-    #         reference_numbers.append({"id": index + 1, "name": ref.reference_number})
-    #     return reference_numbers
-    # else:
-    #     print("Refs haziko")
-    #     if entity and len(entity.title) > 2:
-    #         for x in range(limit):
-    #             prefix = entity.title[:2]
-    #             if models.ReferenceNumbers.objects.filter(entity=entity).exists():
-    #                 references_count = models.ReferenceNumbers.objects.filter(entity=entity).count()
-    #                 ref = str(references_count + 1).zfill(8)
-    #                 my_ref = prefix + ref
-    #                 if models.ReferenceNumbers.objects.filter(
-    #                     reference_number=my_ref
-    #                 ).exists():
-    #                     print(f"Ref existing....{my_ref}")
-    #                     pass
-
-    #                 else:
-    #                     obj = models.ReferenceNumbers.objects.create(
-    #                         reference_number=my_ref, owner=user, entity=entity
-    #                     )
-    #                     reference_numbers.append(
-    #                         {"id": x + 1, "name": obj.reference_number}
-    #                     )
-    #         return reference_numbers
-
 
 def use_reference_number(reference_number):
     if models.ReferenceNumbers.objects.filter(
@@ -3645,7 +3245,6 @@ def use_reference_number(reference_number):
         ref.is_used = True
         ref.save()
     return None
-
 
 
 def create_user_account(user):
@@ -3698,6 +3297,3 @@ def create_user_account(user):
         except Exception as e:
             errors.append(str(e))
             return errors, None
-       
-
-
