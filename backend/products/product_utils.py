@@ -36,12 +36,16 @@ def validate_product_data(data):
     try:
         manufacturer = data["product_details"]["manufacturer"]
         if manufacturer:
+            # 🌟 Check if the entity is EITHER a General or Pharmaceutical Manufacturer
             if Entities.objects.filter(
-                id=manufacturer, entity_type="MANUFACTURING"
+                id=manufacturer, 
+                entity_type__in=["GeneralManufacturer", "PharmaceuticalManufacturer"]
             ).exists():
                 pass
             else:
-                errors.append("Manufacturer with provided ID does not exist")
+                errors.append("Manufacturer with provided ID does not exist or is not a valid manufacturer type.")
+        else:
+            errors.append("Manufacturer ID is required")
     except KeyError:
         errors.append("Manufacturer ID is required")
 
@@ -61,16 +65,33 @@ def validate_product_data(data):
         preparation_id = data["product_details"]["preparation"]
         if preparation_id:
             if Preparation.objects.filter(id=preparation_id).exists():
-                preparation = Preparation.objects.filter(
-                    id=preparation_id).first()
-                if preparation and category.title != "PHARMACY":
+                preparation = Preparation.objects.filter(id=preparation_id).first()
+                
+                # 🌟 Define all valid pharmaceutical entity types
+                PHARMA_ENTITY_TYPES = {
+                    "PharmaceuticalRetailer", 
+                    "PharmaceuticalWholesaler", 
+                    "PharmaceuticalDistributor", 
+                    "PharmaceuticalManufacturer",
+                    "Clinic",
+                    "Hospital",
+                    "Dispensary"
+                }
+                
+                # Get the allowed entities sent from the frontend
+                allowed_entities = data["product_details"].get("allowed_entities", [])
+                
+                # Check if any non-pharma entities were selected
+                invalid_entities = [e for e in allowed_entities if e not in PHARMA_ENTITY_TYPES]
+                
+                if preparation and invalid_entities:
                     errors.append(
-                        "Drug products can only be assigned to pharmacy category"
+                        f"Drug products can only be assigned to pharmaceutical entity types. Invalid: {', '.join(invalid_entities)}"
                     )
-                pass
             else:
                 errors.append(
-                    "Drug preparation with provided ID does not exist")
+                    "Drug preparation with provided ID does not exist"
+                )
 
     if len(errors) > 0:
         raise exceptions.ValidationError(errors)
