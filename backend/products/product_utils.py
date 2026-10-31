@@ -189,7 +189,11 @@ from django.db import transaction
 
 @transaction.atomic
 def update_product(data, user=None):
-    product_id = data.get("id")
+    # 🌟 1. Extract the details. If wrapped in 'product_details' (from frontend), unwrap it.
+    product_details = data.get("product_details", data)
+    
+    # Get ID safely from either root or details
+    product_id = data.get("id") or product_details.get("id")
     if not product_id:
         raise exceptions.ValidationError("Product ID is required")
 
@@ -200,28 +204,28 @@ def update_product(data, user=None):
 
     try:
         # Update preparation safely
-        if "preparation" in data:
-            if data["preparation"]:
-                product.preparation_id = data["preparation"]
+        if "preparation" in product_details:
+            if product_details["preparation"]:
+                product.preparation_id = product_details["preparation"]
             else:
                 product.preparation = None
 
-        # Update standard fields
-        if "category" in data:
-            product.category_id = data["category"]
-        if "manufacturer" in data:
-            product.manufacturer_id = data["manufacturer"]
-        if "title" in data:
-            product.title = data["title"]
-        if "description" in data:
-            product.description = data["description"]
-        if "is_pom" in data:
-            product.is_pom = data["is_pom"]
+        # Update standard fields (checking inside product_details)
+        if "category" in product_details:
+            product.category_id = product_details["category"]
+        if "manufacturer" in product_details:
+            product.manufacturer_id = product_details["manufacturer"]
+        if "title" in product_details:
+            product.title = product_details["title"]
+        if "description" in product_details:
+            product.description = product_details["description"]
+        if "is_pom" in product_details:
+            product.is_pom = product_details["is_pom"]
 
         # 🌟 RESET & ADD ALLOWED ENTITIES FRESH
-        if "allowed_entities" in data:
-            new_entities = data.get("allowed_entities")
-            
+        # Check inside product_details now!
+        if "allowed_entities" in product_details:
+            new_entities = product_details.get("allowed_entities")
             if isinstance(new_entities, list) and len(new_entities) > 0:
                 # Completely replace old entities with the new unique list
                 product.allowed_entities = list(set(new_entities))
@@ -237,6 +241,7 @@ def update_product(data, user=None):
     except Exception as e:
         # Catch specific error so the frontend knows exactly what broke
         raise exceptions.ValidationError(f"Product not updated: {str(e)}")
+
 def search_products(data, user):
     products = []
     # Search through all products for admin users
