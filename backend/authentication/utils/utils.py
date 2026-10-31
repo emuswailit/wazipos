@@ -1047,8 +1047,12 @@ def create_local_entity(data, user):
 
     return entity
 
+from django.db import transaction
+from django.contrib.gis.geos import Point
+from entitylocations.models import Locations
+from authentication.models import Entities, Categories, Agents, Countries, Counties, SubCounties, Users
+from rest_framework import exceptions
 
-# 🌟 CONSOLIDATED UPDATE FUNCTION
 @transaction.atomic
 def update_entity(data, user):
     entity_details = data.get("entity_details", {})
@@ -1066,40 +1070,114 @@ def update_entity(data, user):
     if not user.is_staff and entity.owner != user:
          raise exceptions.ValidationError("Not authorized to update this entity.")
 
-    # 1. Handle Categories
-    category_ids = entity_details.pop("categories", None)
-    if category_ids is not None and isinstance(category_ids, list):
-        entity.categories.set(category_ids)
+    errors = []
 
-    # 2. Handle Owner
-    owner_id = entity_details.pop("owner", None)
+    # ---------------------------------------------------------
+    # 1. VERIFY FOREIGN KEYS (Country, County, Sub-County)
+    # ---------------------------------------------------------
+    country_id = entity_details.get("country")
+    if country_id:
+        country_obj = Countries.objects.filter(id=country_id).first()
+        if not country_obj:
+            errors.append(f"Country with ID {country_id} does not exist.")
+        else:
+            entity.country = country_obj
+
+    county_id = entity_details.get("county")
+    if county_id is not None:
+        if str(county_id).strip() == "":
+            entity.county = None
+        else:
+            county_obj = Counties.objects.filter(id=county_id).first()
+            if not county_obj:
+                errors.append(f"County with ID {county_id} does not exist.")
+            else:
+                entity.county = county_obj
+
+    sub_county_id = entity_details.get("sub_county")
+    if sub_county_id is not None:
+        if str(sub_county_id).strip() == "":
+            entity.sub_county = None
+        else:
+            sub_county_obj = SubCounties.objects.filter(id=sub_county_id).first()
+            if not sub_county_obj:
+                errors.append(f"Sub-county with ID {sub_county_id} does not exist.")
+            else:
+                entity.sub_county = sub_county_obj
+
+    # ---------------------------------------------------------
+    # 2. VERIFY OWNER
+    # ---------------------------------------------------------
+    owner_id = entity_details.get("owner")
     if owner_id:
-        entity.owner_id = owner_id
+        owner_obj = Users.objects.filter(id=owner_id).first()
+        if not owner_obj:
+            errors.append(f"Owner user with ID {owner_id} does not exist.")
+        else:
+            entity.owner = owner_obj
 
-    # 3. Handle Bank Code
-    code_value = entity_details.pop("code", None)
-    entity_type = entity_details.get("entity_type", entity.entity_type)
+    # ---------------------------------------------------------
+    # 3. VERIFY CATEGORIES
+    # ---------------------------------------------------------
+    category_ids = entity_details.get("categories")
+    if category_ids is not None and isinstance(category_ids, list):
+        category_objs = list(Categories.objects.filter(id__in=category_ids))
+        if len(category_objs) != len(category_ids):
+            errors.append("One or more provided Category IDs are invalid.")
+        else:
+            entity.categories.set(category_objs)
+
+    # If there are validation errors, stop and raise them
+    if errors:
+        raise exceptions.ValidationError({"errors": errors})
+
+    # ---------------------------------------------------------
+    # 4. UPDATE STANDARD FIELDS
+    # ---------------------------------------------------------
+    if "title" in entity_details and entity_details["title"]:
+        entity.title = entity_details["title"].upper()
+    if "entity_type" in entity_details and entity_details["entity_type"]:
+        entity.entity_type = entity_details["entity_type"]
+    if "entity_ownership" in entity_details and entity_details["entity_ownership"]:
+        entity.entity_ownership = entity_details["entity_ownership"]
+    if "town" in entity_details:
+        entity.town = entity_details["town"]
+    if "road" in entity_details:
+        entity.road = entity_details["road"]
+    if "building" in entity_details:
+        entity.building = entity_details["building"]
+    if "description" in entity_details:
+        entity.description = entity_details["description"]
     
-    if entity_type == "Bank" and code_value:
+    if "entity_level" in entity_details:
+        try:
+            entity.entity_level = int(entity_details["entity_level"])
+        except (ValueError, TypeError):
+            pass
+
+    # ---------------------------------------------------------
+    # 5. HANDLE BANK CODE & PLAN
+    # ---------------------------------------------------------
+    code_value = entity_details.get("code")
+    if entity.entity_type == "Bank" and code_value:
         entity.bank_code = code_value
-    elif entity_type != "Bank":
+    elif entity.entity_type != "Bank":
         entity.bank_code = None
 
-    # 4. Handle Location
-    latitude = entity_details.pop("latitude", None)
-    longitude = entity_details.pop("longitude", None)
+    plan_value = entity_details.get("plan")
+    if plan_value == "":
+        entity.plan = None
+    # If you have specific plan logic, add it here.
 
-    # 5. Update standard fields dynamically
-    entity_details.pop("expanded", None)
-    entity_details.pop("plan", None) 
-    
-    for attr, value in entity_details.items():
-        if hasattr(entity, attr):
-            setattr(entity, attr, value)
-            
+    # Save the Entity updates
     entity.save()
 
-    # 6. Update or Create Location
+    # ---------------------------------------------------------
+    # 6. UPDATE LOCATION
+    # ---------------------------------------------------------
+    latitude = entity_details.get("latitude")
+    longitude = entity_details.get("longitude")
+    
     if latitude is not None and longitude is not None:
         try:
             point = Point(float(longitude), float(latitude), srid=4326)
@@ -1114,6 +1192,7 @@ def update_entity(data, user):
             print(f"Failed to update location for entity {entity.id}: {e}")
 
     return entity
+
 
 
 @transaction.atomic
