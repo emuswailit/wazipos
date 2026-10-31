@@ -110,7 +110,7 @@ from .serializers import (
     SubCountiesSerializer,
     SimpleUsersSerializer,
     AgentsSerializer,
-    EntityLocationHybridSerializer
+    EntitySerializer
     
   
 )
@@ -1599,7 +1599,7 @@ def entitiesAPIView(request):
 
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(entities, request)
-        serializer = EntityLocationHybridSerializer(page, many=True, context={"request": request})
+        serializer = EntitySerializer(page, many=True, context={"request": request})
         return paginator.get_paginated_response(serializer.data)
     elif request.data["action"] == "GetAgentEntities":
         """Get agent entities"""

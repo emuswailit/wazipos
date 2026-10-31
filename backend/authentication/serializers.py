@@ -629,6 +629,14 @@ from authentication import utils
 # CategoriesSerializer, EntityImagesSerializer, EntityLogosSerializer, 
 # EntityLicencesSerializer, DepartmentsSerializer
 
+from rest_framework import serializers
+from django.contrib.gis.geos import Point
+from authentication import models
+# 🌟 Ensure Locations is imported correctly based on your app structure
+from entitylocations.models import Locations 
+
+# ... (Keep your other imports for CategoriesSerializer, EntityImagesSerializer, etc.)
+
 class EntitySerializer(serializers.ModelSerializer):
     categories_array = serializers.SerializerMethodField(read_only=True)
     country_title = serializers.SerializerMethodField()
@@ -639,12 +647,17 @@ class EntitySerializer(serializers.ModelSerializer):
     departments = serializers.SerializerMethodField()
     owner_details = serializers.SerializerMethodField()
     
+    # 🌟 NEW: Location Attributes
+    point = serializers.SerializerMethodField(read_only=True)
+    farness = serializers.SerializerMethodField(read_only=True)
+    is_pharmacy = serializers.SerializerMethodField(read_only=True)
+    
     # Nested read-only fields
     images = EntityImagesSerializer(many=True, read_only=True, required=False)
     logos = EntityLogosSerializer(many=True, read_only=True, required=False)
     licences = EntityLicencesSerializer(many=True, read_only=True, required=False)
 
-    # 🌟 Added write-only fields for GPS and Bank Code mapping
+    # Write-only fields for GPS and Bank Code mapping
     code = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
     latitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
     longitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
@@ -663,7 +676,9 @@ class EntitySerializer(serializers.ModelSerializer):
             "departments", "description", "country_title", "county_title", 
             "constituency_title", "plan", "plan_title", "postal_address", 
             "postal_code", "postal_town",
-            # 🌟 Include the new write-only fields here
+            # 🌟 Added the new fields to the output
+            "point", "farness", "is_pharmacy",
+            # Write-only fields
             "code", "latitude", "longitude"
         ]
         
@@ -672,7 +687,6 @@ class EntitySerializer(serializers.ModelSerializer):
             "categories_array", "entity_code"
         ]
         
-        # 🌟 Cleaned up and merged extra_kwargs
         extra_kwargs = {
             "licences": {"required": False},
             "images": {"required": False},
@@ -681,7 +695,41 @@ class EntitySerializer(serializers.ModelSerializer):
         }
 
     # ========================================================
-    # Read Methods
+    # Location Attributes Methods
+    # ========================================================
+
+    def get_point(self, obj):
+        """Returns the GPS point as [longitude, latitude]"""
+        try:
+            location = obj.locations # Assuming related_name is 'locations'
+            if location and location.point:
+                # GeoDjango PointField returns a Point object; .coords gives (x, y) -> (lng, lat)
+                return location.point.coords
+        except Exception:
+            pass
+        return None
+
+    def get_farness(self, obj):
+        """Returns the farness string from the related Locations model"""
+        try:
+            location = obj.locations
+            if location:
+                return location.farness
+        except Exception:
+            pass
+        return ""
+
+    def get_is_pharmacy(self, obj):
+        """
+        Determine if the entity is a pharmacy.
+        You can adjust this logic based on your exact entity types.
+        """
+        if obj.entity_type in ["PharmaceuticalRetailer", "PharmaceuticalWholesaler", "Dispensary", "Clinic"]:
+            return True
+        return False
+
+    # ========================================================
+    # Other Read Methods
     # ========================================================
 
     def get_categories_array(self, obj):
@@ -692,7 +740,7 @@ class EntitySerializer(serializers.ModelSerializer):
 
     def get_rating(self, obj):
         rating = 0
-        if Rating.objects.filter(entity=obj).exists(): # Assuming Rating model is imported
+        if Rating.objects.filter(entity=obj).exists(): 
             reviews = Rating.objects.filter(entity=obj)
             ratings = sum(review.rating for review in reviews)
             rating = ratings / reviews.count()
@@ -737,39 +785,32 @@ class EntitySerializer(serializers.ModelSerializer):
         return attrs
 
     # ========================================================
-    # Create & Update (Handling Complex Logic)
+    # Create & Update
     # ========================================================
 
     def create(self, validated_data):
-        # 1. Pop custom and M2M fields
         categories = validated_data.pop("categories", [])
         code_val = validated_data.pop("code", None)
         latitude = validated_data.pop("latitude", None)
         longitude = validated_data.pop("longitude", None)
         
-        # 2. Handle Owner Fallback
         request_user = self.context.get("request").user if "request" in self.context else self.context.get("user")
         owner = validated_data.pop("owner", None) or request_user
 
-        # 3. Handle Bank Code Mapping
         entity_type = validated_data.get("entity_type")
         if entity_type == "Bank" and code_val:
             validated_data["bank_code"] = code_val
         elif entity_type != "Bank":
             validated_data["bank_code"] = None
 
-        # 4. Handle Empty Plan
         if not validated_data.get("plan"):
             validated_data["plan"] = None
 
-        # 5. Create Entity
         entity = models.Entities.objects.create(owner=owner, **validated_data)
 
-        # 6. Attach Categories
         if categories:
             entity.categories.set(categories)
 
-        # 7. Create GPS Location
         if latitude is not None and longitude is not None:
             try:
                 point = Point(float(longitude), float(latitude), srid=4326)
@@ -780,38 +821,31 @@ class EntitySerializer(serializers.ModelSerializer):
         return entity
 
     def update(self, instance, validated_data):
-        # 1. Pop custom and M2M fields
         categories = validated_data.pop("categories", None)
         code_val = validated_data.pop("code", None)
         latitude = validated_data.pop("latitude", None)
         longitude = validated_data.pop("longitude", None)
         
-        # 2. Handle Owner Mapping
         owner = validated_data.pop("owner", None)
         if owner:
             instance.owner = owner
 
-        # 3. Handle Bank Code Mapping
         entity_type = validated_data.get("entity_type", instance.entity_type)
         if entity_type == "Bank" and code_val:
             instance.bank_code = code_val
         elif entity_type != "Bank":
             instance.bank_code = None
 
-        # 4. Handle Empty Plan
         if "plan" in validated_data and not validated_data["plan"]:
             validated_data["plan"] = None
 
-        # 5. Update standard fields dynamically
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # 6. Update Categories
         if categories is not None:
             instance.categories.set(categories)
 
-        # 7. Update/Create GPS Location
         if latitude is not None and longitude is not None:
             try:
                 point = Point(float(longitude), float(latitude), srid=4326)
@@ -824,7 +858,6 @@ class EntitySerializer(serializers.ModelSerializer):
 
         return instance
 
-    
 class ClustersSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Clusters
@@ -2553,15 +2586,25 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
     """
     
     # --- Location Attributes (Pulled from the related Locations model) ---
+from rest_framework import serializers
+from django.contrib.gis.geos import Point
+from authentication import models
+from entitylocations.models import Locations 
+
+# ... (Keep your other imports: CategoriesSerializer, EntityImagesSerializer, etc.)
+
+class EntitySerializer(serializers.ModelSerializer):
+    # --- Location Attributes ---
     point = serializers.SerializerMethodField(read_only=True)
     farness = serializers.SerializerMethodField(read_only=True)
     is_pharmacy = serializers.SerializerMethodField(read_only=True)
     
-    # --- Entity Attributes (From EntitySerializer) ---
+    # --- Entity Attributes ---
     entity_title = serializers.CharField(source="title", read_only=True)
     entity_type = serializers.CharField(read_only=True)
     categories_array = serializers.SerializerMethodField(read_only=True)
     
+    # Using source="..." is more efficient than SerializerMethodField for nested lookups
     country_title = serializers.CharField(source="country.title", read_only=True, default="")
     county_title = serializers.CharField(source="county.title", read_only=True, default="")
     constituency_title = serializers.CharField(source="constituency.title", read_only=True, default="")
@@ -2569,6 +2612,187 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
     owner_details = serializers.SerializerMethodField(read_only=True)
     rating = serializers.SerializerMethodField(read_only=True)
     images = serializers.SerializerMethodField(read_only=True)
+
+    # --- Write-only fields for GPS and Bank Code mapping ---
+    code = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
+    latitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
+    longitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
+
+    class Meta:
+        model = models.Entities
+        fields = [
+            "id", "entity_code", "bank_code", "title", "entity_title", "rating", "administrator",
+            "owner", "owner_details", "registration", "phone", "phone1", "phone2", 
+            "phone3", "email", "entity_type", "entity_ownership", "categories",
+            "categories_array", "town", "country", "county", "sub_county", 
+            "constituency", "road", "building", "images", "logos", "licences",
+            "is_subscribed", "is_verified", "trial_from", "trial_to", 
+            "registration_fee", "commission_percentage", "registration_fee_paid", 
+            "monthly_subscription", "offer_trial", "created", "updated", 
+            "departments", "description", "country_title", "county_title", 
+            "constituency_title", "plan", "plan_title", "postal_address", 
+            "postal_code", "postal_town",
+            # Location Attributes
+            "point", "farness", "is_pharmacy",
+            # Write-only fields
+            "code", "latitude", "longitude"
+        ]
+        
+        read_only_fields = [
+            "is_subscribed", "offer_trial", "owner", "rating", 
+            "categories_array", "entity_code", "entity_title"
+        ]
+        
+        extra_kwargs = {
+            "licences": {"required": False},
+            "logos": {"required": False},
+            "plan": {"required": False, "allow_null": True},
+        }
+
+    # ========================================================
+    # Location Methods
+    # ========================================================
+
+    def get_point(self, obj):
+        """Returns the GPS point as [longitude, latitude]"""
+        try:
+            location = obj.locations # Assuming related_name is 'locations'
+            if location and location.point:
+                return location.point.coords
+        except Exception:
+            pass
+        return None
+
+    def get_farness(self, obj):
+        """Returns the farness string from the related Locations model"""
+        try:
+            location = obj.locations
+            if location:
+                return location.farness
+        except Exception:
+            pass
+        return ""
+
+    def get_is_pharmacy(self, obj):
+        if obj.entity_type in ["PharmaceuticalRetailer", "PharmaceuticalWholesaler", "Dispensary", "Clinic"]:
+            return True
+        return False
+
+    # ========================================================
+    # Entity Methods
+    # ========================================================
+
+    def get_categories_array(self, obj):
+        categories = obj.categories.all()
+        if categories.count() > 0:
+            return CategoriesSerializer(categories, context=self.context, many=True).data
+        return []
+
+    def get_owner_details(self, obj):
+        if obj.owner:
+            return f"{obj.owner.first_name} {obj.owner.last_name} - {obj.owner.phone}"
+        return ""
+
+    def get_rating(self, obj):
+        rating = 0
+        # Ensure Rating model is imported at the top of the file
+        if hasattr(models, 'Rating') and models.Rating.objects.filter(entity=obj).exists(): 
+            reviews = models.Rating.objects.filter(entity=obj)
+            ratings = sum(review.rating for review in reviews)
+            rating = ratings / reviews.count()
+        return rating
+
+    def get_images(self, obj):
+        # Assuming EntityImagesSerializer is imported
+        images = obj.images.all()
+        if images.count() > 0:
+            return EntityImagesSerializer(images, context=self.context, many=True).data
+        return []
+
+    # ========================================================
+    # Validation & Create/Update
+    # ========================================================
+
+    def validate(self, attrs):
+        user = self.context.get("request").user if "request" in self.context else self.context.get("user")
+        entity_type = attrs.get("entity_type", "")
+        
+        if hasattr(models, "utils") and hasattr(models.utils, "admin_can_create_entity"):
+            if models.utils.admin_can_create_entity(user, entity_type):
+                raise serializers.ValidationError(
+                    f"Admin users not allowed to create facility of type: {entity_type}"
+                )
+        return attrs
+
+    def create(self, validated_data):
+        categories = validated_data.pop("categories", [])
+        code_val = validated_data.pop("code", None)
+        latitude = validated_data.pop("latitude", None)
+        longitude = validated_data.pop("longitude", None)
+        
+        request_user = self.context.get("request").user if "request" in self.context else self.context.get("user")
+        owner = validated_data.pop("owner", None) or request_user
+
+        entity_type = validated_data.get("entity_type")
+        if entity_type == "Bank" and code_val:
+            validated_data["bank_code"] = code_val
+        elif entity_type != "Bank":
+            validated_data["bank_code"] = None
+
+        if not validated_data.get("plan"):
+            validated_data["plan"] = None
+
+        entity = models.Entities.objects.create(owner=owner, **validated_data)
+
+        if categories:
+            entity.categories.set(categories)
+
+        if latitude is not None and longitude is not None:
+            try:
+                point = Point(float(longitude), float(latitude), srid=4326)
+                Locations.objects.create(entity=entity, point=point, farness="")
+            except Exception as e:
+                print(f"Failed to save location for entity {entity.id}: {e}")
+
+        return entity
+
+    def update(self, instance, validated_data):
+        categories = validated_data.pop("categories", None)
+        code_val = validated_data.pop("code", None)
+        latitude = validated_data.pop("latitude", None)
+        longitude = validated_data.pop("longitude", None)
+        
+        owner = validated_data.pop("owner", None)
+        if owner:
+            instance.owner = owner
+
+        entity_type = validated_data.get("entity_type", instance.entity_type)
+        if entity_type == "Bank" and code_val:
+            instance.bank_code = code_val
+        elif entity_type != "Bank":
+            instance.bank_code = None
+
+        if "plan" in validated_data and not validated_data["plan"]:
+            validated_data["plan"] = None
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if categories is not None:
+            instance.categories.set(categories)
+
+        if latitude is not None and longitude is not None:
+            try:
+                point = Point(float(longitude), float(latitude), srid=4326)
+                Locations.objects.update_or_create(
+                    entity=instance,
+                    defaults={"point": point, "farness": ""}
+                )
+            except Exception as e:
+                print(f"Failed to update location for entity {instance.id}: {e}")
+
+        return instance
 
     class Meta:
         model = models.Entities
