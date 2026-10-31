@@ -2585,7 +2585,6 @@ class EntityLocationHybridSerializer(serializers.ModelSerializer):
     but flattens the associated Location data (point, farness, etc.).
     """
     
-    # --- Location Attributes (Pulled from the related Locations model) ---
 from rest_framework import serializers
 from django.contrib.gis.geos import Point
 from authentication import models
@@ -2793,102 +2792,6 @@ class EntitySerializer(serializers.ModelSerializer):
                 print(f"Failed to update location for entity {instance.id}: {e}")
 
         return instance
-
-    class Meta:
-        model = models.Entities
-        fields = [
-            "id",
-            "entity_title", 
-            "entity_type",
-            "registration",
-            "phone",
-            "email",
-            "town",
-            
-            # Location Fields
-            "country",
-            "country_title",
-            "county",
-            "county_title",
-            "constituency",        # 🌟 ADDED
-            "constituency_title",  # 🌟 ADDED
-            "road",
-            "building",
-            "description",
-            "point",
-            "farness",
-            "is_pharmacy",
-            
-            # Extras
-            "categories_array",
-            "rating",
-            "images",
-            "owner_details",
-            "monthly_subscription",
-        ]
-        read_only_fields = fields 
-
-    def _get_location(self, obj):
-        """Helper to safely fetch the related location."""
-        if hasattr(obj, "locations"):
-            # Handle both single object (OneToOne/FK) and Manager (ManyToMany)
-            if hasattr(obj.locations, "first"):
-                return obj.locations.first()
-            return obj.locations
-        return None
-
-    # ---------------------------------------------------------
-    # Location Method Fields
-    # ---------------------------------------------------------
-
-    def get_point(self, obj):
-        location = self._get_location(obj)
-        if location and location.point:
-            return {
-                "type": "Point",
-                "coordinates": [location.point.x, location.point.y] # [lng, lat]
-            }
-        return None
-
-    def get_farness(self, obj):
-        location = self._get_location(obj)
-        return location.farness if location else None
-
-    def get_is_pharmacy(self, obj):
-        return obj.entity_type in ["PHARMACY", "PharmaceuticalRetailer", "PharmaceuticalWholesaler"]
-
-    # ---------------------------------------------------------
-    # Entity Method Fields
-    # ---------------------------------------------------------
-
-    def get_categories_array(self, obj):
-        if hasattr(obj, "categories") and obj.categories.exists():
-            return [{"id": c.id, "title": c.title} for c in obj.categories.all()]
-        return []
-
-    def get_owner_details(self, obj):
-        if obj.owner:
-            return {
-                "name": f"{obj.owner.first_name} {obj.owner.last_name}",
-                "phone": obj.owner.phone,
-                "email": obj.owner.email
-            }
-        return None
-
-    def get_rating(self, obj):
-        if hasattr(obj, "rating_set"):
-            reviews = obj.rating_set.all()
-            if reviews.exists():
-                return sum(r.rating for r in reviews) / reviews.count()
-        return 0.0
-
-    def get_images(self, obj):
-        if hasattr(obj, "images"):
-            return [{"id": img.id, "url": img.image.url} for img in obj.images.all() if img.image]
-        return []
-
-
-
 from rest_framework import serializers
 from . import models # Adjust to match your actual models import
 
