@@ -144,15 +144,6 @@ def get_all_products(user):
         # Return all product for admin user
         return Products.objects.filter(active=True)
     else:
-        return Products.objects.filter(active=True)
-        # Return only products for caegories assigned to user
-
-        authorized_products = []
-
-        # if Products.objects.filter(category__in=user.entity.categories.all(), active=True).exists():
-        #     authorized_products = Products.objects.filter(
-        #         category__in=user.entity.categories.all(), active=True).all()
-        # return authorized_products
         queryset = Products.objects.all()
         # Look for a query parameter like ?entity_type=Grocery
         entity_type = user.entity.entity_type
