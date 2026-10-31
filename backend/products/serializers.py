@@ -263,22 +263,17 @@ class ProductsWolesalerReceiptsSerializer(serializers.ModelSerializer):
         return ProductImageSerializer(images, context=self.context, many=True).data
 
 
+from rest_framework import serializers
+from . import models
+# Ensure these are imported from your project
+from authentication.models import Categories, Entities, Countries
+from drugs.models import Preparation # Assuming Preparation is here
+# from core.utils import create_log # Assuming this is where create_log is
+
 class ProductsSerializer(serializers.ModelSerializer):
     """
     Read serializer for Products.
-
-    FK safety:
-    All foreign-key lookups go through `_safe_fk`, which uses the
-    raw `_id` column and `.filter(pk=...).first()` instead of
-    traversing the ORM descriptor. This prevents a single dangling
-    FK (e.g. a `preparation_id` pointing at a deleted row) from
-    raising `DoesNotExist` and 500-ing the entire list endpoint.
-
-    If the foreign key points at a missing row, the affected field
-    simply serializes to its empty form ("" / None). The row stays
-    visible in the response so the frontend isn't silently starved.
     """
-
     key = serializers.SerializerMethodField(read_only=True)
     long_title = serializers.SerializerMethodField(read_only=True)
     category_details = serializers.SerializerMethodField(read_only=True)
@@ -314,7 +309,7 @@ class ProductsSerializer(serializers.ModelSerializer):
             "owner",
             "units_per_pack",
             
-            # --- NEW: Weight & Dimensions ---
+            # --- Weight & Dimensions ---
             "weight_kg",
             "length_cm",
             "width_cm",
@@ -360,7 +355,8 @@ class ProductsSerializer(serializers.ModelSerializer):
         try:
             return model.objects.filter(pk=pk).first()
         except Exception as e:
-            create_log("error",f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
+            # create_log("error", f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
+            print(f"[_safe_fk] {model.__name__} pk={pk} failed: {e}")
             return None
 
     def _prep(self, obj):
@@ -370,15 +366,6 @@ class ProductsSerializer(serializers.ModelSerializer):
             getattr(obj, "preparation_id", None),
         )
 
-    def _formulation(self, prep):
-        """Resolve prep.formulation safely."""
-        if prep is None:
-            return None
-        return self._safe_fk(
-            models.Formulation,
-            getattr(prep, "formulation_id", None),
-        )
-
     # ---------------------------------------------------------
     # Validation (write path only)
     # ---------------------------------------------------------
@@ -386,12 +373,12 @@ class ProductsSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if "category" in attrs:
             category = attrs.get("category", None)
-            if category.title == "PHARMACY" and "preparation" not in attrs:
+            # Safely check if category exists before accessing .title
+            if category and category.title == "PHARMACY" and "preparation" not in attrs:
                 raise exceptions.ValidationError(
                     "Preparation details is mandatory for this category"
                 )
-            else:
-                return attrs
+            return attrs
         else:
             raise exceptions.ValidationError("Category is required")
 
@@ -406,12 +393,8 @@ class ProductsSerializer(serializers.ModelSerializer):
         prep = self._prep(obj)
         if prep is None:
             return obj.title
-
-        form = self._formulation(prep)
-        if form is None:
-            return f"{obj.title} -({prep.title})"
-
-        return f"{obj.title} -({prep.title} - {form.title})"
+        # 🌟 Removed formulation lookup
+        return f"{obj.title} -({prep.title})"
 
     # ---------------------------------------------------------
     # Preparation
@@ -431,20 +414,12 @@ class ProductsSerializer(serializers.ModelSerializer):
         prep = self._prep(obj)
         if prep is None:
             return ""
-
-        form = self._formulation(prep)
-        if form is None:
-            return prep.title
-
-        return f"{prep.title} - {form.title}"
+        # 🌟 Removed formulation lookup, just returning the prep title
+        return prep.title
 
     def get_formulation_title(self, obj):
-        prep = self._prep(obj)
-        if prep is None:
-            return ""
-
-        form = self._formulation(prep)
-        return form.title if form else ""
+        # 🌟 Formulation model no longer exists, returning empty string
+        return ""
 
     # ---------------------------------------------------------
     # Category / sub-category
