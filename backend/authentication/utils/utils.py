@@ -880,12 +880,11 @@ def validate_create_international_entity_data(data):
     else:
         return
 
-
 from django.db import transaction
 from django.contrib.gis.geos import Point
 from entitylocations.models import Locations
 from authentication.models import Entities, Categories, Agents, Countries, Counties, SubCounties
-from authentication.models import Users # Or get_user_model() depending on your setup
+from authentication.models import Users
 from payments.models import PayoutAccounts
 from rest_framework import exceptions
 
@@ -899,18 +898,17 @@ def create_local_entity(data, user):
     KENYA_COUNTRY_ID = "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f"
 
     # ---------------------------------------------------------
-    # 1. VERIFY REQUIRED STRING FIELDS
+    # 1. VERIFY REQUIRED STRING FIELDS (FIXED NULL STRIP ERROR)
     # ---------------------------------------------------------
-    title = entity_details.get("title", "").strip()
-    entity_type = entity_details.get("entity_type", "").strip()
-    entity_ownership = entity_details.get("entity_ownership", "PRIVATE").strip()
-    town = entity_details.get("town", "").strip()
-    road = entity_details.get("road", "").strip()
-    building = entity_details.get("building", "").strip()
+    title = (entity_details.get("title") or "").strip()
+    entity_type = (entity_details.get("entity_type") or "").strip()
+    entity_ownership = (entity_details.get("entity_ownership") or "PRIVATE").strip()
+    town = (entity_details.get("town") or "").strip()
+    road = (entity_details.get("road") or "").strip()
+    building = (entity_details.get("building") or "").strip()
 
     if not title: errors.append("Entity title is required.")
     if not entity_type: errors.append("Entity type is required.")
-    
     
     # ---------------------------------------------------------
     # 2. VERIFY FOREIGN KEYS (Country, County)
@@ -993,7 +991,7 @@ def create_local_entity(data, user):
     entity_level = entity_details.get("entity_level", 0)
     try:
         entity_level = int(entity_level)
-    except ValueError:
+    except (ValueError, TypeError):
         entity_level = 0
 
     entity = Entities.objects.create(
@@ -1003,7 +1001,7 @@ def create_local_entity(data, user):
         town=town,
         road=road,
         building=building,
-        description=entity_details.get("description", ""),
+        description=(entity_details.get("description") or ""), # 🌟 Fixed None fallback
         entity_level=entity_level,
         country=country_obj,
         county=county_obj,
@@ -1031,7 +1029,7 @@ def create_local_entity(data, user):
         PayoutAccounts.objects.create(
             entity=entity,
             account_entity=bank_obj,
-            account_name=account_name or entity.title,
+            account_name=(account_name or entity.title), # 🌟 Fixed None fallback
             account_number=account_number,
             account_type="BANK",
             owner=user,
@@ -1050,7 +1048,6 @@ def create_local_entity(data, user):
                 farness=""
             )
         except Exception as e:
-            # If GIS fails, we might want to let the entity exist but log the failure
             print(f"Failed to create location for entity {entity.id}: {e}")
 
     return entity
