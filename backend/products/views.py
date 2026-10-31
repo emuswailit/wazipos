@@ -787,7 +787,7 @@ def productsAPIView(request):
                 product, many=False, context={"request": request}
             )
             return custom_success_message(
-                0, "Product updated successfully", serializer.data
+                0, "Product updated successfully", serializer.data,"product"
             )
         else:
             return custom_error_response(1, "Product could not be updated")
