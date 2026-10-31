@@ -302,7 +302,7 @@ from rest_framework import exceptions
 from django.db import transaction
 
 @transaction.atomic
-def update_product(data):
+def update_product(data, user=None):
     product_id = data.get("id")
     if not product_id:
         raise exceptions.ValidationError("Product ID is required")
@@ -332,14 +332,12 @@ def update_product(data):
         if "is_pom" in data:
             product.is_pom = data["is_pom"]
 
-        # 🌟 RESET & ADD ALLOWED ENTITIES FRESH
+        # RESET & ADD ALLOWED ENTITIES FRESH
         if "allowed_entities" in data:
             new_entities = data["allowed_entities"]
             if isinstance(new_entities, list):
-                # Clear the old list, remove duplicates, and assign the fresh list
                 product.allowed_entities = list(set(new_entities))
             else:
-                # If somehow a non-list is passed, reset to empty
                 product.allowed_entities = []
 
         # Save the product once at the end
@@ -351,6 +349,7 @@ def update_product(data):
         # Catch specific error so the frontend knows exactly what broke
         raise exceptions.ValidationError(f"Product not updated: {str(e)}")
 
+    
 def search_products(data, user):
     products = []
     # Search through all products for admin users
