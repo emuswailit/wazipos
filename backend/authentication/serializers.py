@@ -2628,7 +2628,7 @@ class EntitySerializer(serializers.ModelSerializer):
             "is_subscribed", "is_verified", "trial_from", "trial_to", 
             "registration_fee", "commission_percentage", "registration_fee_paid", 
             "monthly_subscription", "offer_trial", "created", "updated", 
-            "departments", "description", "country_title", "county_title", 
+           "description", "country_title", "county_title", 
             "constituency_title", "plan", "plan_title", "postal_address", 
             "postal_code", "postal_town",
             # Location Attributes
