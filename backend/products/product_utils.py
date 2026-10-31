@@ -184,116 +184,6 @@ def get_products_by_category(data):
             return None
 
 
-def update_product(data, user):
-    product = None
-
-    try:
-        product_id = data["product"]
-        if data["product"] == "":
-            raise exceptions.ValidationError("Product ID must be valid UUID")
-        if Products.objects.filter(id=product_id).exists():
-            product = Products.objects.filter(id=product_id).first()
-            if user.is_staff:
-                pass
-            elif user == product.owner:
-                pass
-            else:
-                raise exceptions.ValidationError("Not authorized")
-
-    except KeyError:
-        raise exceptions.ValidationError("Product ID is required")
-    try:
-        product_details = data["product_details"]
-        if data["product_details"] == {}:
-            raise exceptions.ValidationError(
-                "No product details were supplied")
-    except KeyError:
-        raise exceptions.ValidationError(
-            "Product details to update are required")
-
-    title = None
-    description = None
-    manufacturer = None
-    is_vatable = ""
-    is_pom = ""
-    active = ""
-    category = ""
-    sub_category = ""
-    units_per_pack = ""
-    packaging = ""
-
-    if "title" in data["product_details"]:
-        if data["product_details"]["title"]:
-            title = data["product_details"]["title"]
-    if "description" in data["product_details"]:
-        if data["product_details"]["description"]:
-            description = data["product_details"]["description"]
-
-    if "manufacturer" in data["product_details"]:
-        if data["product_details"]["manufacturer"]:
-            manufacturer = data["product_details"]["manufacturer"]
-    if "is_vatable" in data["product_details"]:
-        if data["product_details"]["is_vatable"]:
-            is_vatable = data["product_details"]["is_vatable"]
-
-    if "is_pom" in data["product_details"]:
-        if data["product_details"]["is_pom"]:
-            is_pom = data["product_details"]["is_pom"]
-
-    if "category" in data["product_details"]:
-        if data["product_details"]["category"]:
-            category = data["product_details"]["category"]
-
-    if "sub_category" in data["product_details"]:
-        if data["product_details"]["sub_category"]:
-            sub_category = data["product_details"]["sub_category"]
-    if "units_per_pack" in data["product_details"]:
-        if data["product_details"]["units_per_pack"]:
-            units_per_pack = data["product_details"]["units_per_pack"]
-    if "packaging" in data["product_details"]:
-        if data["product_details"]["packaging"]:
-            packaging = data["product_details"]["packaging"]
-    if "active" in data["product_details"]:
-        if data["product_details"]["active"]:
-            active = data["product_details"]["active"]
-
-    try:
-
-        if title:
-            product.title = title
-            product.save()
-        if description:
-            product.description = description
-            product.save()
-        if manufacturer:
-            product.manufacturer = manufacturer
-            product.save()
-        if is_vatable:
-            product.is_vatable = is_vatable
-            product.save()
-        if units_per_pack:
-            product.units_per_pack = units_per_pack
-            product.save()
-        if packaging:
-            product.packaging = packaging
-            product.save()
-        if active:
-            product.active = active
-            product.save()
-        if is_pom and product.preparation != None:
-            product.is_pom = is_pom
-            product.save()
-        if category:
-            product.category = category
-            product.save()
-        if sub_category:
-            product.sub_category = sub_category
-            product.save()
-
-        return product
-    except Exception as e:
-        raise exceptions.ValidationError(e)
-
 from rest_framework import exceptions
 from django.db import transaction
 
@@ -328,12 +218,15 @@ def update_product(data, user=None):
         if "is_pom" in data:
             product.is_pom = data["is_pom"]
 
-        # RESET & ADD ALLOWED ENTITIES FRESH
+        # 🌟 RESET & ADD ALLOWED ENTITIES FRESH
         if "allowed_entities" in data:
-            new_entities = data["allowed_entities"]
-            if isinstance(new_entities, list):
+            new_entities = data.get("allowed_entities")
+            
+            if isinstance(new_entities, list) and len(new_entities) > 0:
+                # Completely replace old entities with the new unique list
                 product.allowed_entities = list(set(new_entities))
             else:
+                # If the list is empty or invalid, clear the array completely
                 product.allowed_entities = []
 
         # Save the product once at the end
@@ -344,8 +237,6 @@ def update_product(data, user=None):
     except Exception as e:
         # Catch specific error so the frontend knows exactly what broke
         raise exceptions.ValidationError(f"Product not updated: {str(e)}")
-
-    
 def search_products(data, user):
     products = []
     # Search through all products for admin users
