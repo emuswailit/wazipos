@@ -876,8 +876,10 @@ def validate_create_international_entity_data(data):
 from django.db import transaction
 from django.contrib.gis.geos import Point
 from entitylocations.models import Locations
-from authentication.models import Entities, Categories, Agents 
+from authentication.models import Entities, Categories, Agents, Countries, Counties, SubCounties
+from authentication.models import Users # Or get_user_model() depending on your setup
 from payments.models import PayoutAccounts
+from rest_framework import exceptions
 
 @transaction.atomic
 def create_local_entity(data, user):
@@ -885,83 +887,162 @@ def create_local_entity(data, user):
     if not entity_details:
         raise exceptions.ValidationError("Entity details are required.")
 
-    # 1. Pop special/M2M fields out so Django doesn't crash
-    category_ids = entity_details.pop("categories", [])
-    owner_id = entity_details.pop("owner", None)
-    
-    # 2. Extract Bank details
-    code_value = entity_details.pop("code", None)
-    bank_id = entity_details.pop("bank", None)
-    account_name = entity_details.pop("account_name", None)
-    account_number = entity_details.pop("account_number", None)
-    
-    # 3. Extract Location
-    latitude = entity_details.pop("latitude", None)
-    longitude = entity_details.pop("longitude", None)
-    
-    # 4. Remove non-model or empty fields
-    entity_details.pop("expanded", None)
-    plan_value = entity_details.pop("plan", "")
-    if plan_value == "":
-        entity_details["plan"] = None
+    errors = []
+    KENYA_COUNTRY_ID = "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f"
 
-    # 5. Fix Data Types
-    if "entity_level" in entity_details:
-        try:
-            entity_details["entity_level"] = int(entity_details["entity_level"])
-        except (ValueError, TypeError):
-            entity_details["entity_level"] = 0
+    # ---------------------------------------------------------
+    # 1. VERIFY REQUIRED STRING FIELDS
+    # ---------------------------------------------------------
+    title = entity_details.get("title", "").strip()
+    entity_type = entity_details.get("entity_type", "").strip()
+    entity_ownership = entity_details.get("entity_ownership", "PRIVATE").strip()
+    town = entity_details.get("town", "").strip()
+    road = entity_details.get("road", "").strip()
+    building = entity_details.get("building", "").strip()
 
-    # 6. Owner & Agent Logic
+    if not title: errors.append("Entity title is required.")
+    if not entity_type: errors.append("Entity type is required.")
+    if not town: errors.append("Town is required.")
+    
+    # ---------------------------------------------------------
+    # 2. VERIFY FOREIGN KEYS (Country, County)
+    # ---------------------------------------------------------
+    country_id = entity_details.get("country", KENYA_COUNTRY_ID)
+    country_obj = Countries.objects.filter(id=country_id).first()
+    if not country_obj:
+        # Fallback to Kenya if the provided ID is invalid
+        country_obj = Countries.objects.filter(id=KENYA_COUNTRY_ID).first()
+        if not country_obj:
+            errors.append(f"Country with ID {country_id} does not exist.")
+
+    county_id = entity_details.get("county")
+    county_obj = None
+    if county_id:
+        county_obj = Counties.objects.filter(id=county_id).first()
+        if not county_obj:
+            errors.append(f"County with ID {county_id} does not exist.")
+        elif county_obj.country_id != country_obj.id:
+            errors.append("Selected county does not belong to the selected country.")
+
+    sub_county_id = entity_details.get("sub_county")
+    sub_county_obj = None
+    if sub_county_id:
+        sub_county_obj = SubCounties.objects.filter(id=sub_county_id).first()
+        if not sub_county_obj:
+            errors.append(f"Sub-county with ID {sub_county_id} does not exist.")
+
+    # ---------------------------------------------------------
+    # 3. VERIFY OWNER AND AGENT
+    # ---------------------------------------------------------
+    owner_id = entity_details.get("owner")
+    if owner_id:
+        owner_obj = Users.objects.filter(id=owner_id).first()
+        if not owner_obj:
+            errors.append(f"Owner user with ID {owner_id} does not exist.")
+    else:
+        owner_obj = user
+
+    # Agent logic (Requesting user is the agent)
     agent_obj = Agents.objects.filter(user=user).first()
-    assigned_agent_id = agent_obj.id if agent_obj else None
-    assigned_owner_id = owner_id if owner_id else user.id
+    
+    # ---------------------------------------------------------
+    # 4. VERIFY BANK (If provided)
+    # ---------------------------------------------------------
+    bank_id = entity_details.get("bank")
+    bank_obj = None
+    if bank_id:
+        bank_obj = Entities.objects.filter(id=bank_id, entity_type="Bank").first()
+        if not bank_obj:
+            errors.append(f"Bank entity with ID {bank_id} does not exist.")
 
-    # 7. Bank Code Mapping
-    entity_type = entity_details.get("entity_type")
-    if entity_type == "Bank" and code_value:
-        entity_details["bank_code"] = code_value
-    elif entity_type != "Bank":
-        entity_details["bank_code"] = None
+    # ---------------------------------------------------------
+    # 5. VERIFY CATEGORIES
+    # ---------------------------------------------------------
+    category_ids = entity_details.get("categories", [])
+    category_objs = []
+    if category_ids:
+        category_objs = list(Categories.objects.filter(id__in=category_ids))
+        if len(category_objs) != len(category_ids):
+            errors.append("One or more provided Category IDs are invalid.")
 
-    # 🌟 8. CREATE ENTITY
-    # entity_details still contains: building, country, county, entity_ownership, 
-    # entity_type, entity_level, road, title, town. All of them are passed automatically!
+    # ---------------------------------------------------------
+    # 6. VERIFY LOCATION (GPS)
+    # ---------------------------------------------------------
+    latitude = entity_details.get("latitude")
+    longitude = entity_details.get("longitude")
+    if (latitude is not None and longitude is None) or (latitude is None and longitude is not None):
+        errors.append("Both latitude and longitude must be provided together.")
+
+    # ---------------------------------------------------------
+    # 7. THROW ERRORS BEFORE CREATING ANYTHING
+    # ---------------------------------------------------------
+    if errors:
+        raise exceptions.ValidationError({"errors": errors})
+
+    # ---------------------------------------------------------
+    # 8. CREATE ENTITY (EXPLICIT ASSIGNMENT)
+    # ---------------------------------------------------------
+    entity_level = entity_details.get("entity_level", 0)
+    try:
+        entity_level = int(entity_level)
+    except ValueError:
+        entity_level = 0
+
     entity = Entities.objects.create(
-        owner_id=assigned_owner_id,
-        agent_id=assigned_agent_id,
-        **entity_details
+        title=title.upper(),
+        entity_type=entity_type,
+        entity_ownership=entity_ownership,
+        town=town,
+        road=road,
+        building=building,
+        description=entity_details.get("description", ""),
+        entity_level=entity_level,
+        country=country_obj,
+        county=county_obj,
+        sub_county=sub_county_obj,
+        owner=owner_obj,
+        agent=agent_obj,
+        bank_code=entity_details.get("code") if entity_type == "Bank" else None,
+        # Non-model or specific mapping
+        # plan = None (Assuming plan is handled elsewhere or empty string maps to None)
     )
 
-    # 9. Attach Categories
-    if category_ids and isinstance(category_ids, list):
-        entity.categories.set(category_ids)
+    # ---------------------------------------------------------
+    # 9. ATTACH CATEGORIES
+    # ---------------------------------------------------------
+    if category_objs:
+        entity.categories.set(category_objs)
 
-    # 10. Create Payout Account (If Bank details were provided)
-    if bank_id and account_number:
-        try:
-            PayoutAccounts.objects.create(
-                entity=entity,                 
-                account_entity_id=bank_id,     
-                account_name=account_name or entity.title, 
-                account_number=account_number,
-                account_type="BANK",
-                owner=user,                    
-                is_active="true"
-            )
-        except Exception as e:
-            print(f"Failed to create payout account for entity {entity.id}: {e}")
+    # ---------------------------------------------------------
+    # 10. CREATE PAYOUT ACCOUNT
+    # ---------------------------------------------------------
+    account_number = entity_details.get("account_number")
+    account_name = entity_details.get("account_name")
+    
+    if bank_obj and account_number:
+        PayoutAccounts.objects.create(
+            entity=entity,
+            account_entity=bank_obj,
+            account_name=account_name or entity.title,
+            account_number=account_number,
+            account_type="BANK",
+            owner=user,
+            is_active="true"
+        )
 
-    # 11. Create Location
+    # ---------------------------------------------------------
+    # 11. CREATE LOCATION
+    # ---------------------------------------------------------
     if latitude is not None and longitude is not None:
         try:
             point = Point(float(longitude), float(latitude), srid=4326)
             Locations.objects.create(
                 entity=entity,
                 point=point,
-                farness="", 
+                farness=""
             )
         except Exception as e:
+            # If GIS fails, we might want to let the entity exist but log the failure
             print(f"Failed to create location for entity {entity.id}: {e}")
 
     return entity
