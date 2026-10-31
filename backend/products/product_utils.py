@@ -139,7 +139,7 @@ def create_product(data, user):
 
 
 def get_all_products(user):
-    print
+  
     if user.is_staff:
         # Return all product for admin user
         return Products.objects.filter(active=True)
