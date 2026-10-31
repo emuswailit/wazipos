@@ -910,7 +910,7 @@ def create_local_entity(data, user):
 
     if not title: errors.append("Entity title is required.")
     if not entity_type: errors.append("Entity type is required.")
-    if not town: errors.append("Town is required.")
+    
     
     # ---------------------------------------------------------
     # 2. VERIFY FOREIGN KEYS (Country, County)
