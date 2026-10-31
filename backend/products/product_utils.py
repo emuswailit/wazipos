@@ -298,32 +298,58 @@ def update_product(data, user):
     except Exception as e:
         raise exceptions.ValidationError(e)
 
+from rest_framework import exceptions
+from django.db import transaction
 
 @transaction.atomic
 def update_product(data):
+    product_id = data.get("id")
+    if not product_id:
+        raise exceptions.ValidationError("Product ID is required")
 
-    if Products.objects.filter(id=data["id"]).exists():
+    # Fetch the product once
+    product = Products.objects.filter(id=product_id).first()
+    if not product:
+        raise exceptions.ValidationError("Product not found")
 
-        try:
-            product = Products.objects.filter(id=data["id"]).first()
+    try:
+        # Update preparation safely
+        if "preparation" in data:
             if data["preparation"]:
                 product.preparation_id = data["preparation"]
             else:
                 product.preparation = None
-                product.save()
 
-            product.category_id = data.get("category", product.category_id)
-            product.manufacturer_id = data.get(
-                "manufacturer", product.manufacturer_id)
-            product.title = data.get("title", product.title)
-            product.description = data.get("description", product.description)
-            product.is_pom = data.get("is_pom", product.is_pom)
-            product.save()
+        # Update standard fields
+        if "category" in data:
+            product.category_id = data["category"]
+        if "manufacturer" in data:
+            product.manufacturer_id = data["manufacturer"]
+        if "title" in data:
+            product.title = data["title"]
+        if "description" in data:
+            product.description = data["description"]
+        if "is_pom" in data:
+            product.is_pom = data["is_pom"]
 
-            return product
-        except:
-            raise exceptions.ValidationError("Product not updated")
+        # 🌟 RESET & ADD ALLOWED ENTITIES FRESH
+        if "allowed_entities" in data:
+            new_entities = data["allowed_entities"]
+            if isinstance(new_entities, list):
+                # Clear the old list, remove duplicates, and assign the fresh list
+                product.allowed_entities = list(set(new_entities))
+            else:
+                # If somehow a non-list is passed, reset to empty
+                product.allowed_entities = []
 
+        # Save the product once at the end
+        product.save()
+
+        return product
+
+    except Exception as e:
+        # Catch specific error so the frontend knows exactly what broke
+        raise exceptions.ValidationError(f"Product not updated: {str(e)}")
 
 def search_products(data, user):
     products = []
