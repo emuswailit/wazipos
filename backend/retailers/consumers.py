@@ -909,9 +909,14 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
                             
+                            create_log("info", f"Polling JamboPay API: {transaction_url}")
                             tx_result = requests.get(transaction_url, headers=poll_headers)
                             
+                            # 🟢 LOG TX_RESULT DATA
                             if tx_result:
+                                create_log("info", f"tx_result Status Code: {tx_result.status_code}")
+                                create_log("info", f"tx_result Raw Text: {tx_result.text}")
+                                
                                 try:
                                     tx_data = tx_result.json()
                                     
@@ -938,14 +943,16 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
                                         create_log("info", f"JamboPay API Returned -> Status: {final_status} | Desc: {status_description}")
                                 except ValueError:
-                                    create_log("error", f"JamboPay returned non-JSON response: {tx_result.text}")
+                                    create_log("error", f"JamboPay returned non-JSON response. Raw text: {tx_result.text}")
+                            else:
+                                # 🟢 LOG IF TX_RESULT IS NOT THERE
+                                create_log("error", "tx_result is None or Falsy. JamboPay request failed or returned no response.")
                     except Exception as e:
                         create_log("error", f"JamboPay Poller exception: {str(e)}")
                 else:
                     create_log("info", f"DB Status already {payment.status}. Skipping JamboPay API poll.")
 
                 # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
-                # 🟢 FIX: Ensure description is passed from JamboPay if DB is empty
                 final_description = payment.description
                 if not final_description and tx_data and tx_data.get("description"):
                     final_description = tx_data.get("description")
@@ -957,7 +964,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     "status": payment.status,
                     "reference_number": payment.reference_number,
                     "payment_method_title": payment_method_title,
-                    "description": final_description, # 👈 Guaranteed to be populated
+                    "description": final_description,
                     "jambopay_response": tx_data if tx_data else {
                         "orderId": order_number_str, 
                         "ref": payment.psp_reference_number,
@@ -989,6 +996,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
+
         
 # =====================================================================
 # Retailer product requests
