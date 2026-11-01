@@ -211,9 +211,6 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                         if tx_result and not tx_result == None:
                             try:
                                 tx_data = tx_result.json()
-
-                                
-                                create_log("info",f"TRX DATA {tx_data}")
                                 
                                 # 3. Update DB with whatever JamboPay returns
                                 if tx_data and not tx_data == None:
@@ -246,7 +243,6 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                 "jambopay_response": tx_data if tx_data else {
                     "orderId": payment.reference_number,
                     "ref": payment.psp_reference_number,
-                    "provider_reference_number": payment.provider_reference_number,
                     "status": payment.status,
                     "description": payment.description
                 }

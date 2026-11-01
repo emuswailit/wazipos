@@ -2889,7 +2889,8 @@ def process_customer_order_payment(
             )
             recompute_order_payment_state(customer_order)
             customer_order.status = "COMPLETE"
-            customer_order.save(update_fields=["status", "updated"])
+            customer_order.reference_number = reference_number
+            customer_order.save(update_fields=["status", "updated","reference_number"])
             use_reference_number(reference_number)
             return [], customer_order
         except Exception as e:

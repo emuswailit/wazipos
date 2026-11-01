@@ -840,7 +840,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
             if customer_order:
                 # 🟢 2. Extract the actual string value from the DocumentNumbers object for JamboPay
-                order_number_str = customer_order.order_number.document_number if customer_order.order_number else self.order_number
+                order_number_str = customer_order.reference_number
 
                 # 🟢 2.5 Extract the Payment Method Title safely
                 payment_method_title = (
