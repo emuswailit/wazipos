@@ -4,6 +4,7 @@ from __future__ import absolute_import, unicode_literals
 import os
 from celery import Celery
 from celery.schedules import crontab
+from decouple import config # 👈 Import config to use .env
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.development")
@@ -12,7 +13,8 @@ app = Celery("wazi")
 
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-app.conf.broker_url = "redis://127.0.0.1:6379/0"
+# 🟢 Fix 1: Read Broker URL from .env or fallback to localhost
+app.conf.broker_url = config("CELERY_BROKER_URL", default="redis://127.0.0.1:6379/0")
 app.conf.enable_utc = False
 app.conf.update(timezone="Africa/Nairobi")
 
@@ -123,8 +125,6 @@ app.conf.beat_schedule = {
     },
 
     # ── DeepRead AI Prescription Safety Net ────────────────────────
-    # Scans for uploaded prescriptions that failed to extract items
-    # and retries them via DeepRead. Runs every 5 minutes.
     "retry-pending-prescription-extractions": {
         "task": "retailers.tasks.retry_pending_prescription_extractions",
         "schedule": 300.0, 
@@ -132,29 +132,27 @@ app.conf.beat_schedule = {
     },
 
     # ── Subscription Payments Reconciliation ───────────────────────
-    # Checks for PENDING subscription payments in case webhooks fail
-    # or the user closes their browser. Runs every five seconds.
+    # 🟢 FIXED: Changed from 3.0s to 60.0s to prevent CPU exhaustion
     "check-pending-subscription-payments": {
         "task": "subscriptions.tasks.check_pending_subscription_payments",
-        "schedule": 3.0,
+        "schedule": 60.0, 
         "args": None,
     },
 
     # ── Customer Order Payments Reconciliation ─────────────────────
-    # 🟢 ADDED: Checks for PENDING customer order payments in case webhooks fail
-    # or the user closes their browser. Runs every five seconds.
+    # 🟢 FIXED: Changed from 5.0s to 60.0s. 
+    # The WebSocket handles real-time (5s) for active users.
+    # Celery handles cleanup (60s) for abandoned users.
     "check-pending-customer-order-payments": {
         "task": "retailers.tasks.check_jambopay_payment_status",
-        "schedule": 5.0,
+        "schedule": 60.0, 
         "args": None,
     },
 
     # ── Hourly Subscription Push ───────────────────────────────────
-    # Pushes the latest subscription status to all connected clients
-    # over WebSockets to ensure the frontend stays in sync.
     "push-hourly-subscriptions": {
         "task": "subscriptions.tasks.push_hourly_subscriptions",
-        "schedule": 60.0, # Every 1 minute
+        "schedule": 60.0, 
         "args": None,
     },
 }

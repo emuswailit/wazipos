@@ -7,6 +7,7 @@ from decouple import config
 from uuid import UUID
 from datetime import timedelta
 from django.utils import timezone
+from django.db import transaction
 import json
 import logging
 
@@ -43,9 +44,11 @@ channel_layer = get_channel_layer()
 # =====================================================================
 
 def get_non_cash_today_customer_order_payments():
+    today = timezone.now().date()
     qs = models.CustomerOrderPayment.objects.filter(
         is_validated=False,
         status="PENDING",
+        created__date=today, # 👈 Added date filter
     ).exclude(
         payment_method__title="CASH",
     ).order_by("-created")
@@ -54,74 +57,74 @@ def get_non_cash_today_customer_order_payments():
 
 @app.task
 def check_jambopay_payment_status():
-    payment = None
     token = get_auth_token()
 
     payments = get_non_cash_today_customer_order_payments()
 
-    if len(payments) > 0:
+    if payments.exists():
         for payment in payments:
             errors, result_json = jambopay_check_payment_status(
                 payment.psp_reference_number
             )
             print("RESULT JSON", result_json)
 
-            if result_json and result_json.get("status") == "SUCCESS":
-                payment.provider_reference_number = result_json.get("providerRef")
-                payment.status = result_json["status"]
-                payment.description = result_json.get("description", "")
-                payment.save()
+            if not result_json:
+                continue
 
-                payment.customer_order.is_paid = "true"
-                payment.customer_order.save()
+            status = result_json.get("status", "").upper()
+            description = result_json.get("description", "")
+            provider_ref = result_json.get("providerRef")
 
-                payment.is_validated = True
-                payment.save()
+            if status == "SUCCESS":
+                with transaction.atomic(): # 👈 Wrap in atomic transaction
+                    payment.provider_reference_number = provider_ref
+                    payment.status = "SUCCESS"
+                    payment.description = description
+                    payment.is_validated = True
+                    payment.save()
 
-                order_items = models.CustomerOrderItems.objects.filter(
-                    customer_order=payment.customer_order
-                ).all()
-                print("order_items", order_items)
-                update_stock(payment.customer_order)
+                    payment.customer_order.is_paid = "true"
+                    payment.customer_order.save()
+
+                    update_stock(payment.customer_order)
                 
                 # 🟢 INSTANTLY NOTIFY FRONTEND
                 broadcast_order_payment_update(
                     reference_number=payment.reference_number,
                     status="SUCCESS",
-                    description=payment.description
+                    description=description
                 )
 
-            elif result_json and result_json.get("status") == "FAILED":
-                payment.status = "FAILED"
-                payment.is_validated = True
-                payment.description = result_json.get("description", "")
-                payment.save()
+            elif status == "FAILED":
+                with transaction.atomic():
+                    payment.status = "FAILED"
+                    payment.is_validated = True
+                    payment.description = description
+                    payment.save()
 
-                payment.customer_order.is_paid = "false"
-                payment.customer_order.save()
+                    payment.customer_order.is_paid = "false"
+                    payment.customer_order.save()
                 
                 # 🟢 INSTANTLY NOTIFY FRONTEND
                 broadcast_order_payment_update(
                     reference_number=payment.reference_number,
                     status="FAILED",
-                    description=payment.description
+                    description=description
                 )
 
             else:
-                payment.is_validated = True
-                payment.status = "FAILED"
-                payment.description = (
-                    result_json.get("description", "") if result_json else ""
-                )
-                payment.save()
+                with transaction.atomic():
+                    payment.is_validated = True
+                    payment.status = "FAILED"
+                    payment.description = description
+                    payment.save()
                 
                 # 🟢 INSTANTLY NOTIFY FRONTEND
                 broadcast_order_payment_update(
                     reference_number=payment.reference_number,
                     status="FAILED",
-                    description=payment.description
+                    description=description
                 )
-                # 🟢 FIXED: changed `return errors` to `continue` so it processes other payments
                 continue 
 
     else:
@@ -314,9 +317,11 @@ def process_collection_settlement(amount, account_number, reference_number):
 
 
 def get_succesful_unsynced_today_customer_order_payments():
+    today = timezone.now().date()
     qs = models.CustomerOrderPayment.objects.filter(
         is_validated=False,
         status="SUCCESS",
+        created__date=today, # 👈 Added date filter
     ).exclude(
         payment_method__title="CASH",
     ).order_by("-created")
@@ -326,9 +331,9 @@ def get_succesful_unsynced_today_customer_order_payments():
 @app.task
 def settle_cashless_customer_order_payments():
     unsettled = get_succesful_unsynced_today_customer_order_payments()
-    if len(unsettled) > 0:
+    if unsettled.exists():
         print(
-            f"We got {len(unsettled)} unsettled customer order payments"
+            f"We got {unsettled.count()} unsettled customer order payments"
         )
         for ubop in unsettled:
             reference_number = generate_reference_number(
