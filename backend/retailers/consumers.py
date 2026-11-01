@@ -946,6 +946,9 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
                                         # 🟢 LOG API RESULT
                                         create_log("info", f"JamboPay API Returned -> Status: {final_status} | Desc: {status_description}")
+
+                                    else:
+                                        create_log("info", f"TXX NONE")
                                 except ValueError:
                                     create_log("error", f"JamboPay returned non-JSON response: {tx_result.text}")
                             else:
