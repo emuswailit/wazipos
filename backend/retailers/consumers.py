@@ -877,11 +877,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
         if customer_order:
             # 🟢 2. Extract the actual string value (document_number) for JamboPay
-            order_number_str = (
-                customer_order.order_number.document_number 
-                if customer_order.order_number 
-                else customer_order.reference_number
-            )
+            order_number_str = customer_order.reference_number
 
             # 🟢 2.5 Extract the Payment Method Title safely
             payment_method_title = (
@@ -909,6 +905,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         token = auth_res.json().get("access_token") if auth_res.json() else None
                         
                         if token:
+                            create_log("error",f"REF {order_number_str}")
                             # 🟢 4. Use the extracted string for the JamboPay URL
                             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
