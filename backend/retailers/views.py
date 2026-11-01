@@ -4,27 +4,28 @@
 import datetime
 from decimal import Decimal
 from core.constants import EntityType
-
+import math
+import logging
 
 # ---------- Third-party ----------
 from django.contrib.gis.geos import fromstr
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import exceptions, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 
 # ---------- Local apps ----------
-from authentication.models import Entities
-from authentication.serializers import CategoriesSerializer, EntityLocationHybridSerializer,CollectionPointSerializer
+from authentication.models import Entities, CollectionPoints
+from authentication.serializers import CategoriesSerializer, EntityLocationHybridSerializer, CollectionPointSerializer
 from authentication.validators import authentication_models_validators
-from authentication.validators.authentication_models_validators import (
-    validate_entity,
-)
+from authentication.validators.authentication_models_validators import validate_entity, validate_dependant
 from core.responses import (
     custom_error_response,
     custom_errors_response,
@@ -32,12 +33,14 @@ from core.responses import (
     custom_success_message,
 )
 from employees.models import Employees
+from entitylocations.models import Locations
 from products.models import Products
 from retailers.models import (
     IndentItemSource,
     RetailerIndent,
     RetailerIndentItem,
     RetailerReceipts,
+    ShippingConfiguration,
 )
 from retailers.retail_permissions import EntitySubscriptionPermission
 from retailers.serializers import RetailerReceiptsSerializer
@@ -48,7 +51,7 @@ from wholesalers.models import (
     WholesalerReceipts,
 )
 from wholesalers.serializers import RetailerOrdersSerializer, WholesalerReceiptReturnListSerializer
-from .utils import daily_retailer_report, retailer_utils
+from .utils.shipping_utils import calculate_shipping_rate
 from . import customer_order_responses, models, retail_permissions, serializers
 from .serializers import (
     RetailerIndentItemEditSerializer,
@@ -69,9 +72,11 @@ from .utils import (
     expiry_report_utils,
     stock_report_utils,
     low_stock_report_utils,
-    product_movement_report_utils
+    product_movement_report_utils,
+    deep_read_utils,
 )
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -79,6 +84,18 @@ from .utils import (
 
 REQUEST_EXPIRY_DAYS = 14
 WHOLESALER_ENTITY_TYPES = ["GeneralWholesaler", "PharmaceuticalWholesaler"]
+
+
+# Helper function for distance calculation
+def calculate_haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate the great circle distance in kilometers between two points on the earth."""
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371  # Radius of earth in kilometers
+    return c * r
 
 
 # ===========================================================================
@@ -197,10 +214,8 @@ def retailerReceiptsAdminAPIView(request):
             1, "Retailer inventory receipt could not be updated", errors
         )
 
-
-
     elif action == "GetPurchasesReturns":
-        purchases_returns =WholesalerReceiptReturns.objects.filter(
+        purchases_returns = WholesalerReceiptReturns.objects.filter(
             retailer_entity=request.user.entity
         )
         paginator = PageNumberPagination()
@@ -273,26 +288,6 @@ def retailerReceiptsAdminAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
 
-        # -----------------------------------------------------------------
-    # Reports — daily sales
-    #
-    # Default: today. Also accepts:
-    #   { "date": "YYYY-MM-DD" }              — single day
-    #   { "from": "YYYY-MM-DD" }              — from that day through today
-    #   { "from": "YYYY-MM-DD", "to": "..." } — explicit range
-    # Staff may pass "entity_id"; others are scoped to their own entity.
-    # -----------------------------------------------------------------
-
-    # -----------------------------------------------------------------
-    # Reports — daily sales
-    #
-    # Default: today. Also accepts:
-    #   { "date": "YYYY-MM-DD" }              — single day
-    #   { "from": "YYYY-MM-DD" }              — from that day through today
-    #   { "from": "YYYY-MM-DD", "to": "..." } — explicit range
-    # Staff may pass "entity_id"; others are scoped to their own entity.
-    # -----------------------------------------------------------------
-
     elif action == "GetDailySalesReport":
         errors, report = daily_retailer_report.get_daily_sales_report(
             request.data, request.user,
@@ -341,13 +336,6 @@ def retailerReceiptsAdminAPIView(request):
             1, "Could not build stock report", errors,
         )
 
-    # -----------------------------------------------------------------
-    # Reports — low stock / reorder
-    #
-    # Lists products below their reorder target with suggested order
-    # quantities, cost estimates, and wholesaler groupings.
-    # -----------------------------------------------------------------
-
     elif action == "GetLowStockReport":
         errors, report = low_stock_report_utils.get_low_stock_report(
             request.data, request.user,
@@ -359,13 +347,6 @@ def retailerReceiptsAdminAPIView(request):
         return custom_errors_response(
             1, "Could not build low stock report", errors,
         )
-
-    # -----------------------------------------------------------------
-    # Reports — product movement ledger
-    #
-    # Full IN/OUT history for one product, with running balance,
-    # daily summary, and per-batch breakdown.
-    # -----------------------------------------------------------------
 
     elif action == "GetProductMovementReport":
         errors, report = product_movement_report_utils.get_product_movement_report(
@@ -380,6 +361,8 @@ def retailerReceiptsAdminAPIView(request):
         )
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
 # ===========================================================================
 # Client orders (customer-facing)
 # ===========================================================================
@@ -441,39 +424,9 @@ def clientOrdersAPIView(request):
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
 
-import math
-from decimal import Decimal
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework import permissions, exceptions
-from rest_framework.pagination import PageNumberPagination
-from authentication.serializers import EntityLocationHybridSerializer, CategoriesSerializer
-from authentication.validators.authentication_models_validators import validate_entity
-from core.responses import custom_success_message, custom_json_response, custom_error_response, custom_errors_response
-from entitylocations.models import Locations
-from . import models, retail_permissions, serializers, customer_order_responses
-from .utils import retailer_utils
-from .models import ShippingConfiguration
-
-import math
-from decimal import Decimal
-from authentication.serializers import EntityLocationHybridSerializer, CategoriesSerializer
-from authentication.validators.authentication_models_validators import validate_entity
-from core.responses import custom_success_message, custom_json_response, custom_error_response, custom_errors_response
-from entitylocations.models import Locations
-from . import models, retail_permissions, serializers, customer_order_responses
-from .utils import retailer_utils
-from .models import ShippingConfiguration
-
-# Helper function for distance calculation
-def calculate_haversine_distance(lat1, lon1, lat2, lon2):
-    """Calculate the great circle distance in kilometers between two points on the earth."""
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    r = 6371  # Radius of earth in kilometers
-    return c * r
+# ===========================================================================
+# Joint API View (Used by your frontend context)
+# ===========================================================================
 
 @api_view(["POST"])
 @permission_classes(
@@ -485,7 +438,44 @@ def retailerReceiptsJointAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-    if action == "GetRetailerReceipts":
+    # 🟢 FIX: Added CreateRetailerReceipt to the Joint View
+    if action == "CreateRetailerReceipt":
+        errors, retailer_receipt = retailer_utils.create_retailer_receipt_directly(
+            request.data, request.user
+        )
+        if retailer_receipt:
+            serializer = serializers.RetailerReceiptsSerializer(
+                retailer_receipt, many=False, context={"request": request}
+            )
+            return custom_success_message(
+                0,
+                "Retailer inventory receipt created successfully",
+                serializer.data,
+                "retailer_receipt",
+            )
+        return custom_errors_response(
+            1, "Retailer inventory receipt could not be created", errors
+        )
+
+    elif action == "UpdateRetailerReceipt":
+        errors, retailer_receipt = retailer_utils.update_retailer_receipt_directly(
+            request.data, request.user
+        )
+        if retailer_receipt:
+            serializer = serializers.RetailerReceiptsSerializer(
+                retailer_receipt, many=False, context={"request": request}
+            )
+            return custom_success_message(
+                0,
+                "Retailer inventory receipt updated successfully",
+                serializer.data,
+                "retailer_receipt",
+            )
+        return custom_errors_response(
+            1, "Retailer inventory receipt could not be updated", errors
+        )
+
+    elif action == "GetRetailerReceipts":
         retailer_receipts = retailer_utils.get_retailer_receipts(request.user)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(retailer_receipts, request)
@@ -783,8 +773,10 @@ def retailerReceiptsJointAPIView(request):
         except ValueError:
             raise exceptions.ValidationError("Invalid coordinates or numeric formats")
 
+    # 🟢 FIX: Fallback to prevent NoneType crash
+    raise exceptions.ValidationError(f"Action {action} is unknown")
 
-        
+
 # ===========================================================================
 # Staff — indents / orders / prescriptions
 # ===========================================================================
@@ -1491,62 +1483,6 @@ def customerOrdersAPIView(request):
 # Prescriptions (remote API)
 # ===========================================================================
 
-import logging
-
-from rest_framework import exceptions, permissions, status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.pagination import PageNumberPagination
-
-from retailers import retail_permissions 
-from retailers import serializers
-from retailers.utils import  retail_prescriptions_utils
-from retailers.serializers import RetailerReceiptsSerializer
-# from your response helpers:
-# from core.responses import custom_success_message, custom_errors_response
-
-logger = logging.getLogger(__name__)
-
-
-# Explicit action list — caught by tests, not at runtime by accident.
-
-import math
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework import permissions, exceptions
-from rest_framework.pagination import PageNumberPagination
-from entitylocations.models import Locations
-from core.responses import custom_success_message, custom_errors_response
-# ... (your other imports) ...
-
-# Helper function for distance calculation (include this if not already in the file)
-def calculate_haversine_distance(lat1, lon1, lat2, lon2):
-    """Calculate the great circle distance in kilometers between two points on the earth."""
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    r = 6371  # Radius of earth in kilometers
-    return c * r
-
-import math
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework import permissions, exceptions
-from rest_framework.pagination import PageNumberPagination
-from entitylocations.models import Locations
-from core.responses import custom_success_message, custom_errors_response
-# ... (your other imports) ...
-
-# Helper function for distance calculation
-def calculate_haversine_distance(lat1, lon1, lat2, lon2):
-    """Calculate the great circle distance in kilometers between two points on the earth."""
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    r = 6371  # Radius of earth in kilometers
-    return c * r
-
 KNOWN_ACTIONS = {
     "UpdateRetailPrescription",
     "GetRetailPrescriptionDetails",
@@ -1561,11 +1497,8 @@ KNOWN_ACTIONS = {
     "GetAdjacentPharmacies",
 }
 
-# Inside your views.py
-
 def _paginated_prescriptions_response(queryset, request):
     """Shared paginated response for the two 'retrieve prescriptions' actions."""
-    # If the util returns None, treat it as an empty list
     if queryset is None:
         queryset = models.Prescriptions.objects.none()
         
@@ -1584,14 +1517,6 @@ def _paginated_prescriptions_response(queryset, request):
     permissions.IsAuthenticated,
 ])
 def remoteRetailPrescriptionsAPIView(request):
-    """
-    Action-dispatch endpoint for retail prescriptions.
-
-    Expected payload: {"action": "<KNOWN_ACTIONS member>", ...action args}
-    All business logic lives in `retail_prescriptions_utils`; this view is
-    strictly a thin dispatcher, serializer, and envelope wrapper.
-    """
-    # --- 1. Validate action ---
     if not isinstance(request.data, dict):
         raise exceptions.ValidationError(
             "Request body must be a JSON object."
@@ -1604,7 +1529,6 @@ def remoteRetailPrescriptionsAPIView(request):
     if action not in KNOWN_ACTIONS:
         raise exceptions.ValidationError(f"Action {action} is unknown")
 
-    # --- 2. Dispatch ---
     try:
         if action == "UpdateRetailPrescription":
             errors, prescription = (
@@ -1762,12 +1686,10 @@ def remoteRetailPrescriptionsAPIView(request):
                     0, "Retail prescription item created successfully",
                     serializer.data, "prescription",
                 )
-            # FIX: always return an error response — never fall through.
             return custom_errors_response(
                 1, "Retail prescription item not created", errors
             )
 
-        # --- GetAdjacentPharmacies Action ---
         if action == "GetAdjacentPharmacies":
             lat = request.data.get("latitude")
             lng = request.data.get("longitude")
@@ -1775,7 +1697,6 @@ def remoteRetailPrescriptionsAPIView(request):
             if not lat or not lng:
                 raise exceptions.ValidationError("Latitude and longitude are required")
 
-            # ONLY query for PharmaceuticalRetailer (Removed "PHARMACEUTICALRETAILER")
             locations = Locations.objects.filter(
                 entity__entity_type="PharmaceuticalRetailer"
             ).select_related("entity")
@@ -1785,24 +1706,20 @@ def remoteRetailPrescriptionsAPIView(request):
                 if not loc.point:
                     continue
                 
-                # Use the Haversine helper
                 dist = calculate_haversine_distance(
                     float(lat), float(lng),
                     float(loc.point.y), float(loc.point.x)
                 )
                 
-                # Only include pharmacies within 50km
                 if dist <= 50.0:
                     results.append({
                         "entity": loc.entity,
                         "distance": dist
                     })
             
-            # Sort by closest and limit to top 30
             results.sort(key=lambda x: x["distance"])
             results = results[:30]
             
-            # Format for the frontend EntityAutocomplete
             pharmacies_data = [
                 {
                     "remote_id": str(r["entity"].id),
@@ -1811,7 +1728,7 @@ def remoteRetailPrescriptionsAPIView(request):
                     "town": getattr(r["entity"], "town", ""),
                     "phone": getattr(r["entity"], "phone", ""),
                     "distance_km": round(r["distance"], 1),
-                    "rating": getattr(r["entity"], "rating", None), # Added rating
+                    "rating": getattr(r["entity"], "rating", None),
                 }
                 for r in results
             ]
@@ -1822,12 +1739,8 @@ def remoteRetailPrescriptionsAPIView(request):
             )
 
     except exceptions.APIException:
-        # DRF exceptions already carry the right HTTP status; re-raise.
         raise
     except Exception:
-        # Anything from the utils layer that isn't an APIException
-        # gets logged with the action + user, and returned as a 400 with
-        # the safe, generic message (no stack trace to the client).
         logger.exception(
             "remoteRetailPrescriptionsAPIView failed: action=%s user_id=%s",
             action, getattr(request.user, "id", None),
@@ -1838,8 +1751,6 @@ def remoteRetailPrescriptionsAPIView(request):
             None,
         )
 
-    # Unreachable: KNOWN_ACTIONS was checked above. Kept as a safety net in
-    # case a handler is deleted without updating KNOWN_ACTIONS.
     raise exceptions.ValidationError(f"Action {action} is not implemented")
 
 
@@ -1897,35 +1808,6 @@ def retailersShippinRatesAPIView(request):
 # Prescriptions — create (multipart)
 # ===========================================================================
 
-from .utils import deep_read_utils
-import datetime
-from django.contrib.gis.geos import fromstr
-from django.db import IntegrityError, transaction
-from rest_framework import exceptions, generics, permissions, status
-from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.response import Response
-
-from authentication.validators import authentication_models_validators
-from . import models, retail_permissions, serializers
-
-# retailers/views.py (or wherever your view lives)
-
-import datetime
-import logging
-from django.utils import timezone
-from django.contrib.gis.geos import fromstr
-from django.db import IntegrityError, transaction
-from rest_framework import generics, status, exceptions
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-
-# ... (your other imports like models, serializers, retail_permissions, deep_read_utils, authentication_models_validators) ...
-
-logger = logging.getLogger(__name__)
-
-
-
 class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
     """Create new retail prescription."""
     name = "retail-prescription-create"
@@ -1941,8 +1823,6 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         retailer = None
         errors_messages = []
 
-        # --- 1. Extract Request Data ---
-        # `patient` is now optional since the frontend supports guest/walk-in prescriptions
         dependant_id = request.POST.get("patient", None)
         
         origin_latitude = request.POST.get("origin_latitude", None)
@@ -1958,9 +1838,8 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         if destination_latitude and destination_longitude:
             destination_point = fromstr(f"POINT({destination_longitude} {destination_latitude})", srid=4326)
 
-        # --- 2. Validation ---
         if dependant_id:
-            dependant = authentication_models_validators.validate_dependant(dependant_id)
+            dependant = validate_dependant(dependant_id)
             if not dependant:
                 errors_messages.append("Invalid patient ID provided.")
                 return Response(
@@ -1986,9 +1865,8 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        retailer = authentication_models_validators.validate_entity(pharmacy_id)
+        retailer = validate_entity(pharmacy_id)
         
-        # Ensure `retailer` actually exists before checking entity_type
         if not retailer:
             errors_messages.append("Retailer entity not found")
             return Response(
@@ -2001,7 +1879,6 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        # FIX: Use EntityType enum instead of hardcoded string
         if retailer.entity_type != EntityType.PHARMACEUTICAL_RETAILER.value:
             errors_messages.append("Selected entity is not a pharmaceutical retailer")
             return Response(
@@ -2014,7 +1891,6 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        # Use timezone.now() instead of datetime.datetime.now() for USE_TZ=True
         minutes_ago = timezone.now() - datetime.timedelta(minutes=2)
         if models.Prescriptions.objects.filter(
             created_by=request.user,
@@ -2067,16 +1943,14 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        # --- 3. Save Prescription & Images ---
         try:
             with transaction.atomic():
                 serializer.save(
                     created_by=request.user,
-                    patient=dependant, # Will be None if no ID was passed
+                    patient=dependant,
                     origin_point=origin_point,
                     destination_point=destination_point,
                 )
-                # Use serializer.instance instead of redundant DB query
                 item = serializer.instance
 
                 saved_images = []
@@ -2092,7 +1966,6 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         except IntegrityError as exc:
             raise exceptions.ValidationError(exc)
 
-        # --- 4. DeepRead AI Extraction (Optional & Safe) ---
         extracted_data = None
         
         try:
@@ -2102,37 +1975,31 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 if hasattr(first_image_file, 'seek'):
                     first_image_file.seek(0)
                 
-                # Mark as processing
                 item.ai_extraction_status = "PROCESSING"
                 item.save(update_fields=["ai_extraction_status"])
                     
                 extracted_data = deep_read_utils.extract_prescription_data(first_image_file)
 
-                # If extraction was successful, auto-create the items
                 if extracted_data and extracted_data.get("medications"):
                     deep_read_utils.map_extracted_medications_to_prescription_items(
                         extracted_data, item, retailer, request.user
                     )
                 
-                # Mark as completed
                 item.ai_extraction_status = "COMPLETED"
                 item.ai_extracted_at = timezone.now()
                 item.save(update_fields=["ai_extraction_status", "ai_extracted_at"])
                     
         except Exception as e:
             logger.error(f"DeepRead AI Extraction failed for prescription {item.id}: {e}")
-            # Mark as failed
             item.ai_extraction_status = "FAILED"
             item.ai_extraction_error = str(e)
             item.ai_extracted_at = timezone.now()
             item.save(update_fields=["ai_extraction_status", "ai_extraction_error", "ai_extracted_at"])
 
-        # --- 5. Return Response ---
         return Response(
             data={
                 "response_code": 0,
                 "response_message": "Retail prescription successfully created",
-                # Refresh to ensure we serialize the newly created AI items
                 "prescription": serializers.RetailPrescriptionsSerializer(
                     item, context={"request": request}
                 ).data,
@@ -2141,6 +2008,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
 
 # ===========================================================================
 # Indent — close and generate orders
@@ -2221,9 +2089,6 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                     final_price = Decimal(str(item["price"]))
                     gross_subtotal = Decimal(str(item["total"]))
 
-                    # Sync the frontend values onto the existing indent line.
-                    # Only real DB columns are written here — the model's
-                    # recalculate() derives bonus, totals, and profit.
                     indent_item = RetailerIndentItem.objects.filter(
                         entity=entity,
                         retailer_indent=indent,
@@ -2496,12 +2361,7 @@ class RetailerIndentItemUpdateView(APIView):
         )
 
     def _recompute_amounts(self, item):
-        """Recompute derived cost/revenue/profit for a line.
-
-        Note: `item_gross_total_amount` and `item_net_total_amount` are
-        model @property values — they cannot be persisted here. We only
-        persist the JSON `profit_estimate`.
-        """
+        """Recompute derived cost/revenue/profit for a line."""
         indent = item.retailer_indent
         pricing_percentage = float(indent.pricing_percentage or 30)
 
@@ -2635,10 +2495,6 @@ class RetailerIndentItemCreateView(APIView):
 
         unit_price = receipt.final_unit_selling_price or 0
 
-        # NB: `final_unit_price` and `item_gross_total_amount` are model
-        # @property values, not DB columns. `supplier_unit_selling_price`
-        # is the persisted price input; the model's recalculate() derives
-        # the rest.
         item = RetailerIndentItem.objects.create(
             entity=entity,
             owner=request.user,
@@ -2817,16 +2673,6 @@ def productRequestsAPIView(request):
     _, message, errors = result
     return custom_errors_response(1, message, errors)
 
-# retailers/views.py
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from decimal import Decimal
-from django.contrib.gis.geos import Point
-from authentication.models import Entities, CollectionPoints
-from .utils.shipping_utils import calculate_shipping_rate
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
