@@ -5,7 +5,6 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.development")
 
@@ -138,6 +137,15 @@ app.conf.beat_schedule = {
     "check-pending-subscription-payments": {
         "task": "subscriptions.tasks.check_pending_subscription_payments",
         "schedule": 3.0,
+        "args": None,
+    },
+
+    # ── Customer Order Payments Reconciliation ─────────────────────
+    # 🟢 ADDED: Checks for PENDING customer order payments in case webhooks fail
+    # or the user closes their browser. Runs every five seconds.
+    "check-pending-customer-order-payments": {
+        "task": "retailers.tasks.check_jambopay_payment_status",
+        "schedule": 5.0,
         "args": None,
     },
 

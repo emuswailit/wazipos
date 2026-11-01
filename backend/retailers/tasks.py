@@ -67,9 +67,7 @@ def check_jambopay_payment_status():
             print("RESULT JSON", result_json)
 
             if result_json and result_json.get("status") == "SUCCESS":
-                payment.provider_reference_number = result_json.get(
-                    "providerRef"
-                )
+                payment.provider_reference_number = result_json.get("providerRef")
                 payment.status = result_json["status"]
                 payment.description = result_json.get("description", "")
                 payment.save()
@@ -85,6 +83,13 @@ def check_jambopay_payment_status():
                 ).all()
                 print("order_items", order_items)
                 update_stock(payment.customer_order)
+                
+                # 🟢 INSTANTLY NOTIFY FRONTEND
+                broadcast_order_payment_update(
+                    reference_number=payment.reference_number,
+                    status="SUCCESS",
+                    description=payment.description
+                )
 
             elif result_json and result_json.get("status") == "FAILED":
                 payment.status = "FAILED"
@@ -94,6 +99,13 @@ def check_jambopay_payment_status():
 
                 payment.customer_order.is_paid = "false"
                 payment.customer_order.save()
+                
+                # 🟢 INSTANTLY NOTIFY FRONTEND
+                broadcast_order_payment_update(
+                    reference_number=payment.reference_number,
+                    status="FAILED",
+                    description=payment.description
+                )
 
             else:
                 payment.is_validated = True
@@ -102,7 +114,15 @@ def check_jambopay_payment_status():
                     result_json.get("description", "") if result_json else ""
                 )
                 payment.save()
-                return errors
+                
+                # 🟢 INSTANTLY NOTIFY FRONTEND
+                broadcast_order_payment_update(
+                    reference_number=payment.reference_number,
+                    status="FAILED",
+                    description=payment.description
+                )
+                # 🟢 FIXED: changed `return errors` to `continue` so it processes other payments
+                continue 
 
     else:
         print("No pending customer order payments to sync")
@@ -119,26 +139,37 @@ class UUIDEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
+def broadcast_order_payment_update(reference_number, status, description=""):
+    """
+    🟢 Helper to broadcast a signal to the specific customer order payment WebSocket group.
+    Triggered by Celery tasks or JamboPay webhooks to instantly notify the frontend.
+    """
+    try:
+        channel_layer = get_channel_layer()
+        
+        # This matches the `group_name` created in CustomerOrderPaymentConsumer
+        group_name = f"payment_{reference_number}"
+        
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                # This matches the method name `send_payment_status` in the consumer
+                "type": "send_payment_status",
+                "payment": {
+                    "reference_number": reference_number,
+                    "status": status,
+                    "description": description,
+                }
+            }
+        )
+        create_log("info", f"Broadcasted order payment status for {reference_number}: {status}")
+    except Exception as e:
+        create_log("error", f"Failed to broadcast order payment update WS message: {str(e)}")
+
+
 @app.task
 def get_wholesaler_discounts():
     print("To be corrected")
-    # retailer_receipts = []
-    # print("Getting wholesaler discounts....")
-    # receipts = WholesalerReceipts.objects.filter(pack_quantity__gte=1).all()
-    #
-    # retailer_receipts = WholesalerReceiptsSerializer(
-    #     receipts, many=True, context={'request': request}
-    # ).data
-    # data = json.dumps(retailer_receipts, cls=UUIDEncoder)
-    # result = async_to_sync(channel_layer.group_send)(
-    #     'wholesaler-discounts',
-    #     {
-    #         "type": "send_wholesaler_discounts",
-    #         "name": "Mikey",
-    #         "data": data
-    #     },
-    # )
-    # return result
 
 
 @app.task
@@ -283,7 +314,6 @@ def process_collection_settlement(amount, account_number, reference_number):
 
 
 def get_succesful_unsynced_today_customer_order_payments():
-    # NOTE: fixed typo — was `is_validate=True`, must be `is_validated=True`
     qs = models.CustomerOrderPayment.objects.filter(
         is_validated=False,
         status="SUCCESS",
@@ -335,15 +365,10 @@ def settle_cashless_customer_order_payments():
 
 @app.task(
     name="retailers.tasks.update_variation_metrics",
-    time_limit=60 * 30,       # hard cap: 30 minutes
-    soft_time_limit=60 * 25,  # raise SoftTimeLimitExceeded at 25 min
+    time_limit=60 * 30,       
+    soft_time_limit=60 * 25,  
 )
 def update_variation_metrics():
-    """
-    Full recompute across every RetailerVariations row.
-
-    Schedule via celery beat (see CELERY_BEAT_SCHEDULE in settings).
-    """
     result = run_variation_metrics_update(config=MetricsConfig())
     logger.info(
         "variation metrics: processed=%s updated=%s failed=%s in %ss",
@@ -362,11 +387,6 @@ def update_variation_metrics():
     soft_time_limit=60 * 12,
 )
 def update_variation_metrics_for_entity(entity_id):
-    """
-    Same as above, scoped to a single entity. Useful after a bulk
-    inventory sync so the reorder thresholds refresh immediately
-    without waiting for the nightly run.
-    """
     result = run_variation_metrics_update(
         config=MetricsConfig(),
         entity_id=str(entity_id),
@@ -388,12 +408,9 @@ def update_variation_metrics_for_entity(entity_id):
 
 @app.task(
     name="retailers.tasks.process_prescription_with_deepread",
-    time_limit=60 * 5, # 5 minute hard limit
+    time_limit=60 * 5, 
 )
 def process_prescription_with_deepread(prescription_id, image_id):
-    """
-    Background task to extract items from a prescription image using DeepRead AI.
-    """
     from .utils import deep_read_utils
 
     logger.info(f"Starting DeepRead extraction for Prescription {prescription_id}")
@@ -402,10 +419,8 @@ def process_prescription_with_deepread(prescription_id, image_id):
         prescription = models.Prescriptions.objects.get(id=prescription_id)
         image_obj = models.PrescriptionImages.objects.get(id=image_id)
         
-        # 1. Call the AI Utility
         extracted_data = deep_read_utils.extract_prescription_data(image_obj.image)
         
-        # 2. Map and Save the Items
         if extracted_data and extracted_data.get("medications"):
             deep_read_utils.map_extracted_medications_to_prescription_items(
                 extracted_data=extracted_data,
@@ -415,7 +430,6 @@ def process_prescription_with_deepread(prescription_id, image_id):
             )
             logger.info(f"DeepRead successfully extracted {len(extracted_data['medications'])} items for Prescription {prescription_id}")
             
-        # 3. Notify the frontend via WebSocket
         load_user_prescriptions.delay()
         
         return {"status": "success", "prescription_id": str(prescription_id)}
@@ -427,28 +441,21 @@ def process_prescription_with_deepread(prescription_id, image_id):
 
 @app.task(
     name="retailers.tasks.retry_pending_prescription_extractions",
-    time_limit=60 * 10, # 10 minute hard limit
+    time_limit=60 * 10, 
 )
 def retry_pending_prescription_extractions():
-    """
-    Safety net task. Runs periodically to find prescriptions that have images 
-    but no extracted items, and triggers the DeepRead AI for them.
-    """
-    # Look for prescriptions created in the last 24 hours that have no items
     yesterday = timezone.now() - timedelta(days=1)
     
     pending_prescriptions = models.Prescriptions.objects.filter(
         created__gte=yesterday,
         status="QUEUING",
-        prescription_items__isnull=True # No items have been created yet
+        prescription_items__isnull=True
     ).distinct()
     
     count = 0
     for prescription in pending_prescriptions:
-        # Get the first image for this prescription
         image = prescription.prescription_images.first()
         if image:
-            # Trigger the DeepRead task
             process_prescription_with_deepread.delay(
                 prescription_id=prescription.id,
                 image_id=image.id

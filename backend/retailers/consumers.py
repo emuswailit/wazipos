@@ -1,10 +1,14 @@
 # retailers/consumers.py
 
 import json
+import asyncio
+import logging
+import requests
 from datetime import date, datetime, timedelta
-from datetime import timedelta
-from django.utils import timezone
 
+from django.utils import timezone
+from django.core.serializers.json import DjangoJSONEncoder
+from decouple import config
 import dateutil.parser
 import simplejson
 from asgiref.sync import async_to_sync, sync_to_async
@@ -15,7 +19,6 @@ from channels.generic.websocket import (
     JsonWebsocketConsumer,
     WebsocketConsumer,
 )
-from django.utils import timezone
 from djangochannelsrestframework import permissions
 from djangochannelsrestframework.decorators import action
 from djangochannelsrestframework.generics import GenericAsyncAPIConsumer
@@ -28,6 +31,7 @@ from core.date_utils import get_formatted_from_date, get_formatted_to_date
 from products.models import Products
 from retailers.models import (
     CustomerOrders,
+    CustomerOrderPayment, # 🟢 Added
     OutOfStock,
     Prescriptions,
     RetailerIndent,
@@ -43,16 +47,16 @@ from retailers.serializers import (
     RetailerProductRequestSerializer,
     RetailerReceiptsSerializer,
 )
-from symtable import Function
 from utils.UUIDEncoder import UUIDEncoder
 
-import asyncio
-import logging
-import time
-from decimal import Decimal
-from uuid import UUID
-
 logger = logging.getLogger("retailers.consumers")
+
+# 🟢 Utility for logging
+try:
+    from utils.logging import create_log
+except ImportError:
+    def create_log(level, message):
+        getattr(logger, level if level in ['info', 'error', 'warning'] else 'info')(message)
 
 
 # =====================================================================
@@ -123,10 +127,7 @@ class RetailerOutOfStocksConsumer(AsyncJsonWebsocketConsumer):
         self.datum = data
 
     async def send_retailer_out_of_stocks(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'out_of_stocks': json.loads(self.datum),
         })
@@ -151,7 +152,6 @@ class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'inventory': json.loads(self.datum),
         })
@@ -177,10 +177,7 @@ class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
         self.datum = json.dumps(sers, cls=UUIDEncoder)
 
     async def send_retailer_receipts(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'inventory': json.loads(self.datum),
         })
@@ -195,8 +192,6 @@ class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         self.user = self.scope["user"]
-        print("User at connect", self.user)
-
         if not self.user.is_authenticated:
             await self.close()
             return
@@ -207,7 +202,6 @@ class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
         )
         await self.accept()
 
-        # Initial snapshot
         await self.push_snapshot()
 
     async def disconnect(self, close_code):
@@ -216,8 +210,6 @@ class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
             self.channel_name,
         )
 
-    # Group event handler — the signal sends:
-    #   { "type": "send.retailer.indents" }
     async def send_retailer_indents(self, event):
         await self.push_snapshot()
 
@@ -251,7 +243,6 @@ class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.user = self.scope["user"]
         self.selected_query_entity = self.scope["selected_query_entity"]
-        print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
 
@@ -262,7 +253,6 @@ class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'shop_inventory': json.loads(self.shop_inventory),
         })
@@ -292,10 +282,7 @@ class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
         self.shop_inventory = json.dumps(sers, cls=UUIDEncoder)
 
     async def send_shop_inventory(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'shop_inventory': json.loads(self.shop_inventory),
         })
@@ -309,7 +296,6 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         self.user = self.scope["user"]
-        print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
 
@@ -320,7 +306,6 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'retailer_dashboard': json.loads(self.retailer_dashboard),
         })
@@ -334,12 +319,6 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        from retailers.models import (
-            CustomerOrderItems,
-            CustomerOrderPayment,
-            CustomerOrders,
-            RetailerReceipts,
-        )
         from wholesalers.models import RetailerOrders
 
         final = {}
@@ -350,7 +329,6 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
         for x in range(7):
             items_value = 0.00
             all_payments_value = 0.00
-            orders = []
             d = now - timedelta(days=x)
             next_d = d + timedelta(days=1)
             days.append(d)
@@ -415,13 +393,11 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
         self.retailer_dashboard = json.dumps(final, cls=UUIDEncoder)
 
     async def send_retailer_dashboard(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'retailer_dashboard': json.loads(self.retailer_dashboard),
         })
+
 
 class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
@@ -458,6 +434,7 @@ class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def _fetch_orders(self):
+        from orders.models import BodaLocations
         since = timezone.now() - timedelta(days=3)
         boda_ids = list(
             BodaLocations.objects
@@ -502,7 +479,6 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'customer_orders': json.loads(self.customer_orders),
         })
@@ -520,16 +496,8 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
             str(timezone.now().date())
         ).strftime("%Y-%m-%d %H:%M:%S")
 
-        # customer_orders = CustomerOrders.objects.filter(
-        #     entity=self.user.entity,
-        #     created__gte=formatted_from_date,
-        # ).order_by('-created')
-
-
-        # earlier in the function
         formatted_from_date = (timezone.now() - timedelta(days=7)).isoformat()
 
-        # your existing filter, unchanged
         customer_orders = CustomerOrders.objects.filter(
             entity=self.user.entity,
             created__gte=formatted_from_date,
@@ -543,10 +511,7 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
         self.customer_orders = json.dumps(orders, cls=UUIDEncoder)
 
     async def send_customer_orders(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'customer_orders': json.loads(self.customer_orders),
         })
@@ -570,7 +535,6 @@ class UserOrdersConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'user_orders': json.loads(self.user_orders),
         })
@@ -596,10 +560,7 @@ class UserOrdersConsumer(AsyncJsonWebsocketConsumer):
         self.user_orders = json.dumps(orders, cls=UUIDEncoder)
 
     async def send_user_orders(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'customer_orders': json.loads(self.user_orders),
         })
@@ -623,7 +584,6 @@ class UserPrescriptionsConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'user_prescriptions': json.loads(self.user_prescriptions),
         })
@@ -649,10 +609,7 @@ class UserPrescriptionsConsumer(AsyncJsonWebsocketConsumer):
         self.user_prescriptions = json.dumps(orders, cls=UUIDEncoder)
 
     async def send_user_prescriptions(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'user_prescriptions': json.loads(self.user_prescriptions),
         })
@@ -716,8 +673,6 @@ class CustomerOrderNotificationsConsumer(WebsocketConsumer):
             )
 
     def send_notification(self, event):
-        print("Event data received in consumer:", event)
-
         self.send(text_data=json.dumps({
             "customer_name": event["customer_name"],
             "customer_phone": event["customer_phone"],
@@ -745,7 +700,6 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         self.user = self.scope["user"]
-        print("User at connect", self.user)
         if not self.user.is_authenticated:
             return
 
@@ -756,7 +710,6 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'customer_order_details': json.loads(self.datum),
         })
@@ -782,12 +735,190 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
         self.datum = json.dumps(sers, cls=UUIDEncoder)
 
     async def send_customer_order_details(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'customer_order_details': json.loads(self.datum),
+        })
+
+
+# =====================================================================
+# 🟢 Customer Order Payment Status (Real-time Polling like Subscription)
+# =====================================================================
+
+class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Listens to a specific payment reference to track its success/failure in real-time.
+    Polls JamboPay every 5 seconds until the status changes from PENDING.
+    """
+
+    async def connect(self):
+        self.user = self.scope.get("user")
+        
+        # 1. Ensure the user is authenticated
+        if not self.user or not self.user.is_authenticated:
+            await self.close()
+            return
+
+        # 2. Get the reference number from the URL route
+        self.reference_number = self.scope['url_route']['kwargs']['reference_number']
+        
+        # 3. Create a specific group for this payment session
+        self.group_name = f"payment_{self.reference_number}"
+
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name,
+        )
+        await self.accept()
+
+        # 4. Start the background polling task
+        self.polling_task = asyncio.create_task(self.poll_payment_loop())
+
+    async def disconnect(self, close_code):
+        # Cancel the polling task if it's still running
+        if hasattr(self, 'polling_task'):
+            self.polling_task.cancel()
+
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name,
+            )
+        await self.close()
+
+    async def poll_payment_loop(self):
+        """
+        Continuously checks the payment status every 5 seconds.
+        Stops when the status is no longer PENDING.
+        """
+        try:
+            while True:
+                # 1. Fetch latest from JamboPay and update DB
+                await self.helper_func()
+                
+                # 2. Send the payload to the frontend
+                payment_dict = json.loads(self.payment_data)
+                await self.send_json({'payment': payment_dict})
+                
+                # 3. Stop polling if we have a final status
+                status = payment_dict.get("status", "").upper()
+                if status and status != "PENDING":
+                    create_log("info", f"Polling stopped for {self.reference_number}. Final status: {status}")
+                    break
+                
+                # 4. Wait 5 seconds before the next poll
+                await asyncio.sleep(5)
+                
+        except asyncio.CancelledError:
+            # Task was cancelled because the user disconnected
+            pass 
+        except Exception as e:
+            create_log("error", f"WebSocket polling loop error: {str(e)}")
+
+    @sync_to_async
+    def helper_func(self):
+        # 🟢 1. Query the CustomerOrder using its reference_number
+        customer_order = CustomerOrders.objects.filter(
+            reference_number=self.reference_number
+        ).first()
+        
+        tx_data = None
+
+        if customer_order:
+            # Get the associated payment record
+            payment = CustomerOrderPayment.objects.filter(
+                customer_order=customer_order
+            ).order_by('-created').first()
+
+            if payment:
+                # Only poll JamboPay if the DB still says PENDING
+                if payment.status == "PENDING":
+                    try:
+                        # 1. Authenticate with JamboPay
+                        the_data = {
+                            "client_id": config("JAMBOPAY_CLIENT_ID"),
+                            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+                            "grant_type": config("JAMBOPA_GRANT_TYPE"),
+                        }
+                        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                        auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
+                        token = auth_res.json().get("access_token") if auth_res.json() else None
+                        
+                        if token:
+                            # 🟢 2. Use customer_order.reference_number for JamboPay transaction lookup
+                            order_id = customer_order.reference_number 
+                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
+                            poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
+                            
+                            tx_result = requests.get(transaction_url, headers=poll_headers)
+                            
+                            if tx_result and not tx_result == None:
+                                try:
+                                    tx_data = tx_result.json()
+                                    
+                                    # 3. Update DB with whatever JamboPay returns
+                                    if tx_data and not tx_data == None:
+                                        final_status = str(tx_data.get("status", "")).upper()
+                                        status_description = tx_data.get("description", "")
+                                        provider_ref = tx_data.get("providerRef")
+                                        
+                                        if final_status:
+                                            payment.status = final_status
+                                        if status_description:
+                                            payment.description = status_description
+                                        
+                                        if provider_ref:
+                                            payment.provider_reference_number = provider_ref
+                                            
+                                        payment.save()
+                                        
+                                        # Keep the customer order in sync
+                                        if final_status == "SUCCESS":
+                                            customer_order.is_paid = "true"
+                                            customer_order.save(update_fields=["is_paid", "updated"])
+                                        elif final_status == "FAILED":
+                                            customer_order.is_paid = "false"
+                                            customer_order.save(update_fields=["is_paid", "updated"])
+
+                                        create_log("info", f"Updated order payment via WS: {final_status} - {status_description}")
+                                except ValueError:
+                                    create_log("error", "JamboPay returned a non-JSON response during polling.")
+                    except Exception as e:
+                        create_log("error", f"WS Poller error: {str(e)}")
+
+                # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
+                self.payment_data = json.dumps({
+                    "payment_id": str(payment.id),
+                    "reference_number": customer_order.reference_number, # 👈 Using customer_order reference
+                    "amount": float(payment.amount),
+                    "status": payment.status,
+                    "description": payment.description,
+                    "jambopay_response": tx_data if tx_data else {
+                        "orderId": customer_order.reference_number,
+                        "ref": payment.psp_reference_number,
+                        "status": payment.status,
+                        "description": payment.description
+                    }
+                }, cls=DjangoJSONEncoder)
+                return
+
+        # Fallback if customer order or payment record isn't found
+        self.payment_data = json.dumps({
+            "payment_id": None,
+            "reference_number": self.reference_number,
+            "amount": 0,
+            "status": "NOT_FOUND",
+            "description": "Payment record could not be found.",
+            "jambopay_response": None
+        })
+
+    async def send_payment_status(self, event):
+        """
+        Triggered by JamboPay Webhooks (if they happen to hit before the socket closes).
+        """
+        await self.helper_func()
+        await self.send_json({
+            'payment': json.loads(self.payment_data),
         })
 
 
@@ -809,7 +940,6 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'retailer_product_requests': json.loads(
                 self.retailer_product_requests
@@ -849,10 +979,7 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def send_retailer_product_requests(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'retailer_product_requests': json.loads(
                 self.retailer_product_requests
@@ -867,10 +994,6 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
 class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
     """
     Live retailer requisitions registry.
-
-    Serves the retailer's own orders — filters on `retailer`
-    (the retailer-side FK on RetailerOrders), not `entity`
-    (which is the wholesaler-side field).
     """
 
     async def connect(self):
@@ -885,7 +1008,6 @@ class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         await self.helper_func()
 
-        # Broadcast result to the group
         await self.send_json({
             'retailer-requisitions': json.loads(
                 self.retailer_requisitions
@@ -920,10 +1042,7 @@ class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def send_retailer_requisitions(self, event):
-        # Call the helper async Function
         await self.helper_func()
-
-        # Broadcast result to the group
         await self.send_json({
             'retailer-requisitions': json.loads(
                 self.retailer_requisitions
@@ -936,23 +1055,20 @@ class BodaLocationConsumer(AsyncJsonWebsocketConsumer):
         lat = content.get("lat")
         lng = content.get("lng")
 
-        # 1. validate
         if not valid_coords(lat, lng):
             await self.send_json({"type": "boda.error", "detail": "bad coords"})
             return
 
         lat, lng = float(lat), float(lng)
-
-        # 2. persist the current point (single-column update)
         await self._save_point(lat, lng)
-
-        # 3. fan out to every live order this boda is on
         await self._broadcast(lat, lng)
 
     @database_sync_to_async
     def _save_point(self, lat, lng):
+        from orders.models import BodaLocations
+        from django.contrib.gis.geos import Point
         BodaLocations.objects.filter(pk=self.boda.pk).update(
-            point=Point(lng, lat, srid=4326),   # lng first!
+            point=Point(lng, lat, srid=4326),
             updated_at=timezone.now(),
         )
 
@@ -978,52 +1094,21 @@ class BodaLocationConsumer(AsyncJsonWebsocketConsumer):
             .values_list("id", flat=True)
         )
 
-# orders/consumers.py
-import json
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.utils import timezone
-
-
-# Statuses during which live tracking is allowed
-LIVE_STATUSES = {"ASSIGNED", "DISPATCHED", "PICKED"}
-
-# Statuses that end the tracking session
-TERMINAL_STATUSES = {"DELIVERED", "CANCELLED", "COMPLETED"}
-
 
 class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
     """
     Watcher socket for a single order.
-
-    Both the CUSTOMER and the RETAILER connect to the same URL:
-
-        /ws/orders/<order_id>/tracking/?token=<jwt>
-
-    The consumer:
-      1. Authenticates the user (via scope["user"] set by middleware).
-      2. Checks the user is allowed to watch this order.
-      3. Joins the per-order group  ->  "order_<order_id>".
-      4. Sends an initial snapshot of the driver's last known location.
-      5. Forwards every boda.location event from the driver to the client.
-      6. Forwards order.status events and closes on terminal statuses.
-      7. Responds to client pings for keepalive.
     """
 
-    # ------------------------------------------------------------------ #
-    # Lifecycle
-    # ------------------------------------------------------------------ #
     async def connect(self):
         self.user = self.scope.get("user")
         self.order_id = self.scope["url_route"]["kwargs"]["order_id"]
         self.group_name = f"order_{self.order_id}"
 
-        # 1. Auth check
         if not self.user or not self.user.is_authenticated:
-            await self.close(code=4401)   # unauthorized
+            await self.close(code=4401)
             return
 
-        # 2. Permission check + terminal-status check
         verdict = await self._authorize()
         if verdict == "not_found":
             await self.close(code=4404)
@@ -1032,7 +1117,6 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4403)
             return
         if verdict == "terminal":
-            # Order is already finished — connect, send final state, close.
             await self.accept()
             snapshot = await self._final_snapshot()
             if snapshot:
@@ -1040,11 +1124,9 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4000)
             return
 
-        # 3. Join group
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
-        # 4. Initial snapshot so the map isn't blank until the next ping
         snapshot = await self._snapshot()
         if snapshot:
             await self.send_json(snapshot)
@@ -1055,9 +1137,6 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
                 self.group_name, self.channel_name
             )
 
-    # ------------------------------------------------------------------ #
-    # Incoming messages from the client
-    # ------------------------------------------------------------------ #
     async def receive_json(self, content, **kwargs):
         msg_type = content.get("type")
 
@@ -1065,17 +1144,12 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"type": "pong", "ts": timezone.now().isoformat()})
             return
 
-        # Clients don't push location on this socket; ignore anything else.
         await self.send_json({
             "type": "error",
             "detail": f"unsupported message type: {msg_type!r}",
         })
 
-    # ------------------------------------------------------------------ #
-    # Channel-layer handlers (names must match the "type" key sent by the driver)
-    # ------------------------------------------------------------------ #
     async def boda_location(self, event):
-        """Forwarded from BodaLocationConsumer when the driver moves."""
         await self.send_json({
             "type": "boda.location",
             "lat": event["lat"],
@@ -1084,7 +1158,6 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
         })
 
     async def order_status(self, event):
-        """Sent whenever the order status changes (view, signal, etc.)."""
         status = event["status"]
         await self.send_json({
             "type": "order.status",
@@ -1093,19 +1166,10 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
         })
 
         if status in TERMINAL_STATUSES:
-            # Nothing more to track — close cleanly.
             await self.close(code=4000)
 
-    # ------------------------------------------------------------------ #
-    # Helpers
-    # ------------------------------------------------------------------ #
     @database_sync_to_async
     def _authorize(self):
-        """
-        Returns one of: "ok", "not_found", "forbidden", "terminal".
-        """
-        from orders.models import CustomerOrders
-
         try:
             order = CustomerOrders.objects.only(
                 "id", "status", "customer_id", "user_id", "owner_id",
@@ -1129,16 +1193,12 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
             return "terminal"
 
         if order.status not in LIVE_STATUSES:
-            # e.g. RECEIVED / PROCESSING — not trackable yet
             return "terminal"
 
         return "ok"
 
     @database_sync_to_async
     def _snapshot(self):
-        """Last known driver location + order meta, for the initial render."""
-        from orders.models import CustomerOrders
-
         order = (
             CustomerOrders.objects
             .select_related("bodaboda__boda__user")
@@ -1171,9 +1231,6 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _final_snapshot(self):
-        """Snapshot sent when the order is already in a terminal state."""
-        from orders.models import CustomerOrders
-
         order = (
             CustomerOrders.objects
             .select_related("bodaboda__boda__user")

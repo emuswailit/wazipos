@@ -1,7 +1,6 @@
 from django.urls import path
 from . import views
 
-
 urlpatterns = [
     # Variation retailer-receipts urls
     path(
@@ -29,10 +28,12 @@ urlpatterns = [
         views.retailerInvoicesAPIView,
         name="retailer-invoices-apiview",
     ),
+    
+    # 🟢 Routes to customerOrdersAPIView which handles MakeCustomerOrderPayment
     path(
         "orders",
         views.customerOrdersAPIView,
-        name="customer-orders-staff-apiview",
+        name="customer-orders-apiview", 
     ),
     path(
         "orders/staff",
@@ -42,7 +43,7 @@ urlpatterns = [
     path(
         "orders/admin",
         views.customerOrdersAdminAPIView,
-        name="customer-orders-apiview",
+        name="customer-orders-admin-apiview",
     ),
     
     # --- Shipping Rates ---
@@ -61,7 +62,7 @@ urlpatterns = [
     path(
         "prescriptions",
         views.remoteRetailPrescriptionsAPIView,
-        name="customer-orders-apiview",
+        name="retail-prescriptions-apiview",
     ),
     path(
         "prescriptions/create",
