@@ -907,6 +907,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     "order_number": order_number_str, # 👈 Use the string
                     "amount": float(payment.amount),
                     "status": payment.status,
+                    "reference_number": payment.reference_number,
                     "description": payment.description,
                     "jambopay_response": tx_data if tx_data else {
                         "orderId": order_number_str, # 👈 Use the string
@@ -923,6 +924,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             "order_number": self.order_number,
             "amount": 0,
             "status": "NOT_FOUND",
+            "refence_number": "",
             "description": "Payment record could not be found.",
             "jambopay_response": None
         })
