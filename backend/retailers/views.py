@@ -144,15 +144,9 @@ def retailerReceiptsAdminAPIView(request):
                 serializer.data,
                 "retailer_receipt",
             )
-        elif errors:
-            return custom_errors_response(
-                1, "Retailer inventory receipt could not be created", errors
-            )
-        else:
-            return custom_errors_response(
-                            1, "Retailer inventory receipt could not be created", ["unknowwn error at create retailer receipt"]
-                        )
-            
+        return custom_errors_response(
+            1, "Retailer inventory receipt could not be created", errors
+        )
 
     elif action == "GetRetailerReceipts":
         retailer_receipts = retailer_utils.get_retailer_receipts(request.user)

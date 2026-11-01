@@ -524,82 +524,91 @@ def validate_retailer_receipt_data(data, user):
 @transaction.atomic
 def create_retailer_receipt_directly(data, user):
     errors = []
-    draft_id = None
-    details = data.get("retailer_receipt_details", {})
-
-    if not details.get("draft_id"):
-        errors.append("Draft ID is required")
-        return errors, None
-
-    draft_id = details.get("draft_id")
-    if draft_id:
-        existing = RetailerReceipts.objects.filter(
-            draft_id=draft_id
-        ).first()
-        if existing:
-            return [], existing
-
-    employee = Employees.objects.filter(
-        user=user, entity=user.entity, is_active="true",
-    ).first()
-    if not employee:
-        errors.append(
-            f"You are not an active employee at "
-            f"{titlecase(user.entity.title)}"
-        )
-        return errors, None
-
-    manufacture_date = details.get("manufacture_date") or None
-    expiry_date = details.get("expiry_date") or None
-
-    received_from = None
-    received_from_id = details.get("received_from")
-    if received_from_id:
-        received_from = validate_entity(received_from_id)
-
-    retailer_order_item = None
-    roi_id = details.get("retailer_order_item")
-    if roi_id:
-        retailer_order_item = RetailerOrderItems.objects.filter(
-            id=roi_id
-        ).first()
-        if retailer_order_item:
-            if retailer_order_item.is_received == "true":
-                errors.append("Item is already received into inventory")
-                return errors, None
-            if retailer_order_item.retailer_order.status != "RECEIVED":
-                errors.append(
-                    "Order status for this item is not yet set to RECEIVED"
-                )
-                return errors, None
-
-    received_unit_quantity = _to_int(
-        details.get("received_unit_quantity")
-    )
-    unit_selling_price = _to_decimal(details.get("unit_selling_price"))
-    unit_price_discount = _to_decimal(details.get("unit_price_discount"))
-    unit_buying_price = _to_decimal(details.get("unit_buying_price"))
-    unit_of_receipt = details.get("unit_of_receipt") or "Piece"
-
-    product_id = details.get("product")
-    product = Products.objects.filter(id=product_id).first()
-    if not product:
-        errors.append("Product with supplied ID does not exist")
-        return errors, None
-
-    batch = details.get("batch") or None
-    bar_code = details.get("bar_code") or ""
-
-    a_minute_ago = datetime.datetime.now() - datetime.timedelta(minutes=1)
-    if RetailerReceipts.objects.filter(
-        product_id=product_id,
-        received_unit_quantity=received_unit_quantity,
-        created__gte=a_minute_ago,
-    ).exists():
-        errors.append("You added a similar item less than a minute ago")
-        return errors, None
-
+    
+    # 🟢 Wrap the ENTIRE function in a try/except so it NEVER crashes the view
     try:
+        draft_id = None
+        details = data.get("retailer_receipt_details", {})
+
+        if not details.get("draft_id"):
+            errors.append("Draft ID is required")
+            return errors, None
+
+        draft_id = details.get("draft_id")
+        if draft_id:
+            existing = RetailerReceipts.objects.filter(
+                draft_id=draft_id
+            ).first()
+            if existing:
+                return [], existing
+
+        employee = Employees.objects.filter(
+            user=user, entity=user.entity, is_active="true",
+        ).first()
+        if not employee:
+            errors.append(
+                f"You are not an active employee at "
+                f"{titlecase(user.entity.title)}"
+            )
+            return errors, None
+
+        manufacture_date = details.get("manufacture_date") or None
+        expiry_date = details.get("expiry_date") or None
+
+        received_from = None
+        received_from_id = details.get("received_from")
+        # 🟢 Check for empty string to prevent UUID validation crash
+        if received_from_id and str(received_from_id).strip() != "":
+            received_from = validate_entity(received_from_id)
+
+        retailer_order_item = None
+        roi_id = details.get("retailer_order_item")
+        # 🟢 Check for empty string to prevent UUID validation crash
+        if roi_id and str(roi_id).strip() != "":
+            retailer_order_item = RetailerOrderItems.objects.filter(
+                id=roi_id
+            ).first()
+            if retailer_order_item:
+                if retailer_order_item.is_received == "true":
+                    errors.append("Item is already received into inventory")
+                    return errors, None
+                if retailer_order_item.retailer_order.status != "RECEIVED":
+                    errors.append(
+                        "Order status for this item is not yet set to RECEIVED"
+                    )
+                    return errors, None
+
+        received_unit_quantity = _to_int(
+            details.get("received_unit_quantity")
+        )
+        unit_selling_price = _to_decimal(details.get("unit_selling_price"))
+        unit_price_discount = _to_decimal(details.get("unit_price_discount"))
+        unit_buying_price = _to_decimal(details.get("unit_buying_price"))
+        unit_of_receipt = details.get("unit_of_receipt") or "Piece"
+
+        product_id = details.get("product")
+        # 🟢 Check for empty string to prevent UUID validation crash
+        if not product_id or str(product_id).strip() == "":
+            errors.append("Product ID is required")
+            return errors, None
+
+        product = Products.objects.filter(id=product_id).first()
+        if not product:
+            errors.append("Product with supplied ID does not exist")
+            return errors, None
+
+        batch = details.get("batch") or None
+        bar_code = details.get("bar_code") or ""
+
+        a_minute_ago = datetime.datetime.now() - datetime.timedelta(minutes=1)
+        if RetailerReceipts.objects.filter(
+            product_id=product_id,
+            received_unit_quantity=received_unit_quantity,
+            created__gte=a_minute_ago,
+        ).exists():
+            errors.append("You added a similar item less than a minute ago")
+            return errors, None
+
         created = RetailerReceipts.objects.create(
             unit_of_receipt=unit_of_receipt,
             product=product,
@@ -628,7 +637,10 @@ def create_retailer_receipt_directly(data, user):
             )
 
         return [], created
+
     except Exception as e:
+        import traceback
+        traceback.print_exc() # This will print the exact line causing the crash in your server terminal
         errors.append(str(e))
         return errors, None
 
