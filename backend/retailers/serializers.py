@@ -750,7 +750,7 @@ class CustomerOrderPaymentsSerializer(serializers.ModelSerializer):
         model = models.CustomerOrderPayment
         fields = (
             "id", "paying_entity", "customer_order", "receiving_entity",
-            "reference_number", "psp_reference_number",
+            "reference_number", "psp_reference_number","description",
             "provider_reference_number", "administrator_account",
             "amount", "is_validated", "narration", "currency", "status",
             "entity_collection_account",

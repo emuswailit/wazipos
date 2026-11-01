@@ -1891,9 +1891,11 @@ class CustomerOrderPayments(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    provider_reference_number = models.CharField(max_length=50, default="",null=True,blank=True)
     reference_number = models.CharField(max_length=50, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     narration = models.CharField(max_length=100)
+    description = models.CharField(max_length=100,null=True,blank=True)
     msisdn = models.CharField(max_length=50, default="")
     transfer_status = models.CharField(max_length=50, default="")
     account_number = models.CharField(max_length=50, default="")
