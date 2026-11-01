@@ -919,6 +919,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         "jambopay_response": tx_data if tx_data else {
                             "orderId": order_number_str, 
                             "ref": payment.psp_reference_number,
+                            "ref": payment.psp_reference_number,
                             "status": payment.status,
                             "description": payment.description
                         }
