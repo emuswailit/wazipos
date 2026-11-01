@@ -866,7 +866,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        # 🟢 1. Query ONLY using reference_number or document_number (NO UUID ID LOOKUP)
+        # 🟢 1. Query ONLY using reference_number or document_number
         customer_order = CustomerOrders.objects.filter(
             Q(reference_number=self.identifier) | 
             Q(order_number__document_number=self.identifier)
@@ -945,6 +945,11 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     create_log("info", f"DB Status already {payment.status}. Skipping JamboPay API poll.")
 
                 # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
+                # 🟢 FIX: Ensure description is passed from JamboPay if DB is empty
+                final_description = payment.description
+                if not final_description and tx_data and tx_data.get("description"):
+                    final_description = tx_data.get("description")
+
                 self.payment_data = json.dumps({
                     "payment_id": str(payment.id),
                     "order_number": order_number_str, 
@@ -952,12 +957,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     "status": payment.status,
                     "reference_number": payment.reference_number,
                     "payment_method_title": payment_method_title,
-                    "description": payment.description,
+                    "description": final_description, # 👈 Guaranteed to be populated
                     "jambopay_response": tx_data if tx_data else {
                         "orderId": order_number_str, 
                         "ref": payment.psp_reference_number,
                         "status": payment.status,
-                        "description": payment.description
+                        "description": final_description
                     }
                 }, cls=DjangoJSONEncoder)
                 return
