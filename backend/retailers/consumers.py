@@ -434,7 +434,7 @@ class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def _fetch_orders(self):
-        from orders.models import BodaLocations
+        from retailers.models import BodaLocations
         since = timezone.now() - timedelta(days=3)
         boda_ids = list(
             BodaLocations.objects
@@ -878,6 +878,9 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         if customer_order:
             # 🟢 2. Extract the actual string value (document_number) for JamboPay
             order_number_str = customer_order.reference_number
+            self.reference_number =order_number_str
+            create_log("error", f"REEEF",self.reference_number)
+
 
             # 🟢 2.5 Extract the Payment Method Title safely
             payment_method_title = (
@@ -907,7 +910,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         if token:
                             create_log("error",f"REF {order_number_str}")
                             # 🟢 4. Use the extracted string for the JamboPay URL
-                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
+                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{self.reference_number}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
                             
                             tx_result = requests.get(transaction_url, headers=poll_headers)
