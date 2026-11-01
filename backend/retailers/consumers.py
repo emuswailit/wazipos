@@ -755,6 +755,17 @@ from django.core.serializers.json import DjangoJSONEncoder
 # =====================================================================
 # 🟢 Customer Order Payment Status (Real-time Polling like Subscription)
 # =====================================================================
+import json
+import asyncio
+import requests
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from asgiref.sync import sync_to_async
+from django.core.serializers.json import DjangoJSONEncoder
+
+# Assuming these are imported from your project
+# from .models import CustomerOrders, CustomerOrderPayment
+# from .utils import create_log
+# from decouple import config
 
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
@@ -831,116 +842,120 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-            # 🟢 1. Query the CustomerOrder by traversing the ForeignKey to the document_number string field
-            customer_order = CustomerOrders.objects.filter(
-                order_number__document_number=self.order_number
-            ).first()
-            
-            tx_data = None
+        # 🟢 1. Query the CustomerOrder
+        customer_order = CustomerOrders.objects.filter(
+            order_number__document_number=self.order_number
+        ).first()
+        
+        tx_data = None
 
-            if customer_order:
-                # 🟢 2. Extract the actual string value from the DocumentNumbers object for JamboPay
-                order_number_str = customer_order.reference_number
+        if customer_order:
+            # 🟢 2. Extract the actual string value (document_number) for JamboPay
+            order_number_str = (
+                customer_order.order_number.document_number 
+                if customer_order.order_number 
+                else customer_order.reference_number
+            )
 
-                # 🟢 2.5 Extract the Payment Method Title safely
-                payment_method_title = (
-                    customer_order.selected_payment_method.title 
-                    if customer_order.selected_payment_method else None
-                )
+            # 🟢 2.5 Extract the Payment Method Title safely
+            payment_method_title = (
+                customer_order.selected_payment_method.title 
+                if customer_order.selected_payment_method else None
+            )
 
-                # 🟢 3. Query the payment using the UUID id of the customer_order
-                payment = CustomerOrderPayment.objects.filter(
-                    customer_order_id=customer_order.id
-                ).order_by('-created').first()
+            # 🟢 3. Query the payment
+            payment = CustomerOrderPayment.objects.filter(
+                customer_order_id=customer_order.id
+            ).order_by('-created').first()
 
-                if payment:
-                    # Only poll JamboPay if the DB still says PENDING
-                    if payment.status == "PENDING":
-                        try:
-                            # 1. Authenticate with JamboPay
-                            the_data = {
-                                "client_id": config("JAMBOPAY_CLIENT_ID"),
-                                "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                                "grant_type": config("JAMBOPA_GRANT_TYPE"),
-                            }
-                            headers = {"Content-Type": "application/x-www-form-urlencoded"}
-                            auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-                            token = auth_res.json().get("access_token") if auth_res.json() else None
-                            
-                            if token:
-                                # 🟢 4. Use the extracted string for the JamboPay URL
-                                transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
-                                poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
-                                
-                                tx_result = requests.get(transaction_url, headers=poll_headers)
-                                
-                                if tx_result and not tx_result == None:
-                                    try:
-                                        tx_data = tx_result.json()
-                                        
-                                        
-                                        # 5. Update DB with whatever JamboPay returns
-                                        if tx_data and not tx_data == None:
-                                            create_log("info", f"TX DATA {tx_data}")
-                                            final_status = str(tx_data.get("status", "")).upper()
-                                            status_description = tx_data.get("description", "")
-                                            provider_ref = tx_data.get("providerRef")
-                                            
-                                            if final_status:
-                                                payment.status = final_status
-                                            if status_description:
-                                                payment.description = status_description
-                                            
-                                            if provider_ref:
-                                                payment.provider_reference_number = provider_ref
-                                                
-                                            payment.save()
-                                            
-                                            # Keep the customer order in sync
-                                            if final_status == "SUCCESS":
-                                                customer_order.is_paid = "true"
-                                                customer_order.save(update_fields=["is_paid", "updated"])
-                                            elif final_status == "FAILED":
-                                                customer_order.is_paid = "false"
-                                                customer_order.save(update_fields=["is_paid", "updated"])
-
-                                            create_log("info", f"Updated order payment via WS: {final_status} - {status_description}")
-                                    except ValueError:
-                                        create_log("error", f"NO TX DATA")
-                                        create_log("error", "JamboPay returned a non-JSON response during polling.")
-                        except Exception as e:
-                            create_log("error", f"WS Poller error: {str(e)}")
-
-                    # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
-                    self.payment_data = json.dumps({
-                        "payment_id": str(payment.id),
-                        "order_number": order_number_str, 
-                        "amount": float(payment.amount),
-                        "status": payment.status,
-                        "reference_number": payment.reference_number,
-                        "payment_method_title": payment_method_title,  # 👈 Added here
-                        "description": payment.description,
-                        "jambopay_response": tx_data if tx_data else {
-                            "orderId": order_number_str, 
-                            "ref": payment.psp_reference_number,
-                            "ref": payment.psp_reference_number,
-                            "status": payment.status,
-                            "description": payment.description
+            if payment:
+                # Only poll JamboPay if the DB still says PENDING
+                if payment.status == "PENDING":
+                    try:
+                        # 1. Authenticate with JamboPay
+                        the_data = {
+                            "client_id": config("JAMBOPAY_CLIENT_ID"),
+                            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+                            "grant_type": config("JAMBOPA_GRANT_TYPE"),
                         }
-                    }, cls=DjangoJSONEncoder)
-                    return
+                        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                        auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
+                        token = auth_res.json().get("access_token") if auth_res.json() else None
+                        
+                        if token:
+                            # 🟢 4. Use the extracted string for the JamboPay URL
+                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
+                            poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
+                            
+                            tx_result = requests.get(transaction_url, headers=poll_headers)
+                            
+                            if tx_result and tx_result.status_code == 200:
+                                try:
+                                    tx_data = tx_result.json()
+                                    create_log("info", f"TX DATA {tx_data}")
+                                    
+                                    # 5. Update DB with whatever JamboPay returns
+                                    if tx_data:
+                                        final_status = str(tx_data.get("status", "")).upper()
+                                        status_description = tx_data.get("description", "")
+                                        provider_ref = tx_data.get("providerRef")
+                                        
+                                        if final_status:
+                                            payment.status = final_status
+                                        if status_description:
+                                            payment.description = status_description
+                                        
+                                        if provider_ref:
+                                            payment.provider_reference_number = provider_ref
+                                            
+                                        payment.save()
+                                        
+                                        # Keep the customer order in sync
+                                        if final_status == "SUCCESS":
+                                            customer_order.is_paid = "true"
+                                            customer_order.save(update_fields=["is_paid", "updated"])
+                                        elif final_status == "FAILED":
+                                            customer_order.is_paid = "false"
+                                            customer_order.save(update_fields=["is_paid", "updated"])
 
-            # Fallback if customer order or payment record isn't found
-            self.payment_data = json.dumps({
-                "payment_id": None,
-                "order_number": self.order_number,
-                "amount": 0,
-                "status": "NOT_FOUND",
-                "reference_number": "",
-                "payment_method_title": None, # 👈 Added here as well
-                "description": "Payment record could not be found.",
-                "jambopay_response": None
-            })
+                                        create_log("info", f"Updated order payment via WS: {final_status} - {status_description}")
+                                except ValueError:
+                                    create_log("error", f"NO TX DATA: {tx_result.text}")
+                            else:
+                                create_log("error", f"JamboPay API error: {tx_result.status_code if tx_result else 'No response'}")
+                    except Exception as e:
+                        create_log("error", f"WS Poller error: {str(e)}")
+
+                # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
+                self.payment_data = json.dumps({
+                    "payment_id": str(payment.id),
+                    "order_number": order_number_str, 
+                    "amount": float(payment.amount) if payment.amount else 0,
+                    "status": payment.status,
+                    "reference_number": payment.reference_number,
+                    "payment_method_title": payment_method_title,
+                    "description": payment.description,
+                    "jambopay_response": tx_data if tx_data else {
+                        "orderId": order_number_str, 
+                        "ref": payment.psp_reference_number,
+                        "status": payment.status,
+                        "description": payment.description
+                    }
+                }, cls=DjangoJSONEncoder)
+                return
+
+        # Fallback if customer order or payment record isn't found
+        self.payment_data = json.dumps({
+            "payment_id": None,
+            "order_number": self.order_number,
+            "amount": 0,
+            "status": "NOT_FOUND",
+            "reference_number": "",
+            "payment_method_title": None,
+            "description": "Payment record could not be found.",
+            "jambopay_response": None
+        })
+
     async def send_payment_status(self, event):
         """
         Triggered by JamboPay Webhooks (if they happen to hit before the socket closes).
@@ -949,7 +964,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
-
+        
 # =====================================================================
 # Retailer product requests
 # =====================================================================
