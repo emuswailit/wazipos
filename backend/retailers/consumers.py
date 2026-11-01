@@ -757,6 +757,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 # =====================================================================
 import json
 import asyncio
+import time
 import requests
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from asgiref.sync import sync_to_async
@@ -770,7 +771,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
     Listens to a specific order number to track its payment status in real-time.
-    Polls JamboPay every 5 seconds until the status changes from PENDING.
+    Polls JamboPay exactly every 5 seconds.
     """
 
     async def connect(self):
@@ -783,7 +784,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
         # 2. Get the order number from the URL route
         self.order_number = self.scope['url_route']['kwargs']['order_number']
-        create_log("info", f"REF {self.order_number}")
+        create_log("info", f"WS Connect: REF {self.order_number}")
         
         # 3. Create a specific group for this payment session
         self.group_name = f"payment_{self.order_number}"
@@ -798,6 +799,8 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         self.polling_task = asyncio.create_task(self.poll_payment_loop())
 
     async def disconnect(self, close_code):
+        create_log("info", f"WS Disconnect: REF {self.order_number}, Code: {close_code}")
+        
         # Cancel the polling task if it's still running
         if hasattr(self, 'polling_task'):
             self.polling_task.cancel()
@@ -811,12 +814,18 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     async def poll_payment_loop(self):
         """
-        Continuously checks the payment status every 5 seconds.
-        Stops when the status is no longer PENDING, but polls at least 3 times.
+        Continuously checks the payment status.
+        Guarantees at least 3 polls. Continues if status is PENDING.
+        Maintains exactly 5 seconds between the start of each poll.
         """
         poll_count = 0
+        MAX_POLLS = 20  # Safety limit: ~100 seconds max
+
         try:
-            while True:
+            while poll_count < MAX_POLLS:
+                # Record start time to calculate exact sleep duration later
+                start_time = time.time()
+                
                 # 1. Fetch latest from JamboPay and update DB
                 await self.helper_func()
                 poll_count += 1
@@ -826,22 +835,36 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     payment_dict = json.loads(self.payment_data)
                     await self.send_json({'payment': payment_dict})
                     
-                    # 3. Stop polling if we have a final status AND we've polled at least 3 times
                     status = payment_dict.get("status", "").upper()
-                    create_log("warning", f"TX DICT (Poll #{poll_count}) {payment_dict}")
+                    description = payment_dict.get("description", "")
+                    ref = payment_dict.get("reference_number", "")
                     
-                    if status and status != "PENDING" and poll_count >= 3:
+                    # 🟢 LOG POLL RESULT
+                    create_log("info", f"[POLL #{poll_count}/{MAX_POLLS}] Result -> Status: {status} | Ref: {ref} | Desc: {description}")
+                    
+                    # 3. Stop polling ONLY IF:
+                    #    - We have polled at least 3 times
+                    #    - AND the status is no longer PENDING
+                    if poll_count >= 3 and status and status != "PENDING":
                         create_log("info", f"Polling stopped for {self.order_number}. Final status: {status} after {poll_count} polls.")
                         break
                 
-                # 4. Wait 5 seconds before the next poll
-                await asyncio.sleep(5)
+                # 4. Wait exactly 5 seconds from the START of this poll
+                elapsed_time = time.time() - start_time
+                sleep_time = max(0, 5.0 - elapsed_time) # Prevent negative sleep
+                
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+                
+            if poll_count >= MAX_POLLS:
+                create_log("error", f"Max polling attempts ({MAX_POLLS}) reached for {self.order_number}. Stopping loop.")
                 
         except asyncio.CancelledError:
             # Task was cancelled because the user disconnected
+            create_log("info", f"Polling loop cancelled for {self.order_number}.")
             pass 
         except Exception as e:
-            create_log("error", f"WebSocket polling loop error: {str(e)}")
+            create_log("error", f"WebSocket polling loop error for {self.order_number}: {str(e)}")
 
     @sync_to_async
     def helper_func(self):
@@ -895,7 +918,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                             if tx_result and not tx_result == None:
                                 try:
                                     tx_data = tx_result.json()
-                                    create_log("info", f"TX DATA {tx_data}")
                                     
                                     # 5. Update DB with whatever JamboPay returns
                                     if tx_data:
@@ -921,11 +943,16 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                             customer_order.is_paid = "false"
                                             customer_order.save(update_fields=["is_paid", "updated"])
 
-                                        create_log("info", f"Updated order payment via WS: {final_status} - {status_description}")
+                                        # 🟢 LOG API RESULT
+                                        create_log("info", f"JamboPay API Returned -> Status: {final_status} | Desc: {status_description}")
                                 except ValueError:
-                                    create_log("error", f"NO TX DATA: {tx_result.text}")
+                                    create_log("error", f"JamboPay returned non-JSON response: {tx_result.text}")
+                            else:
+                                create_log("error", f"JamboPay API failed. Response: {tx_result}")
                     except Exception as e:
-                        create_log("error", f"WS Poller error: {str(e)}")
+                        create_log("error", f"JamboPay Poller exception: {str(e)}")
+                else:
+                    create_log("info", f"DB Status already {payment.status}. Skipping JamboPay API poll.")
 
                 # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
                 self.payment_data = json.dumps({
@@ -946,6 +973,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 return
 
         # Fallback if customer order or payment record isn't found
+        create_log("error", f"Fallback triggered. CustomerOrder or Payment not found for REF {self.order_number}")
         self.payment_data = json.dumps({
             "payment_id": None,
             "order_number": self.order_number,
@@ -961,6 +989,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         """
         Triggered by JamboPay Webhooks (if they happen to hit before the socket closes).
         """
+        create_log("info", f"Webhook triggered send_payment_status for {self.order_number}")
         await self.helper_func()
         await self.send_json({
             'payment': json.loads(self.payment_data),
