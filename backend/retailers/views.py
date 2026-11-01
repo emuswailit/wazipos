@@ -932,7 +932,22 @@ def customerOrdersStaffAPIView(request):
             return custom_errors_response(
                 1, "Out of stock item not created", errors
             )
-
+    elif action == "MakeCustomerOrderPayment":
+        errors, customer_order = retailer_utils.make_customer_order_payment(
+            request.data, request.user
+        )
+        if customer_order:
+            serializer = serializers.CustomerOrdersSerializer(
+                customer_order, many=False, context={"request": request}
+            )
+            return custom_success_message(
+                0, "Customer order payment made successfully",
+                serializer.data, "customer_order",
+            )
+        if errors:
+            return custom_errors_response(
+                1, "Customer order payment process failed", errors
+            )
     elif action == "RetrieveCurrentOpenIndent":
         errors, open_indent = retailer_utils.retrieve_open_indent(request.user)
         if open_indent:
