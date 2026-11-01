@@ -2841,6 +2841,13 @@ def recompute_order_payment_state(customer_order):
     return now_paid and not was_paid
 
 
+import json
+import requests
+from decimal import Decimal
+from decouple import config  # 🟢 Ensure this is imported
+
+# ... other imports (UserAccounts, CustomerOrderPayment, etc.)
+
 def process_customer_order_payment(
     entity, customer_order, payment_method, user,
     mobile_money_phone, order_items,
@@ -2857,14 +2864,23 @@ def process_customer_order_payment(
     errors = []
     administrator_account = None
 
+    # Safely cast the amount to a float first, then to an int
+    raw_amount = customer_order.order_net_price_total or 0
+    try:
+        amount = int(float(raw_amount))
+    except (ValueError, TypeError):
+        amount = 0
+
+    # 🟢 FETCH FROM .ENV
+    jambopay_collection_account = config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT", default=None)
+
     if payment_method.title == "CASH":
         try:
             CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="SUCCESS",
-                amount=customer_order.order_net_price_total
-                or Decimal("0.00"),
+                amount=customer_order.order_net_price_total or Decimal("0.00"),
                 entity=user.entity,
                 currency="KES",
                 owner=user,
@@ -2890,31 +2906,29 @@ def process_customer_order_payment(
         return [], customer_order
 
     elif payment_method.title == "MOBILE MONEY":
-        if not UserAccounts.objects.filter(
-            owner=entity.administrator
-        ).exists():
-            errors.append("Entity admin has no collection account")
+        if not mobile_money_phone or str(mobile_money_phone).strip() == "":
+            errors.append("Mobile money phone number is required for this payment method.")
             return errors, None
 
-        administrator_account = UserAccounts.objects.filter(
-            owner=entity.administrator
-        ).first()
+        # 🟢 FIX: Use the .env account instead of querying UserAccounts
+        if not jambopay_collection_account:
+            errors.append("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT is missing in .env")
+            return errors, None
 
         telco, formatted_phone_number = get_telco_by_phone_number(
             mobile_money_phone
         )
-        amount = int(customer_order.order_net_price_total or 0)
 
         payload = None
         if telco == "MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": amount,
+                "amount": amount, 
                 "callBackUrl": (
                     "https://webhook.site/"
                     "7911487f-fc9e-46b0-a812-3adfa008375c"
                 ),
-                "accountTo": administrator_account.account_number,
+                "accountTo": jambopay_collection_account, # 👈 Used here
                 "description": "Merchant payment",
                 "modeOfPayment": "MOBILE_MONEY",
                 "provider": "Mpesa",
@@ -2923,19 +2937,17 @@ def process_customer_order_payment(
                     "serviceType": "TOPUP",
                 },
             })
-            create_log(
-                "info",
-                f"create customer order by customer {payload}",
-            )
+            create_log("info", f"create customer order by customer {payload}")
+            
         elif telco == "AIRTELMONEY":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": str(amount),
+                "amount": str(amount), 
                 "callBackUrl": (
                     "https://webhook.site/"
                     "55963e0b-b692-42b6-a682-0223eaf7fbff"
                 ),
-                "accountTo": administrator_account.account_number,
+                "accountTo": jambopay_collection_account, # 👈 Used here
                 "currency": "KES",
                 "description": "TOPUP",
                 "modeOfPayment": "MOBILE_MONEY",
@@ -2988,17 +3000,19 @@ def process_customer_order_payment(
             return errors, None
 
         try:
+            # 🟢 Check if the account exists in DB (for the ForeignKey), otherwise pass None
+            db_account = UserAccounts.objects.filter(account_number=jambopay_collection_account).first()
+
             CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=customer_order.order_net_price_total
-                or Decimal("0.00"),
+                amount=customer_order.order_net_price_total or Decimal("0.00"),
                 entity=entity,
                 currency="KES",
                 owner=user,
                 customer_order=customer_order,
-                administrator_account=administrator_account,
+                administrator_account=db_account, # Falls back to None if not found
                 psp_reference_number=result_json["ref"],
                 telco=telco,
             )
@@ -3009,31 +3023,24 @@ def process_customer_order_payment(
             return errors, None
 
     elif payment_method.title == "JAMBOPAY WALLET":
-        if not UserAccounts.objects.filter(
-            owner=user.entity.administrator
-        ).exists():
-            errors.append("Entity administrator has no collection account")
+        # 🟢 FIX: Use the .env account instead of querying UserAccounts
+        if not jambopay_collection_account:
+            errors.append("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT is missing in .env")
             return errors, None
-
-        administrator_account = UserAccounts.objects.filter(
-            owner=user.entity.administrator
-        ).first()
 
         errors, wallet = get_account_by_phone(mobile_money_phone)
         if not wallet:
             errors.append("No wallet for provided mobile phone")
             return errors, None
 
-        amount = int(customer_order.order_net_price_total or 0)
-
         data = {
             "orderId": reference_number,
-            "amount": amount,
+            "amount": amount, 
             "callBackUrl": (
                 "https://webhook.site/"
                 "931bef21-de22-43bc-a45b-7e12999ac9cb"
             ),
-            "accountTo": administrator_account.account_number,
+            "accountTo": jambopay_collection_account, # 👈 Used here
             "description": "Customer order payment",
             "modeOfPayment": "WALLET_AS_SERVICE",
             "provider": "JAMBOPAY",
@@ -3049,17 +3056,19 @@ def process_customer_order_payment(
             return errors, None
 
         try:
+            # 🟢 Check if the account exists in DB (for the ForeignKey), otherwise pass None
+            db_account = UserAccounts.objects.filter(account_number=jambopay_collection_account).first()
+
             customer_order_payment = CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=customer_order.order_net_price_total
-                or Decimal("0.00"),
+                amount=customer_order.order_net_price_total or Decimal("0.00"),
                 entity=user.entity,
                 currency="KES",
                 owner=user,
                 customer_order=customer_order,
-                entity_collection_account=administrator_account,
+                entity_collection_account=db_account, # Falls back to None if not found
             )
             use_reference_number(reference_number)
             customer_order.reference_number = reference_number
@@ -3074,7 +3083,6 @@ def process_customer_order_payment(
 
     errors.append("Unsupported payment method")
     return errors, None
-
 
 @transaction.atomic
 def make_customer_order_payment(data, user):
