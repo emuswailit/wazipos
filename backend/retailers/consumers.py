@@ -815,7 +815,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     
                     # 3. Stop polling if we have a final status
                     status = payment_dict.get("status", "").upper()
-                    create_log("warn", f"TX DICT {payment_dict}")
+                    create_log("warning", f"TX DICT {payment_dict}")
                     if status and status != "PENDING":
                         create_log("info", f"Polling stopped for {self.order_number}. Final status: {status}")
                         break
