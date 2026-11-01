@@ -37,7 +37,7 @@ retailers_websocket_urlpatterns = [
     
     # 🟢 Customer Order Payment Status (WebSocket Polling)
     path(
-        "ws/retailers/orders/payment/<str:reference_number>/",
+        "ws/retailers/orders/payment/<str:order_number>/",
         consumers.CustomerOrderPaymentConsumer.as_asgi(),
     ),
 ]
