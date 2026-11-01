@@ -740,6 +740,17 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
             'customer_order_details': json.loads(self.datum),
         })
 
+import json
+import asyncio
+import requests
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from asgiref.sync import sync_to_async
+from django.core.serializers.json import DjangoJSONEncoder
+
+# Assuming these are imported from your project
+# from .models import CustomerOrders, CustomerOrderPayment
+# from .utils import create_log
+# from decouple import config
 
 # =====================================================================
 # 🟢 Customer Order Payment Status (Real-time Polling like Subscription)
@@ -798,14 +809,15 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 await self.helper_func()
                 
                 # 2. Send the payload to the frontend
-                payment_dict = json.loads(self.payment_data)
-                await self.send_json({'payment': payment_dict})
-                
-                # 3. Stop polling if we have a final status
-                status = payment_dict.get("status", "").upper()
-                if status and status != "PENDING":
-                    create_log("info", f"Polling stopped for {self.order_number}. Final status: {status}")
-                    break
+                if hasattr(self, 'payment_data'):
+                    payment_dict = json.loads(self.payment_data)
+                    await self.send_json({'payment': payment_dict})
+                    
+                    # 3. Stop polling if we have a final status
+                    status = payment_dict.get("status", "").upper()
+                    if status and status != "PENDING":
+                        create_log("info", f"Polling stopped for {self.order_number}. Final status: {status}")
+                        break
                 
                 # 4. Wait 5 seconds before the next poll
                 await asyncio.sleep(5)
@@ -818,15 +830,18 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        # 🟢 1. Query the CustomerOrder using its order_number (which is a string field)
+        # 🟢 1. Query the CustomerOrder by traversing the ForeignKey to the document_number string field
         customer_order = CustomerOrders.objects.filter(
-            order_number=self.order_number
+            order_number__document_number=self.order_number
         ).first()
         
         tx_data = None
 
         if customer_order:
-            # 🟢 2. Query the payment using the UUID id of the customer_order
+            # 🟢 2. Extract the actual string value from the DocumentNumbers object for JamboPay
+            order_number_str = customer_order.order_number.document_number if customer_order.order_number else self.order_number
+
+            # 🟢 3. Query the payment using the UUID id of the customer_order
             payment = CustomerOrderPayment.objects.filter(
                 customer_order_id=customer_order.id
             ).order_by('-created').first()
@@ -846,9 +861,8 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         token = auth_res.json().get("access_token") if auth_res.json() else None
                         
                         if token:
-                            # 🟢 3. Use customer_order.order_number for JamboPay transaction lookup
-                            order_id = customer_order.order_number 
-                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
+                            # 🟢 4. Use the extracted string for the JamboPay URL
+                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
                             
                             tx_result = requests.get(transaction_url, headers=poll_headers)
@@ -857,7 +871,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 try:
                                     tx_data = tx_result.json()
                                     
-                                    # 4. Update DB with whatever JamboPay returns
+                                    # 5. Update DB with whatever JamboPay returns
                                     if tx_data and not tx_data == None:
                                         final_status = str(tx_data.get("status", "")).upper()
                                         status_description = tx_data.get("description", "")
@@ -890,12 +904,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
                 self.payment_data = json.dumps({
                     "payment_id": str(payment.id),
-                    "order_number": customer_order.order_number, # 👈 Use order_number
+                    "order_number": order_number_str, # 👈 Use the string
                     "amount": float(payment.amount),
                     "status": payment.status,
                     "description": payment.description,
                     "jambopay_response": tx_data if tx_data else {
-                        "orderId": customer_order.order_number,
+                        "orderId": order_number_str, # 👈 Use the string
                         "ref": payment.psp_reference_number,
                         "status": payment.status,
                         "description": payment.description
@@ -921,7 +935,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
-
 
 # =====================================================================
 # Retailer product requests
