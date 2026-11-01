@@ -812,23 +812,26 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     async def poll_payment_loop(self):
         """
         Continuously checks the payment status every 5 seconds.
-        Stops when the status is no longer PENDING.
+        Stops when the status is no longer PENDING, but polls at least 3 times.
         """
+        poll_count = 0
         try:
             while True:
                 # 1. Fetch latest from JamboPay and update DB
                 await self.helper_func()
+                poll_count += 1
                 
                 # 2. Send the payload to the frontend
                 if hasattr(self, 'payment_data'):
                     payment_dict = json.loads(self.payment_data)
                     await self.send_json({'payment': payment_dict})
                     
-                    # 3. Stop polling if we have a final status
+                    # 3. Stop polling if we have a final status AND we've polled at least 3 times
                     status = payment_dict.get("status", "").upper()
-                    create_log("warning", f"TX DICT {payment_dict}")
-                    if status and status != "PENDING":
-                        create_log("info", f"Polling stopped for {self.order_number}. Final status: {status}")
+                    create_log("warning", f"TX DICT (Poll #{poll_count}) {payment_dict}")
+                    
+                    if status and status != "PENDING" and poll_count >= 3:
+                        create_log("info", f"Polling stopped for {self.order_number}. Final status: {status} after {poll_count} polls.")
                         break
                 
                 # 4. Wait 5 seconds before the next poll
@@ -889,7 +892,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                             
                             tx_result = requests.get(transaction_url, headers=poll_headers)
                             
-                            if tx_result and tx_result.status_code == 200:
+                            if tx_result and not tx_result == None:
                                 try:
                                     tx_data = tx_result.json()
                                     create_log("info", f"TX DATA {tx_data}")
@@ -921,8 +924,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                         create_log("info", f"Updated order payment via WS: {final_status} - {status_description}")
                                 except ValueError:
                                     create_log("error", f"NO TX DATA: {tx_result.text}")
-                            else:
-                                create_log("error", f"JamboPay API error: {tx_result.status_code if tx_result else 'No response'}")
                     except Exception as e:
                         create_log("error", f"WS Poller error: {str(e)}")
 
