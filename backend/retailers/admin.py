@@ -39,6 +39,7 @@ class CustomerOrdersAdmin(admin.ModelAdmin):
         "order_type",
         "order_origin",
         "order_number",
+        "reference_number",
         "order_channel",
         "shipping_cost",
         "order_price_total",

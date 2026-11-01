@@ -761,6 +761,8 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
         # 2. Get the reference number from the URL route
         self.reference_number = self.scope['url_route']['kwargs']['reference_number']
+
+        create_log("info", f"REF { self.reference_number}")
         
         # 3. Create a specific group for this payment session
         self.group_name = f"payment_{self.reference_number}"
