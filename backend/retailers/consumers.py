@@ -760,12 +760,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             return
 
         # 2. Get the reference number from the URL route
-        self.reference_number = self.scope['url_route']['kwargs']['reference_number']
+        self.order_number = self.scope['url_route']['kwargs']['order_number']
 
-        create_log("info", f"REF { self.reference_number}")
+        create_log("info", f"REF { self.order_number}")
         
         # 3. Create a specific group for this payment session
-        self.group_name = f"payment_{self.reference_number}"
+        self.group_name = f"payment_{self.order_number}"
 
         await self.channel_layer.group_add(
             self.group_name,
@@ -805,7 +805,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 # 3. Stop polling if we have a final status
                 status = payment_dict.get("status", "").upper()
                 if status and status != "PENDING":
-                    create_log("info", f"Polling stopped for {self.reference_number}. Final status: {status}")
+                    create_log("info", f"Polling stopped for {self.order_number}. Final status: {status}")
                     break
                 
                 # 4. Wait 5 seconds before the next poll
@@ -819,9 +819,9 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        # 🟢 1. Query the CustomerOrder using its reference_number
+        # 🟢 1. Query the CustomerOrder using its order_number
         customer_order = CustomerOrders.objects.filter(
-            reference_number=self.reference_number
+            order_number=self.order_number
         ).first()
         
         tx_data = None
@@ -831,6 +831,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             payment = CustomerOrderPayment.objects.filter(
                 customer_order=customer_order
             ).order_by('-created').first()
+            
 
             if payment:
                 # Only poll JamboPay if the DB still says PENDING
@@ -847,8 +848,8 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         token = auth_res.json().get("access_token") if auth_res.json() else None
                         
                         if token:
-                            # 🟢 2. Use customer_order.reference_number for JamboPay transaction lookup
-                            order_id = customer_order.reference_number 
+                            # 🟢 2. Use customer_order.order_number for JamboPay transaction lookup
+                            order_id = customer_order.order_number 
                             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
                             
@@ -870,7 +871,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                             payment.description = status_description
                                         
                                         if provider_ref:
-                                            payment.provider_reference_number = provider_ref
+                                            payment.provider_order_number = provider_ref
                                             
                                         payment.save()
                                         
@@ -891,12 +892,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
                 self.payment_data = json.dumps({
                     "payment_id": str(payment.id),
-                    "reference_number": customer_order.reference_number, # 👈 Using customer_order reference
+                    "order_number": payment.reference_number, # 👈 Using payment reference
                     "amount": float(payment.amount),
                     "status": payment.status,
                     "description": payment.description,
                     "jambopay_response": tx_data if tx_data else {
-                        "orderId": customer_order.reference_number,
+                        "orderId": payment.reference_number,
                         "ref": payment.psp_reference_number,
                         "status": payment.status,
                         "description": payment.description
@@ -907,7 +908,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         # Fallback if customer order or payment record isn't found
         self.payment_data = json.dumps({
             "payment_id": None,
-            "reference_number": self.reference_number,
+            "order_number": self.order_number,
             "amount": 0,
             "status": "NOT_FOUND",
             "description": "Payment record could not be found.",
