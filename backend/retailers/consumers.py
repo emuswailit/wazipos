@@ -764,6 +764,7 @@ import requests
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import Q
 
 # Assuming these are imported from your project
 # from .models import CustomerOrders, CustomerOrderPayment
@@ -772,7 +773,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
-    Listens to a specific order (by ID or Reference Number) to track its payment status.
+    Listens to a specific order by reference number to track its payment status.
     Polls JamboPay exactly every 5 seconds until the status is no longer PENDING.
     """
 
@@ -784,7 +785,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             await self.close()
             return
 
-        # 2. Get the identifier from the URL route (could be ID or Reference Number)
+        # 2. Get the reference number from the URL route
         self.identifier = str(self.scope['url_route']['kwargs']['order_number'])
         create_log("info", f"WS Connect: Identifier {self.identifier}")
         
@@ -816,7 +817,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     async def poll_payment_loop(self):
         """
         Continuously checks the payment status every 5 seconds.
-        Stops when the status is no longer PENDING.
+        Polls at least 3 times, and continues while status is PENDING.
         """
         MAX_POLLS = 20  # Safety limit: ~100 seconds max
         poll_count = 0
@@ -840,9 +841,11 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     
                     create_log("info", f"[POLL #{poll_count}/{MAX_POLLS}] Result -> Status: {status} | Ref: {ref} | Desc: {description}")
                     
-                    # 3. Stop polling if status is no longer PENDING
-                    if status and status != "PENDING":
-                        create_log("info", f"Polling stopped for {self.identifier}. Final status: {status}")
+                    # 3. Stop polling if:
+                    #    - We have polled at least 3 times
+                    #    - AND the status is no longer PENDING
+                    if poll_count >= 3 and status and status != "PENDING":
+                        create_log("info", f"Polling stopped for {self.identifier}. Final status: {status} after {poll_count} polls.")
                         break
                 
                 # 4. Wait exactly 5 seconds from the start of the poll
@@ -863,23 +866,11 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        customer_order = None
-        
-        # 🟢 1. DETERMINE IF IDENTIFIER IS ORDER ID OR REFERENCE NUMBER
-        # Try finding by ID first (handles int or string IDs)
-        try:
-            customer_order = CustomerOrders.objects.filter(id=self.identifier).first()
-        except (ValueError, TypeError):
-            # If passing a string like "CYH..." to an IntegerField, it throws a ValueError
-            pass
-
-        # If not found by ID, try by reference_number
-        if not customer_order:
-            customer_order = CustomerOrders.objects.filter(reference_number=self.identifier).first()
-            
-        # Fallback: Check if it was passed as document_number
-        if not customer_order:
-            customer_order = CustomerOrders.objects.filter(order_number__document_number=self.identifier).first()
+        # 🟢 1. Query ONLY using reference_number or document_number (NO UUID ID LOOKUP)
+        customer_order = CustomerOrders.objects.filter(
+            Q(reference_number=self.identifier) | 
+            Q(order_number__document_number=self.identifier)
+        ).first()
 
         tx_data = None
 
@@ -993,7 +984,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
-
         
 # =====================================================================
 # Retailer product requests
