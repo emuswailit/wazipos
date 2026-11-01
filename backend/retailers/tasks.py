@@ -142,8 +142,9 @@ class UUIDEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def broadcast_order_payment_update(reference_number, status, description=""):
+def broadcast_order_payment_update(reference_number, status, description="Desc"):
     """
+    fzffzx
     🟢 Helper to broadcast a signal to the specific customer order payment WebSocket group.
     Triggered by Celery tasks or JamboPay webhooks to instantly notify the frontend.
     """
