@@ -921,6 +921,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                     
                                     # 5. Update DB with whatever JamboPay returns
                                     if tx_data:
+                                        create_log("info", f"TXX {tx_data}")
                                         final_status = str(tx_data.get("status", "")).upper()
                                         status_description = tx_data.get("description", "")
                                         provider_ref = tx_data.get("providerRef")
@@ -994,7 +995,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
-        
+
 # =====================================================================
 # Retailer product requests
 # =====================================================================
