@@ -957,6 +957,10 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     tx_data["payment_method_title"] = payment_method_title
                     tx_data["reference_number"] = payment.reference_number
                     
+                    # 🟢 FIX: If JamboPay returns an empty description, fallback to the DB description
+                    if not tx_data.get("description") and payment.description:
+                        tx_data["description"] = payment.description
+                    
                     self.payment_data = json.dumps(tx_data, cls=DjangoJSONEncoder)
                 else:
                     # Fallback: Construct a JamboPay-like payload from DB values
