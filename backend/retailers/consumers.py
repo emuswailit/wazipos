@@ -876,10 +876,11 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 if tx_result and not tx_result == None:
                                     try:
                                         tx_data = tx_result.json()
-                                        create_log("info", f"TX DATA {tx_data}")
+                                        
                                         
                                         # 5. Update DB with whatever JamboPay returns
                                         if tx_data and not tx_data == None:
+                                            create_log("info", f"TX DATA {tx_data}")
                                             final_status = str(tx_data.get("status", "")).upper()
                                             status_description = tx_data.get("description", "")
                                             provider_ref = tx_data.get("providerRef")
@@ -904,6 +905,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
                                             create_log("info", f"Updated order payment via WS: {final_status} - {status_description}")
                                     except ValueError:
+                                        create_log("error", f"NO TX DATA")
                                         create_log("error", "JamboPay returned a non-JSON response during polling.")
                         except Exception as e:
                             create_log("error", f"WS Poller error: {str(e)}")
