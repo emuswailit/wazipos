@@ -908,7 +908,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         token = auth_res.json().get("access_token") if auth_res.json() else None
                         
                         if token:
-                            create_log("error",f"REF {order_number_str}")
+                            create_log("error",f"REF {self.reference_number}")
                             # 🟢 4. Use the extracted string for the JamboPay URL
                             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{self.reference_number}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
