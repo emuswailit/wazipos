@@ -31,7 +31,7 @@ from core.date_utils import get_formatted_from_date, get_formatted_to_date
 from products.models import Products
 from retailers.models import (
     CustomerOrders,
-    CustomerOrderPayment, # 🟢 Added
+    CustomerOrderPayment,
     OutOfStock,
     Prescriptions,
     RetailerIndent,
@@ -747,7 +747,7 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
 
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
-    Listens to a specific payment reference to track its success/failure in real-time.
+    Listens to a specific order number to track its payment status in real-time.
     Polls JamboPay every 5 seconds until the status changes from PENDING.
     """
 
@@ -759,10 +759,9 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             await self.close()
             return
 
-        # 2. Get the reference number from the URL route
+        # 2. Get the order number from the URL route
         self.order_number = self.scope['url_route']['kwargs']['order_number']
-
-        create_log("info", f"REF { self.order_number}")
+        create_log("info", f"REF {self.order_number}")
         
         # 3. Create a specific group for this payment session
         self.group_name = f"payment_{self.order_number}"
@@ -819,7 +818,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        # 🟢 1. Query the CustomerOrder using its order_number
+        # 🟢 1. Query the CustomerOrder using its order_number (which is a string field)
         customer_order = CustomerOrders.objects.filter(
             order_number=self.order_number
         ).first()
@@ -827,11 +826,10 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         tx_data = None
 
         if customer_order:
-            # Get the associated payment record
+            # 🟢 2. Query the payment using the UUID id of the customer_order
             payment = CustomerOrderPayment.objects.filter(
-                customer_order=customer_order
+                customer_order_id=customer_order.id
             ).order_by('-created').first()
-            
 
             if payment:
                 # Only poll JamboPay if the DB still says PENDING
@@ -848,7 +846,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         token = auth_res.json().get("access_token") if auth_res.json() else None
                         
                         if token:
-                            # 🟢 2. Use customer_order.order_number for JamboPay transaction lookup
+                            # 🟢 3. Use customer_order.order_number for JamboPay transaction lookup
                             order_id = customer_order.order_number 
                             transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
@@ -859,7 +857,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 try:
                                     tx_data = tx_result.json()
                                     
-                                    # 3. Update DB with whatever JamboPay returns
+                                    # 4. Update DB with whatever JamboPay returns
                                     if tx_data and not tx_data == None:
                                         final_status = str(tx_data.get("status", "")).upper()
                                         status_description = tx_data.get("description", "")
@@ -871,7 +869,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                             payment.description = status_description
                                         
                                         if provider_ref:
-                                            payment.provider_order_number = provider_ref
+                                            payment.provider_reference_number = provider_ref
                                             
                                         payment.save()
                                         
@@ -892,12 +890,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
                 self.payment_data = json.dumps({
                     "payment_id": str(payment.id),
-                    "order_number": payment.reference_number, # 👈 Using payment reference
+                    "order_number": customer_order.order_number, # 👈 Use order_number
                     "amount": float(payment.amount),
                     "status": payment.status,
                     "description": payment.description,
                     "jambopay_response": tx_data if tx_data else {
-                        "orderId": payment.reference_number,
+                        "orderId": customer_order.order_number,
                         "ref": payment.psp_reference_number,
                         "status": payment.status,
                         "description": payment.description
