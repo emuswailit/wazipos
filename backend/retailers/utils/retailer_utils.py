@@ -3017,6 +3017,8 @@ def process_customer_order_payment(
                 psp_reference_number=result_json["ref"],
                 telco=telco,
             )
+            customer_order.reference_number=reference_number
+            customer_order.save()
             use_reference_number(reference_number)
             return [], customer_order
         except Exception as e:

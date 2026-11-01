@@ -755,6 +755,8 @@ from django.core.serializers.json import DjangoJSONEncoder
 # =====================================================================
 # 🟢 Customer Order Payment Status (Real-time Polling like Subscription)
 # =====================================================================
+
+
 import json
 import asyncio
 import time
@@ -770,7 +772,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
-    Listens to a specific order number to track its payment status in real-time.
+    Listens to a specific order reference number to track its payment status in real-time.
     Polls JamboPay exactly every 5 seconds.
     """
 
@@ -782,12 +784,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             await self.close()
             return
 
-        # 2. Get the order number from the URL route
-        self.order_number = self.scope['url_route']['kwargs']['order_number']
-        create_log("info", f"WS Connect: REF {self.order_number}")
+        # 2. Get the reference number from the URL route
+        self.order_ref = self.scope['url_route']['kwargs']['order_number']
+        create_log("info", f"WS Connect: REF {self.order_ref}")
         
         # 3. Create a specific group for this payment session
-        self.group_name = f"payment_{self.order_number}"
+        self.group_name = f"payment_{self.order_ref}"
 
         await self.channel_layer.group_add(
             self.group_name,
@@ -799,7 +801,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         self.polling_task = asyncio.create_task(self.poll_payment_loop())
 
     async def disconnect(self, close_code):
-        create_log("info", f"WS Disconnect: REF {self.order_number}, Code: {close_code}")
+        create_log("info", f"WS Disconnect: REF {self.order_ref}, Code: {close_code}")
         
         # Cancel the polling task if it's still running
         if hasattr(self, 'polling_task'):
@@ -846,7 +848,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     #    - We have polled at least 3 times
                     #    - AND the status is no longer PENDING
                     if poll_count >= 3 and status and status != "PENDING":
-                        create_log("info", f"Polling stopped for {self.order_number}. Final status: {status} after {poll_count} polls.")
+                        create_log("info", f"Polling stopped for {self.order_ref}. Final status: {status} after {poll_count} polls.")
                         break
                 
                 # 4. Wait exactly 5 seconds from the START of this poll
@@ -857,30 +859,27 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     await asyncio.sleep(sleep_time)
                 
             if poll_count >= MAX_POLLS:
-                create_log("error", f"Max polling attempts ({MAX_POLLS}) reached for {self.order_number}. Stopping loop.")
+                create_log("error", f"Max polling attempts ({MAX_POLLS}) reached for {self.order_ref}. Stopping loop.")
                 
         except asyncio.CancelledError:
             # Task was cancelled because the user disconnected
-            create_log("info", f"Polling loop cancelled for {self.order_number}.")
+            create_log("info", f"Polling loop cancelled for {self.order_ref}.")
             pass 
         except Exception as e:
-            create_log("error", f"WebSocket polling loop error for {self.order_number}: {str(e)}")
+            create_log("error", f"WebSocket polling loop error for {self.order_ref}: {str(e)}")
 
     @sync_to_async
     def helper_func(self):
-        # 🟢 1. Query the CustomerOrder
+        # 🟢 1. Query the CustomerOrder by reference_number
         customer_order = CustomerOrders.objects.filter(
-            order_number__document_number=self.order_number
+            reference_number=self.order_ref
         ).first()
         
         tx_data = None
 
         if customer_order:
-            # 🟢 2. Extract the actual string value (document_number) for JamboPay
+            # 🟢 2. Use the reference_number for JamboPay
             order_number_str = customer_order.reference_number
-            self.reference_number =order_number_str
-            create_log("error", f"REEEF",self.reference_number)
-
 
             # 🟢 2.5 Extract the Payment Method Title safely
             payment_method_title = (
@@ -908,9 +907,8 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         token = auth_res.json().get("access_token") if auth_res.json() else None
                         
                         if token:
-                            create_log("error",f"REF {self.reference_number}")
                             # 🟢 4. Use the extracted string for the JamboPay URL
-                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{self.reference_number}"
+                            transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_number_str}"
                             poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
                             
                             tx_result = requests.get(transaction_url, headers=poll_headers)
@@ -921,7 +919,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                     
                                     # 5. Update DB with whatever JamboPay returns
                                     if tx_data:
-                                        create_log("info", f"TXX {tx_data}")
                                         final_status = str(tx_data.get("status", "")).upper()
                                         status_description = tx_data.get("description", "")
                                         provider_ref = tx_data.get("providerRef")
@@ -946,9 +943,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
                                         # 🟢 LOG API RESULT
                                         create_log("info", f"JamboPay API Returned -> Status: {final_status} | Desc: {status_description}")
-
-                                    else:
-                                        create_log("info", f"TXX NONE")
                                 except ValueError:
                                     create_log("error", f"JamboPay returned non-JSON response: {tx_result.text}")
                             else:
@@ -977,10 +971,10 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 return
 
         # Fallback if customer order or payment record isn't found
-        create_log("error", f"Fallback triggered. CustomerOrder or Payment not found for REF {self.order_number}")
+        create_log("error", f"Fallback triggered. CustomerOrder or Payment not found for REF {self.order_ref}")
         self.payment_data = json.dumps({
             "payment_id": None,
-            "order_number": self.order_number,
+            "order_number": self.order_ref,
             "amount": 0,
             "status": "NOT_FOUND",
             "reference_number": "",
@@ -993,12 +987,13 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         """
         Triggered by JamboPay Webhooks (if they happen to hit before the socket closes).
         """
-        create_log("info", f"Webhook triggered send_payment_status for {self.order_number}")
+        create_log("info", f"Webhook triggered send_payment_status for {self.order_ref}")
         await self.helper_func()
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
 
+        
 # =====================================================================
 # Retailer product requests
 # =====================================================================
