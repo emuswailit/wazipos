@@ -3172,11 +3172,6 @@ def re_initiate_order_payment(data, user):
         else:
             raise exceptions.ValidationError("Order already paid for")
 
-
-# ===========================================================================
-# Customer order — create / update
-# ===========================================================================
-
 @transaction.atomic
 def create_customer_order(data, user):
     errors = []
@@ -3268,6 +3263,9 @@ def create_customer_order(data, user):
                 payment_method_id
             )
         )
+        if not payment_method:
+            errors.append("Invalid payment method provided")
+            return errors, None
 
     delivery_method = details.get("delivery_method")
     if not delivery_method:
@@ -3291,7 +3289,8 @@ def create_customer_order(data, user):
             errors.append("Product ID is required")
             return errors, None
 
-        retailer_receipt = models.RetailerReceipts.objects.filter(
+        # 🟢 FIX: Changed models.RetailerReceipts to RetailerReceipts
+        retailer_receipt = RetailerReceipts.objects.filter(
             id=retailer_receipt_id, current_unit_quantity__gte=0,
         ).first()
         if not retailer_receipt:
@@ -3327,12 +3326,16 @@ def create_customer_order(data, user):
         entity, user, "CUSTOMERORDER",
     )
 
+    # 🟢 FIX: Use the customer details sent by the frontend (for Walk-in customers)
+    customer_name = details.get("customer_name") or f"{user.first_name} {user.last_name}"
+    customer_phone = details.get("customer_phone") or str(user.phone or "")
+
     try:
         order_created = CustomerOrders.objects.create(
             order_number=order_number,
             payment_account_number=payment_account_number,
-            customer_name=f"{user.first_name} {user.last_name}",
-            customer_phone=f"{user.phone}",
+            customer_name=customer_name,
+            customer_phone=customer_phone,
             order_origin=order_origin,
             delivery_method=delivery_method,
             shipping_cost=shipping_cost,
@@ -3357,11 +3360,14 @@ def create_customer_order(data, user):
 
         for item in order_items:
             purchased_qty = _to_int(item["purchased_quantity"])
-            discount_quantity = _to_int(item.get("discount_quantity"))
+            discount_quantity = _to_int(item.get("discount_quantity", 0))
             final_unit = _to_decimal(item["final_unit_selling_price"])
-            discount_unit = _to_decimal(item.get("item_price_discount"))
+            
+            # 🟢 FIX: Check for both item_price_discount and item_discount from frontend
+            discount_unit = _to_decimal(item.get("item_price_discount") or item.get("item_discount") or 0)
 
-            retailer_receipt = models.RetailerReceipts.objects.filter(
+            # 🟢 FIX: Changed models.RetailerReceipts to RetailerReceipts
+            retailer_receipt = RetailerReceipts.objects.filter(
                 id=item["retailer_receipt"],
                 current_unit_quantity__gte=purchased_qty,
             ).first()
@@ -3419,6 +3425,7 @@ def create_customer_order(data, user):
     except Exception as e:
         errors.append(str(e))
         return errors, None
+
 
 
 @transaction.atomic
