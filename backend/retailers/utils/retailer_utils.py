@@ -2858,6 +2858,36 @@ def broadcast_customer_orders_update():
         create_log("error", f"Failed to broadcast customer orders update: {e}")
 
 
+import json
+import requests
+from decimal import Decimal
+from decouple import config
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from django.db import transaction
+from django.core.exceptions import ValidationError
+
+# Assuming these are imported from your project
+# from .models import CustomerOrderPayment, UserAccounts
+# from .utils import generate_reference_number, use_reference_number, get_telco_by_phone_number
+# from utils.logging import create_log
+
+def broadcast_customer_orders_update():
+    """
+    Triggers the CustomerOrdersConsumer to fetch the latest orders 
+    and push them to all connected frontend clients.
+    """
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            'customer-orders',
+            {'type': 'send_customer_orders'}
+        )
+        create_log("info", "Broadcasted customer orders update via WebSocket.")
+    except Exception as e:
+        create_log("error", f"Failed to broadcast customer orders update: {e}")
+
+
 def process_customer_order_payment(
     entity, customer_order, payment_method, user,
     mobile_money_phone, order_items,
@@ -2874,11 +2904,12 @@ def process_customer_order_payment(
     errors = []
     administrator_account = None
 
-    # 🟢 FIX: Use Decimal to preserve cents (e.g., 81.50) instead of int() which truncates
+    # 🟢 FIX: JamboPay requires whole numbers (no decimals). Convert to int.
     raw_amount = customer_order.order_net_price_total or 0
     try:
-        amount_decimal = Decimal(str(raw_amount)).quantize(Decimal('0.01'))
-        amount_str = str(amount_decimal)
+        amount_int = int(float(raw_amount))
+        amount_str = str(amount_int)
+        amount_decimal = Decimal(str(raw_amount)).quantize(Decimal('0.01')) # Keep decimals for DB
     except (ValueError, TypeError):
         errors.append("Invalid order amount.")
         return errors, None
@@ -2905,7 +2936,6 @@ def process_customer_order_payment(
             customer_order.save()
             use_reference_number(reference_number)
             
-            # 🟢 PUSH WEBSOCKET UPDATE
             broadcast_customer_orders_update()
             
             return [], customer_order
@@ -2921,7 +2951,6 @@ def process_customer_order_payment(
             "payment_method", "reference_number", "status", "updated",
         ])
         
-        # 🟢 PUSH WEBSOCKET UPDATE
         broadcast_customer_orders_update()
         
         return [], customer_order
@@ -2943,7 +2972,7 @@ def process_customer_order_payment(
         if telco == "MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": amount_str, # 🟢 Use string amount
+                "amount": amount_int, # 🟢 Pass integer
                 "callBackUrl": (
                     "https://webhook.site/"
                     "7911487f-fc9e-46b0-a812-3adfa008375c"
@@ -2960,7 +2989,7 @@ def process_customer_order_payment(
         elif telco == "AIRTELMONEY":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": amount_str, # 🟢 Use string amount
+                "amount": amount_str, # 🟢 Pass integer string
                 "callBackUrl": (
                     "https://webhook.site/"
                     "55963e0b-b692-42b6-a682-0223eaf7fbff"
@@ -3041,7 +3070,7 @@ def process_customer_order_payment(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=amount_decimal,
+                amount=amount_decimal, # Keep decimal for DB
                 entity=entity,
                 currency="KES",
                 owner=user,
@@ -3077,12 +3106,12 @@ def process_customer_order_payment(
 
         data = {
             "orderId": reference_number,
-            "amount": amount_str, # 🟢 Use string amount
+            "amount": amount_int, # 🟢 Pass integer
             "callBackUrl": (
                 "https://webhook.site/"
                 "931bef21-de22-43bc-a45b-7e12999ac9cb"
             ),
-            "accountTo": jambopay_collection_account,
+            "accountTo": jambopay_collection_account, 
             "description": "Customer order payment",
             "modeOfPayment": "WALLET_AS_SERVICE",
             "provider": "JAMBOPAY",
@@ -3104,7 +3133,7 @@ def process_customer_order_payment(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=amount_decimal,
+                amount=amount_decimal, # Keep decimal for DB
                 entity=user.entity,
                 currency="KES",
                 owner=user,
@@ -3130,7 +3159,6 @@ def process_customer_order_payment(
 
     errors.append("Unsupported payment method")
     return errors, None
-
 
 @transaction.atomic
 def make_customer_order_payment(data, user):
