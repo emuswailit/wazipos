@@ -12,7 +12,8 @@ from decimal import Decimal, InvalidOperation
 import pytz
 import requests
 from decouple import config
-
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 # ---------- Django ----------
 from django.contrib.gis.geos import Point, fromstr
 from django.db import IntegrityError, transaction
@@ -2841,12 +2842,21 @@ def recompute_order_payment_state(customer_order):
     return now_paid and not was_paid
 
 
-import json
-import requests
-from decimal import Decimal
-from decouple import config  # 🟢 Ensure this is imported
+def broadcast_customer_orders_update():
+    """
+    Triggers the CustomerOrdersConsumer to fetch the latest orders 
+    and push them to all connected frontend clients.
+    """
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            'customer-orders',
+            {'type': 'send_customer_orders'}
+        )
+        create_log("info", "Broadcasted customer orders update via WebSocket.")
+    except Exception as e:
+        create_log("error", f"Failed to broadcast customer orders update: {e}")
 
-# ... other imports (UserAccounts, CustomerOrderPayment, etc.)
 
 def process_customer_order_payment(
     entity, customer_order, payment_method, user,
@@ -2864,16 +2874,17 @@ def process_customer_order_payment(
     errors = []
     administrator_account = None
 
-    # Safely cast the amount to a float first, then to an int
+    # 🟢 FIX: Use Decimal to preserve cents (e.g., 81.50) instead of int() which truncates
     raw_amount = customer_order.order_net_price_total or 0
     try:
-        amount = int(float(raw_amount))
+        amount_decimal = Decimal(str(raw_amount)).quantize(Decimal('0.01'))
+        amount_str = str(amount_decimal)
     except (ValueError, TypeError):
-        amount = 0
+        errors.append("Invalid order amount.")
+        return errors, None
 
     # 🟢 FETCH FROM .ENV
     jambopay_collection_account = config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT", default=None)
-    ###
 
     if payment_method.title == "CASH":
         try:
@@ -2881,7 +2892,7 @@ def process_customer_order_payment(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="SUCCESS",
-                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                amount=amount_decimal,
                 entity=user.entity,
                 currency="KES",
                 owner=user,
@@ -2893,6 +2904,10 @@ def process_customer_order_payment(
             customer_order.reference_number = reference_number
             customer_order.save()
             use_reference_number(reference_number)
+            
+            # 🟢 PUSH WEBSOCKET UPDATE
+            broadcast_customer_orders_update()
+            
             return [], customer_order
         except Exception as e:
             errors.append(str(e))
@@ -2905,6 +2920,10 @@ def process_customer_order_payment(
         customer_order.save(update_fields=[
             "payment_method", "reference_number", "status", "updated",
         ])
+        
+        # 🟢 PUSH WEBSOCKET UPDATE
+        broadcast_customer_orders_update()
+        
         return [], customer_order
 
     elif payment_method.title == "MOBILE MONEY":
@@ -2912,7 +2931,6 @@ def process_customer_order_payment(
             errors.append("Mobile money phone number is required for this payment method.")
             return errors, None
 
-        # 🟢 FIX: Use the .env account instead of querying UserAccounts
         if not jambopay_collection_account:
             errors.append("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT is missing in .env")
             return errors, None
@@ -2925,12 +2943,12 @@ def process_customer_order_payment(
         if telco == "MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": amount, 
+                "amount": amount_str, # 🟢 Use string amount
                 "callBackUrl": (
                     "https://webhook.site/"
                     "7911487f-fc9e-46b0-a812-3adfa008375c"
                 ),
-                "accountTo": jambopay_collection_account, # 👈 Used here
+                "accountTo": jambopay_collection_account, 
                 "description": "Merchant payment",
                 "modeOfPayment": "MOBILE_MONEY",
                 "provider": "Mpesa",
@@ -2939,17 +2957,15 @@ def process_customer_order_payment(
                     "serviceType": "TOPUP",
                 },
             })
-            create_log("info", f"create customer order by customer {payload}")
-            
         elif telco == "AIRTELMONEY":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": str(amount), 
+                "amount": amount_str, # 🟢 Use string amount
                 "callBackUrl": (
                     "https://webhook.site/"
                     "55963e0b-b692-42b6-a682-0223eaf7fbff"
                 ),
-                "accountTo": jambopay_collection_account, # 👈 Used here
+                "accountTo": jambopay_collection_account,
                 "currency": "KES",
                 "description": "TOPUP",
                 "modeOfPayment": "MOBILE_MONEY",
@@ -2963,7 +2979,7 @@ def process_customer_order_payment(
             errors.append(f"Unsupported telco: {telco}")
             return errors, None
 
-        create_log("info", f"just before checkout {payload}")
+        create_log("info", f"JAMBOPAY CHECKOUT PAYLOAD for {reference_number}: {payload}")
 
         the_data = {
             "client_id": config("JAMBOPAY_CLIENT_ID"),
@@ -2971,15 +2987,18 @@ def process_customer_order_payment(
             "grant_type": config("JAMBOPA_GRANT_TYPE"),
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        result = requests.post(
-            config("JAMBOPAY_AUTH_URL1"),
-            data=the_data,
-            headers=headers,
-        )
-        result_json = result.json()
-        token = result_json.get("access_token") if result_json else None
+        
+        # 🟢 AUTHENTICATION
+        try:
+            auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
+            token = auth_res.json().get("access_token") if auth_res.json() else None
+        except ValueError:
+            create_log("error", f"JAMBOPAY AUTH NON-JSON RESPONSE. HTTP Status: {auth_res.status_code} | Raw Text: {auth_res.text}")
+            errors.append("Payment gateway authentication failed (Invalid response).")
+            return errors, None
 
         if not token:
+            create_log("error", f"JAMBOPAY AUTH FAILED for {reference_number}. Response: {auth_res.text}")
             errors.append("Token not generated")
             return errors, None
 
@@ -2988,54 +3007,65 @@ def process_customer_order_payment(
             "Authorization": "Bearer " + token,
             "Accept": "*/*",
         }
-        # ✅ NEW CODE (Safely handles non-JSON errors)
-        result = requests.post(
-            config("JAMBOPAY_BASE_URL") + "/checkout/express",
-            data=payload,
-            headers=headers,
-        )
         
+        # 🟢 EXPRESS CHECKOUT
         try:
-            result_json = result.json()
-        except ValueError:
-            # 🟢 If JamboPay returns HTML or plain text, log it and fail gracefully
-            create_log("error", f"JAMBOPAY NON-JSON RESPONSE. HTTP Status: {result.status_code} | Raw Text: {result.text}")
+            result = requests.post(
+                config("JAMBOPAY_BASE_URL") + "/checkout/express", 
+                data=payload, 
+                headers=headers
+            )
             
-            errors.append(f"Payment Gateway Error ({result.status_code}). Please contact support.")
-            return errors, None
-        
-        if not result_json or "ref" not in result_json:
-            create_log("info", f"from jp errors {errors}")
-            errors.append("Payment failed")
-            return errors, None
+            create_log("info", f"JAMBOPAY EXPRESS HTTP STATUS: {result.status_code}")
+            
+            try:
+                result_json = result.json()
+            except ValueError:
+                create_log("error", f"JAMBOPAY NON-JSON RESPONSE. HTTP Status: {result.status_code} | Raw Text: {result.text}")
+                errors.append(f"Payment Gateway Error ({result.status_code}). Please contact support.")
+                return errors, None
 
-        try:
-            # 🟢 Check if the account exists in DB (for the ForeignKey), otherwise pass None
+            create_log("info", f"JAMBOPAY EXPRESS RESPONSE JSON: {json.dumps(result_json, indent=2)}")
+
+            if not result_json or "ref" not in result_json:
+                # Extract the exact error from JamboPay if it exists
+                jp_error = result_json.get("message") or result_json.get("error") or result_json.get("description") or "Unknown rejection"
+                create_log("error", f"JAMBOPAY REJECTED PAYMENT for {reference_number}. Reason: {jp_error}")
+                errors.append(f"JamboPay Error: {jp_error}")
+                return errors, None
+
+            # 🟢 SAVE PAYMENT TO DB
             db_account = UserAccounts.objects.filter(account_number=jambopay_collection_account).first()
 
             CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                amount=amount_decimal,
                 entity=entity,
                 currency="KES",
                 owner=user,
                 customer_order=customer_order,
-                administrator_account=db_account, # Falls back to None if not found
+                administrator_account=db_account,
                 psp_reference_number=result_json["ref"],
                 telco=telco,
             )
-            customer_order.reference_number=reference_number
+            
+            customer_order.reference_number = reference_number
             customer_order.save()
             use_reference_number(reference_number)
+            
+            # 🟢 PUSH WEBSOCKET UPDATE
+            broadcast_customer_orders_update()
+            
             return [], customer_order
+
         except Exception as e:
+            create_log("error", f"JAMBOPAY EXCEPTION for {reference_number}: {str(e)}")
             errors.append(str(e))
             return errors, None
 
     elif payment_method.title == "JAMBOPAY WALLET":
-        # 🟢 FIX: Use the .env account instead of querying UserAccounts
         if not jambopay_collection_account:
             errors.append("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT is missing in .env")
             return errors, None
@@ -3047,12 +3077,12 @@ def process_customer_order_payment(
 
         data = {
             "orderId": reference_number,
-            "amount": amount, 
+            "amount": amount_str, # 🟢 Use string amount
             "callBackUrl": (
                 "https://webhook.site/"
                 "931bef21-de22-43bc-a45b-7e12999ac9cb"
             ),
-            "accountTo": jambopay_collection_account, # 👈 Used here
+            "accountTo": jambopay_collection_account,
             "description": "Customer order payment",
             "modeOfPayment": "WALLET_AS_SERVICE",
             "provider": "JAMBOPAY",
@@ -3068,26 +3098,31 @@ def process_customer_order_payment(
             return errors, None
 
         try:
-            # 🟢 Check if the account exists in DB (for the ForeignKey), otherwise pass None
             db_account = UserAccounts.objects.filter(account_number=jambopay_collection_account).first()
 
             customer_order_payment = CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                amount=amount_decimal,
                 entity=user.entity,
                 currency="KES",
                 owner=user,
                 customer_order=customer_order,
-                entity_collection_account=db_account, # Falls back to None if not found
+                entity_collection_account=db_account,
+                psp_reference_number=response.get("ref"),
             )
             use_reference_number(reference_number)
+            
             customer_order.reference_number = reference_number
             customer_order.payment = customer_order_payment
             customer_order.save(update_fields=[
                 "reference_number", "payment", "updated",
             ])
+            
+            # 🟢 PUSH WEBSOCKET UPDATE
+            broadcast_customer_orders_update()
+            
             return [], customer_order
         except Exception as e:
             errors.append(str(e))
@@ -3095,6 +3130,7 @@ def process_customer_order_payment(
 
     errors.append("Unsupported payment method")
     return errors, None
+
 
 @transaction.atomic
 def make_customer_order_payment(data, user):
