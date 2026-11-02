@@ -2844,34 +2844,33 @@ def recompute_order_payment_state(customer_order):
 import json
 import requests
 from decimal import Decimal
-from decouple import config  # 🟢 Ensure this is imported
+from decouple import config
+from django.db import transaction
 
-# ... other imports (UserAccounts, CustomerOrderPayment, etc.)
+# Assuming these are imported from your project
+# from .models import CustomerOrderPayment, UserAccounts
+# from .utils import generate_reference_number, use_reference_number, get_telco_by_phone_number
 
 def process_customer_order_payment(
     entity, customer_order, payment_method, user,
     mobile_money_phone, order_items,
 ):
     customer_order.selected_payment_method = payment_method
-    customer_order.save(update_fields=[
-        "selected_payment_method", "updated",
-    ])
+    customer_order.save(update_fields=["selected_payment_method", "updated"])
 
-    reference_number = generate_reference_number(
-        customer_order.entity, user
-    )
+    reference_number = generate_reference_number(customer_order.entity, user)
 
     errors = []
-    administrator_account = None
-
-    # Safely cast the amount to a float first, then to an int
+    
+    # Preserve decimals (e.g., 81.50) instead of truncating to int
     raw_amount = customer_order.order_net_price_total or 0
     try:
-        amount = int(float(raw_amount))
+        amount_decimal = Decimal(str(raw_amount)).quantize(Decimal('0.01'))
+        amount_str = str(amount_decimal)
     except (ValueError, TypeError):
-        amount = 0
+        errors.append("Invalid order amount.")
+        return errors, None
 
-    # 🟢 FETCH FROM .ENV
     jambopay_collection_account = config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT", default=None)
 
     if payment_method.title == "CASH":
@@ -2880,7 +2879,7 @@ def process_customer_order_payment(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="SUCCESS",
-                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                amount=amount_decimal,
                 entity=user.entity,
                 currency="KES",
                 owner=user,
@@ -2889,8 +2888,9 @@ def process_customer_order_payment(
             )
             recompute_order_payment_state(customer_order)
             customer_order.status = "COMPLETE"
+            # 🟢 Updated reference number
             customer_order.reference_number = reference_number
-            customer_order.save(update_fields=["status", "updated","reference_number"])
+            customer_order.save(update_fields=["status", "updated", "reference_number"])
             use_reference_number(reference_number)
             return [], customer_order
         except Exception as e:
@@ -2899,11 +2899,10 @@ def process_customer_order_payment(
 
     elif payment_method.title == "CREDIT":
         customer_order.payment_method = payment_method
+        # 🟢 Updated reference number
         customer_order.reference_number = reference_number
         customer_order.status = "DEFERRED"
-        customer_order.save(update_fields=[
-            "payment_method", "reference_number", "status", "updated",
-        ])
+        customer_order.save(update_fields=["payment_method", "reference_number", "status", "updated"])
         return [], customer_order
 
     elif payment_method.title == "MOBILE MONEY":
@@ -2911,25 +2910,19 @@ def process_customer_order_payment(
             errors.append("Mobile money phone number is required for this payment method.")
             return errors, None
 
-        # 🟢 FIX: Use the .env account instead of querying UserAccounts
         if not jambopay_collection_account:
             errors.append("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT is missing in .env")
             return errors, None
 
-        telco, formatted_phone_number = get_telco_by_phone_number(
-            mobile_money_phone
-        )
+        telco, formatted_phone_number = get_telco_by_phone_number(mobile_money_phone)
 
         payload = None
         if telco == "MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": amount, 
-                "callBackUrl": (
-                    "https://webhook.site/"
-                    "7911487f-fc9e-46b0-a812-3adfa008375c"
-                ),
-                "accountTo": jambopay_collection_account, # 👈 Used here
+                "amount": amount_str,
+                "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+                "accountTo": jambopay_collection_account,
                 "description": "Merchant payment",
                 "modeOfPayment": "MOBILE_MONEY",
                 "provider": "Mpesa",
@@ -2938,17 +2931,12 @@ def process_customer_order_payment(
                     "serviceType": "TOPUP",
                 },
             })
-            create_log("info", f"create customer order by customer {payload}")
-            
         elif telco == "AIRTELMONEY":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": str(amount), 
-                "callBackUrl": (
-                    "https://webhook.site/"
-                    "55963e0b-b692-42b6-a682-0223eaf7fbff"
-                ),
-                "accountTo": jambopay_collection_account, # 👈 Used here
+                "amount": amount_str,
+                "callBackUrl": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
+                "accountTo": jambopay_collection_account,
                 "currency": "KES",
                 "description": "TOPUP",
                 "modeOfPayment": "MOBILE_MONEY",
@@ -2970,11 +2958,7 @@ def process_customer_order_payment(
             "grant_type": config("JAMBOPA_GRANT_TYPE"),
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        result = requests.post(
-            config("JAMBOPAY_AUTH_URL1"),
-            data=the_data,
-            headers=headers,
-        )
+        result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
         result_json = result.json()
         token = result_json.get("access_token") if result_json else None
 
@@ -2987,11 +2971,7 @@ def process_customer_order_payment(
             "Authorization": "Bearer " + token,
             "Accept": "*/*",
         }
-        result = requests.post(
-            config("JAMBOPAY_BASE_URL") + "/checkout/express",
-            data=payload,
-            headers=headers,
-        )
+        result = requests.post(config("JAMBOPAY_BASE_URL") + "/checkout/express", data=payload, headers=headers)
         result_json = result.json()
         create_log("info", f"result_json {result_json}")
 
@@ -3001,24 +2981,27 @@ def process_customer_order_payment(
             return errors, None
 
         try:
-            # 🟢 Check if the account exists in DB (for the ForeignKey), otherwise pass None
             db_account = UserAccounts.objects.filter(account_number=jambopay_collection_account).first()
 
+            # 1. Create Payment Record
             CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                amount=amount_decimal,
                 entity=entity,
                 currency="KES",
                 owner=user,
                 customer_order=customer_order,
-                administrator_account=db_account, # Falls back to None if not found
+                administrator_account=db_account,
                 psp_reference_number=result_json["ref"],
                 telco=telco,
             )
-            customer_order.reference_number=reference_number
-            customer_order.save()
+            
+            # 2. Update Customer Order with the reference number
+            customer_order.reference_number = reference_number
+            customer_order.save(update_fields=["reference_number", "updated"])
+            
             use_reference_number(reference_number)
             return [], customer_order
         except Exception as e:
@@ -3026,7 +3009,6 @@ def process_customer_order_payment(
             return errors, None
 
     elif payment_method.title == "JAMBOPAY WALLET":
-        # 🟢 FIX: Use the .env account instead of querying UserAccounts
         if not jambopay_collection_account:
             errors.append("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT is missing in .env")
             return errors, None
@@ -3038,12 +3020,9 @@ def process_customer_order_payment(
 
         data = {
             "orderId": reference_number,
-            "amount": amount, 
-            "callBackUrl": (
-                "https://webhook.site/"
-                "931bef21-de22-43bc-a45b-7e12999ac9cb"
-            ),
-            "accountTo": jambopay_collection_account, # 👈 Used here
+            "amount": amount_str,
+            "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
+            "accountTo": jambopay_collection_account,
             "description": "Customer order payment",
             "modeOfPayment": "WALLET_AS_SERVICE",
             "provider": "JAMBOPAY",
@@ -3059,26 +3038,28 @@ def process_customer_order_payment(
             return errors, None
 
         try:
-            # 🟢 Check if the account exists in DB (for the ForeignKey), otherwise pass None
             db_account = UserAccounts.objects.filter(account_number=jambopay_collection_account).first()
 
+            # 1. Create Payment Record
             customer_order_payment = CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
-                amount=customer_order.order_net_price_total or Decimal("0.00"),
+                amount=amount_decimal,
                 entity=user.entity,
                 currency="KES",
                 owner=user,
                 customer_order=customer_order,
-                entity_collection_account=db_account, # Falls back to None if not found
+                entity_collection_account=db_account,
+                psp_reference_number=response.get("ref"),
             )
             use_reference_number(reference_number)
+            
+            # 2. Update Customer Order with the reference number
             customer_order.reference_number = reference_number
             customer_order.payment = customer_order_payment
-            customer_order.save(update_fields=[
-                "reference_number", "payment", "updated",
-            ])
+            customer_order.save(update_fields=["reference_number", "payment", "updated"])
+            
             return [], customer_order
         except Exception as e:
             errors.append(str(e))
@@ -3086,6 +3067,9 @@ def process_customer_order_payment(
 
     errors.append("Unsupported payment method")
     return errors, None
+
+from django.core.exceptions import ValidationError
+# ... other imports ...
 
 @transaction.atomic
 def make_customer_order_payment(data, user):
@@ -3099,9 +3083,18 @@ def make_customer_order_payment(data, user):
         errors.append("Customer order ID is required")
         return errors, None
 
-    customer_order = CustomerOrders.objects.filter(
-        id=customer_order_id
-    ).first()
+    # 🟢 FIX: Safely handle both UUIDs and Draft IDs
+    try:
+        # Try querying by the UUID id first
+        customer_order = CustomerOrders.objects.filter(id=customer_order_id).first()
+    except (ValueError, ValidationError):
+        # If it fails (because it's a "draft-..." string), we catch the error
+        customer_order = None
+
+    # If not found by UUID, try querying by draft_id
+    if not customer_order:
+        customer_order = CustomerOrders.objects.filter(draft_id=customer_order_id).first()
+
     if not customer_order:
         errors.append("Customer order for provided ID does not exist")
         return errors, None

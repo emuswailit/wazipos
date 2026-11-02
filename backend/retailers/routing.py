@@ -34,10 +34,9 @@ retailers_websocket_urlpatterns = [
     path("ws/retailers/orders/bodaboda/assigned/", consumers.BodabodaAssignedOrdersConsumer.as_asgi()),
     path("ws/bodaboda/location/", consumers.BodaLocationConsumer.as_asgi()),
     path("ws/retailers/orders/tracking/<str:order_id>/", consumers.OrderTrackingConsumer.as_asgi()),
-    
-    # 🟢 Customer Order Payment Status (WebSocket Polling)
     path(
-        "ws/retailers/orders/payment/<str:order_number>/",
+        "ws/retailers/orders/payment/<str:reference_number>/",
         consumers.CustomerOrderPaymentConsumer.as_asgi(),
     ),
+
 ]
