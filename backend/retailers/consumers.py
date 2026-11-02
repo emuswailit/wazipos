@@ -758,7 +758,6 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 
 # consumers.py
-
 import json
 import asyncio
 import time
@@ -885,13 +884,13 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             self._set_fallback_payload("CustomerOrder record not found.")
             return
 
-        # 🟢 2. Look for its corresponding payment using the reference number
+        # 🟢 2. Look for its corresponding payment using the order ID
         payment = CustomerOrderPayment.objects.filter(
-            reference_number=customer_order.reference_number
+            customer_order_id=customer_order.id
         ).order_by('-created').first()
 
         if not payment:
-            create_log("error", f"❌ CustomerOrderPayment not found for reference number: {customer_order.reference_number}")
+            create_log("error", f"❌ CustomerOrderPayment not found for order ID: {customer_order.id}")
             self._set_fallback_payload("Payment record not found.")
             return
 
@@ -900,8 +899,13 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             if customer_order.selected_payment_method else None
         )
 
-        # 🟢 3. Check for its status on JamboPay if DB status is still PENDING
-        if payment.status == "PENDING":
+        # 🟢 3. The reference number is exactly what the frontend sent
+        reference_number_str = customer_order.reference_number
+
+        # 🟢 4. Poll JamboPay if PENDING OR if we are missing a description
+        should_poll = payment.status == "PENDING" or not payment.description
+
+        if should_poll:
             try:
                 the_data = {
                     "client_id": config("JAMBOPAY_CLIENT_ID"),
@@ -913,9 +917,8 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 token = auth_res.json().get("access_token") if auth_res.json() else None
                 
                 if not token:
-                    create_log("error", "❌ Failed to authenticate with JamboPay (No token received).")
+                    create_log("error", "❌ Failed to authenticate with JamboPay.")
                 else:
-                    reference_number_str = customer_order.reference_number
                     transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{reference_number_str}"
                     poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
                     
@@ -923,7 +926,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                     tx_result = requests.get(transaction_url, headers=poll_headers)
                     
                     if tx_result:
-                        create_log("info", f"📥 JamboPay HTTP Status: {tx_result.status_code}")
                         try:
                             tx_data = tx_result.json()
                             create_log("info", f"📦 Raw tx_data from JamboPay: {json.dumps(tx_data, indent=2, cls=DjangoJSONEncoder)}")
@@ -933,7 +935,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                 status_description = tx_data.get("description", "")
                                 provider_ref = tx_data.get("providerRef")
                                 
-                                # 🟢 4. If status is no longer PENDING, update DB parameters
+                                # 🟢 Update DB parameters if status is no longer PENDING
                                 if final_status and final_status != "PENDING":
                                     payment.status = final_status
                                     if status_description:
@@ -954,25 +956,21 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                         except ValueError:
                             create_log("error", f"❌ JamboPay returned non-JSON response. Raw text: {tx_result.text}")
                     else:
-                        create_log("error", "❌ tx_result is None or Falsy. JamboPay request failed or returned no response.")
+                        create_log("error", "❌ tx_result is None or Falsy. JamboPay request failed.")
             except Exception as e:
                 create_log("error", f"❌ JamboPay Poller exception: {str(e)}")
         else:
-            create_log("info", f"⏭️ DB Status is already {payment.status}. Skipping JamboPay API poll.")
+            create_log("info", f"⏭️ DB Status is already {payment.status} and has a description. Skipping JamboPay API poll.")
 
         # 🌟 CONSTRUCT EXACT PAYLOAD FOR FRONTEND
-        reference_number_str = customer_order.reference_number
-
         if tx_data:
-            # Inject the UI fields the frontend needs into the JamboPay response
-            tx_data["reference_number"] = payment.reference_number
+            # Send the EXACT JamboPay payload, but inject UI fields
+            tx_data["reference_number"] = reference_number_str
             tx_data["payment_method_title"] = payment_method_title
             
-            # If JamboPay returns an empty description, fallback to the DB description
+            # Fallback logic for description
             if not tx_data.get("description") and payment.description:
                 tx_data["description"] = payment.description
-            
-            # FINAL SAFETY NET: If both are empty, provide a default
             if not tx_data.get("description"):
                 tx_data["description"] = f"Payment {payment.status.lower()} (No description provided)."
             
@@ -986,12 +984,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                 "providerRef": payment.provider_reference_number,
                 "status": payment.status,
                 "description": final_description,
-                "reference_number": reference_number_str,
+                "orderId": reference_number_str,
                 "amount": str(payment.amount) if payment.amount else "0.00",
                 "modeOfPayment": "MOBILE_MONEY",
                 "currency": "KES",
                 "completed": payment.status != "PENDING",
-                # UI fields
+                "reference_number": reference_number_str,
                 "payment_method_title": payment_method_title,
             }, cls=DjangoJSONEncoder)
         
@@ -1003,7 +1001,6 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             "ref": "",
             "status": "NOT_FOUND",
             "description": error_message,
-            # UI fields
             "reference_number": self.identifier,
             "payment_method_title": None,
         })
@@ -1018,7 +1015,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'payment': json.loads(self.payment_data),
         })
-           
+      
 # =====================================================================
 # Retailer product requests
 # =====================================================================
