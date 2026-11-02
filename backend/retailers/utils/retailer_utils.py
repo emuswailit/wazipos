@@ -3145,9 +3145,7 @@ def process_customer_order_payment(
             
             customer_order.reference_number = reference_number
             customer_order.payment = customer_order_payment
-            customer_order.save(update_fields=[
-                "reference_number", "payment", "updated",
-            ])
+            customer_order.save()
             
             # 🟢 PUSH WEBSOCKET UPDATE
             broadcast_customer_orders_update()
