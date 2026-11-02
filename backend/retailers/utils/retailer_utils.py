@@ -2873,13 +2873,14 @@ def process_customer_order_payment(
 
     # 🟢 FETCH FROM .ENV
     jambopay_collection_account = config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT", default=None)
+    ###
 
     if payment_method.title == "CASH":
         try:
             CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
-                status="PENDING",
+                status="SUCCESS",
                 amount=customer_order.order_net_price_total or Decimal("0.00"),
                 entity=user.entity,
                 currency="KES",
