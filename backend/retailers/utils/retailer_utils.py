@@ -2987,14 +2987,22 @@ def process_customer_order_payment(
             "Authorization": "Bearer " + token,
             "Accept": "*/*",
         }
+        # ✅ NEW CODE (Safely handles non-JSON errors)
         result = requests.post(
             config("JAMBOPAY_BASE_URL") + "/checkout/express",
             data=payload,
             headers=headers,
         )
-        result_json = result.json()
-        create_log("info", f"result_json {result_json}")
-
+        
+        try:
+            result_json = result.json()
+        except ValueError:
+            # 🟢 If JamboPay returns HTML or plain text, log it and fail gracefully
+            create_log("error", f"JAMBOPAY NON-JSON RESPONSE. HTTP Status: {result.status_code} | Raw Text: {result.text}")
+            
+            errors.append(f"Payment Gateway Error ({result.status_code}). Please contact support.")
+            return errors, None
+        
         if not result_json or "ref" not in result_json:
             create_log("info", f"from jp errors {errors}")
             errors.append("Payment failed")
