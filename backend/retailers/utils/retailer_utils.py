@@ -3068,71 +3068,86 @@ def process_customer_order_payment(
     errors.append("Unsupported payment method")
     return errors, None
 
+
 from django.core.exceptions import ValidationError
-# ... other imports ...
+from django.db import transaction
+
+# Assuming these are imported from your project
+# from .models import CustomerOrders, CustomerOrderPayment, PaymentMethods, CustomerOrderItems
+# from .utils import process_customer_order_payment
 
 @transaction.atomic
 def make_customer_order_payment(data, user):
     errors = []
-    customer_order = None
-    payment_method = None
-    mobile_money_phone = None
-
+    
+    # ---------------------------------------------------------
+    # 1. Validate Customer Order ID
+    # ---------------------------------------------------------
     customer_order_id = data.get("customer_order")
     if not customer_order_id:
-        errors.append("Customer order ID is required")
-        return errors, None
+        return ["Customer order ID is required."], None
 
-    # 🟢 FIX: Safely handle both UUIDs and Draft IDs
+    customer_order = None
+    
+    # 🟢 Bulletproof Lookup: Handle both UUIDs and Draft IDs safely
     try:
-        # Try querying by the UUID id first
-        customer_order = CustomerOrders.objects.filter(id=customer_order_id).first()
+        # Try UUID lookup first with a database lock to prevent double-clicks
+        customer_order = CustomerOrders.objects.select_for_update().filter(id=customer_order_id).first()
     except (ValueError, ValidationError):
-        # If it fails (because it's a "draft-..." string), we catch the error
+        # Catch the ValidationError if it's a string like "draft-123..."
         customer_order = None
 
-    # If not found by UUID, try querying by draft_id
+    # If not found by UUID, try finding it by draft_id
     if not customer_order:
-        customer_order = CustomerOrders.objects.filter(draft_id=customer_order_id).first()
+        customer_order = CustomerOrders.objects.select_for_update().filter(draft_id=customer_order_id).first()
 
     if not customer_order:
-        errors.append("Customer order for provided ID does not exist")
-        return errors, None
+        return ["Customer order for provided ID does not exist."], None
 
+    # ---------------------------------------------------------
+    # 2. Validate Payment Method ID
+    # ---------------------------------------------------------
     payment_method_id = data.get("payment_method")
     if not payment_method_id:
-        errors.append("Payment method ID is required")
-        return errors, None
+        return ["Payment method ID is required."], None
 
-    payment_method = PaymentMethods.objects.filter(
-        id=payment_method_id
-    ).first()
+    payment_method = None
+    try:
+        payment_method = PaymentMethods.objects.filter(id=payment_method_id).first()
+    except (ValueError, ValidationError):
+        payment_method = None
+
     if not payment_method:
-        errors.append("Payment method with provided ID does not exist")
-        return errors, None
+        return ["Payment method with provided ID does not exist."], None
 
-    if data.get("mobile_money_phone"):
-        mobile_money_phone = data["mobile_money_phone"]
+    # ---------------------------------------------------------
+    # 3. Extract Optional Fields
+    # ---------------------------------------------------------
+    mobile_money_phone = data.get("mobile_money_phone")
 
+    # ---------------------------------------------------------
+    # 4. Check for Existing Successful Payment (Prevent Double Pay)
+    # ---------------------------------------------------------
     if CustomerOrderPayment.objects.filter(
         customer_order=customer_order,
         status="SUCCESS",
         is_validated=True,
     ).exists():
-        errors.append("Order is already paid")
-        return errors, None
+        return ["This order is already paid."], None
 
-    if not CustomerOrderItems.objects.filter(
-        customer_order=customer_order
-    ).exists():
-        errors.append("Order has no items")
-        return errors, None
+    # ---------------------------------------------------------
+    # 5. Validate Order Items
+    # ---------------------------------------------------------
+    order_items = CustomerOrderItems.objects.filter(customer_order=customer_order)
+    if not order_items.exists():
+        return ["This order has no items to pay for."], None
 
-    order_items = CustomerOrderItems.objects.filter(
-        customer_order=customer_order
-    )
-
-    errors, customer_order = process_customer_order_payment(
+    # ---------------------------------------------------------
+    # 6. Delegate to Payment Processor
+    # ---------------------------------------------------------
+    # process_customer_order_payment handles the actual JamboPay API calls, 
+    # reference number generation, and updating the order.
+    errors, updated_customer_order = process_customer_order_payment(
         customer_order.entity,
         customer_order,
         payment_method,
@@ -3141,8 +3156,9 @@ def make_customer_order_payment(data, user):
         order_items,
     )
 
-    if customer_order:
-        return [], customer_order
+    if updated_customer_order:
+        return [], updated_customer_order
+
     return errors, None
 
 
