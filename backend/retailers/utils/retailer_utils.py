@@ -2879,7 +2879,7 @@ def process_customer_order_payment(
             CustomerOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
-                status="SUCCESS",
+                status="PENDING",
                 amount=customer_order.order_net_price_total or Decimal("0.00"),
                 entity=user.entity,
                 currency="KES",
@@ -2890,7 +2890,7 @@ def process_customer_order_payment(
             recompute_order_payment_state(customer_order)
             customer_order.status = "COMPLETE"
             customer_order.reference_number = reference_number
-            customer_order.save(update_fields=["status", "updated","reference_number"])
+            customer_order.save()
             use_reference_number(reference_number)
             return [], customer_order
         except Exception as e:
