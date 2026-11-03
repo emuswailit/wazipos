@@ -5,7 +5,7 @@ import asyncio
 import logging
 import requests
 from datetime import date, datetime, timedelta
-
+from .utils.inventory_utils import update_stock
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 from decouple import config
@@ -464,6 +464,261 @@ class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
 # =====================================================================
 # Customer orders
 # =====================================================================
+# consumers.py
+
+import json
+import asyncio
+import time
+import requests
+import dateutil.parser
+from datetime import timedelta
+from django.utils import timezone
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from asgiref.sync import sync_to_async
+from django.core.serializers.json import DjangoJSONEncoder
+
+# Assuming these are imported from your project
+# from .models import CustomerOrders, CustomerOrderPayment
+# from .serializers import CustomerOrdersSerializer
+# from .utils.inventory_utils import update_stock
+# from utils.logging import create_log
+# from decouple import config
+
+
+class UUIDEncoder(json.JSONEncoder):
+    def default(self, obj):
+        import uuid
+        if isinstance(obj, uuid.UUID):
+            return obj.hex
+        return json.JSONEncoder.default(self, obj)
+
+
+class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Listens to a specific order by reference number to track its payment status.
+    Polls JamboPay exactly every 5 seconds until the status is no longer PENDING.
+    """
+
+    async def connect(self):
+        self.user = self.scope.get("user")
+        
+        if not self.user or not self.user.is_authenticated:
+            create_log("warning", "WS Connect Rejected: User not authenticated")
+            await self.close()
+            return
+
+        self.identifier = str(self.scope['url_route']['kwargs']['reference_number'])
+        create_log("info", f"🔌 WS Connect Accepted: Reference Number {self.identifier}")
+        
+        self.group_name = f"payment_{self.identifier}"
+
+        await self.channel_layer.group_add(
+            self.group_name,
+            self.channel_name,
+        )
+        await self.accept()
+
+        self.polling_task = asyncio.create_task(self.poll_payment_loop())
+
+    async def disconnect(self, close_code):
+        create_log("info", f"🔌 WS Disconnect: Reference Number {self.identifier}, Code: {close_code}")
+        
+        if hasattr(self, 'polling_task'):
+            self.polling_task.cancel()
+
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name,
+            )
+        await self.close()
+
+    async def poll_payment_loop(self):
+        MAX_POLLS = 20  # Safety limit: ~100 seconds max
+        poll_count = 0
+
+        create_log("info", f"🚀 Starting polling loop for {self.identifier}")
+
+        try:
+            while poll_count < MAX_POLLS:
+                start_time = time.time()
+                poll_count += 1
+                
+                create_log("info", f"🔄 [POLL #{poll_count}/{MAX_POLLS}] Checking status for {self.identifier}...")
+
+                await self.helper_func()
+                
+                if hasattr(self, 'payment_data'):
+                    payment_dict = json.loads(self.payment_data)
+                    await self.send_json({'payment': payment_dict})
+                    
+                    status = payment_dict.get("status", "").upper()
+                    description = payment_dict.get("description", "")
+                    ref = payment_dict.get("ref", "") or payment_dict.get("reference_number", "")
+                    
+                    create_log("info", f"📤 [POLL #{poll_count}/{MAX_POLLS}] Sent to Frontend -> Status: {status} | Ref: {ref} | Desc: {description}")
+                    
+                    if poll_count >= 3 and status and status != "PENDING":
+                        create_log("info", f"🛑 Polling stopped for {self.identifier}. Final status: {status} after {poll_count} polls.")
+                        break
+                
+                elapsed_time = time.time() - start_time
+                sleep_time = max(0, 5.0 - elapsed_time)
+                
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+                
+            if poll_count >= MAX_POLLS:
+                create_log("error", f"⚠️ Max polling attempts ({MAX_POLLS}) reached for {self.identifier}. Stopping loop.")
+                
+        except asyncio.CancelledError:
+            create_log("info", f"🛑 Polling loop cancelled for {self.identifier} (user disconnected).")
+            pass 
+        except Exception as e:
+            create_log("error", f"❌ WebSocket polling loop error for {self.identifier}: {str(e)}")
+
+    @sync_to_async
+    def helper_func(self):
+        customer_order = CustomerOrders.objects.filter(
+            reference_number=self.identifier
+        ).first()
+
+        tx_data = None
+
+        if not customer_order:
+            create_log("error", f"❌ CustomerOrder not found for reference number: {self.identifier}")
+            self._set_fallback_payload("CustomerOrder record not found.")
+            return
+
+        payment = CustomerOrderPayment.objects.filter(
+            customer_order_id=customer_order.id
+        ).order_by('-created').first()
+
+        if not payment:
+            create_log("error", f"❌ CustomerOrderPayment not found for order ID: {customer_order.id}")
+            self._set_fallback_payload("Payment record not found.")
+            return
+
+        payment_method_title = (
+            customer_order.selected_payment_method.title 
+            if customer_order.selected_payment_method else None
+        )
+
+        reference_number_str = customer_order.reference_number
+
+        # Poll JamboPay if PENDING OR if we are missing a description
+        should_poll = payment.status == "PENDING" or not payment.description
+
+        if should_poll:
+            try:
+                the_data = {
+                    "client_id": config("JAMBOPAY_CLIENT_ID"),
+                    "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+                    "grant_type": config("JAMBOPA_GRANT_TYPE"),
+                }
+                headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
+                token = auth_res.json().get("access_token") if auth_res.json() else None
+                
+                if not token:
+                    create_log("error", "❌ Failed to authenticate with JamboPay.")
+                else:
+                    transaction_url = config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{reference_number_str}"
+                    poll_headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
+                    
+                    create_log("info", f"🌐 Calling JamboPay API: {transaction_url}")
+                    tx_result = requests.get(transaction_url, headers=poll_headers)
+                    
+                    if tx_result:
+                        try:
+                            tx_data = tx_result.json()
+                            create_log("info", f"📦 Raw tx_data from JamboPay: {json.dumps(tx_data, indent=2, cls=DjangoJSONEncoder)}")
+                            
+                            if tx_data:
+                                final_status = str(tx_data.get("status", "")).upper()
+                                status_description = tx_data.get("description", "")
+                                provider_ref = tx_data.get("providerRef")
+                                
+                                if final_status and final_status != "PENDING":
+                                    payment.status = final_status
+                                    if status_description:
+                                        payment.description = status_description
+                                    if provider_ref:
+                                        payment.provider_reference_number = provider_ref
+                                        
+                                    payment.save()
+                                    
+                                    if final_status == "SUCCESS":
+                                        customer_order.is_paid = "true"
+                                        customer_order.save(update_fields=["is_paid", "updated"])
+                                        
+                                        # 🟢 DEDUCT STOCK AND PREVENT DOUBLE DEDUCTION
+                                        update_stock(customer_order)
+                                        payment.is_validated = True
+                                        payment.save(update_fields=["is_validated", "updated"])
+                                        create_log("info", f"✅ Stock deducted for order {customer_order.order_number} via poller")
+                                        
+                                    elif final_status == "FAILED":
+                                        customer_order.is_paid = "false"
+                                        customer_order.save(update_fields=["is_paid", "updated"])
+
+                                    create_log("info", f"💾 DB Updated -> Status: {final_status} | Desc: {status_description}")
+                        except ValueError:
+                            create_log("error", f"❌ JamboPay returned non-JSON response. Raw text: {tx_result.text}")
+                    else:
+                        create_log("error", "❌ tx_result is None or Falsy. JamboPay request failed.")
+            except Exception as e:
+                create_log("error", f"❌ JamboPay Poller exception: {str(e)}")
+        else:
+            create_log("info", f"⏭️ DB Status is already {payment.status} and has a description. Skipping JamboPay API poll.")
+
+        if tx_data:
+            tx_data["reference_number"] = reference_number_str
+            tx_data["payment_method_title"] = payment_method_title
+            
+            if not tx_data.get("description") and payment.description:
+                tx_data["description"] = payment.description
+            if not tx_data.get("description"):
+                tx_data["description"] = f"Payment {payment.status.lower()} (No description provided)."
+            
+            self.payment_data = json.dumps(tx_data, cls=DjangoJSONEncoder)
+        else:
+            final_description = payment.description or f"Payment {payment.status.lower()} (No description provided)."
+            self.payment_data = json.dumps({
+                "id": str(payment.id),
+                "ref": payment.reference_number,
+                "providerRef": payment.provider_reference_number,
+                "status": payment.status,
+                "description": final_description,
+                "orderId": reference_number_str,
+                "amount": str(payment.amount) if payment.amount else "0.00",
+                "modeOfPayment": "MOBILE_MONEY",
+                "currency": "KES",
+                "completed": payment.status != "PENDING",
+                "reference_number": reference_number_str,
+                "payment_method_title": payment_method_title,
+            }, cls=DjangoJSONEncoder)
+        
+        create_log("info", f"✅ Final payload prepared for frontend: {self.payment_data}")
+
+    def _set_fallback_payload(self, error_message):
+        self.payment_data = json.dumps({
+            "id": None,
+            "ref": "",
+            "status": "NOT_FOUND",
+            "description": error_message,
+            "reference_number": self.identifier,
+            "payment_method_title": None,
+        })
+        create_log("info", f"⚠️ Fallback payload set: {self.payment_data}")
+
+    async def send_payment_status(self, event):
+        create_log("info", f"📡 Webhook triggered send_payment_status for {self.identifier}")
+        await self.helper_func()
+        await self.send_json({
+            'payment': json.loads(self.payment_data),
+        })
+
 
 class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
 
@@ -492,16 +747,30 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        formatted_from_date = dateutil.parser.parse(
-            str(timezone.now().date())
-        ).strftime("%Y-%m-%d %H:%M:%S")
-
         formatted_from_date = (timezone.now() - timedelta(days=7)).isoformat()
 
         customer_orders = CustomerOrders.objects.filter(
             entity=self.user.entity,
             created__gte=formatted_from_date,
         ).order_by('-created')[:100]
+
+        # 🟢 STOCK DEDUCTION SWEEPER: Run only once per successful payment
+        for order in customer_orders:
+            # Check for successful payments that haven't triggered stock deduction yet
+            payment = CustomerOrderPayment.objects.filter(
+                customer_order=order,
+                status="SUCCESS",
+                is_validated=False
+            ).first()
+
+            if payment:
+                try:
+                    update_stock(order)
+                    payment.is_validated = True
+                    payment.save(update_fields=["is_validated", "updated"])
+                    create_log("info", f"Stock deducted via OrdersConsumer for order {order.order_number}")
+                except Exception as e:
+                    create_log("error", f"Failed to deduct stock for {order.order_number}: {str(e)}")
 
         orders = CustomerOrdersSerializer(
             customer_orders,
