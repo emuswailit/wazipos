@@ -32,28 +32,44 @@ def subscriptionsDispatcherAPIView(request):
     # 1. GET ENTITY SUBSCRIPTIONS
     # ==========================================
     if action == "GetEntitySubscriptions":
-        subscriptions = Subscription.objects.filter(entity=entity).order_by('-created')
+        # 🟢 CHECK IF USER IS ADMIN (is_staff)
+        if request.user.is_staff:
+            # Admin: Fetch ALL subscriptions across all entities
+            subscriptions = Subscription.objects.all().order_by('-created')
+        else:
+            # Regular User: Fetch subscriptions ONLY for their entity
+            subscriptions = Subscription.objects.filter(entity=entity).order_by('-created')
+
         paginator = PageNumberPagination()
         paginator.page_size = request.data.get("page_size", 10) 
         paginated_subscriptions = paginator.paginate_queryset(subscriptions, request)
 
         if not paginated_subscriptions and paginator.page.paginator.count == 0:
-            return custom_error_response(1, "No subscriptions found for this entity")
+            # Changed the error message slightly since it's no longer just for one entity
+            return custom_error_response(1, "No subscriptions found")
 
         serializer = SubscriptionSerializer(paginated_subscriptions, many=True, context={"request": request})
         return custom_success_message(
             0, "Subscriptions retrieved successfully", 
             {
-                "results": serializer.data, "count": paginator.page.paginator.count,
-                "next": paginator.get_next_link(), "previous": paginator.get_previous_link(),
+                "results": serializer.data, 
+                "count": paginator.page.paginator.count,
+                "next": paginator.get_next_link(), 
+                "previous": paginator.get_previous_link(),
             }, "subscriptions"
         )
-
     # ==========================================
     # 2. GET ENTITY SUBSCRIPTION PAYMENTS
     # ==========================================
     elif action == "GetEntitySubscriptionPayments":
-        payments = SubscriptionPayment.objects.filter(entity=entity).order_by('-created')
+        # 🟢 CHECK IF USER IS ADMIN (is_staff)
+        if request.user.is_staff:
+            # Admin: Fetch ALL subscription payments across all entities
+            payments = SubscriptionPayment.objects.all().order_by('-created')
+        else:
+            # Regular User: Fetch subscription payments ONLY for their entity
+            payments = SubscriptionPayment.objects.filter(entity=entity).order_by('-created')
+
         paginator = PageNumberPagination()
         paginator.page_size = request.data.get("page_size", 10) 
         paginated_payments = paginator.paginate_queryset(payments, request)
