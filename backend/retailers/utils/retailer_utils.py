@@ -2944,11 +2944,11 @@ def process_customer_order_payment(
             return errors, None
 
     elif payment_method.title == "CREDIT":
-        customer_order.payment_method = payment_method
+        customer_order.selected_payment_method = payment_method
         customer_order.reference_number = reference_number
         customer_order.status = "DEFERRED"
         customer_order.save(update_fields=[
-            "payment_method", "reference_number", "status", "updated",
+            "selected_payment_method", "reference_number", "status", "updated",
         ])
         
         broadcast_customer_orders_update()
