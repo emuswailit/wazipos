@@ -1788,31 +1788,33 @@ class Users(AbstractBaseUser, PermissionsMixin):
 
     def tokens(self):
         roles = []
-        employee=None
-        my_is_staff="true"
-        entity_trial_done= "false"
-        entity_registration_paid= "false"
-        has_uploaded_documents= "false"
-        is_bodaboda= "false"
+        employee = None
+        my_is_staff = "true"
+        entity_trial_done = "false"
+        entity_registration_paid = "false"
+        has_uploaded_documents = "false"
+        is_bodaboda = "false"
+        
         refresh = RefreshToken.for_user(self)
         decodeJTW = jwt.decode(
             str(refresh.access_token), config("SECRET_KEY"), algorithms=["HS256"]
         )
+        
         from payments.models import EntityRegistrationFeePayments
         from transport.models import SaccoPersonnel
         from employees.models import Employees
-        if SaccoPersonnel.objects.filter(user=self,personnel_type="BODABODA", is_active="true").exists():
-            is_bodaboda="true"
+        from entitylocations.models import Locations  # 🟢 Import Locations model
 
+        if SaccoPersonnel.objects.filter(user=self, personnel_type="BODABODA", is_active="true").exists():
+            is_bodaboda = "true"
 
-      
         if EntityRegistrationFeePayments.objects.filter(entity=self.entity).exists():
-            entity_registration_paid="true" 
+            entity_registration_paid = "true" 
 
         if UserDocuments.objects.filter(owner=self).exists():
-            has_uploaded_documents="true" 
+            has_uploaded_documents = "true" 
 
-        if not self.entity.trial_from ==None and not self.entity.trial_to ==None:
+        if not self.entity.trial_from == None and not self.entity.trial_to == None:
             today = datetime.date.today()
             yesterday = datetime.date.today() - timedelta(1)
             # if self.entity.trial_to > today:
@@ -1837,9 +1839,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
                 roles.append(role_item)
 
         # Add roles to token
-
         if not self.is_staff:
-            my_is_staff="false"
+            my_is_staff = "false"
             if Roles.objects.filter(value="Client").exists():
                 default_role = Roles.objects.filter(value="Client").first()
                 role_item = dict(
@@ -1853,10 +1854,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
                     value=default_role.value,
                 )
                 roles.append(role_item)
-        
 
         for role in self.roles.all().filter(entity=self.entity):
-        # for role in self.roles.all():
             role_item = dict(
                 id=str(role.id),
                 cluster=str(role.cluster_id),
@@ -1868,8 +1867,6 @@ class Users(AbstractBaseUser, PermissionsMixin):
                 value=role.value,
             )
             roles.append(role_item)
-
-
 
         decodeJTW["roles"] = roles
         decodeJTW["first_name"] = f"{self.first_name}"
@@ -1896,20 +1893,31 @@ class Users(AbstractBaseUser, PermissionsMixin):
         decodeJTW["monthly_subscription"] = f"{self.entity.monthly_subscription}"
         decodeJTW["marital_status"] = f"{self.marital_status}"
         decodeJTW["education_level"] = f"{self.education_level}"
+        
         if self.country:
             decodeJTW["country_title"] = f"{self.country.title}"
             decodeJTW["country_id"] = f"{self.country.id}"
+
+        # 🟢 FETCH ENTITY LOCATION FROM Locations MODEL AND ADD TO JWT
+        entity_location = Locations.objects.filter(entity=self.entity).first()
+        if entity_location and entity_location.point:
+            # GeoDjango PointField returns a Point object where .y is latitude and .x is longitude
+            decodeJTW["entity_latitude"] = float(entity_location.point.y)
+            decodeJTW["entity_longitude"] = float(entity_location.point.x)
+        else:
+            decodeJTW["entity_latitude"] = 0.0
+            decodeJTW["entity_longitude"] = 0.0
     
-        if Agents.objects.filter(user=self,is_active=True).exists():
-            agent = Agents.objects.filter(user=self,is_active=True).first()
+        if Agents.objects.filter(user=self, is_active=True).exists():
+            agent = Agents.objects.filter(user=self, is_active=True).first()
             decodeJTW["agent_id"] = f"{agent.id}"
             decodeJTW["is_agent"] = "true"
         else:
             decodeJTW["agent_id"] = ""
             decodeJTW["is_agent"] = "false"
 
-        if Employees.objects.filter(user=self,entity=self.entity).exists():
-            employee = Employees.objects.filter(user=self,entity=self.entity).first()
+        if Employees.objects.filter(user=self, entity=self.entity).exists():
+            employee = Employees.objects.filter(user=self, entity=self.entity).first()
             decodeJTW["employment_id"] = f"{employee.id}"
             decodeJTW["employment_entity"] = f"{employee.entity}"
             decodeJTW["employment_entity_title"] = f"{employee.entity.title}"
@@ -1921,7 +1929,6 @@ class Users(AbstractBaseUser, PermissionsMixin):
                 decodeJTW["employment_department"] = None
                 decodeJTW["employment_department_title"] = None
                 decodeJTW["employment_department_type"] = None
-
         else:
             decodeJTW["employment_id"] = None
             decodeJTW["employment_entity"] = None
@@ -1929,10 +1936,10 @@ class Users(AbstractBaseUser, PermissionsMixin):
             decodeJTW["employment_department"] = None
             decodeJTW["employment_department_title"] = None
             decodeJTW["employment_department_type"] = None
+            
         # encode
         encoded = jwt.encode(decodeJTW, config("SECRET_KEY"), algorithm="HS256")
         return {"refresh": str(refresh), "access": encoded}
-
     def authenticate(self, otp):
         """This method authenticates the given otp"""
 
