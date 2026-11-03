@@ -23,7 +23,7 @@ from rest_framework.permissions import IsAuthenticated
 
 # ---------- Local apps ----------
 from authentication.models import Entities, CollectionPoints
-from authentication.serializers import CategoriesSerializer, EntityLocationHybridSerializer, CollectionPointSerializer
+from authentication.serializers import CategoriesSerializer, EntitySerializer, CollectionPointSerializer
 from authentication.validators import authentication_models_validators
 from authentication.validators.authentication_models_validators import validate_entity, validate_dependant
 from core.responses import (
@@ -515,7 +515,7 @@ def retailerReceiptsJointAPIView(request):
             
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(entities, request)
-        serializer = EntityLocationHybridSerializer(
+        serializer = EntitySerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
@@ -529,7 +529,7 @@ def retailerReceiptsJointAPIView(request):
             
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(entities, request)
-        serializer = EntityLocationHybridSerializer(
+        serializer = EntitySerializer(
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)
@@ -647,7 +647,7 @@ def retailerReceiptsJointAPIView(request):
         couriers = retailer_utils.get_courier_entities(
             request.data, request.user
         )
-        serializer = EntityLocationHybridSerializer(
+        serializer = EntitySerializer(
             couriers, many=True, context={"request": request}
         )
         return customer_order_responses.custom_success_message(
@@ -659,7 +659,7 @@ def retailerReceiptsJointAPIView(request):
         couriers = retailer_utils.get_delivery_entities(
             request.data, request.user
         )
-        serializer = EntityLocationHybridSerializer(
+        serializer = EntitySerializer(
             couriers, many=True, context={"request": request}
         )
         return customer_order_responses.custom_success_message(
