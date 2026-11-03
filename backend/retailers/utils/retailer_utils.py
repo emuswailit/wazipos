@@ -2936,6 +2936,9 @@ def process_customer_order_payment(
             customer_order.save()
             use_reference_number(reference_number)
             
+            # 🟢 DEDUCT STOCK FOR CASH
+            update_stock(customer_order)
+            
             broadcast_customer_orders_update()
             
             return [], customer_order
@@ -2950,6 +2953,9 @@ def process_customer_order_payment(
         customer_order.save(update_fields=[
             "selected_payment_method", "reference_number", "status", "updated",
         ])
+        
+        # 🟢 DEDUCT STOCK FOR CREDIT
+        update_stock(customer_order)
         
         broadcast_customer_orders_update()
         

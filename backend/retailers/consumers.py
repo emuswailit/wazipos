@@ -650,12 +650,12 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                     
                                     if final_status == "SUCCESS":
                                         customer_order.is_paid = "true"
-                                        customer_order.save(update_fields=["is_paid", "updated"])
+                                        customer_order.save()
                                         
                                         # 🟢 DEDUCT STOCK AND PREVENT DOUBLE DEDUCTION
                                         update_stock(customer_order)
                                         payment.is_validated = True
-                                        payment.save(update_fields=["is_validated", "updated"])
+                                        payment.save()
                                         create_log("info", f"✅ Stock deducted for order {customer_order.order_number} via poller")
                                         
                                     elif final_status == "FAILED":
