@@ -2800,13 +2800,30 @@ def update_dependant(data, user):
 
 
 # Departments
-def get_entity_departments(data, user):
-    entity_id = None
-    if "entity" in data:
-        entity_id = data["entity"]
-    entity = authentication_models_validators.validate_entity(entity_id)
-    return models.Departments.objects.filter(entity=entity)
+# utils.py
 
+def get_entity_departments(data, user):
+    # Base queryset
+    queryset = models.Departments.objects.all().order_by("-created")
+
+    # 1. If the user is staff, they can view all departments
+    if user.is_staff:
+        entity_id = data.get("entity")
+        # If the staff user explicitly passes an entity ID, filter by it
+        if entity_id:
+            entity = authentication_models_validators.validate_entity(entity_id)
+            return queryset.filter(entity=entity)
+            
+        # If no entity ID is passed, return ALL departments across all entities
+        return queryset
+
+    # 2. If the user is NOT staff, they can only see departments for their current entity
+    else:
+        # Safely handle users who are not yet assigned to an entity
+        if not getattr(user, "entity", None):
+            return models.Departments.objects.none()
+            
+        return queryset.filter(entity=user.entity)
 
 def create_department(data, user):
     errors =[]
