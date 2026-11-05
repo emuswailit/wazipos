@@ -2462,7 +2462,6 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, exceptions
 from rest_framework.pagination import PageNumberPagination
 
-
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def clustersAPIView(request):
@@ -2485,16 +2484,17 @@ def clustersAPIView(request):
         """Create a new cluster"""
         data = request.data.get("cluster_details", {})
         
-        # Frontend sends "label", but model expects "title"
-        title = data.get("label", "").strip()
+        # 🟢 Accepts EITHER 'title' (from Postman) OR 'label' (from frontend)
+        title = data.get("title") or data.get("label")
+        title = str(title).strip() if title else ""
+        
         if not title:
-            return custom_error_response(1, "Cluster label (title) is required")
+            return custom_error_response(1, "Cluster title/label is required")
 
-        # Note: If your EntityRelatedModel requires the entity to be explicitly set
-        # and it's not automatically handled by the serializer context, you might 
-        # need to add it here like: "entity": request.user.entity
         serializer_data = {
             "title": title,
+            # Include entity if your model strictly requires it and it's not handled in context
+            # "entity": request.user.entity 
         }
         
         serializer = ClustersSerializer(
@@ -2503,11 +2503,13 @@ def clustersAPIView(request):
         )
         
         if serializer.is_valid():
-            serializer.save()
+            # Assign the logged-in user as the owner
+            serializer.save(owner=request.user)
             return custom_success_message(
                 0, "Cluster created successfully", serializer.data, "cluster"
             )
         else:
+            # This will catch the unique=True error if the title already exists
             return custom_error_response(1, serializer.errors)
 
     elif action == "UpdateCluster":
@@ -2519,14 +2521,16 @@ def clustersAPIView(request):
             return custom_error_response(1, "Cluster ID is required for update")
 
         try:
-            # Assuming Clusters is your model name
-            cluster = utils.get_cluster_by_id(cluster_id) or models.Clusters.objects.get(id=cluster_id)
+            cluster = models.Clusters.objects.get(id=cluster_id)
         except models.Clusters.DoesNotExist:
             return custom_error_response(1, "Cluster not found")
 
-        title = data.get("label", "").strip()
+        # 🟢 Accepts EITHER 'title' OR 'label'
+        title = data.get("title") or data.get("label")
+        title = str(title).strip() if title else ""
+        
         if not title:
-            return custom_error_response(1, "Cluster label (title) is required")
+            return custom_error_response(1, "Cluster title/label is required")
 
         serializer_data = {
             "title": title,
@@ -2545,11 +2549,13 @@ def clustersAPIView(request):
                 0, "Cluster updated successfully", serializer.data, "cluster"
             )
         else:
+            # This will catch the unique=True error if the new title already exists
             return custom_error_response(1, serializer.errors)
 
     else:
         raise exceptions.ValidationError(f'Action {action} is unknown')
 
+        
 
 class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
     """
