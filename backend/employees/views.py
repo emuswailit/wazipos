@@ -218,9 +218,6 @@ def employeesAdminAPIView(request):
 
     elif request.data["action"] == "GetAllEmployees":
         """Retrieve all employees"""
-        if not request.user.is_staff:
-            raise exceptions.ValidationError(
-                'Not authorized to access this content')
 
         employees = utils.get_all_employees(request.user, request.data)
 
