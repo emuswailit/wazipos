@@ -2862,91 +2862,35 @@ def create_department(data, user):
     except Exception as e:
         raise exceptions.ValidationError(str(e))
 
+# utils.py
 
 def update_department(data, user):
-    errors = []
+    # 🟢 Read directly from the flat root payload
+    department_id = data.get("department")
     
-    # 🟢 Accepts BOTH nested and flat payloads
-    details = data.get("department_details", data)
-    department_id = details.get("id") or data.get("department") 
-
     if not department_id:
-        return ["Department ID is required"], None
+        raise exceptions.ValidationError("Department ID is required")
 
     department = authentication_models_validators.validate_department(department_id, user)
 
     if not department:
-        return ["Department not found"], None
+        raise exceptions.ValidationError("Department not found or unauthorized")
 
-    # Update fields safely
-    if "title" in details and details["title"]:
-        department.title = details["title"]
+    # 🟢 Update fields safely
+    if "title" in data and data["title"]:
+        department.title = data["title"]
         
-    if "description" in details and details["description"] is not None:
-        department.description = details["description"]
+    if "description" in data and data["description"] is not None:
+        department.description = data["description"]
         
-    if "department_type" in details and details["department_type"] is not None:
-        department.department_type = details["department_type"]
+    if "department_type" in data and data["department_type"] is not None:
+        department.department_type = data["department_type"]
 
     try:
         department.save()
-        return [], department
+        return department # Returns the object directly, matching your view logic
     except Exception as e:
         raise exceptions.ValidationError(str(e))
-
-        
-def update_department(data, user):
-    errors = []
-    
-    # 🟢 Extract from 'department_details'
-    details = data.get("department_details", {})
-    department_id = details.get("id")
-
-    if not department_id:
-        return ["Department ID is required"], None
-
-    department = authentication_models_validators.validate_department(department_id, user)
-
-    if not department:
-        return ["Department not found"], None
-
-    # Update fields safely
-    if "title" in details and details["title"]:
-        department.title = details["title"]
-        
-    if "description" in details and details["description"] is not None:
-        department.description = details["description"]
-        
-    if "department_type" in details and details["department_type"] is not None:
-        department.department_type = details["department_type"]
-
-    try:
-        department.save()
-        return [], department
-    except Exception as e:
-        raise exceptions.ValidationError(str(e))
-
-
-def update_department(data,user):
-    department_id=None
-    department =None
-    errors =[]
-    if "department" in data and not data["department"]=="":
-        department_id=data["department"]
-        department = authentication_models_validators.validate_department(department_id,user)
-
-        if department:
-            if "description" in data and not data["description"]=="":
-                department.description = data["description"]
-                department.save()
-
-            if "title" in data and not data["title"]=="":
-                department.title = data["title"]
-                department.save()
-
-            return department
-        else:
-            return None
 
 
 #  Roles
