@@ -2146,7 +2146,7 @@ class Departments(EntityRelatedModel):
             verbose_name=_("Department Type"),
             choices=DepartmentTypeOptions.choices,
             max_length=100,
-            default="Other"
+            default="", null=True, blank=True
 
         )
     description = models.TextField(max_length=100, null=True, blank=True)
