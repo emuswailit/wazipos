@@ -671,8 +671,29 @@ def get_entity_delivery_persons(user, data):
         return []
 
 
+# utils.py
+
 def get_all_employees(user, data):
-    return Employees.objects.all()
+    # Base queryset (ordered by newest first, assuming you have a 'created' field)
+    queryset = Employees.objects.all().order_by("-created")
+
+    # 🟢 1. If user is staff, they can see all employees
+    if user.is_staff:
+        # Optional: If the admin passes an entity ID in the payload, filter by it
+        entity_id = data.get("entity")
+        if entity_id:
+            return queryset.filter(entity_id=entity_id)
+        
+        return queryset
+
+    # 🟢 2. If user is NOT staff, restrict to their current entity
+    else:
+        # Safely check if the user is actually attached to an entity
+        if getattr(user, "entity", None):
+            return queryset.filter(entity=user.entity)
+            
+        # Fallback if a non-staff user somehow has no entity assigned
+        return Employees.objects.none()
 
 
 def get_owned_employees(user):
