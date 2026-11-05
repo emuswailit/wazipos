@@ -2865,7 +2865,7 @@ def create_department(data, user):
 # utils.py
 
 def update_department(data, user):
-    # 🟢 Read directly from the flat root payload
+    # 🟢 Now expects flat data perfectly matching Postman
     department_id = data.get("department")
     
     if not department_id:
@@ -2876,7 +2876,6 @@ def update_department(data, user):
     if not department:
         raise exceptions.ValidationError("Department not found or unauthorized")
 
-    # 🟢 Update fields safely
     if "title" in data and data["title"]:
         department.title = data["title"]
         
@@ -2888,11 +2887,10 @@ def update_department(data, user):
 
     try:
         department.save()
-        return department # Returns the object directly, matching your view logic
+        return department 
     except Exception as e:
         raise exceptions.ValidationError(str(e))
-
-
+    
 #  Roles
 def get_entity_roles(data, user):
     roles = []
