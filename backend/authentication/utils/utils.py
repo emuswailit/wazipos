@@ -2830,8 +2830,8 @@ def get_entity_departments(data, user):
 def create_department(data, user):
     errors = []
     
-    # 🟢 Extract from 'department_details' to match the frontend payload
-    details = data.get("department_details", {})
+    # 🟢 Accepts BOTH nested (React) and flat (Postman) payloads
+    details = data.get("department_details", data)
     
     title = details.get("title", "").strip()
     description = details.get("description", "")
@@ -2852,7 +2852,7 @@ def create_department(data, user):
             title=title,
             description=description,
             owner=user,
-            department_type=department_type, # 🟢 Now safely defaults to ""
+            department_type=department_type, 
             entity=user.entity,
         )
         if created:
@@ -2863,6 +2863,38 @@ def create_department(data, user):
         raise exceptions.ValidationError(str(e))
 
 
+def update_department(data, user):
+    errors = []
+    
+    # 🟢 Accepts BOTH nested and flat payloads
+    details = data.get("department_details", data)
+    department_id = details.get("id") or data.get("department") 
+
+    if not department_id:
+        return ["Department ID is required"], None
+
+    department = authentication_models_validators.validate_department(department_id, user)
+
+    if not department:
+        return ["Department not found"], None
+
+    # Update fields safely
+    if "title" in details and details["title"]:
+        department.title = details["title"]
+        
+    if "description" in details and details["description"] is not None:
+        department.description = details["description"]
+        
+    if "department_type" in details and details["department_type"] is not None:
+        department.department_type = details["department_type"]
+
+    try:
+        department.save()
+        return [], department
+    except Exception as e:
+        raise exceptions.ValidationError(str(e))
+
+        
 def update_department(data, user):
     errors = []
     
