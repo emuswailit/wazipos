@@ -2825,41 +2825,74 @@ def get_entity_departments(data, user):
             
         return queryset.filter(entity=user.entity)
 
+# utils.py
+
 def create_department(data, user):
-    errors =[]
-    description = None
-    department_type = None
-    title =None
-    if "title" in data and not data["title"]=="":
-        title = data["title"]
-        if models.Departments.objects.filter(title=title.upper(),entity=user.entity).exists():
-            errors.append(f"Department with similar title exists at {user.entity}")
-            return errors,None
-            
-    else:
+    errors = []
+    
+    # 🟢 Extract from 'department_details' to match the frontend payload
+    details = data.get("department_details", {})
+    
+    title = details.get("title", "").strip()
+    description = details.get("description", "")
+    
+    # 🟢 Default to empty string to satisfy the DB's NOT NULL constraint
+    department_type = details.get("department_type", "")
+
+    if not title:
         errors.append("Title is required")
-        return errors,None
-
-    if "description" in data and not data["description"]=="":
-        description = data["description"]
-
-    if "department_type" in data and not data["department_type"]=="":
-        department_type = data["department_type"]
+        return errors, None
+        
+    if models.Departments.objects.filter(title=title.upper(), entity=user.entity).exists():
+        errors.append(f"Department with similar title exists at {user.entity}")
+        return errors, None
 
     try:
         created = models.Departments.objects.create(
-            title=data["title"],
+            title=title,
             description=description,
             owner=user,
-            department_type=department_type,
+            department_type=department_type, # 🟢 Now safely defaults to ""
             entity=user.entity,
         )
         if created:
             return [], created
         else:
-            return None
+            return ["An error occurred"], None
     except Exception as e:
-        raise exceptions.ValidationError(e)
+        raise exceptions.ValidationError(str(e))
+
+
+def update_department(data, user):
+    errors = []
+    
+    # 🟢 Extract from 'department_details'
+    details = data.get("department_details", {})
+    department_id = details.get("id")
+
+    if not department_id:
+        return ["Department ID is required"], None
+
+    department = authentication_models_validators.validate_department(department_id, user)
+
+    if not department:
+        return ["Department not found"], None
+
+    # Update fields safely
+    if "title" in details and details["title"]:
+        department.title = details["title"]
+        
+    if "description" in details and details["description"] is not None:
+        department.description = details["description"]
+        
+    if "department_type" in details and details["department_type"] is not None:
+        department.department_type = details["department_type"]
+
+    try:
+        department.save()
+        return [], department
+    except Exception as e:
+        raise exceptions.ValidationError(str(e))
 
 
 def update_department(data,user):
