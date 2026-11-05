@@ -2524,8 +2524,8 @@ def clustersAPIView(request):
 
         try:
             # Assuming Clusters is your model name
-            cluster = utils.get_cluster_by_id(cluster_id) or Clusters.objects.get(id=cluster_id)
-        except Clusters.DoesNotExist:
+            cluster = utils.get_cluster_by_id(cluster_id) or models.Clusters.objects.get(id=cluster_id)
+        except models.Clusters.DoesNotExist:
             return custom_error_response(1, "Cluster not found")
 
         title = data.get("label", "").strip()
