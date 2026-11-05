@@ -1315,27 +1315,16 @@ class EntityReviews(EntityRelatedModel):
     )
 
 
+import re
+from django.db import models
+
 class Clusters(EntityRelatedModel):
     """
     Model for user clusters
     """
 
-    # ROLE_CATEGORIES = (
-    #     ("Accounts", "Accounts"),
-    #     ("Admin", "Admin"),
-    #     ("Courier", "Courier"),
-    #     ("Default", "Default"),
-    #     ("Despatch", "Despatch"),
-    #     ("Inventory", "Inventory"),
-    #     ("Medicine", "Medicine"),
-    #     ("Nursing", "Nursing"),
-    #     ("Pharmacy", "Pharmacy"),
-    #     ("Sales", "Sales"),
-    #     ("Support", "Support"),
-    #     ("SuperAdmin", "SuperAdmin"),
-    # )
-
-    title = models.CharField(max_length=100)
+    # 🟢 Added unique=True
+    title = models.CharField(max_length=100, unique=True)
     value = models.CharField(max_length=100)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -1346,13 +1335,17 @@ class Clusters(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    
     def __str__(self):
         return self.value
 
     def save(self, *args, **kwargs):
-        self.title = self.title.upper()
+        # 🟢 .strip() removes leading/trailing spaces so " Admin " becomes "ADMIN"
+        self.title = self.title.strip().upper()
+        
         # Make value equal to title, replacing all spaces with underscores
-        self.value = self.title.replace(" ", "_")
+        self.value = re.sub(r'\s+', '_', self.title)
+        
         super(Clusters, self).save(*args, **kwargs)
 
     class Meta:
