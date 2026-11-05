@@ -1349,8 +1349,15 @@ class Clusters(EntityRelatedModel):
     def __str__(self):
         return self.value
 
+    def save(self, *args, **kwargs):
+        self.title = self.title.upper()
+        # Make value equal to title, replacing all spaces with underscores
+        self.value = self.title.replace(" ", "_")
+        super(Clusters, self).save(*args, **kwargs)
+
     class Meta:
         verbose_name_plural = "Clusters"
+
 
 
 class Cadres(models.Model):
