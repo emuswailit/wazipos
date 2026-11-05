@@ -2458,21 +2458,25 @@ def constituenciesAPIView(request):
         raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
 
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions, exceptions
+from rest_framework.pagination import PageNumberPagination
+# Ensure you have these imports from your project
+# from myapp.models import Clusters
+# from myapp.serializers import ClustersSerializer
+# from myapp.utils import custom_success_message, custom_error_response
+# from myapp import utils
+
 @api_view(["POST"])
-@permission_classes(
-    [
-        permissions.IsAuthenticated,
-    ]
-)
+@permission_classes([permissions.IsAuthenticated])
 def clustersAPIView(request):
     try:
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
-    if request.data["action"] == "GetClusters":
+    if action == "GetClusters":
         """Get all clusters"""
-
         clusters = utils.get_clusters()
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(clusters, request)
@@ -2481,21 +2485,74 @@ def clustersAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
 
-    # elif request.data["action"] == "GetClusterDetails":
-    #     country = utils.get_county_details(request.data)
-    #     if country:
-    #         serializer = CountiesSerializer(
-    #             country, many=False, context={"request": request}
-    #         )
-    #         return custom_success_message(
-    #             0, "County retrieved successfully", serializer.data, "county"
-    #         )
+    elif action == "CreateCluster":
+        """Create a new cluster"""
+        data = request.data.get("cluster_details", {})
+        
+        # Frontend sends "label", but model expects "title"
+        title = data.get("label", "").strip()
+        if not title:
+            return custom_error_response(1, "Cluster label (title) is required")
 
-    #     else:
-    #         return custom_error_response(1, "County could not be retrieved")
+        # Note: If your EntityRelatedModel requires the entity to be explicitly set
+        # and it's not automatically handled by the serializer context, you might 
+        # need to add it here like: "entity": request.user.entity
+        serializer_data = {
+            "title": title,
+        }
+        
+        serializer = ClustersSerializer(
+            data=serializer_data, 
+            context={"request": request, "user": request.user}
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return custom_success_message(
+                0, "Cluster created successfully", serializer.data, "cluster"
+            )
+        else:
+            return custom_error_response(1, serializer.errors)
+
+    elif action == "UpdateCluster":
+        """Update an existing cluster"""
+        data = request.data.get("cluster_details", {})
+        cluster_id = data.get("id")
+        
+        if not cluster_id:
+            return custom_error_response(1, "Cluster ID is required for update")
+
+        try:
+            # Assuming Clusters is your model name
+            cluster = utils.get_cluster_by_id(cluster_id) or Clusters.objects.get(id=cluster_id)
+        except Clusters.DoesNotExist:
+            return custom_error_response(1, "Cluster not found")
+
+        title = data.get("label", "").strip()
+        if not title:
+            return custom_error_response(1, "Cluster label (title) is required")
+
+        serializer_data = {
+            "title": title,
+        }
+        
+        serializer = ClustersSerializer(
+            cluster, 
+            data=serializer_data, 
+            partial=True,
+            context={"request": request, "user": request.user}
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return custom_success_message(
+                0, "Cluster updated successfully", serializer.data, "cluster"
+            )
+        else:
+            return custom_error_response(1, serializer.errors)
 
     else:
-        raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+        raise exceptions.ValidationError(f'Action {action} is unknown')
 
 
 class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):

@@ -3462,3 +3462,97 @@ def create_user_account(user):
         except Exception as e:
             errors.append(str(e))
             return errors, None
+
+# utils.py
+
+# ... [other imports and functions] ...
+
+# Clusters
+def get_clusters():
+    return models.Clusters.objects.all()
+
+
+def get_cluster_details(data, user=None):
+    try:
+        cluster_id = data["cluster"]
+        if models.Clusters.objects.filter(id=cluster_id).exists():
+            cluster = models.Clusters.objects.get(id=cluster_id)
+            return cluster
+    except KeyError:
+        raise exceptions.ValidationError("Cluster ID is required")
+
+
+def validate_cluster_data(data, user):
+    errors = []
+    try:
+        cluster_details = data["cluster_details"]
+    except KeyError:
+        errors.append("Cluster details are required")
+        raise exceptions.ValidationError(errors)
+
+    try:
+        label = data["cluster_details"].get("label", "").strip()
+        if not label:
+            errors.append("Cluster label is required")
+    except KeyError:
+        errors.append("Cluster label is required")
+
+    if errors:
+        raise exceptions.ValidationError(errors)
+    return
+
+
+def create_cluster(data, user):
+    try:
+        label = data["cluster_details"]["label"].strip()
+        
+        cluster = models.Clusters(
+            title=label,
+            owner=user,
+            # entity=user.entity # 🟢 Uncomment this if your Clusters model requires an entity!
+        )
+        
+        # full_clean() will trigger the unique=True validation on the title field
+        cluster.full_clean() 
+        cluster.save() # This triggers your custom save() to upper() and generate 'value'
+        
+        return cluster
+    except Exception as e:
+        raise exceptions.ValidationError(str(e))
+
+
+@transaction.atomic
+def update_cluster(data, user):
+    errors = []
+    cluster_id = None
+    title = None
+
+    try:
+        cluster_id = data["cluster_details"]["id"]
+        if not cluster_id:
+            errors.append("Cluster ID is required")
+            raise exceptions.ValidationError(errors)
+    except KeyError:
+        raise exceptions.ValidationError("Cluster ID is required")
+
+    try:
+        cluster = models.Clusters.objects.get(id=cluster_id)
+    except models.Clusters.DoesNotExist:
+        raise exceptions.ValidationError("Cluster not found")
+
+    if "label" in data["cluster_details"]:
+        if data["cluster_details"]["label"]:
+            title = data["cluster_details"]["label"].strip()
+
+    try:
+        if title:
+            cluster.title = title
+            # full_clean() will check if the new title violates the unique=True constraint
+            cluster.full_clean() 
+            cluster.save() # Triggers your custom save() to upper() and generate 'value'
+
+        return cluster
+    except Exception as e:
+        raise exceptions.ValidationError(str(e))
+
+
