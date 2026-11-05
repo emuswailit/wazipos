@@ -2491,7 +2491,18 @@ def clustersAPIView(request):
         if not title:
             return custom_error_response(1, "Cluster title is required")
 
-        serializer_data = {"title": title}
+        # 🟢 Find the entity ID (from payload or from the logged-in user)
+        entity_id = data.get("entity") or getattr(request.user, "entity_id", None)
+        if not entity_id:
+            return custom_error_response(1, "Cannot create cluster: You must be switched to an active entity.")
+
+        # 🟢 FIX: Provide 'entity' and a temporary 'value' so the serializer accepts the data.
+        # The model's custom save() method will automatically overwrite 'value' with the proper format.
+        serializer_data = {
+            "title": title,
+            "value": title.upper().replace(" ", "_"), 
+            "entity": entity_id
+        }
         
         serializer = ClustersSerializer(
             data=serializer_data, 
@@ -2500,13 +2511,13 @@ def clustersAPIView(request):
         
         if serializer.is_valid():
             try:
-                # 🟢 Explicitly pass entity and owner to prevent IntegrityError
-                serializer.save(owner=request.user, entity=request.user.entity)
+                # Save the cluster and assign the owner
+                cluster = serializer.save(owner=request.user) 
                 return custom_success_message(
                     0, "Cluster created successfully", serializer.data, "cluster"
                 )
             except Exception as e:
-                return custom_error_response(1, str(e))
+                return custom_error_response(1, f"Database error: {str(e)}")
         else:
             return custom_error_response(1, serializer.errors)
 
@@ -2529,7 +2540,11 @@ def clustersAPIView(request):
         if not title:
             return custom_error_response(1, "Cluster title is required")
 
-        serializer_data = {"title": title}
+        # 🟢 FIX: Provide the temporary 'value' so the serializer doesn't complain
+        serializer_data = {
+            "title": title,
+            "value": title.upper().replace(" ", "_"),
+        }
         
         serializer = ClustersSerializer(
             cluster, 
@@ -2545,13 +2560,13 @@ def clustersAPIView(request):
                     0, "Cluster updated successfully", serializer.data, "cluster"
                 )
             except Exception as e:
-                return custom_error_response(1, str(e))
+                return custom_error_response(1, f"Database error: {str(e)}")
         else:
-            # This catches the unique constraint error
             return custom_error_response(1, serializer.errors)
 
     else:
-        raise exceptions.ValidationError(f'Action {action} is unknown')    
+        raise exceptions.ValidationError(f'Action {action} is unknown')
+
 
 class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
     """
