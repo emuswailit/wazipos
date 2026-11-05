@@ -3556,3 +3556,10 @@ def update_cluster(data, user):
         raise exceptions.ValidationError(str(e))
 
 
+# utils.py
+
+def get_cluster_by_id(cluster_id):
+    try:
+        return models.Clusters.objects.get(id=cluster_id)
+    except models.Clusters.DoesNotExist:
+        return None

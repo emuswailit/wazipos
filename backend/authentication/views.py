@@ -2461,11 +2461,7 @@ def constituenciesAPIView(request):
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, exceptions
 from rest_framework.pagination import PageNumberPagination
-# Ensure you have these imports from your project
-# from myapp.models import Clusters
-# from myapp.serializers import ClustersSerializer
-# from myapp.utils import custom_success_message, custom_error_response
-# from myapp import utils
+
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
