@@ -5027,6 +5027,114 @@ class GoogleLogin(SocialLoginView):
     client_class = SafeOAuth2Client
 
 
+GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
+_google_jwks_client = jwt.PyJWKClient("https://www.googleapis.com/oauth2/v3/certs")
+
+
+def verify_google_id_token(id_token):
+    """
+    Verify a Google ID token's signature, audience, issuer and expiry using Google's
+    public keys. Returns the token claims, or raises jwt.PyJWTError / ValueError.
+    """
+    signing_key = _google_jwks_client.get_signing_key_from_jwt(id_token)
+    claims = jwt.decode(
+        id_token,
+        signing_key.key,
+        algorithms=["RS256"],
+        audience=settings.GOOGLE_OAUTH_ALLOWED_CLIENT_IDS,
+    )
+    if claims.get("iss") not in GOOGLE_ISSUERS:
+        raise ValueError("Unexpected token issuer")
+    if not claims.get("email") or claims.get("email_verified") not in (True, "true"):
+        raise ValueError("Google account email is not verified")
+    return claims
+
+
+def get_or_create_google_user(claims):
+    """
+    Return the user owning the Google account's email, creating a basic account under the
+    default WAZIPOS entity with the Client role when none exists.
+    """
+    email = claims["email"].strip().lower()
+    user = models.Users.objects.filter(email__iexact=email).first()
+    if user:
+        if user.is_email_verified != "true":
+            # Google has verified this address, so the account's email is verified too.
+            user.is_email_verified = "true"
+            user.is_verified = "true"
+            user.save()
+        return user, False
+
+    client_role = models.Roles.objects.filter(value="Client").first()
+    default_entity = models.Entities.objects.filter(title="WAZIPOS").first()
+    if not client_role or not default_entity:
+        raise exceptions.APIException("System roles or default entity are not set up")
+
+    with transaction.atomic():
+        user = models.Users(
+            email=email,
+            first_name=claims.get("given_name") or email.split("@")[0],
+            last_name=claims.get("family_name") or "",
+            registration_method="Google",
+        )
+        user.set_unusable_password()
+        user.entity = default_entity
+        user.country = default_entity.country
+        user.is_active = True
+        user.is_email_verified = "true"
+        user.is_verified = "true"
+        user.save()
+        user.roles.add(client_role)
+    return user, True
+
+
+class GoogleIdTokenLoginAPIView(APIView):
+    """
+    Sign in with a Google ID token from the mobile or web app.
+    Responds in the same shape as LoginAPIView so the app handles both alike.
+    """
+    authentication_classes = []
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        id_token = request.data.get("id_token")
+        if not id_token:
+            return JsonResponse(
+                data={"response_code": 1, "response_message": "Google ID token is required"},
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            claims = verify_google_id_token(id_token)
+        except (jwt.PyJWTError, ValueError) as e:
+            create_log("info", f"Google sign-in rejected: {e}")
+            return JsonResponse(
+                data={"response_code": 1, "response_message": "Google sign-in could not be verified. Please try again."},
+                status=status.HTTP_200_OK,
+            )
+
+        user, created = get_or_create_google_user(claims)
+        if not user.is_active:
+            return JsonResponse(
+                data={"response_code": 1, "response_message": "This account is inactive. Contact support."},
+                status=status.HTTP_200_OK,
+            )
+
+        tokens = user.tokens()
+        decoded_access = jwt.decode(tokens["access"], config("SECRET_KEY"), algorithms=["HS256"])
+        return JsonResponse(
+            data={
+                "tokens": tokens,
+                "expires": decoded_access["exp"],
+                "response_code": 0,
+                "response_message": "Account created and signed in with Google" if created else "Log in was succesful",
+                "user": UsersSerializer(user, many=False, context={"request": request}).data,
+            },
+            safe=False,
+            status=status.HTTP_200_OK,
+        )
+
+
 class UserMe(APIView):
     permission_classes = (permissions.IsAuthenticated,)
     

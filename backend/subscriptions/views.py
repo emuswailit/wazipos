@@ -14,6 +14,9 @@ from payments.models import PaymentMethods, UserAccounts
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
 
+# Longest period a single mobile money renewal can cover.
+MAX_RENEWAL_MONTHS = 12
+
 Users = get_user_model()
 
 @api_view(["POST"])
@@ -109,9 +112,17 @@ def subscriptionsDispatcherAPIView(request):
         except Exception as e:
             return custom_error_response(1, f"Invalid phone number: {str(e)}")
 
-        amount = int(entity.monthly_subscription or 0)
-        if amount <= 0:
+        try:
+            months = int(request.data.get("months", 1))
+        except (TypeError, ValueError):
+            return custom_error_response(1, "months must be a whole number")
+        if months < 1 or months > MAX_RENEWAL_MONTHS:
+            return custom_error_response(1, f"months must be between 1 and {MAX_RENEWAL_MONTHS}")
+
+        monthly_amount = int(entity.monthly_subscription or 0)
+        if monthly_amount <= 0:
             return custom_error_response(1, "This entity does not have a valid subscription amount configured")
+        amount = monthly_amount * months
 
         reference_number = generate_reference_number(entity, request.user)
         payload = None
@@ -179,8 +190,9 @@ def subscriptionsDispatcherAPIView(request):
             sub_payment = SubscriptionPayment.objects.create(
                 reference_number=reference_number, 
                 psp_reference_number=result_json["ref"],
-                amount=Decimal(str(amount)), 
-                entity=entity, 
+                amount=Decimal(str(amount)),
+                months=months,
+                entity=entity,
                 owner=request.user, 
                 status="PENDING",
                 description="Waiting for PIN entry."
@@ -195,6 +207,7 @@ def subscriptionsDispatcherAPIView(request):
                     "payment_id": sub_payment.id,
                     "reference_number": reference_number,
                     "amount": amount,
+                    "months": months,
                     "status": "PENDING",
                     "description": "Waiting for PIN entry.",
                     "jambopay_response": result_json

@@ -143,11 +143,20 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
             if Subscription.objects.filter(payment=payment).exists():
                 return
 
-            months = 1 
-            if payment.amount >= 5000: months = 6
-            elif payment.amount >= 10000: months = 12
+            # The number of months the user chose is stored on the payment when it is initiated.
+            months = max(1, payment.months or 1)
 
-            start_date = timezone.now()
+            # Stack onto any time the entity still has left (paid or trial), so renewing
+            # early never loses days. Lock the rows so two payments settling at once can't
+            # both extend from the same end date.
+            now = timezone.now()
+            current = (
+                Subscription.objects.select_for_update()
+                .filter(entity=payment.entity, end_date__gt=now)
+                .order_by("-end_date")
+                .first()
+            )
+            start_date = current.end_date if current else now
             end_date = start_date + timedelta(days=30 * months)
 
             Subscription.objects.create(

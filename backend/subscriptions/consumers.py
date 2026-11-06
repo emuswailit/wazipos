@@ -228,6 +228,14 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
                                         
                                     payment.save()
                                     create_log("info", f"Updated payment via WS: {final_status} - {status_description}")
+
+                                    # The Celery checker only looks at PENDING payments, so if this
+                                    # poller sees SUCCESS first it must create the subscription itself.
+                                    # create_subscription_from_payment skips payments already handled.
+                                    if final_status == "SUCCESS":
+                                        from .tasks import broadcast_subscription_update, create_subscription_from_payment
+                                        create_subscription_from_payment(payment)
+                                        broadcast_subscription_update()
                             except ValueError:
                                 create_log("error", "JamboPay returned a non-JSON response during polling.")
                 except Exception as e:

@@ -242,6 +242,13 @@ ACCOUNT_AUTHENTICATION_METHOD = "email"
 GOOGLE_OAUTH_CLIENT_ID = config("GOOGLE_OAUTH_CLIENT_ID")
 GOOGLE_OAUTH_CLIENT_SECRET = config("GOOGLE_OAUTH_CLIENT_SECRET")
 GOOGLE_OAUTH_CALLBACK_URL = config("GOOGLE_OAUTH_CALLBACK_URL")
+# Client IDs whose Google ID tokens the mobile/web app may send to /authentication/google/.
+# The app requests tokens for the Web client ID on every platform, so that is the default.
+GOOGLE_OAUTH_ALLOWED_CLIENT_IDS = [
+    client_id.strip()
+    for client_id in config("GOOGLE_OAUTH_ALLOWED_CLIENT_IDS", default=GOOGLE_OAUTH_CLIENT_ID).split(",")
+    if client_id.strip()
+]
 
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True

@@ -31,7 +31,11 @@ class SubscriptionPayment(EntityRelatedModel):
     operator_reference_number = models.CharField(max_length=120, null=True, blank=True)
     provider_reference_number = models.CharField(max_length=120, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    
+    months = models.PositiveIntegerField(
+        default=1,
+        help_text="Number of months this payment renews the subscription for.",
+    )
+
     # 🌟 Add the new status field
     status = models.CharField(
         max_length=50, 

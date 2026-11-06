@@ -47,7 +47,7 @@ urlpatterns = [
     path(
         "entities/create/agent", views.EntitiesCreateByAgentAPIView.as_view(), name="entity-create-agent"
     ),
-#    path('google/login/', views.GoogleLogin.as_view(), name='google_login'),
+   path('google/login/', views.GoogleLogin.as_view(), name='google_login'),
 #     path('users/me/', views.UserMe.as_view(), name='user_detail'),
     path("roles", views.rolesAPIView, name="roles-api-view"),
     path("sms", views.smsAPIView, name="sms-api-view"),
@@ -66,6 +66,7 @@ urlpatterns = [
     path("register/corporate", views.CorporateRegisterView.as_view(), name="corporate-register"),
     path("register/simple", views.SimpleRegisterView.as_view(), name="simple-register"),
     path("login/", views.LoginAPIView.as_view(), name="login"),
+    path("google/", views.GoogleIdTokenLoginAPIView.as_view(), name="google-id-token-login"),
     path("secret/", views.SendPasswordAPIView.as_view(), name="secret"),
     path("secret/email", views.SendEmailPasswordAPIView.as_view(), name="secret-email"),
     path("otp/resend/", views.SendOTPAPIView.as_view(), name="login"),
