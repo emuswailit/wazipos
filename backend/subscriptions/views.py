@@ -13,6 +13,7 @@ from authentication.utils.utils import generate_reference_number, get_telco_by_p
 from payments.models import PaymentMethods, UserAccounts
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
+from .summary import build_subscription_summary
 
 # Longest period a single mobile money renewal can cover.
 MAX_RENEWAL_MONTHS = 12
@@ -59,6 +60,8 @@ def subscriptionsDispatcherAPIView(request):
                 "count": paginator.page.paginator.count,
                 "next": paginator.get_next_link(), 
                 "previous": paginator.get_previous_link(),
+                # Totals for the user's own entity (same shape the WebSocket sends)
+                "summary": build_subscription_summary(entity),
             }, "subscriptions"
         )
     # ==========================================

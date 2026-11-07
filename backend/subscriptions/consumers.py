@@ -11,6 +11,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from utils.logging import create_log
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer
+from .summary import build_subscription_summary
 
 
 class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
@@ -39,9 +40,7 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
 
         # 3. Fetch initial data and send it
         await self.helper_func()
-        await self.send_json({
-            'subscriptions': json.loads(self.subscriptions),
-        })
+        await self.send_json(self.build_payload())
 
         # 4. Start the hourly background task
         self.hourly_push_task = asyncio.create_task(self.hourly_push_loop())
@@ -71,9 +70,7 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
                 await self.helper_func()
                 
                 # Send to frontend
-                await self.send_json({
-                    'subscriptions': json.loads(self.subscriptions),
-                })
+                await self.send_json(self.build_payload())
                 create_log("info", f"Pushed hourly subscription update to user {self.user.id}")
                 
         except asyncio.CancelledError:
@@ -96,15 +93,21 @@ class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
         ).data
         
         self.subscriptions = json.dumps(subscriptions_data, cls=DjangoJSONEncoder)
+        # Totals across every active subscription (stacked renewals included)
+        self.summary = build_subscription_summary(self.user.entity)
+
+    def build_payload(self):
+        return {
+            'subscriptions': json.loads(self.subscriptions),
+            'summary': self.summary,
+        }
 
     async def send_subscriptions(self, event):
         """
         Triggered instantly by signals/webhooks when a payment succeeds or status changes.
         """
         await self.helper_func()
-        await self.send_json({
-            'subscriptions': json.loads(self.subscriptions),
-        })
+        await self.send_json(self.build_payload())
 
 
 class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):

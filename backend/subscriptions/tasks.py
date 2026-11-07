@@ -14,6 +14,8 @@ from asgiref.sync import async_to_sync
 
 from utils.logging import create_log
 from .models import Subscription, SubscriptionPayment
+from .periods import next_period_start, period_end
+from authentication.models import Entities
 
 
 @shared_task
@@ -139,6 +141,12 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
     """
     try:
         with transaction.atomic():
+            # Serialise all subscription creation for this entity: lock the entity row first.
+            # Without it, two payments settling together (or the WebSocket poller and the Celery
+            # checker handling the same payment) could each read the same latest end date and
+            # create overlapping or duplicate periods.
+            Entities.objects.select_for_update().filter(pk=payment.entity_id).first()
+
             # Check if a subscription already exists for this payment to prevent duplicates
             if Subscription.objects.filter(payment=payment).exists():
                 return
@@ -146,18 +154,17 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
             # The number of months the user chose is stored on the payment when it is initiated.
             months = max(1, payment.months or 1)
 
-            # Stack onto any time the entity still has left (paid or trial), so renewing
-            # early never loses days. Lock the rows so two payments settling at once can't
-            # both extend from the same end date.
+            # Periods never overlap: the renewal starts the day after the entity's last
+            # subscription that hasn't ended yet (paid or trial), so renewing early never
+            # loses days.
             now = timezone.now()
-            current = (
-                Subscription.objects.select_for_update()
-                .filter(entity=payment.entity, end_date__gt=now)
+            latest = (
+                Subscription.objects.filter(entity=payment.entity, end_date__gt=now)
                 .order_by("-end_date")
                 .first()
             )
-            start_date = current.end_date if current else now
-            end_date = start_date + timedelta(days=30 * months)
+            start_date = next_period_start(latest.end_date) if latest else now
+            end_date = period_end(start_date, months)
 
             Subscription.objects.create(
                 entity=payment.entity,
