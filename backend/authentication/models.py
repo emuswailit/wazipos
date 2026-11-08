@@ -2,7 +2,7 @@ import random
 from utils.logging import create_log
 import re
 from rest_framework.response import Response
-from utils.mailing import send_email
+from core.utils import send_email
 from django.db.models import Q
 from django.db import models
 from datetime import date, timedelta, timezone,datetime
@@ -979,9 +979,10 @@ class Entities(models.Model):
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
-from core.utils import generate_password, send_email # 🌟 Import send_email
+from core.utils import generate_password
+from core.utils import send_email
 from decouple import config
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms
 from core.phone_number_utils import get_telco_by_phone_number
 
 @receiver(post_save, sender=Entities)
@@ -1050,13 +1051,7 @@ def create_entity_system_user(sender, instance, created, **kwargs):
                             f"System Login - Phone: {phone}, Password: {password}. "
                             f"Do not share."
                         )
-                        payload = {
-                            "contact": owner_phone,
-                            "message": message,
-                            "callback": "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                            "sender_name": config("JAMBOPAY_SWIFT_SENDER_NAME")
-                        }
-                        send_swift_sms(payload)
+                        send_sms(owner_phone, message)
                     except Exception as e:
                         create_log("error", f"Failed to send SMS to owner: {e}")
 

@@ -3,7 +3,7 @@ from django.db import IntegrityError
 import re
 import datetime
 from intergrations.jambopay.jambopay_create_whitelabel_account import create_white_label_account
-from utils.mailing import send_email
+from core.utils import send_email
 from payments.utils.payment_utils import create_user_account
 import dateutil.parser
 from rest_framework import generics, serializers, status, views, permissions, exceptions
@@ -14,7 +14,7 @@ from utils.encription import decrypt
 from core.responses import custom_error_response, custom_success_message,qr_code_response
 from core.phone_number_utils import get_telco_by_phone_number
 from employees.serializers import EmployeesSerializer
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms, send_push_notification
 from authentication.utils import utils
 from payments.models import UserAccounts,PaymentServicesProvider
 from rest_framework.decorators import (
@@ -375,6 +375,37 @@ def smsAPIView(request):
 
     else:
         raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def utilsAPIView(request):
+    """
+    Utility actions available to any signed-in user.
+
+    SendSMS
+        purpose: "CUSTOMER_ORDER_REMINDER" (default; the only purpose supported)
+        customer_order: id of an unpaid, overdue CREDIT order of the user's entity.
+        The SMS text is generated on the server from the order.
+    """
+    action = request.data.get("action")
+    if not action:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    if action == "SendSMS":
+        purpose = request.data.get("purpose") or "CUSTOMER_ORDER_REMINDER"
+        if purpose != "CUSTOMER_ORDER_REMINDER":
+            return custom_errors_response(1, "SMS could not be sent", [f"Unsupported SMS purpose: {purpose}"])
+
+        errors, result = sms_utils.send_customer_order_payment_reminder(
+            request.data.get("customer_order"), request.user
+        )
+        if errors:
+            return custom_errors_response(1, "Reminder could not be sent", errors)
+        return custom_success_message(0, "Payment reminder sent", result, "sms")
+
+    raise exceptions.ValidationError(f"Action {action} is unknown")
+
 
 @api_view(["POST"])
 @permission_classes(
@@ -2684,19 +2715,12 @@ class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
                         "email_subject": "Succesful Wazipos Account Creation",
                     }
 
-                utils.Util.send_email(data)
+                send_email(data)
 
                 # Send sms
                 telco, phone_number = get_telco_by_phone_number(user.phone)
                 message =f"Your Wazipos account has been created. Your password is {password} . Do not share your password with any other person."
-                payload = {
-                        "contact" : phone_number,
-                        "message" : message,
-                        "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                        "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                    }
-        
-                errors, sent = send_swift_sms(payload)
+                errors, sent = send_sms(phone_number, message)
                 # email_body = (
                 #     "Hi "
                 #     + user.first_name
@@ -2711,7 +2735,7 @@ class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
                 #     "email_subject": "Verify your email address",
                 # }
 
-                # utils.Util.send_email(data)
+                # send_email(data)
 
                 # time_otp = sms_utils.generate_otp(user)
                 # message =f"Mobiticket verification OTP {time_otp}.You or your agent should use it to activate your account. Your secret password is {password}. PLease donT share password with anyone"
@@ -2729,7 +2753,7 @@ class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
                 #     "email_subject": "Verify your email address",
                 # }
 
-                # utils.Util.send_email(data)
+                # send_email(data)
                 # sent = sms_utils.send_sms_code(user)
 
                 errors_messages = []
@@ -2800,19 +2824,12 @@ class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
                         "email_subject": "Succesful Wazipos Account Creation",
                     }
 
-                utils.Util.send_email(data)
+                send_email(data)
 
                 # Send sms
                 telco, phone_number = get_telco_by_phone_number(user.phone)
                 message =f"Your Wazipos account has been created. Your password is {password} . Do not share your password with any other person."
-                payload = {
-                        "contact" : phone_number,
-                        "message" : message,
-                        "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                        "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                    }
-        
-                errors, sent = send_swift_sms(payload)
+                errors, sent = send_sms(phone_number, message)
               
 
                 errors_messages = []
@@ -2932,7 +2949,7 @@ class EntityRegisterView(CreateModelMixin, generics.GenericAPIView):
                     "email_subject": "Verify your email address",
                 }
 
-                utils.Util.send_email(data)
+                send_email(data)
                 sent = sms_utils.send_sms_code(user)
 
                 errors_messages = []
@@ -3007,7 +3024,7 @@ class EntityRegisterView(CreateModelMixin, generics.GenericAPIView):
                     "email_subject": "Verify your email address",
                 }
 
-                utils.Util.send_email(data)
+                send_email(data)
 
                 errors_messages = []
                 # sent = sms_utils.send_sms_code(user)
@@ -3446,14 +3463,7 @@ class LoginAPIView(generics.GenericAPIView):
             if  not entered_phone_number=="" and user.phone_otp_verified=="false":
                 time_otp = sms_utils.generate_otp(user)
                 message =f"Mobiticket verification OTP {time_otp}."
-                payload = {
-                        "contact" : user.phone,
-                        "message" : message,
-                        "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                        "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                    }
-            
-                errors, sent = send_swift_sms(payload)
+                errors, sent = send_sms(user.phone, message)
                 # return JsonResponse(
                 #     data={
                 #         "response_code": 2,
@@ -3647,7 +3657,7 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
                 "email_subject": "Reset your password",
             }
 
-            utils.Util.send_email(data)
+            send_email(data)
         return Response(
             {"success": "We have sent you a link to reset your password"},
             status=status.HTTP_200_OK,
@@ -3832,7 +3842,7 @@ class PhoneLoginSerializer(serializers.ModelSerializer):
         #         'Email is not verified. Log in to your email to verify')
 
         if user.notification_token:
-            utils.send_message(
+            send_push_notification(
                 user.notification_token, "Hey there", "You are logged in!!"
             )
         return {

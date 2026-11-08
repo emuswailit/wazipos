@@ -16,7 +16,7 @@ from authentication.utils.utils import generate_reference_number,use_reference_n
 from intergrations.jambopay.jambopay_wallet import jambopay_wallet_checkout
 from utils.logging import create_log
 from payments.utils.payment_utils import get_service_charge
-from utils.send_messages import send_sms
+from core.utils import send_sms
 from utils.logging import create_log
 from intergrations.jambopay.jambopay_wallet import get_wallet_balance
 from intergrations.jambopay.jambopay_check_payment_status import jambopay_check_payment_status

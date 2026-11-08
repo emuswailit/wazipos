@@ -9,7 +9,7 @@ from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
 from django.db import transaction
 from utils.validations import start_and_end_date_validated
 from datetime import datetime
-from utils.send_messages import send_message
+from core.utils import send_push_notification
 from .utils import utils
 from loyalty.models import Rating
 
@@ -2057,7 +2057,7 @@ class PhoneLoginSerializer(serializers.ModelSerializer):
         #         'Email is not verified. Log in to your email to verify')
 
         if user.notification_token:
-            send_message(user.notification_token, "Hey there", "You are logged in!!")
+            send_push_notification(user.notification_token, "Hey there", "You are logged in!!")
         return {
             "tokens": user.tokens(),
             "notification_token": user.notification_token,

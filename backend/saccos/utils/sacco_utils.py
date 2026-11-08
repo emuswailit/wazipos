@@ -9,7 +9,7 @@ from employees.validators import employees_models_validators
 from ..utils import sacco_models_validators
 from authentication.models import Users
 from utils.logging import create_log
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms
 from decouple import config
 from core.phone_number_utils import get_telco_by_phone_number
 from .. import models
@@ -1183,14 +1183,7 @@ def send_new_password(user):
     user.set_password(generated_password)
     user.save()
     message =f"Your Wazipos secret is {generated_password} .Keep it yor secret. Do NOT share with any person"
-    payload = {
-            "contact" : user.phone,
-            "message" : message,
-            "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-            "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-        }
-
-    errors, sent = send_swift_sms(payload)
+    errors, sent = send_sms(user.phone, message)
     return user
 
 def verify_sacco_member_otp(data,user):
@@ -1297,17 +1290,10 @@ def send_sacco_user_sms_code(data):
     time_otp = pyotp.TOTP(user.key, interval=300, digits=4)
     time_otp = time_otp.now()
     message =f"{user.entity} verification code id {time_otp}"
-    payload = {
-            "contact" : user.phone,
-            "message" : message,
-            "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-            "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-        }
-
-    errors, sent = send_swift_sms(payload)
+    errors, sent = send_sms(user.phone, message)
     print("errrors",errors)
     print("sent",sent)
-    if sent and sent["message_id"] and sent["telco"]:
+    if not errors:
         return None, user
     else:
         return ["An error occurred"],None

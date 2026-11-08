@@ -22,7 +22,8 @@ from django.http import JsonResponse
 from authentication.serializers import CorporateRegisterSerializer,UserDocumentsSerializer
 from authentication.renderers import UserRenderer
 from authentication.utils import utils,sms_utils
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms
+from core.utils import send_email
 from saccos.models import Members,MemberAccounts
 from authentication.validators import authentication_models_validators
 from rest_framework.response import Response
@@ -767,21 +768,14 @@ class SaccoUserRegisterView(CreateModelMixin, generics.GenericAPIView):
                     # message = f"Your account for {user.entity} has been created at JAMBOPAY. Your password is {password}"
                     time_otp = sms_utils.generate_otp(user_obj)
                     message =f"{request.user.entity.title} verification OTP {time_otp}.Use it to activate your account."
-                    payload = {
-                            "contact" : user_obj.phone,
-                            "message" : message,
-                            "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                            "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                        }
-                
-                    errors, sent = send_swift_sms(payload)
+                    errors, sent = send_sms(user_obj.phone, message)
                     data = {
                         "email_body": email_body,
                         "to_email": user_obj.email,
                         "email_subject": "Verify your email address",
                     }
 
-                    utils.Util.send_email(data)
+                    send_email(data)
 
                     errors_messages = []
                     # sent = sms_utils.send_sms_code(user)

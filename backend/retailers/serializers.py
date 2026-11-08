@@ -422,7 +422,7 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
             "order_origin", "shipping_cost", "is_quoted",
 
             "is_paid", "paid_at", "paid_total", "balance_due",
-            "is_settled", "due_date",
+            "is_settled", "due_date", "last_payment_reminder_at",
 
             "is_delivered", "is_delivered_string",
             "delivered_at", "delivered_by",
@@ -460,7 +460,7 @@ class CustomerOrdersSerializer(serializers.ModelSerializer):
             "order_price_discount_total", "order_net_price_total",
 
             "is_paid", "paid_at", "paid_total",
-            "balance_due", "is_settled",
+            "balance_due", "is_settled", "last_payment_reminder_at",
 
             "is_delivered", "delivered_at",
 
@@ -677,13 +677,13 @@ class CustomerOrdersDetailedSerializer(serializers.ModelSerializer):
             "is_received", "received_at", "received_by",
             "delivery_method",
             "customer", "coupon", "entity",
-            "vendor", "user", "phone", "email", "due_date",
+            "vendor", "user", "phone", "email", "due_date", "last_payment_reminder_at",
             "created", "updated", "owner",
             "customer_name", "customer_phone",
             "owner_details", "entity_details", "customer_details",
             "selected_payment_method", "selected_payment_method_title",
         )
-        read_only_fields = ("id", "created", "updated", "owner", "net_amount")
+        read_only_fields = ("id", "created", "updated", "owner", "net_amount", "last_payment_reminder_at")
 
     def get_shipping_cost(self, obj):
         return float(obj.shipping_cost or 0)

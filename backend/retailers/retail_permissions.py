@@ -12,8 +12,11 @@ class EntitySubscriptionPermission(permissions.BasePermission):
     def has_permission(self, request, view):
     
         if request.user.is_authenticated:
-            
-            if Subscription.objects.filter(entity=request.user.entity, end_date__gte=timezone.now()).exists(): 
+            # Super admins act on other entities' data; their own entity's
+            # subscription is irrelevant.
+            if request.user.is_superuser:
+                return True
+            if Subscription.objects.filter(entity=request.user.entity, end_date__gte=timezone.now()).exists():
                 return True
             else:
 

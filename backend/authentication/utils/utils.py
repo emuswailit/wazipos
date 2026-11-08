@@ -1,5 +1,4 @@
 from datetime import datetime
-from django.core.mail import EmailMessage
 from rest_framework import exceptions
 from intergrations.jambopay.jambopay_create_whitelabel_account import create_white_label_account
 from payments.models import BranchCollectionAccount,PaymentServicesProvider, EntityPSPCollectionAccount, UserAccounts
@@ -13,7 +12,7 @@ from employees.models import Employees
 from ..models import YearLetters,Users
 import json
 import re
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms, send_bulk_sms
 from intergrations.jambopay.jambopay_wallet import iprs_verify
 
 
@@ -53,42 +52,21 @@ Users = get_user_model()
 
 
 def send_sms_messages(data, user):
+    """Admin bulk SMS. Returns (errors, results); results maps number -> provider response."""
     errors = []
-    message = None
-    contacts = []
-    callback_url = None
-
-    print ("data", data)
     if not user.is_staff:
-        errors.append("No sent")
+        errors.append("Only staff can send bulk SMS")
+    message = (data.get("message") or "").strip()
+    if not message:
+        errors.append("Message is required")
+    contacts = data.get("contacts") or []
+    if not isinstance(contacts, list) or not contacts:
+        errors.append("Contacts are required")
+    if errors:
+        return errors, None
 
-    if "calback_url" in data:
-        callback_url = data["callback_url"]
-    if not "message" in data:
-        errors.append("Message id required")
-    else:
-        message = data["message"]
-
-    if not "contacts" in data or len(data["contacts"])<1:
-        errors.append("Contacts are  required")
-    else:
-        contacts = data["contacts"]
-
-    for contact in contacts:
-        telco, phone_number = get_telco_by_phone_number(contact)
-        if phone_number:
-            payload = {
-                    "contact" : phone_number,
-                    "message" : message,
-                    "callback" : callback_url,
-                    "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                }
-        
-            errors, sent = send_swift_sms(payload)
-    # if sent:
-    #     return [], sent
-    if len(errors)>0:
-        return errors, False   
+    errors, results = send_bulk_sms(contacts, message, data.get("callback_url"))
+    return errors, results
 
 
 def validate_user_roles_data(data, owner):
@@ -128,17 +106,6 @@ def validate_user_roles_data(data, owner):
 
 
 class Util:
-    @staticmethod
-    def send_email(data):
-        email = EmailMessage(
-            subject=data["email_subject"],
-            body=data["email_body"],
-            to=[
-                data["to_email"],
-            ],
-        )
-        email.send()
-
     def admin_can_create_entity(user, entity_type):
         """Admin user can only create manufacturing entities"""
         if entity_type != "MANUFACTURING" and user.is_staff:
@@ -1344,14 +1311,7 @@ def create_local_entity_by_agent(data, user):
                 if collection_account:
                     message = f"Your account number {collection_account.entity_account_number} has been created at MOBITICKET. Your can dial *615*50# on your phone number {collection_account.entity_account_phone} to set your pin"
 
-                    payload = {
-                            "contact" : created.owner.phone,
-                            "message" : message,
-                            "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                            "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                        }
-
-                    errors, sent = send_swift_sms(payload)
+                    errors, sent = send_sms(created.owner.phone, message)
                     return [], created
                 else:
                     employee.delete()
@@ -3467,14 +3427,7 @@ def create_user_account(user):
                     print("fdfdfdf",user_account)
                     message = f"Your wallet account number {user_account.account_number} has been created at JAMBOPAY. Your can dial *615*50# on your phone number {user_account.account_phone} to set your pin"
                  
-                    payload = {
-                            "contact" : user.phone,
-                            "message" : message,
-                            "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                            "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                        }
-
-                    errors, sent = send_swift_sms(payload)
+                    errors, sent = send_sms(user.phone, message)
                     print("AT MESSAGE",errors)
                     print("AT MESSAGE",sent)
                     return [], user

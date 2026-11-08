@@ -21,7 +21,7 @@ import datetime
 import json
 User = get_user_model()
 from decouple import config
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms
 from payments.models import PaymentServicesProvider
 
 
@@ -1460,17 +1460,10 @@ def retrieve_wallet_details(phone_number):
     return response
 
 
-def send_sms(user):
+def send_wallet_created_sms(user):
     message = f"Your cashless wallet has been created at JAMBOPAY."
 
-    payload = {
-                    "contact" : user.phone,
-                    "message" : message,
-                    "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                    "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                }
-        
-    errors, sent = send_swift_sms(payload)
+    errors, sent = send_sms(user.phone, message)
 
 def create_user_account(user, wallet):
     if UserAccounts.objects.filter(account_phone = user.phone, account_type="WALLET").exists():
@@ -1596,7 +1589,7 @@ def create_wallet_1(splitted, msisdn):
                                 
                                 if wallet:
                                     create_user_account(user, wallet)
-                                    send_sms(user)
+                                    send_wallet_created_sms(user)
                                     response = "END Your wallet has been created."
                                     return response      
                                 else:

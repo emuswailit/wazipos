@@ -45,6 +45,11 @@ urlpatterns = [
         views.customerOrdersAdminAPIView,
         name="customer-orders-admin-apiview",
     ),
+    path(
+        "orders/superadmin",
+        views.customerOrdersSuperAdminAPIView,
+        name="customer-orders-superadmin-apiview",
+    ),
     
     # --- Shipping Rates ---
     path(

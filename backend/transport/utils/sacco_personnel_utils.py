@@ -2,7 +2,7 @@ from authentication.validators.authentication_models_validators import validate_
 from transport.transport_validators import validate_sacco_personnel, validate_vehicle, validate_sacco_subscription
 from intergrations.jambopay.jambopay_create_whitelabel_account import create_white_label_account
 from ..models import SaccoPersonnel, SaccoPersonnelAccount, SaccoSubscriptionPayment, SaccoSubscriptionSettlement
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms
 from payments.validators.payments_models_validators import validate_payment_method_exists
 import datetime
 from datetime import timedelta

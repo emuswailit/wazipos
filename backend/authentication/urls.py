@@ -51,6 +51,7 @@ urlpatterns = [
 #     path('users/me/', views.UserMe.as_view(), name='user_detail'),
     path("roles", views.rolesAPIView, name="roles-api-view"),
     path("sms", views.smsAPIView, name="sms-api-view"),
+    path("utils", views.utilsAPIView, name="utils-api-view"),
     path("plans", views.plansAPIView, name="plans-api-view"),
     path("cadres", views.cadresAPIView, name="cadres-api-view"),
     path("dependants", views.dependantsAPIView, name="dependants-api-view"),

@@ -17,7 +17,7 @@ from payments.utils import payment_utils, account_utils
 from utils.logging import create_log
 
 from intergrations.jambopay import integration_utils
-from intergrations.jambopay_swift.jambopay_swift_sms import send_swift_sms
+from core.utils import send_sms
 from decouple import config
 from utils.logging import create_log
 
@@ -1188,14 +1188,7 @@ def set_mandatory_entity_subscription_to_all_entity_accounts(entity_subscrition)
 
             message = f"Admin at {entity_subscrition.entity} has added your account {i} to {entity_subscrition} subscription"
 
-            payload = {
-                    "contact" : i.account_phone,
-                    "message" : message,
-                    "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                    "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                }
-
-            errors, sent = send_swift_sms(payload)
+            errors, sent = send_sms(i.account_phone, message)
 
 
 class EntitySubscriptionsCreateAPIView(generics.GenericAPIView):

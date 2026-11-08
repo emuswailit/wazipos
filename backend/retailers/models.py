@@ -1708,6 +1708,10 @@ class CustomerOrders(EntityRelatedModel):
     packed_at = models.DateTimeField(null=True, blank=True)
     received_at = models.DateTimeField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
+    last_payment_reminder_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the last SMS payment reminder was sent for this credit order.",
+    )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(User, related_name="retailerOrderOwner", on_delete=models.CASCADE)

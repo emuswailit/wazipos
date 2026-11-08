@@ -1245,6 +1245,67 @@ def retailerInvoicesAPIView(request):
 # Admin — customer orders
 # ===========================================================================
 
+# Roles allowed to change a customer order's due date (Roles.value), for their own entity.
+DUE_DATE_EDITOR_ROLES = ("GeneralRetailerSuperAdmin", "PharmaceuticalRetailerSuperAdmin")
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated, retail_permissions.EntitySubscriptionPermission])
+def customerOrdersSuperAdminAPIView(request):
+    """
+    Retailer super-admin actions on customer orders.
+
+    UpdateCustomerOrderDueDate
+        customer_order: order id
+        due_date: YYYY-MM-DD (past dates allowed, to correct old orders)
+        Allowed for users holding a DUE_DATE_EDITOR_ROLES role in the order's entity.
+    """
+    action = request.data.get("action")
+    if not action:
+        raise exceptions.ValidationError("Action is not supplied")
+
+    if action == "UpdateCustomerOrderDueDate":
+        order_id = request.data.get("customer_order")
+        raw_date = request.data.get("due_date")
+        if not order_id:
+            return custom_errors_response(1, "Due date not updated", ["customer_order is required"])
+        try:
+            new_due_date = datetime.date.fromisoformat(str(raw_date or "").strip()[:10])
+        except ValueError:
+            return custom_errors_response(1, "Due date not updated", ["due_date must be a valid date (YYYY-MM-DD)"])
+
+        try:
+            order = models.CustomerOrders.objects.select_related("selected_payment_method").get(id=order_id)
+        except Exception:  # DoesNotExist, or a malformed id
+            return custom_errors_response(1, "Due date not updated", ["Customer order not found"])
+
+        # The role must be held in the same entity as the order.
+        if not request.user.roles.filter(entity=order.entity, value__in=DUE_DATE_EDITOR_ROLES).exists():
+            return custom_errors_response(
+                1, "Due date not updated", ["Only retailer super admins of this business can change due dates"]
+            )
+
+        method = (getattr(order.selected_payment_method, "title", "") or "").strip().upper()
+        if method != "CREDIT":
+            return custom_errors_response(1, "Due date not updated", ["Only CREDIT orders have a due date"])
+        if str(order.is_paid).lower() == "true":
+            return custom_errors_response(1, "Due date not updated", ["This order is already paid"])
+
+        previous = order.due_date
+        order.due_date = new_due_date
+        order.save(update_fields=["due_date", "updated"])
+        create_log(
+            "info",
+            f"Due date of customer order {order.id} changed from {previous} to {new_due_date} "
+            f"by user {request.user.id}",
+        )
+
+        serializer = serializers.CustomerOrdersSerializer(order, many=False, context={"request": request})
+        return custom_success_message(0, "Due date updated", serializer.data, "customer_order")
+
+    raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
 @api_view(["POST"])
 @permission_classes(
     [

@@ -1272,10 +1272,11 @@ def generate_order_estimates(data, user, request):
 # Customer orders — queries
 # ===========================================================================
 
-def get_user_own_orders(user, data):
-    today = datetime.date.today()
-    tommorow = today + datetime.timedelta(days=1)
+# Orders returned by get_user_own_orders / get_entity_orders when no date range is given.
+USER_OWN_ORDERS_LIMIT = 50
 
+
+def get_user_own_orders(user, data):
     if (
         "filters" in data
         and "from_date" in data["filters"]
@@ -1295,18 +1296,15 @@ def get_user_own_orders(user, data):
             .order_by("-created")
         )
 
+    # No date range given: the 50 most recent orders, newest first.
     return (
         CustomerOrders.objects
         .filter(entity=user.entity)
-        .filter(created__gte=today, created__lt=tommorow)
-        .order_by("-created")
+        .order_by("-created")[:USER_OWN_ORDERS_LIMIT]
     )
 
 
 def get_entity_orders(user, data):
-    today = datetime.date.today()
-    tommorow = today + datetime.timedelta(days=1)
-
     if (
         "filters" in data
         and "from_date" in data["filters"]
@@ -1326,11 +1324,11 @@ def get_entity_orders(user, data):
             .order_by("-created")
         )
 
+    # No date range given: the 50 most recent orders, newest first.
     return (
         CustomerOrders.objects
         .filter(entity=user.entity)
-        .filter(created__gte=today, created__lt=tommorow)
-        .order_by("-created")
+        .order_by("-created")[:USER_OWN_ORDERS_LIMIT]
     )
 
 
@@ -3407,6 +3405,24 @@ def create_customer_order(data, user):
             errors.append("Final unit selling price is required")
             return errors, None
 
+    # Credit sales: the customer owes the money, so we need who they are, how to reach
+    # them, and when they've agreed to pay. The app sends the date as credit_due_date.
+    due_date = None
+    is_credit = (getattr(payment_method, "title", "") or "").strip().upper() == "CREDIT"
+    raw_due_date = details.get("credit_due_date") or details.get("due_date")
+    if raw_due_date:
+        try:
+            due_date = datetime.date.fromisoformat(str(raw_due_date).strip()[:10])
+        except ValueError:
+            errors.append("Due date must be a valid date (YYYY-MM-DD)")
+    if is_credit:
+        if not due_date and not errors:
+            errors.append("Due date is required for credit orders")
+        if not (details.get("customer_name") or "").strip():
+            errors.append("Customer name is required for credit orders")
+        if not (details.get("customer_phone") or "").strip():
+            errors.append("Customer phone is required for credit orders")
+
     if errors:
         return errors, None
 
@@ -3414,7 +3430,8 @@ def create_customer_order(data, user):
         entity, user, "CUSTOMERORDER",
     )
 
-    # 🟢 FIX: Use the customer details sent by the frontend (for Walk-in customers)
+    # 🟢 FIX: Use the customer details sent by the frontend (for Walk-in customers).
+    # Credit orders are validated above, so they never fall back to the cashier's details.
     customer_name = details.get("customer_name") or f"{user.first_name} {user.last_name}"
     customer_phone = details.get("customer_phone") or str(user.phone or "")
 
@@ -3438,6 +3455,7 @@ def create_customer_order(data, user):
             recipient_name=recipient_name,
             recipient_phone=recipient_phone,
             farness=farness,
+            due_date=due_date,
         )
 
         create_log("info", f"Customer order: {order_created}")
@@ -3698,9 +3716,14 @@ def update_customer_order(data, user):
 
     customer_order = CustomerOrders.objects.filter(
         id=customer_order_id
-    ).first()
+    ).select_related("selected_payment_method").first()
     if not customer_order:
         errors.append("Customer order with provided ID does not exist")
+        return errors, None
+
+    is_platform_admin = user.is_superuser or user.is_staff
+    if not is_platform_admin and customer_order.entity_id != getattr(user, "entity_id", None):
+        errors.append("You can only update your own entity's orders")
         return errors, None
 
     if details.get("payment_method"):
@@ -3730,7 +3753,36 @@ def update_customer_order(data, user):
     if details.get("status"):
         status = details["status"]
 
+    # Due date of a CREDIT order. Super admins only; past dates are allowed so old
+    # orders can be corrected.
+    due_date = None
+    if "due_date" in details:
+        if not user.is_superuser:
+            errors.append("Only super admins can change the due date")
+            return errors, None
+        try:
+            due_date = datetime.date.fromisoformat(str(details.get("due_date") or "").strip()[:10])
+        except ValueError:
+            errors.append("due_date must be a valid date (YYYY-MM-DD)")
+            return errors, None
+        effective_method = payment_method or customer_order.selected_payment_method
+        if (getattr(effective_method, "title", "") or "").strip().upper() != "CREDIT":
+            errors.append("Only CREDIT orders have a due date")
+            return errors, None
+        if str(customer_order.is_paid).lower() == "true":
+            errors.append("This order is already paid")
+            return errors, None
+
     changed = []
+
+    if due_date is not None and due_date != customer_order.due_date:
+        create_log(
+            "info",
+            f"Due date of customer order {customer_order.id} changed from "
+            f"{customer_order.due_date} to {due_date} by user {user.id}",
+        )
+        customer_order.due_date = due_date
+        changed.append("due_date")
 
     if shipping_cost is not None:
         customer_order.shipping_cost = shipping_cost
