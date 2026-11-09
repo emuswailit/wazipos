@@ -1430,18 +1430,21 @@ def get_bodaboda_deliveries(data, user):
     return bodaboda_assigned_orders
 
 
+def customer_order_payments_for_entity(entity):
+    """
+    Payments received by an entity (the shop).
+
+    Payments are created with `entity` set to the shop; `receiving_entity` is usually
+    empty, so filtering on it alone returns nothing. Match either.
+    """
+    return CustomerOrderPayment.objects.filter(Q(entity=entity) | Q(receiving_entity=entity))
+
+
 def get_customer_order_payments(data, user):
-    if CustomerOrderPayment.objects.filter(
-        receiving_entity=user.entity,
+    return customer_order_payments_for_entity(user.entity).filter(
         created__gte=get_formatted_from_date(data),
         created__lte=get_formatted_to_date(data),
-    ).exists():
-        return CustomerOrderPayment.objects.filter(
-            receiving_entity=user.entity,
-            created__gte=get_formatted_from_date(data),
-            created__lte=get_formatted_to_date(data),
-        ).all()
-    return []
+    ).order_by("-created")
 
 
 def get_customer_order_settlements(data, user):

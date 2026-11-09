@@ -6,7 +6,11 @@ import logging
 import requests
 from datetime import date, datetime, timedelta
 from .utils.inventory_utils import update_stock
-from .utils.retailer_utils import customer_order_payments_group, customer_orders_group
+from .utils.retailer_utils import (
+    customer_order_payments_for_entity,
+    customer_order_payments_group,
+    customer_orders_group,
+)
 from django.db import transaction
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
@@ -866,7 +870,7 @@ class CustomerOrderPaymentsConsumer(AsyncJsonWebsocketConsumer):
     @sync_to_async
     def _latest_payments(self):
         payments = (
-            CustomerOrderPayment.objects.filter(receiving_entity=self.user.entity)
+            customer_order_payments_for_entity(self.user.entity)
             .select_related("customer_order", "customer_order__order_number", "payment_method")
             .order_by("-created")[:self.PAYMENTS_LIMIT]
         )

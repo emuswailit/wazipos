@@ -258,9 +258,10 @@ def load_customer_orders():
         .values_list("customer_order__entity_id", flat=True)
         .distinct()
     )
+    # Payments are stored with `entity` = the shop (receiving_entity is usually empty).
     entity_ids |= set(
         CustomerOrderPayment.objects.filter(updated__gte=since)
-        .values_list("receiving_entity_id", flat=True)
+        .values_list("entity_id", flat=True)
         .distinct()
     )
     entity_ids.discard(None)
