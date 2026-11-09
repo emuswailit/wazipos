@@ -1115,11 +1115,11 @@ def customerOrdersStaffAPIView(request):
         return paginator.get_paginated_response(serializer.data)
 
     elif action == "SearchCustomerOrders":
-        retailer_orders = retailer_utils.search_customer_orders(
+        customer_orders = retailer_utils.search_customer_orders(
             request.data, request.user
         )
         paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(retailer_orders, request)
+        page = paginator.paginate_queryset(customer_orders, request)
         serializer = serializers.CustomerOrdersSerializer(
             page, many=True, context={"request": request}
         )
@@ -1127,7 +1127,7 @@ def customerOrdersStaffAPIView(request):
 
     elif action == "RetrieveOwnOrders":
         employee_orders = retailer_utils.get_own_orders(
-            request.data, request.user
+            request.data, request.user, entity=request.user.entity
         )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(employee_orders, request)
@@ -1159,8 +1159,9 @@ def customerOrdersStaffAPIView(request):
             raise exceptions.ValidationError(
                 "Customer order ID is required"
             )
+        # Always scoped to the user's current entity.
         customer_order = models.CustomerOrders.objects.filter(
-            id=customer_order_id
+            id=customer_order_id, entity=request.user.entity
         ).first()
         if not customer_order:
             return customer_order_responses.custom_error_response(
@@ -1295,6 +1296,7 @@ def customerOrdersSuperAdminAPIView(request):
             f"Due date of customer order {order.id} changed from {previous} to {new_due_date} "
             f"by user {request.user.id}",
         )
+        retailer_utils.broadcast_customer_orders_update(order.entity_id)
 
         serializer = serializers.CustomerOrdersSerializer(order, many=False, context={"request": request})
         return custom_success_message(0, "Due date updated", serializer.data, "customer_order")
@@ -1409,8 +1411,9 @@ def customerOrdersAdminAPIView(request):
             raise exceptions.ValidationError(
                 "Customer order ID is required"
             )
+        # Always scoped to the user's current entity.
         customer_order = models.CustomerOrders.objects.filter(
-            id=customer_order_id
+            id=customer_order_id, entity=request.user.entity
         ).first()
         if not customer_order:
             return customer_order_responses.custom_error_response(
@@ -1539,7 +1542,7 @@ def customerOrdersAPIView(request):
             )
 
     elif action == "RetrieveOwnOrders":
-        own_orders = retailer_utils.get_own_orders(request.data, request.user)
+        own_orders = retailer_utils.get_own_orders(request.data, request.user, entity=request.user.entity)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(own_orders, request)
         serializer = serializers.CustomerOrdersSerializer(

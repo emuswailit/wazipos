@@ -235,11 +235,31 @@ def load_retailer_dashboard():
 
 @app.task
 def load_customer_orders():
-    result = async_to_sync(channel_layer.group_send)(
-        "customer-orders",
-        {"type": "send_customer_orders"},
+    """
+    Safety-net push (runs every 30s via Celery beat). Only entities that need it are
+    notified, each on its own group:
+      - orders changed in the last 2 minutes (catches anything not broadcast directly),
+      - successful payments whose stock hasn't been deducted yet, so the
+        CustomerOrdersConsumer sweeper runs for them.
+    """
+    from .utils.retailer_utils import broadcast_customer_orders_update
+
+    since = timezone.now() - timedelta(minutes=2)
+    entity_ids = set(
+        models.CustomerOrders.objects.filter(updated__gte=since)
+        .values_list("entity_id", flat=True)
+        .distinct()
     )
-    return result
+    entity_ids |= set(
+        CustomerOrderPayment.objects.filter(status="SUCCESS", is_validated=False)
+        .values_list("customer_order__entity_id", flat=True)
+        .distinct()
+    )
+    entity_ids.discard(None)
+
+    for entity_id in entity_ids:
+        broadcast_customer_orders_update(entity_id)
+    return len(entity_ids)
 
 
 @app.task

@@ -1358,19 +1358,27 @@ def get_employee_orders(data, user):
         )
 
 
-def get_own_orders(data, user):
+def get_own_orders(data, user, entity=None):
+    """
+    Orders the user created (owner=user), newest first, at most 20.
+
+    Retailer endpoints pass entity=user.entity so only the current entity's orders
+    come back. The customer-facing client endpoint passes no entity: a shopper's
+    orders belong to the shops they bought from, not to the shopper's own entity.
+    """
     try:
-        if CustomerOrders.objects.filter(user=user).exists():
-            return (
-                CustomerOrders.objects
-                .filter(
-                    owner=user,
-                    created__gte=get_formatted_from_date(data),
-                    created__lte=get_formatted_to_date(data),
-                )
-                .all()
-                .order_by("created")[:20]
+        qs = CustomerOrders.objects.filter(user=user)
+        if entity is not None:
+            qs = qs.filter(entity=entity)
+        if qs.exists():
+            orders = CustomerOrders.objects.filter(
+                owner=user,
+                created__gte=get_formatted_from_date(data),
+                created__lte=get_formatted_to_date(data),
             )
+            if entity is not None:
+                orders = orders.filter(entity=entity)
+            return orders.order_by("-created")[:20]
         return []
     except KeyError:
         raise exceptions.ValidationError(
@@ -1386,7 +1394,10 @@ def get_customer_orders(data, user):
     try:
         customer_id = data["customer"]
         if Users.objects.filter(id=customer_id).exists():
-            return CustomerOrders.objects.filter(customer_id=customer_id)
+            # Only this customer's orders at the user's current entity, newest first.
+            return CustomerOrders.objects.filter(
+                customer_id=customer_id, entity=user.entity
+            ).order_by("-created")
         raise exceptions.ValidationError(
             "User for provided ID does not exist"
         )
@@ -2840,20 +2851,26 @@ def recompute_order_payment_state(customer_order):
     return now_paid and not was_paid
 
 
-def broadcast_customer_orders_update():
+def customer_orders_group(entity_id):
+    """Channels group for one entity's customer-orders WebSocket clients."""
+    return f"customer-orders-{entity_id}"
+
+
+def broadcast_customer_orders_update(entity_id):
     """
-    Triggers the CustomerOrdersConsumer to fetch the latest orders 
-    and push them to all connected frontend clients.
+    Ask the CustomerOrdersConsumer connections of ONE entity to re-fetch their
+    orders and push them to their clients. Other entities are not touched.
     """
+    if not entity_id:
+        return
     try:
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            'customer-orders',
+            customer_orders_group(entity_id),
             {'type': 'send_customer_orders'}
         )
-        create_log("info", "Broadcasted customer orders update via WebSocket.")
     except Exception as e:
-        create_log("error", f"Failed to broadcast customer orders update: {e}")
+        create_log("error", f"Failed to broadcast customer orders update for entity {entity_id}: {e}")
 
 
 import json
@@ -2869,21 +2886,7 @@ from django.core.exceptions import ValidationError
 # from .models import CustomerOrderPayment, UserAccounts
 # from .utils import generate_reference_number, use_reference_number, get_telco_by_phone_number
 # from utils.logging import create_log
-
-def broadcast_customer_orders_update():
-    """
-    Triggers the CustomerOrdersConsumer to fetch the latest orders 
-    and push them to all connected frontend clients.
-    """
-    try:
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            'customer-orders',
-            {'type': 'send_customer_orders'}
-        )
-        create_log("info", "Broadcasted customer orders update via WebSocket.")
-    except Exception as e:
-        create_log("error", f"Failed to broadcast customer orders update: {e}")
+# (broadcast_customer_orders_update is defined once, above.)
 
 
 def process_customer_order_payment(
@@ -2937,7 +2940,7 @@ def process_customer_order_payment(
             # 🟢 DEDUCT STOCK FOR CASH
             update_stock(customer_order)
             
-            broadcast_customer_orders_update()
+            broadcast_customer_orders_update(customer_order.entity_id)
             
             return [], customer_order
         except Exception as e:
@@ -2955,7 +2958,7 @@ def process_customer_order_payment(
         # 🟢 DEDUCT STOCK FOR CREDIT
         update_stock(customer_order)
         
-        broadcast_customer_orders_update()
+        broadcast_customer_orders_update(customer_order.entity_id)
         
         return [], customer_order
 
@@ -3089,7 +3092,7 @@ def process_customer_order_payment(
             use_reference_number(reference_number)
             
             # 🟢 PUSH WEBSOCKET UPDATE
-            broadcast_customer_orders_update()
+            broadcast_customer_orders_update(customer_order.entity_id)
             
             return [], customer_order
 
@@ -3152,7 +3155,7 @@ def process_customer_order_payment(
             customer_order.save()
             
             # 🟢 PUSH WEBSOCKET UPDATE
-            broadcast_customer_orders_update()
+            broadcast_customer_orders_update(customer_order.entity_id)
             
             return [], customer_order
         except Exception as e:
@@ -3175,7 +3178,7 @@ def make_customer_order_payment(data, user):
         return errors, None
 
     customer_order = CustomerOrders.objects.filter(
-        id=customer_order_id
+        id=customer_order_id, entity=user.entity
     ).first()
     if not customer_order:
         errors.append("Customer order for provided ID does not exist")
@@ -3246,10 +3249,10 @@ def re_initiate_order_payment(data, user):
     reference_number = data["reference_number"]
 
     if CustomerOrders.objects.filter(
-        reference_number=reference_number
+        reference_number=reference_number, entity=user.entity
     ).exists():
         customer_order = CustomerOrders.objects.filter(
-            reference_number=reference_number
+            reference_number=reference_number, entity=user.entity
         ).first()
 
         if not customer_order.payment:
@@ -3334,6 +3337,16 @@ def create_customer_order(data, user):
             errors.append("Retailer with provided ID does not exist")
     else:
         entity = user.entity
+
+    # Idempotent by draft_id: apps upload offline orders and retry after network errors,
+    # so the same order can arrive more than once (e.g. the first upload succeeded but the
+    # response was lost). Return the existing order instead of creating a duplicate,
+    # before any stock check, stock deduction or payment runs again.
+    if draft_id and entity:
+        existing = CustomerOrders.objects.filter(entity=entity, draft_id=draft_id).first()
+        if existing:
+            create_log("info", f"CreateCustomerOrder: draft {draft_id} already exists as {existing.id}; returning it")
+            return [], existing
 
     payment_account_number = details.get("payment_account_number")
 
@@ -3826,6 +3839,11 @@ def update_customer_order(data, user):
         if "shipping_cost" in changed or "selected_payment_method" in changed:
             customer_order.recalculate()
 
+        # Push the change (e.g. a new due date) to this entity's open order lists once
+        # the transaction has committed, so clients re-fetch the saved values.
+        entity_id = customer_order.entity_id
+        transaction.on_commit(lambda: broadcast_customer_orders_update(entity_id))
+
     return [], customer_order
 
 
@@ -4228,7 +4246,7 @@ def create_sales_return(data, user):
         return errors, None
 
     customer_order = models.CustomerOrders.objects.filter(
-        id=data["customer_order"]
+        id=data["customer_order"], entity=user.entity
     ).first()
     if not customer_order:
         errors.append("No order with provided ID")
@@ -4366,7 +4384,7 @@ def update_sales_return(data, user):
         return errors, None
 
     customer_order = models.CustomerOrders.objects.filter(
-        id=new_order_id
+        id=new_order_id, entity=user.entity
     ).first()
     if not customer_order:
         errors.append("No order with provided ID")

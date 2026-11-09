@@ -6,6 +6,8 @@ import logging
 import requests
 from datetime import date, datetime, timedelta
 from .utils.inventory_utils import update_stock
+from .utils.retailer_utils import customer_orders_group
+from django.db import transaction
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 from decouple import config
@@ -721,16 +723,30 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
 
 class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Live customer orders for the user's own entity.
+
+    Each entity has its own group (customer_orders_group), so a broadcast for one
+    entity never makes other entities' clients re-query.
+    """
 
     async def connect(self):
         self.user = self.scope["user"]
+        self.group_name = None
+
         if not self.user.is_authenticated:
+            # Reject with the code TokenAuthMiddleware chose (4001 no token,
+            # 4002 invalid, 4003 expired) so the client knows not to retry blindly.
+            await self.close(code=self.scope.get("close_code") or 4002)
             return
 
-        await self.channel_layer.group_add(
-            'customer-orders',
-            self.channel_name,
-        )
+        entity_id = getattr(self.user, "entity_id", None)
+        if not entity_id:
+            await self.close(code=4002)
+            return
+
+        self.group_name = customer_orders_group(entity_id)
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
         await self.helper_func()
 
@@ -739,36 +755,58 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
         })
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            'customer-orders',
-            self.channel_name,
-        )
-        await self.close()
+        if self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    @staticmethod
+    def _deduct_stock_once(order):
+        """
+        Deduct stock for a successful payment exactly once, even when several
+        connections of the same entity run this at the same moment: the payment row
+        is locked (rows another connection holds are skipped) and is_validated is set
+        in the same transaction.
+        """
+        with transaction.atomic():
+            payment = (
+                CustomerOrderPayment.objects.select_for_update(skip_locked=True)
+                .filter(customer_order=order, status="SUCCESS", is_validated=False)
+                .first()
+            )
+            if not payment:
+                return
+            update_stock(order)
+            payment.is_validated = True
+            payment.save(update_fields=["is_validated", "updated"])
+        create_log("info", f"Stock deducted via OrdersConsumer for order {order.order_number}")
+
+    # The full list sent to clients. Clients mirror it exactly (orders not in it are
+    # removed locally), so this is how much history devices keep.
+    SNAPSHOT_DAYS = 30
+    SNAPSHOT_LIMIT = 500
 
     @sync_to_async
     def helper_func(self):
-        formatted_from_date = (timezone.now() - timedelta(days=7)).isoformat()
+        formatted_from_date = (timezone.now() - timedelta(days=self.SNAPSHOT_DAYS)).isoformat()
 
         customer_orders = CustomerOrders.objects.filter(
             entity=self.user.entity,
             created__gte=formatted_from_date,
-        ).order_by('-created')[:100]
+        ).order_by('-created')[:self.SNAPSHOT_LIMIT]
 
-        # 🟢 STOCK DEDUCTION SWEEPER: Run only once per successful payment
-        for order in customer_orders:
-            # Check for successful payments that haven't triggered stock deduction yet
-            payment = CustomerOrderPayment.objects.filter(
-                customer_order=order,
+        # 🟢 STOCK DEDUCTION SWEEPER: run only once per successful payment.
+        # Only orders with a successful payment still awaiting stock deduction are
+        # touched (usually none), instead of opening a transaction per listed order.
+        pending_order_ids = set(
+            CustomerOrderPayment.objects.filter(
+                customer_order__entity=self.user.entity,
                 status="SUCCESS",
-                is_validated=False
-            ).first()
-
-            if payment:
+                is_validated=False,
+            ).values_list("customer_order_id", flat=True)
+        )
+        if pending_order_ids:
+            for order in CustomerOrders.objects.filter(id__in=pending_order_ids):
                 try:
-                    update_stock(order)
-                    payment.is_validated = True
-                    payment.save(update_fields=["is_validated", "updated"])
-                    create_log("info", f"Stock deducted via OrdersConsumer for order {order.order_number}")
+                    self._deduct_stock_once(order)
                 except Exception as e:
                     create_log("error", f"Failed to deduct stock for {order.order_number}: {str(e)}")
 
@@ -994,7 +1032,7 @@ class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
     def helper_func(self):
         order_id = self.scope["url_route"]["kwargs"]["order_id"]
         customer_order = CustomerOrders.objects.filter(
-            id=order_id
+            id=order_id, entity=self.user.entity
         ).first()
 
         sers = CustomerOrdersSerializer(
@@ -1143,7 +1181,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     def helper_func(self):
         # 🟢 1. Look out for the order with reference number from frontend
         customer_order = CustomerOrders.objects.filter(
-            reference_number=self.identifier
+            reference_number=self.identifier, entity=self.user.entity
         ).first()
 
         tx_data = None
