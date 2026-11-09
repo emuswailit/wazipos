@@ -3694,6 +3694,21 @@ def create_express_customer_order_data(data, user):
         return errors, None
 
 
+# Roles (Roles.value) allowed to change a customer order's due date, for their own entity.
+DUE_DATE_EDITOR_ROLES = ("GeneralRetailerSuperAdmin", "PharmaceuticalRetailerSuperAdmin")
+
+
+def can_edit_customer_order_due_date(user, customer_order):
+    """
+    True only for users holding a DUE_DATE_EDITOR_ROLES role in the order's own entity.
+    Roles are the only rule (no superuser/staff exception). Used by every endpoint that
+    can change a due date.
+    """
+    return user.roles.filter(
+        entity_id=customer_order.entity_id, value__in=DUE_DATE_EDITOR_ROLES
+    ).exists()
+
+
 @transaction.atomic
 def update_customer_order(data, user):
     errors = []
@@ -3753,12 +3768,12 @@ def update_customer_order(data, user):
     if details.get("status"):
         status = details["status"]
 
-    # Due date of a CREDIT order. Super admins only; past dates are allowed so old
-    # orders can be corrected.
+    # Due date of a CREDIT order. Only users with a DUE_DATE_EDITOR_ROLES role in the
+    # order's business; past dates are allowed so old orders can be corrected.
     due_date = None
     if "due_date" in details:
-        if not user.is_superuser:
-            errors.append("Only super admins can change the due date")
+        if not can_edit_customer_order_due_date(user, customer_order):
+            errors.append("Only the business's super admins can change the due date")
             return errors, None
         try:
             due_date = datetime.date.fromisoformat(str(details.get("due_date") or "").strip()[:10])

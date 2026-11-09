@@ -1245,10 +1245,6 @@ def retailerInvoicesAPIView(request):
 # Admin — customer orders
 # ===========================================================================
 
-# Roles allowed to change a customer order's due date (Roles.value), for their own entity.
-DUE_DATE_EDITOR_ROLES = ("GeneralRetailerSuperAdmin", "PharmaceuticalRetailerSuperAdmin")
-
-
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated, retail_permissions.EntitySubscriptionPermission])
 def customerOrdersSuperAdminAPIView(request):
@@ -1258,7 +1254,8 @@ def customerOrdersSuperAdminAPIView(request):
     UpdateCustomerOrderDueDate
         customer_order: order id
         due_date: YYYY-MM-DD (past dates allowed, to correct old orders)
-        Allowed for users holding a DUE_DATE_EDITOR_ROLES role in the order's entity.
+        Allowed per retailer_utils.can_edit_customer_order_due_date (the same rule as
+        the staff UpdateCustomerOrder action).
     """
     action = request.data.get("action")
     if not action:
@@ -1279,10 +1276,9 @@ def customerOrdersSuperAdminAPIView(request):
         except Exception:  # DoesNotExist, or a malformed id
             return custom_errors_response(1, "Due date not updated", ["Customer order not found"])
 
-        # The role must be held in the same entity as the order.
-        if not request.user.roles.filter(entity=order.entity, value__in=DUE_DATE_EDITOR_ROLES).exists():
+        if not retailer_utils.can_edit_customer_order_due_date(request.user, order):
             return custom_errors_response(
-                1, "Due date not updated", ["Only retailer super admins of this business can change due dates"]
+                1, "Due date not updated", ["Only the business's super admins can change the due date"]
             )
 
         method = (getattr(order.selected_payment_method, "title", "") or "").strip().upper()
