@@ -6,7 +6,7 @@ import logging
 import requests
 from datetime import date, datetime, timedelta
 from .utils.inventory_utils import update_stock
-from .utils.retailer_utils import customer_orders_group
+from .utils.retailer_utils import customer_order_payments_group, customer_orders_group
 from django.db import transaction
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
@@ -41,6 +41,7 @@ from retailers.models import (
     RetailerReceipts,
 )
 from retailers.serializers import (
+    CustomerOrderPaymentListSerializer,
     CustomerOrdersSerializer,
     MiniCustomerOrdersSerializer,
     OutOfStocksSerializer,
@@ -825,6 +826,58 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
 
 
 # =====================================================================
+# Customer order payments (Payments screen)
+# =====================================================================
+
+class CustomerOrderPaymentsConsumer(AsyncJsonWebsocketConsumer):
+    """
+    The latest customer order payments received by the user's own entity.
+
+    Sends `{"customer_order_payments": [...]}` (newest first, at most PAYMENTS_LIMIT) on
+    connect and whenever the entity's orders/payments change (see
+    broadcast_customer_order_payments_update). The list is complete, so clients can
+    mirror it exactly.
+    """
+
+    PAYMENTS_LIMIT = 50
+
+    async def connect(self):
+        self.user = self.scope["user"]
+        self.group_name = None
+
+        if not self.user.is_authenticated:
+            await self.close(code=self.scope.get("close_code") or 4002)
+            return
+
+        entity_id = getattr(self.user, "entity_id", None)
+        if not entity_id:
+            await self.close(code=4002)
+            return
+
+        self.group_name = customer_order_payments_group(entity_id)
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        await self.send_json({'customer_order_payments': await self._latest_payments()})
+
+    async def disconnect(self, close_code):
+        if self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    @sync_to_async
+    def _latest_payments(self):
+        payments = (
+            CustomerOrderPayment.objects.filter(receiving_entity=self.user.entity)
+            .select_related("customer_order", "customer_order__order_number", "payment_method")
+            .order_by("-created")[:self.PAYMENTS_LIMIT]
+        )
+        data = CustomerOrderPaymentListSerializer(payments, many=True).data
+        return json.loads(json.dumps(data, cls=UUIDEncoder))
+
+    async def send_customer_order_payments(self, event):
+        await self.send_json({'customer_order_payments': await self._latest_payments()})
+
+
+# =====================================================================
 # User orders
 # =====================================================================
 
@@ -1259,6 +1312,10 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
                                         customer_order.is_paid = "false"
                                         customer_order.save(update_fields=["is_paid", "updated"])
 
+                                    # Push the new status to this entity's open order and
+                                    # payment lists right away.
+                                    from .utils.retailer_utils import broadcast_customer_orders_update
+                                    broadcast_customer_orders_update(customer_order.entity_id)
                                     create_log("info", f"💾 DB Updated -> Status: {final_status} | Desc: {status_description}")
                         except ValueError:
                             create_log("error", f"❌ JamboPay returned non-JSON response. Raw text: {tx_result.text}")

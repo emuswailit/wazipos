@@ -18,6 +18,8 @@ retailers_websocket_urlpatterns = [
     # Customer Orders
     path("ws/retailers/orders/notification/", consumers.CustomerOrderNotificationsConsumer.as_asgi()),
     path("ws/retailers/orders/list/", consumers.CustomerOrdersConsumer.as_asgi()),
+    # Latest customer order payments for the Payments screen
+    path("ws/retailers/orders/payments/list/", consumers.CustomerOrderPaymentsConsumer.as_asgi()),
     path("ws/retailers/orders/user/", consumers.UserOrdersConsumer.as_asgi()),
     path("ws/retailers/orders/details/<str:order_id>/", consumers.OrderDetailsConsumer.as_asgi()),
     

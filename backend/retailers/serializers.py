@@ -759,6 +759,42 @@ class CustomerOrderPaymentsSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created", "updated", "owner")
 
 
+class CustomerOrderPaymentListSerializer(serializers.ModelSerializer):
+    """Customer order payments for the Payments screen, with the details the list shows."""
+
+    order_number = serializers.SerializerMethodField(read_only=True)
+    customer_order_id = serializers.SerializerMethodField(read_only=True)
+    customer_name = serializers.SerializerMethodField(read_only=True)
+    customer_phone = serializers.SerializerMethodField(read_only=True)
+    payment_method_title = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = models.CustomerOrderPayment
+        fields = (
+            "id", "customer_order_id", "order_number", "customer_name", "customer_phone",
+            "payment_method_title", "telco", "amount", "transaction_charge", "currency",
+            "status", "description", "narration", "reference_number", "psp_reference_number",
+            "provider_reference_number", "is_validated", "created", "updated",
+        )
+        read_only_fields = fields
+
+    def get_order_number(self, obj):
+        order = obj.customer_order
+        return order.order_number.document_number if order and order.order_number else ""
+
+    def get_customer_order_id(self, obj):
+        return str(obj.customer_order_id) if obj.customer_order_id else None
+
+    def get_customer_name(self, obj):
+        return obj.customer_order.customer_name if obj.customer_order else ""
+
+    def get_customer_phone(self, obj):
+        return obj.customer_order.customer_phone if obj.customer_order else ""
+
+    def get_payment_method_title(self, obj):
+        return obj.payment_method.title if obj.payment_method else ""
+
+
 class CustomerOrderSettlementSerializer(serializers.ModelSerializer):
     psp_title = serializers.SerializerMethodField()
 

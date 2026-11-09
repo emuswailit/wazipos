@@ -2856,10 +2856,32 @@ def customer_orders_group(entity_id):
     return f"customer-orders-{entity_id}"
 
 
+def customer_order_payments_group(entity_id):
+    """Channels group for one entity's customer-order-payments WebSocket clients."""
+    return f"customer-order-payments-{entity_id}"
+
+
+def broadcast_customer_order_payments_update(entity_id):
+    """Ask ONE entity's CustomerOrderPaymentsConsumer connections to re-send their list."""
+    if not entity_id:
+        return
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            customer_order_payments_group(entity_id),
+            {'type': 'send_customer_order_payments'}
+        )
+    except Exception as e:
+        create_log("error", f"Failed to broadcast customer order payments update for entity {entity_id}: {e}")
+
+
 def broadcast_customer_orders_update(entity_id):
     """
     Ask the CustomerOrdersConsumer connections of ONE entity to re-fetch their
     orders and push them to their clients. Other entities are not touched.
+
+    Payments change together with their orders (created, paid, failed), so the
+    entity's Payments screen is refreshed too.
     """
     if not entity_id:
         return
@@ -2871,6 +2893,7 @@ def broadcast_customer_orders_update(entity_id):
         )
     except Exception as e:
         create_log("error", f"Failed to broadcast customer orders update for entity {entity_id}: {e}")
+    broadcast_customer_order_payments_update(entity_id)
 
 
 import json

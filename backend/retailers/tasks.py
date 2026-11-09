@@ -240,7 +240,10 @@ def load_customer_orders():
     notified, each on its own group:
       - orders changed in the last 2 minutes (catches anything not broadcast directly),
       - successful payments whose stock hasn't been deducted yet, so the
-        CustomerOrdersConsumer sweeper runs for them.
+        CustomerOrdersConsumer sweeper runs for them,
+      - payments changed in the last 2 minutes (e.g. status set by the payment checks),
+        so the Payments screen updates too.
+    broadcast_customer_orders_update refreshes both the orders and payments lists.
     """
     from .utils.retailer_utils import broadcast_customer_orders_update
 
@@ -253,6 +256,11 @@ def load_customer_orders():
     entity_ids |= set(
         CustomerOrderPayment.objects.filter(status="SUCCESS", is_validated=False)
         .values_list("customer_order__entity_id", flat=True)
+        .distinct()
+    )
+    entity_ids |= set(
+        CustomerOrderPayment.objects.filter(updated__gte=since)
+        .values_list("receiving_entity_id", flat=True)
         .distinct()
     )
     entity_ids.discard(None)
