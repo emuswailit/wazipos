@@ -19,7 +19,7 @@ from django.contrib.gis.db import models as geomodel
 from django.core.exceptions import ValidationError
 from django.core.files import File
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Q, Sum
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -675,45 +675,66 @@ class RetailerIndent(EntityRelatedModel):
     def __str__(self):
         return f"{self.indent_number or '(unsaved)'} · {self.entity.title}"
 
-    def save(self, *args, **kwargs):
-        if not self.indent_number:
-            self.indent_number = self._generate_indent_number()
+    # How many times save() picks the next number when another request took
+    # the one it generated (two indents created at the same moment).
+    INDENT_NUMBER_RETRIES = 5
 
-        if self.is_open == "true" and self.entity_id:
-            with transaction.atomic():
-                (
-                    RetailerIndent.objects
-                    .filter(entity_id=self.entity_id, is_open="true")
-                    .exclude(pk=self.pk)
-                    .update(is_open="false")
-                )
-                super().save(*args, **kwargs)
-        else:
-            super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        auto_number = not self.indent_number
+        attempts = self.INDENT_NUMBER_RETRIES if auto_number else 1
+
+        for attempt in range(attempts):
+            if auto_number:
+                self.indent_number = self._generate_indent_number()
+            try:
+                # Savepoint per attempt, so a unique-number clash can be retried
+                # without breaking an outer transaction.
+                with transaction.atomic():
+                    if self.is_open == "true" and self.entity_id:
+                        (
+                            RetailerIndent.objects
+                            .filter(entity_id=self.entity_id, is_open="true")
+                            .exclude(pk=self.pk)
+                            .update(is_open="false")
+                        )
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError as exc:
+                clash = "indent_number" in str(exc)
+                if not (auto_number and clash) or attempt == attempts - 1:
+                    raise
+                # Someone else took that number: generate the next one and retry.
+                self.indent_number = None
+
+    def _indent_number_prefix(self):
+        # Entities carry a unique `entity_code` (there is no `code` field, which
+        # is why every business used to fall back to "TRA" and collide).
+        code = getattr(self.entity, "entity_code", None) or "TRA"
+        return "".join(ch for ch in str(code) if ch.isalnum())[:7].upper() or "TRA"
 
     def _generate_indent_number(self):
         if not self.entity_id:
             return None
 
-        prefix = getattr(self.entity, "code", "TRA")
-        prefix = (prefix or "TRA")[:5].upper()
+        prefix = self._indent_number_prefix()
 
+        # indent_number is unique across ALL businesses, so the next number must
+        # come from every indent using this prefix — not just this entity's.
+        # The regex keeps e.g. prefix "TR" from matching "TRA0000000007".
         last = (
             RetailerIndent.objects
-            .filter(entity=self.entity)
-            .exclude(indent_number__isnull=True)
+            .filter(indent_number__regex=rf"^{prefix}[0-9]{{10}}$")
             .order_by("-indent_number")
             .values_list("indent_number", flat=True)
             .first()
         )
 
-        if last and last.startswith(prefix):
+        seq = 1
+        if last:
             try:
                 seq = int(last[len(prefix):]) + 1
             except (ValueError, TypeError):
                 seq = 1
-        else:
-            seq = 1
 
         return f"{prefix}{seq:010d}"
 

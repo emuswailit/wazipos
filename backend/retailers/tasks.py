@@ -318,11 +318,33 @@ def load_retailer_product_requests():
 
 @app.task
 def load_retailer_requisitions():
-    result = async_to_sync(channel_layer.group_send)(
-        "retailer-requisitions",
-        {"type": "send_retailer_requisitions"},
+    """
+    Push fresh requisitions (runs every 2 minutes via Celery beat) only to retailers
+    whose requisitions changed: the requisition itself, or a payment on it (which
+    changes its balance). Each retailer has its own group.
+    """
+    from wholesalers.models import RetailerOrderPayments, RetailerOrders
+    from .consumers import retailer_requisitions_group
+
+    since = timezone.now() - timedelta(minutes=3)  # overlaps the 2-minute schedule
+    entity_ids = set(
+        RetailerOrders.objects.filter(updated__gte=since)
+        .values_list("retailer_id", flat=True)
+        .distinct()
     )
-    return result
+    entity_ids |= set(
+        RetailerOrderPayments.objects.filter(updated__gte=since)
+        .values_list("retailer_order__retailer_id", flat=True)
+        .distinct()
+    )
+    entity_ids.discard(None)
+
+    for entity_id in entity_ids:
+        async_to_sync(channel_layer.group_send)(
+            retailer_requisitions_group(entity_id),
+            {"type": "send_retailer_requisitions"},
+        )
+    return len(entity_ids)
 
 
 # =====================================================================

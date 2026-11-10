@@ -276,6 +276,44 @@ def retailerReceiptsAdminAPIView(request):
                 1, "Stock adjustment not created", errors
             )
 
+    elif action == "UpdateStockAdjustment":
+        # Reverses the old effect on stock and applies the new one (one transaction).
+        errors, stock_adjustment = retailer_utils.update_stock_adjustment(
+            request.data, request.user
+        )
+        if stock_adjustment and not errors:
+            serializer = serializers.StockAdjustmentsSerializer(
+                stock_adjustment, many=False, context={"request": request}
+            )
+            return custom_success_message(
+                0,
+                "Stock adjustment updated successfully",
+                serializer.data,
+                "stock_adjustment",
+            )
+        return custom_errors_response(
+            1, "Stock adjustment not updated",
+            errors or ["Stock adjustment could not be updated"],
+        )
+
+    elif action == "DeleteStockAdjustment":
+        # Reverses the adjustment's effect on stock, then deletes it.
+        adjustment_id = request.data.get("stock_adjustment") or request.data.get("id")
+        errors, deleted = retailer_utils.delete_stock_adjustment(
+            request.data, request.user
+        )
+        if deleted is not None and not errors:
+            return custom_success_message(
+                0,
+                "Stock adjustment deleted successfully",
+                {"id": str(adjustment_id)},
+                "stock_adjustment",
+            )
+        return custom_errors_response(
+            1, "Stock adjustment not deleted",
+            errors or ["Stock adjustment could not be deleted"],
+        )
+
     elif action == "GetStockAdjustments":
         stock_adjustments = models.StockAdjustments.objects.filter(
             entity=request.user.entity

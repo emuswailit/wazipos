@@ -1453,20 +1453,37 @@ class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
 # Retailer requisitions
 # =====================================================================
 
+def retailer_requisitions_group(entity_id):
+    """Channels group for one retailer entity's requisitions WebSocket clients."""
+    return f"retailer-requisitions-{entity_id}"
+
+
 class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
     """
-    Live retailer requisitions registry.
+    Live retailer requisitions (RetailerOrders placed by the user's entity).
+
+    Each entity has its own group, so a push for one retailer never makes other
+    retailers' clients re-query. Sends the newest SNAPSHOT_LIMIT requisitions.
     """
+
+    SNAPSHOT_LIMIT = 200
 
     async def connect(self):
         self.user = self.scope["user"]
+        self.group_name = None
+
         if not self.user.is_authenticated:
+            # Reject with the code TokenAuthMiddleware chose (4001/4002/4003).
+            await self.close(code=self.scope.get("close_code") or 4002)
             return
 
-        await self.channel_layer.group_add(
-            'retailer-requisitions',
-            self.channel_name,
-        )
+        entity_id = getattr(self.user, "entity_id", None)
+        if not entity_id:
+            await self.close(code=4002)
+            return
+
+        self.group_name = retailer_requisitions_group(entity_id)
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
         await self.helper_func()
 
@@ -1477,11 +1494,8 @@ class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
         })
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            'retailer-requisitions',
-            self.channel_name,
-        )
-        await self.close()
+        if self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     @sync_to_async
     def helper_func(self):
@@ -1491,7 +1505,7 @@ class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
         retailer_orders = (
             RetailerOrders.objects
             .filter(retailer=self.user.entity)
-            .order_by('-created')[:20]
+            .order_by('-created')[:self.SNAPSHOT_LIMIT]
         )
 
         orders = RetailerOrdersSerializer(
