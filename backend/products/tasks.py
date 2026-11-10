@@ -1,18 +1,16 @@
-from celery import Celery
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
+# products/tasks.py
 
-app = Celery()
-channel_layer = get_channel_layer()
-# Products web socket task
+from celery import shared_task
 
-@app.task
-def load_products():
 
-    result= async_to_sync(channel_layer.group_send)(
-            'products',
-            {
-                "type": "send_products"
-            },
-        )
-    return result
+@shared_task
+def load_products(reason="task"):
+    """
+    Push a fresh catalogue snapshot to every connected ProductsConsumer
+    (ws/products/all/). Product saves already do this automatically via
+    products/signals.py; use this for manual or scheduled pushes, e.g.
+    load_products.delay().
+    """
+    from .signals import broadcast_products_changed
+
+    broadcast_products_changed(reason)
