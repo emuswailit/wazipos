@@ -1608,6 +1608,12 @@ KNOWN_ACTIONS = {
     "GetRelatedEntityInventoryForProduct",
     "CreateRetailPrescriptionItem",
     "GetAdjacentPharmacies",
+    "MarkPrescriptionDigitized",
+    "SubmitPrescriptionQuotation",
+    "ForwardPrescriptionForQuotation",
+    "PayPrescriptionQuotation",
+    "SearchPharmacies",
+    "RemovePrescriptionQuoteLine",
 }
 
 def _paginated_prescriptions_response(queryset, request):
@@ -1622,6 +1628,106 @@ def _paginated_prescriptions_response(queryset, request):
         context={"request": request, "user": request.user},
     )
     return paginator.get_paginated_response(serializer.data)
+
+
+def _rx_ok(message, prescription, request):
+    serializer = serializers.RetailPrescriptionsSerializer(prescription, many=False, context={"request": request})
+    return custom_success_message(0, message, serializer.data, "prescription")
+
+
+def _prescription_flow_action(action, request):
+    """Actions of the quotation-based prescription flow, shared by the remote and admin endpoints."""
+    data, user = request.data, request.user
+    if action == "MarkPrescriptionDigitized":
+        errors, prescription = retail_prescriptions_utils.mark_prescription_digitized(data, user)
+        if prescription:
+            return _rx_ok("Prescription marked as digitized. The customer has been notified.", prescription, request)
+        return custom_errors_response(1, "Prescription not marked as digitized", errors)
+    if action == "SubmitPrescriptionQuotation":
+        errors, prescription = retail_prescriptions_utils.submit_quotation(data, user)
+        if prescription:
+            return _rx_ok("Quotation sent to the customer.", prescription, request)
+        return custom_errors_response(1, "Quotation not sent", errors)
+    if action == "ForwardPrescriptionForQuotation":
+        errors, prescription = retail_prescriptions_utils.forward_for_quotation(data, user)
+        if prescription:
+            return _rx_ok("Prescription sent for quotation. The pharmacies have been notified.", prescription, request)
+        return custom_errors_response(1, "Prescription not forwarded", errors)
+    if action == "PayPrescriptionQuotation":
+        errors, order = retail_prescriptions_utils.pay_quotation(data, user)
+        if order:
+            serializer = serializers.CustomerOrdersSerializer(order, many=False, context={"request": request})
+            return custom_success_message(0, "Payment started. Confirm the prompt on your phone.", serializer.data, "customer_order")
+        return custom_errors_response(1, "Payment not started", errors)
+    if action == "SearchPharmacies":
+        return custom_success_message(0, "Pharmacies retrieved", retail_prescriptions_utils.search_pharmacies(data, user), "pharmacies")
+    if action == "RemovePrescriptionQuoteLine":
+        item = models.PrescriptionItems.objects.filter(id=data.get("prescription_item")).first() if data.get("prescription_item") else None
+        if not item:
+            return custom_errors_response(1, "Quote not removed", ["No prescription item for provided ID"])
+        errors, _ = retail_prescriptions_utils.remove_quote_line(item, user)
+        if errors:
+            return custom_errors_response(1, "Quote not removed", errors)
+        return _rx_ok("Removed from your quotation.", item.prescription, request)
+    return None
+
+
+ADMIN_PRESCRIPTION_ACTIONS = {
+    "RetrieveAllPrescriptions",
+    "GetRetailPrescriptionDetails",
+    "CreateRetailPrescriptionItem",
+    "UpdateRetailPrescriptionItem",
+    "RemoveRetailPrescriptionItem",
+    "MarkPrescriptionDigitized",
+    "ForwardPrescriptionForQuotation",
+    "SearchPharmacies",
+}
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def adminRetailPrescriptionsAPIView(request):
+    """
+    Admin prescriptions: list every user prescription, digitize it (preparation
+    and/or product only — admins have no inventory, so they never quote), and
+    forward it to pharmacies for quotation.
+    """
+    if not isinstance(request.data, dict):
+        raise exceptions.ValidationError("Request body must be a JSON object.")
+    action = request.data.get("action")
+    if action not in ADMIN_PRESCRIPTION_ACTIONS:
+        raise exceptions.ValidationError(f"Action {action} is unknown")
+    if request.data.get("retailer_receipt"):
+        return custom_errors_response(1, "Not saved", ["Admins can't quote: forward the prescription to pharmacies instead"])
+
+    if action == "RetrieveAllPrescriptions":
+        queryset = retail_prescriptions_utils.get_all_prescriptions(request.data, request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = serializers.RetailPrescriptionsSerializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
+
+    flow_response = _prescription_flow_action(action, request)
+    if flow_response is not None:
+        return flow_response
+
+    if action == "GetRetailPrescriptionDetails":
+        errors, prescription = retail_prescriptions_utils.get_retail_prescription_details(request.data, request.user)
+        if prescription:
+            return _rx_ok("Retail prescription details retrieved successfully", prescription, request)
+        return custom_errors_response(1, "Retail prescription not retrieved", errors)
+
+    handlers = {
+        "CreateRetailPrescriptionItem": (retail_prescriptions_utils.create_retail_prescription_item, "Item added", "Item not added"),
+        "UpdateRetailPrescriptionItem": (retail_prescriptions_utils.update_retail_prescription_item, "Item updated", "Item not updated"),
+        "RemoveRetailPrescriptionItem": (retail_prescriptions_utils.remove_retail_prescription_item, "Item removed", "Item not removed"),
+    }
+    handler, ok_message, fail_message = handlers[action]
+    errors, result = handler(request.data, request.user)
+    if result is None:
+        return custom_errors_response(1, fail_message, errors)
+    prescription = result if isinstance(result, models.Prescriptions) else result.prescription
+    return _rx_ok(ok_message, prescription, request)
 
 
 @api_view(["POST"])
@@ -1660,6 +1766,10 @@ def remoteRetailPrescriptionsAPIView(request):
             return custom_errors_response(
                 1, "Retail prescription not created", errors
             )
+
+        flow_response = _prescription_flow_action(action, request)
+        if flow_response is not None:
+            return flow_response
 
         if action == "GetRetailPrescriptionDetails":
             errors, prescription = (
@@ -1965,22 +2075,12 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                     status=status.HTTP_200_OK,
                 )
 
+        # Choosing a pharmacy is optional: without one the system / an admin
+        # digitizes the prescription and forwards it to pharmacies for quotation.
         pharmacy_id = request.POST.get("entity", None)
-        if not pharmacy_id:
-            errors_messages.append("Retailer ID is required")
-            return Response(
-                data={
-                    "response_code": 1,
-                    "response_message": "Retail prescription not created",
-                    "errors": errors_messages,
-                    "status": status.HTTP_200_OK,
-                },
-                status=status.HTTP_200_OK,
-            )
+        retailer = validate_entity(pharmacy_id) if pharmacy_id else None
 
-        retailer = validate_entity(pharmacy_id)
-        
-        if not retailer:
+        if pharmacy_id and not retailer:
             errors_messages.append("Retailer entity not found")
             return Response(
                 data={
@@ -1992,7 +2092,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        if retailer.entity_type != EntityType.PHARMACEUTICAL_RETAILER.value:
+        if retailer and retailer.entity_type != EntityType.PHARMACEUTICAL_RETAILER.value:
             errors_messages.append("Selected entity is not a pharmaceutical retailer")
             return Response(
                 data={
@@ -2060,11 +2160,16 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
             with transaction.atomic():
                 serializer.save(
                     created_by=request.user,
+                    entity=retailer,
                     patient=dependant,
                     origin_point=origin_point,
                     destination_point=destination_point,
                 )
                 item = serializer.instance
+                if retailer:
+                    models.PrescriptionQuotations.objects.get_or_create(
+                        prescription=item, entity=retailer, defaults={"requested_by": request.user}
+                    )
 
                 saved_images = []
                 for file in files:

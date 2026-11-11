@@ -70,6 +70,11 @@ urlpatterns = [
         name="retail-prescriptions-apiview",
     ),
     path(
+        "prescriptions/admin/",
+        views.adminRetailPrescriptionsAPIView,
+        name="admin-retail-prescriptions-apiview",
+    ),
+    path(
         "prescriptions/create",
         views.RetailPrescriptionsCreateAPIView.as_view(),
         name=views.RetailPrescriptionsCreateAPIView.name,

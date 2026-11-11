@@ -12,6 +12,22 @@ from django.db import transaction
 from utils.logging import create_log
 from authentication.utils.utils import generate_reference_number, use_reference_number, get_telco_by_phone_number,generate_document_number
 from .retailer_utils import process_customer_order_payment
+# Quotation-based flow (see prescription_flow.py). Re-exported under the names the views use.
+from .prescription_flow import (  # noqa: F401
+    _present,
+    create_prescription_item as create_retail_prescription_item,
+    forward_for_quotation,
+    get_all_prescriptions,
+    get_inventory_for_item as get_related_inventory_for_product,
+    get_pharmacy_prescriptions as get_entity_retail_prescriptions,
+    mark_prescription_digitized,
+    pay_quotation,
+    remove_quote_line,
+    remove_prescription_item as remove_retail_prescription_item,
+    search_pharmacies,
+    submit_quotation,
+    update_prescription_item as update_retail_prescription_item,
+)
 from payments.validators import payments_models_validators
 from core.constants import EntityType 
 
@@ -182,78 +198,6 @@ def create_or_update_prescription_order_item(data,user):
         
 
 
-def get_related_inventory_for_product(data,user):
-    related_inventory =[]
-    product = None
-    if "product" in data and not data["product"]=="":
-        product = product_models_validator.validate_product(data["product"])
-        if product and product.preparation:
-            if RetailerReceipts.objects.filter(current_unit_quantity__gte=1,product__preparation=product.preparation).exists():
-                related_inventory=RetailerReceipts.objects.filter(current_unit_quantity__gte=1,product__preparation=product.preparation).all()
-        else:
-            if RetailerReceipts.objects.filter(current_unit_quantity__gte=1,product=product).exists():
-                related_inventory = RetailerReceipts.objects.filter(current_unit_quantity__gte=1,product=product).all()
-
-    return related_inventory
-
-def update_retail_prescription_item(data,user):
-    errors = []
-    prescription_item = None
-    retailer_receipt = None
-    issued_unit_quantity = None
-    balance_unit_quantity = None
-    unit_of_issue = None
-    if not "prescription_item" in data or data["prescription_item"]=="":
-        errors.append("Prescription item ID is required")
-        return errors, None
-    else:
-        if models.PrescriptionItems.objects.filter(id=data["prescription_item"]).exists():
-            prescription_item =models.PrescriptionItems.objects.filter(id=data["prescription_item"]).first()
-        else:
-            errors.append("Prescription with provided ID not found")
-            return errors, None
-        
-    if "retailer_receipt" in data and not data["retailer_receipt"]=="":
-        if models.RetailerReceipts.objects.filter(id=data["retailer_receipt"]).exists():
-            retailer_receipt= models.RetailerReceipts.objects.filter(id=data["retailer_receipt"]).first()
-            prescription_item.retailer_receipt=retailer_receipt
-            prescription_item.save()
-
-    if "required_unit_quantity" in data and not data["required_unit_quantity"]=="":
-        required_unit_quantity= int(data["required_unit_quantity"])
-        prescription_item.required_unit_quantity=required_unit_quantity
-        prescription_item.balance_unit_quantity=required_unit_quantity
-        prescription_item.save()
-
-    # if "issued_unit_quantity" in data and not data["issued_unit_quantity"]=="":
-    #     issued_unit_quantity= int(data["issued_unit_quantity"])
-    #     prescription_item.issued_unit_quantity+=issued_unit_quantity
-    #     prescription_item.balance_unit_quantity=prescription_item.required_unit_quantity -  prescription_item.issued_unit_quantity
-    #     prescription_item.save()
-
-    # if "balance_unit_quantity" in data and not data["balance_unit_quantity"]=="":
-    #     balance_unit_quantity= int(data["balance_unit_quantity"])
-    #     prescription_item.balance_unit_quantity=balance_unit_quantity
-    #     prescription_item.save()
-
-    if "unit_of_issue" in data and not data["unit_of_issue"]=="":
-        unit_of_issue= data["unit_of_issue"]
-        prescription_item.unit_of_issue=unit_of_issue
-        prescription_item.save()
-    
-    return errors, prescription_item
-
-
-
-def get_entity_retail_prescriptions(data, user):
-    """Get retail prescriptions for entity"""
-    # Safely check if the user's entity type is a Pharmaceutical Retailer
-    if getattr(user.entity, "entity_type", None) == EntityType.PHARMACEUTICAL_RETAILER.value:
-        return models.Prescriptions.objects.filter(entity=user.entity).all()
-    else:
-        return []
-
-    
 def get_user_retail_prescriptions(data, user):
     """Get retail prescriptions for user"""
     if models.Prescriptions.objects.filter(owner=user).exists():
@@ -261,107 +205,6 @@ def get_user_retail_prescriptions(data, user):
     else:
         return []
     
-def create_retail_prescription_item(data,user):
-    errors=[]
-    prescription = None
-    preparation = None
-    route = None
-    frequency = None
-    created = None
-    employee=None
-    dose=None
-    days=None
-    product =None
-
-    employee = employees_models_validators.validate_employee(user)
-
-    if not "prescription" in data or data['prescription']=="":
-        errors.append("Retail prescription ID is required")
-        return errors,None
-    else:
-        if models.Prescriptions.objects.filter(id=data['prescription']).exists():
-            prescription =models.Prescriptions.objects.filter(id=data['prescription']).first()
-            if prescription.is_closed=="true":
-                errors.append("Prescription is already closed")
-                return errors,None
-        else:
-            errors.append("No retail prescription for provided ID exists")
-            return errors,None
-    
-    if "product" in data and not data['product']=="":
-        
-        if Products.objects.filter(id=data["product"]).exists():
-            product =Products.objects.filter(id=data["product"]).first()
-    else:
-        pass
-        # errors.append("Product ID is required")
-        # return errors,None
-    
-    if "preparation" in data and not data['preparation']=="":
-
-        if Preparation.objects.filter(id=data['preparation']).exists():
-            preparation =Preparation.objects.filter(id=data['preparation']).first()
-
-        else:
-            errors.append("No drug for provided ID exists")
-            return errors,None
-
-    if not "route" in data or data['route']=="":
-        errors.append("Route ID is required")
-        return errors,None
-    else:
-        if Routes.objects.filter(id=data['route']).exists():
-            route =Routes.objects.filter(id=data['route']).first()
-        else:
-            errors.append("No route  for provided ID exists")
-            return errors,None
-    
-    if not "frequency" in data or data['frequency']=="":
-        errors.append("Frequency ID is required")
-        return errors,None
-    else:
-        if Frequency.objects.filter(id=data['frequency']).exists():
-            frequency =Frequency.objects.filter(id=data['frequency']).first()
-        else:
-            errors.append("No frequncy for provided ID exists")
-            return errors,None
-
-    if not "dose" in data or data['dose']=="":
-        errors.append("Dose is required")
-        return errors,None
-    else:
-        dose =data['dose']
-
-    if not "days" in data or data['days']=="":
-        errors.append("Duration in days is required")
-        return errors,None
-    else:
-        days =int(data['days'])
-
-    if models.PrescriptionItems.objects.filter(prescription=prescription,product=product,created__gte=get_today(),entity=user.entity,owner=user).exists():
-        errors.append(f"Item is already added to prescription")
-        return errors,None
-    try:
-        created = models.PrescriptionItems.objects.create(
-            prescription=prescription,
-            preparation=preparation,
-            product=product,
-            route=route,
-            frequency=frequency,
-            days=days,
-            dose=dose,
-            created_by=employee,
-            prescribed_by=employee,
-            entity=user.entity,
-            owner=user,
-        )
-        if created:
-            return [],prescription
-    except Exception as e:
-        errors.append(str(e))
-        return errors, None
-    
-
 def update_retail_prescription_item_administration(data,user):
     administration=None
     errors=[]
@@ -383,149 +226,6 @@ def update_retail_prescription_item_administration(data,user):
         errors.append("Administration ID ire required")
         return errors, None
 
-def remove_retail_prescription_item(data,user):
-    errors =[]
-    prescription_item=None
-    prescription=None
-    if not "prescription_item" in data or data["prescription_item"]=="":
-        errors.append("Prescription item ID is requied")
-        return errors, None
-    else:
-        if models.PrescriptionItems.objects.filter(id=data["prescription_item"]).exists():
-            prescription_item =models.PrescriptionItems.objects.filter(id=data["prescription_item"]).first()
-            prescription = prescription_item.prescription
-            if  prescription.is_closed=="false":
-                prescription_item.delete()
-            else:
-                errors.append("Prescription is already closed")
-                return errors, None
-
-            return [],prescription
-        else:
-            errors.append("No prescription item for provided ID")
-            return errors, None
-    
-
-# def create_retail_prescription_item(data,user):
-#     errors=[]
-#     prescription = None
-#     preparation = None
-#     route = None
-#     frequency = None
-#     dependant = None
-#     created = None
-#     employee=None
-#     dose=None
-#     days=None
-#     product =None
-
-#     employee = employees_models_validators.validate_employee(user)
-
-#     if not "hospital_prescription" in data or data['hospital_prescription']=="":
-#         errors.append("Hospital prescription ID is required")
-#         return errors,None
-#     else:
-#         if models.HospitalPrescription.objects.filter(id=data['hospital_prescription']).exists():
-#             hospital_prescription =models.HospitalPrescription.objects.filter(id=data['hospital_prescription']).first()
-#         else:
-#             errors.append("No hospital prescription for provided ID exists")
-#             return errors,None
-    
-#     if "product" in data and not data['product']=="":
-        
-#         if Products.objects.filter(id=data["product"]).exists():
-#             product =Products.objects.filter(id=data["product"]).first()
-#     else:
-#         if Preparation.objects.filter(id=data['preparation']).exists():
-#             preparation =Preparation.objects.filter(id=data['preparation']).first()
-
-#         else:
-#             errors.append("No drug for provided ID exists")
-#             return errors,None
-#     if not "preparation" in data or data['preparation']=="":
-#         errors.append("Preparation ID is required")
-#         return errors,None
-#     else:
-#         if Preparation.objects.filter(id=data['preparation']).exists():
-#             preparation =Preparation.objects.filter(id=data['preparation']).first()
-
-#         else:
-#             errors.append("No drug for provided ID exists")
-#             return errors,None
-
-#     if not "route" in data or data['route']=="":
-#         errors.append("Route ID is required")
-#         return errors,None
-#     else:
-#         if Routes.objects.filter(id=data['route']).exists():
-#             route =Routes.objects.filter(id=data['route']).first()
-#         else:
-#             errors.append("No route  for provided ID exists")
-#             return errors,None
-    
-#     if not "frequency" in data or data['frequency']=="":
-#         errors.append("Frequency ID is required")
-#         return errors,None
-#     else:
-#         if Frequency.objects.filter(id=data['frequency']).exists():
-#             frequency =Frequency.objects.filter(id=data['frequency']).first()
-#         else:
-#             errors.append("No frequncy for provided ID exists")
-#             return errors,None
-
-#     if not "dose" in data or data['dose']=="":
-#         errors.append("Dose is required")
-#         return errors,None
-#     else:
-#         dose =data['dose']
-
-#     if not "days" in data or data['days']=="":
-#         errors.append("Duration in days is required")
-#         return errors,None
-#     else:
-#         days =data['days']
-
-#     if models.HospitalPrescriptionItem.objects.filter(hospital_prescription=hospital_prescription,product=product,created__gte=date.today(),entity=user.entity,owner=user).exists():
-#         errors.append(f"Item is already added to prescription")
-#         return errors,None
-#     try:
-#         created = models.HospitalPrescriptionItem.objects.create(
-#             hospital_prescription=hospital_prescription,
-#             preparation=preparation,
-#             product=product,
-#             route=route,
-#             frequency=frequency,
-#             days=days,
-#             dose=dose,
-#             created_by=employee,
-#             prescribed_by=employee,
-#             entity=user.entity,
-#             owner=user,
-#         )
-#         if created:
-#             return [],hospital_prescription
-#     except Exception as e:
-#         errors.append(str(e))
-#         return errors, None
-
-# def delete_hospital_prescription_item(data,user):
-#     errors =[]
-#     hospital_prescription_item = None
-#     hospital_prescription = None
-
-#     if "hospital_prescription_item" in data and not data["hospital_prescription_item"]=="":
-#         if models.HospitalPrescriptionItem.objects.filter(id=data["hospital_prescription_item"]).exists():
-#             hospital_prescription_item =models.HospitalPrescriptionItem.objects.filter(id=data["hospital_prescription_item"]).first()
-#             hospital_prescription=hospital_prescription_item.hospital_prescription
-#             hospital_prescription_item.delete()
-#             return [],hospital_prescription
-#         else:
-#             errors.append("Item with given ID not found")
-#             return errors,None
-        
-#     else:
-#         errors.append("Item ID is required")
-#         return errors,None
 def get_retail_prescription_details(data,user):
     errors =[]
     prescription=None
@@ -584,3 +284,7 @@ def update_retail_prescription(data,user):
 
     return errors,prescription
 
+
+# ---------------------------------------------------------------------------
+# Digitizing done -> customer notified; customer forwards unpriced items.
+# ---------------------------------------------------------------------------

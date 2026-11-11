@@ -25,6 +25,7 @@ retailers_websocket_urlpatterns = [
     
     # Prescriptions & Dashboard
     path("ws/retailers/prescriptions/user/", consumers.UserPrescriptionsConsumer.as_asgi()),
+    path("ws/retailers/prescriptions/events/", consumers.PrescriptionEventsConsumer.as_asgi()),
     path("ws/retailers/dashboard/", consumers.RetailerDashboardsConsumer.as_asgi()),
     path("ws/retailers/products/requests/", consumers.RetailerProductRequestsConsumer.as_asgi()),
 

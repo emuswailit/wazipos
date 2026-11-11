@@ -1595,6 +1595,9 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
     entity_details = serializers.SerializerMethodField(read_only=True)
     patient_age = serializers.SerializerMethodField(read_only=True)
     key = serializers.SerializerMethodField(read_only=True)
+    quotations = serializers.SerializerMethodField(read_only=True)
+    digitized_by_name = serializers.SerializerMethodField(read_only=True)
+    digitized_by_entity_title = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         ordering = ["-created"]
@@ -1609,9 +1612,10 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
             "patient", "patient_name", "patient_gender",
             "patient_date_of_birth", "patient_age", "comment",
             "ai_extraction_status",
+            "digitized_at", "digitized_by_name", "digitized_by_entity", "digitized_by_entity_title", "quotations",
             "key", "created", "updated",
         )
-        read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status")
+        read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status", "digitized_at", "digitized_by_entity")
         extra_kwargs = {"images": {"required": False}}
 
     def get_key(self, obj):
@@ -1625,6 +1629,42 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
 
     def get_items_count(self, obj):
         return models.PrescriptionItems.objects.filter(prescription=obj).count()
+
+    def _viewer(self):
+        """(user, pharmacy id, is_admin) of whoever this is serialized for."""
+        viewer = self.context.get("viewer")
+        if viewer is not None:
+            return viewer
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not getattr(user, "is_authenticated", False):
+            return (None, None, False)
+        entity = getattr(user, "entity", None)
+        pharmacy_id = entity.id if entity is not None and entity.entity_type == "PharmaceuticalRetailer" else None
+        return (user, pharmacy_id, bool(user.is_staff or user.is_superuser))
+
+    def get_quotations(self, obj):
+        """
+        The customer (owner) and admins see every pharmacy's quotation; a
+        pharmacy sees only its own (never competitors' prices).
+        """
+        user, pharmacy_id, admin = self._viewer()
+        qs = models.PrescriptionQuotations.objects.filter(prescription=obj).select_related("entity", "customer_order")
+        is_owner = user is not None and (obj.owner_id == user.id or obj.created_by_id == user.id)
+        if not (admin or is_owner):
+            if not pharmacy_id:
+                return []
+            qs = qs.filter(entity_id=pharmacy_id)
+        return PrescriptionQuotationSerializer(qs, many=True, context=self.context).data
+
+    def get_digitized_by_name(self, obj):
+        u = obj.digitized_by
+        if not u:
+            return ""
+        return (f"{getattr(u, 'first_name', '')} {getattr(u, 'last_name', '')}".strip() or getattr(u, "username", "") or "")
+
+    def get_digitized_by_entity_title(self, obj):
+        return obj.digitized_by_entity.title if obj.digitized_by_entity else ""
 
     def get_entity_title(self, obj):
         return obj.entity.title if obj.entity else ""
@@ -1675,6 +1715,7 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
     balance_value = serializers.SerializerMethodField(read_only=True)
     key = serializers.SerializerMethodField(read_only=True)
     verified_by_name = serializers.SerializerMethodField(read_only=True) # ADDED
+    bought_quantity = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.PrescriptionItems
@@ -1694,6 +1735,7 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
             "administrations", "administration_progress",
             "is_divisible", "key",
             "is_verified", "verified_by", "verified_by_name", "verified_at", # ADDED
+            "allow_partial_purchase", "bought_quantity",
             "created_by", "created", "updated",
         )
         read_only_fields = (
@@ -1703,6 +1745,15 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
 
     def get_key(self, obj):
         return obj.id
+
+    def get_bought_quantity(self, obj):
+        """Units already paid for, across all pharmacies."""
+        from django.db.models import Sum
+
+        agg = models.CustomerOrderItems.objects.filter(
+            prescription_item=obj, customer_order__is_paid="true"
+        ).aggregate(q=Sum("quantity"))
+        return int(agg["q"] or 0)
 
     def get_verified_by_name(self, obj):
         if obj.verified_by and obj.verified_by.user:
@@ -2196,4 +2247,53 @@ class RetailerProductRequestResponseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+
+class PrescriptionQuotationSerializer(serializers.ModelSerializer):
+    """A pharmacy's quotation with its priced lines (one independent customer order)."""
+
+    entity_title = serializers.SerializerMethodField(read_only=True)
+    entity_town = serializers.SerializerMethodField(read_only=True)
+    order = serializers.SerializerMethodField(read_only=True)
+    lines = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = models.PrescriptionQuotations
+        fields = ("id", "prescription", "entity", "entity_title", "entity_town", "status", "quoted_at", "created", "order", "lines")
+
+    def get_entity_title(self, obj):
+        return obj.entity.title if obj.entity else ""
+
+    def get_entity_town(self, obj):
+        return getattr(obj.entity, "town", "") or ""
+
+    def get_order(self, obj):
+        o = obj.customer_order
+        if not o:
+            return None
+        return {
+            "id": str(o.id),
+            "status": o.status,
+            "is_paid": o.is_paid,
+            "total": str(o.order_net_price_total or 0),
+            "reference_number": o.reference_number or "",
+        }
+
+    def get_lines(self, obj):
+        o = obj.customer_order
+        if not o:
+            return []
+        out = []
+        for line in o.parent_order.select_related("retailer_receipt", "retailer_receipt__product").all():
+            r = line.retailer_receipt
+            out.append({
+                "id": str(line.id),
+                "prescription_item": str(line.prescription_item_id) if line.prescription_item_id else None,
+                "product_title": getattr(getattr(r, "product", None), "title", "") if r else "",
+                "batch": getattr(r, "batch", "") or "",
+                "expiry_date": str(r.expiry_date) if r and r.expiry_date else None,
+                "quantity": int(line.quantity or 0),
+                "unit_price": str(line.item_price or 0),
+                "total": str(line.item_price_total or 0),
+            })
+        return out
 

@@ -1264,6 +1264,15 @@ class RetailersShippingRates(EntityRelatedModel):
 class PrescriptionImages(EntityRelatedModel):
     """Prescription image."""
 
+    entity = models.ForeignKey(
+        "authentication.Entities",
+        related_name="retailers_prescriptionimages_set",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     prescription = models.ForeignKey(
         "Prescriptions",
         related_name="prescription_images",
@@ -1303,6 +1312,7 @@ class Prescriptions(EntityRelatedModel):
     PRESCRIPTION_STATUS_CHOICES = (
         ("CANCELLED", "CANCELLED"),
         ("CLOSED", "CLOSED"),
+        ("DIGITIZED", "DIGITIZED"),
         ("DISPENSED", "DISPENSED"),
         ("QUEUING", "QUEUING"),
     )
@@ -1373,6 +1383,33 @@ class Prescriptions(EntityRelatedModel):
         blank=True,
     )
 
+    # Uploading with a pharmacy is optional: without one, the system / an admin
+    # digitizes it and forwards it to pharmacies for quotation.
+    entity = models.ForeignKey(
+        "authentication.Entities",
+        related_name="retailers_prescriptions_set",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    # Set when digitizing is marked done (status -> DIGITIZED).
+    digitized_at = models.DateTimeField(null=True, blank=True)
+    digitized_by = models.ForeignKey(
+        User,
+        related_name="prescriptions_digitized",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    # The pharmacy whose staff digitized it; empty when an admin / the system did.
+    digitized_by_entity = models.ForeignKey(
+        "authentication.Entities",
+        related_name="prescriptions_digitized_by_entity",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     ai_extraction_status = models.CharField(
         max_length=20,
         choices=AI_STATUS_CHOICES,
@@ -1401,7 +1438,18 @@ class Prescriptions(EntityRelatedModel):
 
 
 class PrescriptionItems(EntityRelatedModel):
-    """Retail prescription item."""
+    """Retail prescription item (shared by every pharmacy quoting the prescription)."""
+
+    entity = models.ForeignKey(
+        "authentication.Entities",
+        related_name="retailers_prescriptionitems_set",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    # False: the full prescribed quantity must be bought at once, from one pharmacy.
+    allow_partial_purchase = models.BooleanField(default=False)
 
     prescription = models.ForeignKey(
         Prescriptions,
@@ -1777,6 +1825,15 @@ class CustomerOrders(EntityRelatedModel):
 
 class CustomerOrderItems(EntityRelatedModel):
     """One line on a customer order — the actual sale event."""
+
+    # Set on prescription quotation orders: the prescription item this line prices.
+    prescription_item = models.ForeignKey(
+        "retailers.PrescriptionItems",
+        related_name="quote_lines",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     customer_order = models.ForeignKey(
         CustomerOrders,
@@ -3067,3 +3124,48 @@ def send_notification_on_create(sender, instance, created, **kwargs):
         "id": str(instance.id),
     }
     async_to_sync(channel_layer.group_send)(group_name, notification_data)
+
+
+class PrescriptionQuotations(models.Model):
+    """
+    A pharmacy's quotation for a prescription. Each one is backed by its own,
+    independent customer order whose lines price the prescription's items.
+    REQUESTED: sent to the pharmacy (upload or forward) · QUOTED: sent to the customer ·
+    CHECKOUT: the customer chose lines and started paying · DECLINED / CANCELLED.
+    """
+
+    STATUS_CHOICES = (
+        ("REQUESTED", "REQUESTED"),
+        ("QUOTED", "QUOTED"),
+        ("CHECKOUT", "CHECKOUT"),
+        ("DECLINED", "DECLINED"),
+        ("CANCELLED", "CANCELLED"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    prescription = models.ForeignKey(Prescriptions, related_name="quotations", on_delete=models.CASCADE)
+    entity = models.ForeignKey("authentication.Entities", related_name="prescription_quotations", on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="REQUESTED")
+    customer_order = models.OneToOneField(
+        CustomerOrders, related_name="prescription_quotation", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    requested_by = models.ForeignKey(
+        User, related_name="prescription_quotations_requested", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    quoted_by = models.ForeignKey(
+        User, related_name="prescription_quotations_quoted", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    quoted_at = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Prescription Quotations"
+        ordering = ["created"]
+        constraints = [
+            models.UniqueConstraint(fields=["prescription", "entity"], name="unique_prescription_quotation_per_pharmacy"),
+        ]
+
+    def __str__(self):
+        return f"{self.prescription_id} @ {self.entity_id} ({self.status})"
+

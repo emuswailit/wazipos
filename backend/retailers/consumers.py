@@ -1736,3 +1736,42 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
         if not p:
             return None
         return {"lat": p.y, "lng": p.x}
+
+
+# =====================================================================
+# Prescription events (digitized / forwarded) — see prescription_events.py
+# =====================================================================
+
+
+class PrescriptionEventsConsumer(AsyncJsonWebsocketConsumer):
+    """Joins rx_user_<id> (customers) and rx_entity_<id> (pharmacy staff)."""
+
+    async def connect(self):
+        from .prescription_events import entity_group, user_group
+
+        self.user = self.scope.get("user")
+        self.rx_groups = []
+        if not self.user or not self.user.is_authenticated:
+            # TokenAuthMiddleware records why: 4001 no token, 4002 invalid, 4003 expired.
+            await self.close(code=self.scope.get("close_code") or 4001)
+            return
+        self.rx_groups.append(user_group(self.user.id))
+        entity_id = getattr(self.user, "entity_id", None)
+        if entity_id:
+            self.rx_groups.append(entity_group(entity_id))
+        for g in self.rx_groups:
+            await self.channel_layer.group_add(g, self.channel_name)
+        await self.accept()
+        await self.send_json({"event": "connected"})
+
+    async def disconnect(self, close_code):
+        for g in getattr(self, "rx_groups", []):
+            await self.channel_layer.group_discard(g, self.channel_name)
+
+    async def receive_json(self, content, **kwargs):
+        if (content or {}).get("action") == "ping":
+            await self.send_json({"event": "pong"})
+
+    async def prescription_event(self, event):
+        await self.send_json({"event": event.get("event"), "prescription": event.get("prescription")})
+
