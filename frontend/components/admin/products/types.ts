@@ -39,7 +39,9 @@ export interface AdminProductsSharedProps {
     sourceTone: "server" | "cache" | "none";
     lastSyncedTime: string;
     items: ProductItem[];
-    emptyComponent?: React.ReactNode;
+    /** Whole filtered list; the mobile view shows all of it. */
+    allItems?: ProductItem[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
     onPressItem: (item: ProductItem) => void;
     onEditItem: (item: ProductItem) => void;

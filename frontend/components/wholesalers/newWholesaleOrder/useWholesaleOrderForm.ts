@@ -1,13 +1,32 @@
 // components/wholesalers/newWholesaleOrder/useWholesaleOrderForm.ts
 
+import wholesalersApi, {
+    type CreateStaffRetailerOrderPayload,
+    type CreateStaffRetailerOrderResponse,
+} from '@/api/wholesalersApi';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
+import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
 import type {
     EntityItem,
-    RetailerOrder,
     WholesalerReceipt,
 } from '@/databases/types';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+
+function newDraftId(userId: string): string {
+    return `${userId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Flattens the backend's `errors` (list or field map) into one message. */
+function describeErrors(data: CreateStaffRetailerOrderResponse | undefined): string {
+    const errs = data?.errors;
+    if (Array.isArray(errs) && errs.length) return errs.join('\n');
+    if (errs && typeof errs === 'object') {
+        const parts = Object.values(errs).flat().map(String);
+        if (parts.length) return parts.join('\n');
+    }
+    return data?.response_message || 'The order could not be created.';
+}
 
 /* =========================================================
  * Row type
@@ -26,7 +45,7 @@ export interface WholesaleItemRow {
 /* =========================================================
  * Hook options
  * ======================================================= */
-export interface UseWholesaleOrderFormOptions {
+interface UseWholesaleOrderFormOptions {
     onSubmitFinished?: (
         retailerId: string,
         notes: string,
@@ -47,8 +66,17 @@ export function useWholesaleOrderForm(
     const { entitiesList, isEntitiesSyncing } =
         useEntitiesSync();
 
-    /* -------- Retailer orders sync context -------- */
-    const { addLocalOrder } = useRetailerOrdersSync();
+    /* -------- Retailer orders list (refreshed after a successful submit) -------- */
+    const { forceManualRefresh } = useRetailerOrdersSync();
+
+    /* -------- Wholesaler inventory (scanner lookups) -------- */
+    const { wholesalerReceipts } = useWholesalerReceiptsSync();
+
+    /* -------- Idempotency key, stable until a successful submit or reset -------- */
+    const draftIdRef = useRef<string | null>(null);
+
+    /* -------- Scanner -------- */
+    const [isScannerOpen, setIsScanningOpen] = useState(false);
 
     /* -------- Retailers -------- */
     const retailers = useMemo<EntityItem[]>(() => {
@@ -212,9 +240,69 @@ export function useWholesaleOrderForm(
             setNotes('');
             setMpesaNumber('');
             setSelectedPaymentMethod(null);
+            draftIdRef.current = null;
             onRowsCountChange?.(1);
         },
         [onRowsCountChange]
+    );
+
+    /* ---------------------------------------------------------
+     * Scanner — adds the matching receipt as a row, or bumps its quantity
+     * ------------------------------------------------------- */
+    const processBarcodeScanResult = useCallback(
+        (barcode: string) => {
+            const code = barcode.trim();
+            if (!code) return;
+            const receipt = (wholesalerReceipts ?? []).find(
+                (r) => r.bar_code === code
+            );
+            if (!receipt) return;
+            const receiptId = resolveReceiptId(receipt);
+            if (!receiptId) return;
+            const price = Number(
+                receipt.final_unit_selling_price ??
+                receipt.unit_selling_price ??
+                0
+            );
+            const available = Number(receipt.current_unit_quantity ?? 0);
+            const withTotal = (row: WholesaleItemRow): WholesaleItemRow => ({
+                ...row,
+                item_price_total:
+                    (Number(row.purchased_quantity) || 0) * (Number(row.item_price) || 0) -
+                    (Number(row.item_price_discount) || 0),
+            });
+
+            setFormRows((prev) => {
+                const existing = prev.findIndex(
+                    (r) => r.wholesaler_receipt_id === receiptId
+                );
+                if (existing !== -1) {
+                    return prev.map((r, i) =>
+                        i === existing
+                            ? withTotal({ ...r, purchased_quantity: String((Number(r.purchased_quantity) || 0) + 1) })
+                            : r
+                    );
+                }
+                const filled = withTotal({
+                    id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    selectedReceipt: receipt,
+                    wholesaler_receipt_id: receiptId,
+                    purchased_quantity: '1',
+                    item_price_discount: '0.00',
+                    item_price: price,
+                    item_price_total: 0,
+                    available,
+                });
+                const blank = prev.findIndex((r) => !r.selectedReceipt);
+                const next =
+                    blank !== -1
+                        ? prev.map((r, i) => (i === blank ? { ...filled, id: r.id } : r))
+                        : [...prev, filled];
+                if (next.length !== prev.length) onRowsCountChange?.(next.length);
+                return next;
+            });
+        },
+        [wholesalerReceipts, resolveReceiptId, onRowsCountChange]
     );
 
     /* ---------------------------------------------------------
@@ -232,312 +320,68 @@ export function useWholesaleOrderForm(
     );
 
     /* ---------------------------------------------------------
-     * commitOrder — builds and persists a RetailerOrder locally
+     * submitOrder — sends CreateStaffRetailerOrder straight to the backend
      * ------------------------------------------------------- */
-    const commitOrder = useCallback(
+    const submitOrder = useCallback(
         async (opts: {
             retailerId: string;
-            retailerTitle: string;
-            paymentMethodId: string;
-            paymentMethodTitle: string;
-            mpesaNumber: string;
-            notes: string;
+            paymentMethodId?: string;
+            mobileMoneyPhone?: string | null;
             userId: string;
-        }): Promise<RetailerOrder> => {
-            const userId = opts.userId;
-            const draftId = `${userId}:${Math.floor(
-                Date.now() / 1000
-            )}`;
+        }): Promise<{ ok: true; orderId: string; reference?: string } | { ok: false; message: string }> => {
+            if (!draftIdRef.current) draftIdRef.current = newDraftId(opts.userId);
 
-            console.log(
-                '[commitOrder] rows → items:',
-                formRows.map((r) => ({
-                    title: r.selectedReceipt?.title,
-                    remote_id: (r.selectedReceipt as any)
-                        ?.remote_id,
-                    remote_key: (r.selectedReceipt as any)
-                        ?.remote_key,
-                    id: (r.selectedReceipt as any)?.id,
-                    cached_id: r.wholesaler_receipt_id,
-                    product: r.selectedReceipt?.product,
-                    picked: !!r.selectedReceipt,
-                }))
-            );
+            const lines = formRows.filter((r) => r.selectedReceipt);
+            const order_items = lines.map((r) => {
+                const qty = Number(r.purchased_quantity) || 0;
+                const price = Number(r.item_price) || 0;
+                const discount = Number(r.item_price_discount) || 0;
+                return {
+                    wholesaler_receipt: String(r.wholesaler_receipt_id || resolveReceiptId(r.selectedReceipt)),
+                    purchased_quantity: qty,
+                    discount_quantity: 0,
+                    total_quantity: qty,
+                    item_price: price,
+                    item_price_discount: discount,
+                    item_net_price: price,
+                    item_price_total: qty * price - discount,
+                };
+            });
+            const gross = order_items.reduce((s, i) => s + i.purchased_quantity * i.item_price, 0);
+            const discountTotal = order_items.reduce((s, i) => s + i.item_price_discount, 0);
 
-            const order: RetailerOrder = {
-                remote_id: '',
-                draft_id: draftId,
-
-                retailer: opts.retailerId,
-                retailer_title: opts.retailerTitle,
-
-                wholesaler: null,
-                wholesaler_title: null,
-                owner: userId,
-                owner_title: '',
-                employee: userId,
-
-                title: opts.retailerTitle,
-
-                payment_method: opts.paymentMethodId,
-                payment_method_title:
-                    opts.paymentMethodTitle,
-
-                order_origin: 'STAFF',
-                order_terms: 'CASH',
-
-                document_number: null,
-                document_number_display: 'N/A',
-                reference_number: '',
-                provider_reference_number: null,
-                psp_reference_number: '',
-                telco: '',
-
-                status: 'DRAFT',
-
-                shipping_amount: '0.00',
-                order_discount_total: '0.00',
-                order_gross_price_total: String(
-                    grandTotalCost
-                ),
-                order_tax_total: '0.00',
-                final_price: String(grandTotalCost),
-                final_price_total: String(
-                    grandTotalCost
-                ),
-
-                is_paid: 'false',
-                is_delivered: 'false',
-                is_processed: 'false',
-                is_packed: 'false',
-                is_received: 'false',
-                is_approved: 'false',
-                is_dispatched: 'false',
-                is_committed: 'false',
-
-                paid_at: null,
-                delivered_at: null,
-                delivered_by: null,
-                processed_at: null,
-                processed_by: null,
-                packed_at: null,
-                packed_by: null,
-                received_at: null,
-                received_by: null,
-                approved_at: null,
-                approved_by: null,
-                dispatched_at: null,
-                dispatched_by: null,
-                committed_at: null,
-                cancelled_at: null,
-
-                commit_type: null,
-                commit_type_display: null,
-                committed_by_entity: null,
-                committed_by_title: null,
-                committed_by_user: null,
-                commit_note: '',
-
-                delivery_method: '',
-                actual_lead_time_days: null,
-
-                payment_summary: {
-                    paid_total: 0,
-                    balance_due: grandTotalCost,
-                    is_paid: false,
+            const payload: CreateStaffRetailerOrderPayload = {
+                action: 'CreateStaffRetailerOrder',
+                retailer_order_details: {
+                    retailer_id: opts.retailerId,
+                    draft_id: draftIdRef.current,
+                    order_terms: 'CASH',
+                    payment_method_id: opts.paymentMethodId,
+                    mobile_money_phone: opts.mobileMoneyPhone ?? null,
+                    order_gross_price_total: gross,
+                    order_discount_total: discountTotal,
+                    final_price_total: gross - discountTotal,
+                    order_items,
                 },
+            };
 
-                description: opts.notes || null,
+            const res = await wholesalersApi.wholesaleRetailerOrdersStaffAction(payload);
+            if (!res.ok) {
+                return { ok: false, message: describeErrors(res.data) || res.problem || 'Network error.' };
+            }
+            if (String(res.data?.response_code) !== '0' || !res.data?.retailer_order?.id) {
+                return { ok: false, message: describeErrors(res.data) };
+            }
 
-                order_items: formRows
-                    .filter((r) => r.selectedReceipt)
-                    .map((r, i) => {
-                        const receipt = r
-                            .selectedReceipt!;
-
-                        const receiptId =
-                            r.wholesaler_receipt_id ||
-                            resolveReceiptId(receipt);
-
-                        if (!receiptId) {
-                            console.warn(
-                                '[commitOrder] item has no receipt id',
-                                {
-                                    title: receipt.title,
-                                    product:
-                                        receipt.product,
-                                    remote_id:
-                                        (receipt as any)
-                                            .remote_id,
-                                    remote_key:
-                                        (receipt as any)
-                                            .remote_key,
-                                    id: (receipt as any)
-                                        .id,
-                                }
-                            );
-                        }
-
-                        return {
-                            id: `local-${draftId}-${i}`,
-                            entity: opts.retailerId,
-                            title: receipt.title ?? '',
-                            units_per_pack: 1,
-                            retailer_order: draftId,
-                            retailer_indent_item: null,
-                            product_title:
-                                receipt.title ?? '',
-                            preparation_title: '',
-                            wholesaler_receipt:
-                                String(receiptId),
-                            product:
-                                receipt.product ?? '',
-                            purchased_quantity: Number(
-                                r.purchased_quantity
-                            ),
-                            discount_quantity: 0,
-                            total_quantity: Number(
-                                r.purchased_quantity
-                            ),
-                            unit_quantity: Number(
-                                r.purchased_quantity
-                            ),
-                            item_price: String(
-                                r.item_price
-                            ),
-                            item_price_total: String(
-                                r.item_price_total
-                            ),
-                            item_net_price: String(
-                                r.item_price
-                            ),
-                            item_net_price_total: null,
-                            item_price_discount: String(
-                                r.item_price_discount
-                            ),
-                            item_price_discount_total: null,
-                            item_tax: null,
-                            item_tax_total: null,
-                            item_counter_price_discount: null,
-                            item_counter_price_discount_amount:
-                                null,
-                            item_counter_price_discount_amount_total:
-                                '0.00',
-                            item_final_price: null,
-                            item_final_price_total: null,
-                            intended_retail_unit_price: null,
-                            intended_retail_unit_price_source:
-                                'markup',
-                            line_margin: null,
-                            pricing_source_label: 'Markup',
-                            stakeholders: [],
-                            is_received: 'false',
-                            is_issued: 'false',
-                            item_paid_amount: '0.00',
-                            item_pending_amount: null,
-                            batch: receipt.batch ?? null,
-                            manufacture_date:
-                                receipt.manufacture_date ??
-                                null,
-                            expiry_date:
-                                receipt.expiry_date ??
-                                null,
-                            wholesaler:
-                                (receipt as any).entity ??
-                                '',
-                            retailer: opts.retailerId,
-                            facilitator: '',
-                            images:
-                                (receipt as any).images ??
-                                [],
-                            created:
-                                new Date().toISOString(),
-                            updated:
-                                new Date().toISOString(),
-                            owner: userId,
-                        };
-                    }),
-
-                retailer_postal_town: null,
-                retailer_postal_code: null,
-                retailer_postal_address: null,
-                retailer_phone: null,
-                retailer_email: null,
-
-                wholesaler_postal_town: null,
-                wholesaler_postal_code: null,
-                wholesaler_postal_address: null,
-                wholesaler_phone: null,
-                wholesaler_email: null,
-
-                created: new Date().toISOString(),
-                updated: new Date().toISOString(),
-
-                cached_at: new Date().toISOString(),
-                synced: false,
-                sync_error: null,
-            } as RetailerOrder;
-
-            await addLocalOrder(order);
-
-            console.log(
-                '[commitOrder] local order saved',
-                {
-                    draft_id: order.draft_id,
-                    itemCount:
-                        order.order_items.length,
-                    receiptIds: order.order_items.map(
-                        (i) => i.wholesaler_receipt
-                    ),
-                }
-            );
-
-            return order;
+            draftIdRef.current = null;
+            void forceManualRefresh();
+            return {
+                ok: true,
+                orderId: res.data.retailer_order.id,
+                reference: res.data.retailer_order.reference_number,
+            };
         },
-        [
-            formRows,
-            grandTotalCost,
-            addLocalOrder,
-            resolveReceiptId,
-        ]
-    );
-
-    /* ---------------------------------------------------------
-     * Legacy payload builder
-     * ------------------------------------------------------- */
-    const buildSubmitItems = useCallback(
-        () =>
-            formRows
-                .filter((r) => r.selectedReceipt)
-                .map((r) => {
-                    const receipt = r.selectedReceipt!;
-                    const receiptId =
-                        r.wholesaler_receipt_id ||
-                        resolveReceiptId(receipt);
-                    return {
-                        wholesaler_receipt: String(
-                            receiptId
-                        ),
-                        product:
-                            receipt.product ?? '',
-                        barcode:
-                            receipt.bar_code ?? '',
-                        batch: receipt.batch ?? '',
-                        quantity:
-                            Number(r.purchased_quantity) ||
-                            0,
-                        unit_price:
-                            Number(r.item_price) || 0,
-                        discount:
-                            Number(
-                                r.item_price_discount
-                            ) || 0,
-                        total:
-                            Number(r.item_price_total) ||
-                            0,
-                    };
-                }),
-        [formRows, resolveReceiptId]
+        [formRows, resolveReceiptId, forceManualRefresh]
     );
 
     /* ---------------------------------------------------------
@@ -578,10 +422,16 @@ export function useWholesaleOrderForm(
         submitToast,
         setSubmitToast,
 
-        /* Totals & payload */
+        /* Totals & submit */
         grandTotalCost,
-        buildSubmitItems,
-        commitOrder,
+
+        submitOrder,
+
+        /* Scanner */
+        isScannerOpen,
+        setIsScanningOpen,
+        processBarcodeScanResult,
+        wholesalerReceipts,
 
         /* Optional passthrough */
         onSubmitFinished,

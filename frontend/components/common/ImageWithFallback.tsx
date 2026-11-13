@@ -6,12 +6,12 @@
 
 import { useAuth } from '@/context/AuthContext';
 import React, { useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Image, Text, View, type DimensionValue } from 'react-native';
 
-export interface ImageWithFallbackProps {
+interface ImageWithFallbackProps {
     uri: string | null | undefined;
-    width: number | string;
-    height: number | string;
+    width: DimensionValue;
+    height: DimensionValue;
     fallback?: string;
     fallbackSize?: number;
     resizeMode?: 'cover' | 'contain' | 'stretch';

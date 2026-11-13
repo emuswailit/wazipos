@@ -67,7 +67,7 @@ const get = async <T = any>(key: string): Promise<T | null> => {
   }
 };
 
-export const cacheService = {
+const cacheService = {
   get,
   store,
 };

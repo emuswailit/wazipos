@@ -1,7 +1,18 @@
+// components/navigation/SidebarNavigationList.tsx
+
 import { useAuth } from "@/context/AuthContext";
 import { SIDEBAR_NAV_MANIFEST } from "@/utils/navigationData";
 import { usePathname, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import {
+    Activity, AlertTriangle, ArrowLeftRight, BadgePercent, BarChart3, BookOpen,
+    Boxes, CalendarX, ChevronDown, ChevronUp, ClipboardCheck, ClipboardList,
+    Clock, CreditCard, FileCheck, FileText, FlaskConical, FolderTree, Gift,
+    Layers, Layers2, LayoutDashboard, Megaphone, Package, PackageX, Pill,
+    PlusCircle, Receipt, RefreshCw, Route, ShieldCheck, ShoppingBag,
+    ShoppingCart, Sliders, Store, Tag, TestTube, TrendingUp, Undo2, User,
+    UserCircle, Users, Wallet, Warehouse, type LucideIcon,
+} from "lucide-react-native";
+import React, { useEffect, useMemo, useState } from "react";
 import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 interface NavListProps {
@@ -10,19 +21,103 @@ interface NavListProps {
     onCloseSidebarTrigger?: () => void;
 }
 
+function cleanPath(path: string): string {
+    return (path.replace(/\/\([^)]+\)/g, "").replace(/\/+$/, "") || "/");
+}
+
+const LUCIDE_ICONS: Record<string, LucideIcon> = {
+    Activity, AlertTriangle, ArrowLeftRight, BadgePercent, BarChart3, BookOpen,
+    Boxes, CalendarX, ClipboardCheck, ClipboardList, Clock, CreditCard,
+    FileCheck, FileText, FlaskConical, FolderTree, Gift, LayoutDashboard,
+    Layers, Layers2, Megaphone, Package, PackageX, Pill, PlusCircle, Receipt,
+    RefreshCw, Route, ShieldCheck, ShoppingBag, ShoppingCart, Sliders, Store,
+    Tag, TestTube, TrendingUp, Undo2, User, UserCircle, Users, Wallet, Warehouse,
+};
+
+function initials(title: string): string {
+    const parts = title.replace(/[^a-zA-Z ]/g, "").trim().split(/\s+/);
+    if (parts.length === 0) return "•";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+/*
+ * IconSlot now renders the icon in the SAME color as the label.
+ * No tinted square background — the icon floats next to the text.
+ */
+function IconSlot({
+    item,
+    color,
+    size = 18,
+    iconSize = 16,
+}: {
+    item: any;
+    color: string;
+    size?: number;
+    iconSize?: number;
+}) {
+    const Comp = item.icon ? LUCIDE_ICONS[item.icon as string] : undefined;
+
+    if (Comp) {
+        return <Comp size={iconSize} color={color} strokeWidth={2} />;
+    }
+
+    // Fallback: initials glyph, same color as label
+    return (
+        <View
+            style={{
+                width: size,
+                height: size,
+                alignItems: "center",
+                justifyContent: "center",
+            }}
+        >
+            <Text
+                style={{
+                    fontSize: iconSize - 3,
+                    fontWeight: "700",
+                    color,
+                    letterSpacing: 0.4,
+                }}
+            >
+                {initials(String(item.title ?? "?"))}
+            </Text>
+        </View>
+    );
+}
+
 export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavListProps) {
-    const { user, theme, isDarkMode, toggleTheme, logout } = useAuth();
+    const { user, theme, isDarkMode } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
     const [activeMenu, setActiveMenu] = useState<string>("");
 
-    const userRolesArray: string[] = React.useMemo(() => {
-        return user?.roles?.map((r: any) => r?.value).filter(Boolean) || ["Client"];
-    }, [user]);
+    const userRolesArray: string[] = useMemo(
+        () => user?.roles?.map((r: any) => r?.value).filter(Boolean) || ["Client"],
+        [user]
+    );
+
+    const hasAccessPermission = (routeAllowedRoles: string[]) =>
+        routeAllowedRoles.some((role) => userRolesArray.includes(role));
+
+    const authorizedRoutes = useMemo(
+        () =>
+            SIDEBAR_NAV_MANIFEST.filter(
+                (item) => item.showInSidebar && hasAccessPermission(item.allowedRoles)
+            ),
+        [userRolesArray]
+    );
+
+    const cleanCurrentPath = cleanPath(pathname);
 
     useEffect(() => {
-        console.log("userRolesArray", userRolesArray)
-    }, [userRolesArray])
+        const parent = authorizedRoutes.find((link) =>
+            link.subRoutes?.some((sub) =>
+                cleanCurrentPath.startsWith(cleanPath(sub.route.split("?")[0]))
+            )
+        );
+        if (parent) setActiveMenu(parent.title);
+    }, [cleanCurrentPath, authorizedRoutes]);
 
     const handleMenuClick = (link: any) => {
         const hasSubroutes = link.subRoutes && link.subRoutes.length > 0;
@@ -35,81 +130,161 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
         }
     };
 
-    const hasAccessPermission = (routeAllowedRoles: string[]) => {
-        return routeAllowedRoles.some(role => userRolesArray.includes(role));
-    };
-
-    const authorizedRoutes = SIDEBAR_NAV_MANIFEST.filter(item =>
-        item.showInSidebar && hasAccessPermission(item.allowedRoles)
-    );
-
-    const customBorderColor = isDarkMode ? "#334155" : theme.primary;
-    const customTextColor = isDarkMode ? "#ffffff" : theme.primary;
+    const dividerColor = isDarkMode ? "#334155" : "#e2e8f0";
+    const inactiveLabel = isDarkMode ? "#94a3b8" : "#64748b";
+    const inactiveLabelStrong = isDarkMode ? "#cbd5e1" : "#334155";
+    const activeBg = isDarkMode ? "rgba(255,255,255,0.08)" : `${theme.primary}12`;
+    const headerLabelColor = isDarkMode ? "#ffffff" : theme.textDark;
 
     return (
-        <View className="flex-1 justify-between h-full">
-            <View className="flex-1 min-h-0">
-                {Platform.OS === 'web' && onCloseSidebarTrigger && (
-                    <View style={{ borderBottomColor: customBorderColor }} className="flex-row justify-between items-center pb-3 border-b mb-2 px-1">
-                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs, color: isDarkMode ? "#ffffff" : theme.textDark }} className="uppercase tracking-widest">
-                            Navigation Menu
+        <View style={{ flex: 1, minHeight: 0 }}>
+            {Platform.OS === "web" && onCloseSidebarTrigger && (
+                <View
+                    style={{ borderBottomColor: dividerColor }}
+                    className="flex-row justify-between items-center pb-3 border-b mb-2 px-1"
+                >
+                    <Text
+                        className="tracking-widest text-[10px]"
+                        style={{ fontFamily: theme.font.bold, color: headerLabelColor }}
+                    >
+                        Navigation Menu
+                    </Text>
+                    <TouchableOpacity
+                        activeOpacity={0.6}
+                        onPress={onCloseSidebarTrigger}
+                        className="p-1.5 px-2.5 rounded-md"
+                        style={{ backgroundColor: "rgba(244,63,94,0.10)" }}
+                    >
+                        <Text
+                            className="text-red-500 text-[10px] tracking-wider"
+                            style={{ fontFamily: theme.font.bold }}
+                        >
+                            ✕ Close
                         </Text>
-                        <TouchableOpacity activeOpacity={0.6} onPress={onCloseSidebarTrigger} className="p-1.5 px-3 rounded-lg bg-red-500/10">
-                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-red-500">✕ Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }} className="space-y-2">
-                    {authorizedRoutes.map((link) => {
-                        const hasSubroutes = link.subRoutes && link.subRoutes.length > 0;
-                        const cleanRoutePath = link.route.replace(/\/\([^)]+\)/g, '');
-                        const isRouteActive = pathname === cleanRoutePath;
-                        const isMenuOpen = activeMenu === link.title;
-                        const activeItemBg = isRouteActive ? (isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(59, 130, 246, 0.1)") : "transparent";
-                        return (
-                            <View key={link.id} className="mb-2">
-                                <TouchableOpacity activeOpacity={0.7} onPress={() => handleMenuClick(link)} style={{ backgroundColor: activeItemBg, borderColor: customBorderColor }} className="flex-row justify-between items-center py-3 px-4 rounded-xl border transition-all">
-                                    <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: customTextColor }} className="tracking-wide">
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 16, flexGrow: 1 }}
+            >
+                {authorizedRoutes.map((link) => {
+                    const hasSubroutes = link.subRoutes && link.subRoutes.length > 0;
+                    const isRouteActive = cleanCurrentPath === cleanPath(link.route);
+                    const childIsActive =
+                        link.subRoutes?.some((sub) =>
+                            cleanCurrentPath.startsWith(cleanPath(sub.route.split("?")[0]))
+                        ) ?? false;
+                    const parentIsActive = isRouteActive || childIsActive;
+                    const isMenuOpen =
+                        activeMenu === link.title ||
+                        (childIsActive && activeMenu !== link.title && activeMenu === "");
+
+                    // Label + icon share this color for parent rows
+                    const parentColor = parentIsActive
+                        ? theme.primary
+                        : inactiveLabelStrong;
+
+                    return (
+                        <View key={link.id}>
+                            <TouchableOpacity
+                                activeOpacity={0.7}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: parentIsActive, expanded: isMenuOpen }}
+                                onPress={() => handleMenuClick(link)}
+                                style={{ backgroundColor: parentIsActive ? activeBg : "transparent" }}
+                                className="flex-row items-center justify-between py-2.5 px-2 rounded-lg web:hover:bg-slate-500/5"
+                            >
+                                <View className="flex-row items-center gap-3 flex-1 min-w-0">
+                                    <IconSlot item={link} color={parentColor} />
+                                    <Text
+                                        numberOfLines={1}
+                                        className="text-[13px] flex-1"
+                                        style={{
+                                            fontFamily: parentIsActive
+                                                ? theme.font.bold
+                                                : theme.font.medium,
+                                            color: parentColor,
+                                        }}
+                                    >
                                         {link.title}
                                     </Text>
-                                    {hasSubroutes && (
-                                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs, color: customTextColor }}>
-                                            {isMenuOpen ? "▲" : "▼"}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
-                                {hasSubroutes && isMenuOpen && (
-                                    <View style={{ borderLeftColor: customBorderColor }} className="pl-4 mt-2 border-l-2 ml-4 gap-y-1 py-1">
-                                        {link.subRoutes!.filter(sub => sub.showInSidebar && hasAccessPermission(sub.allowedRoles)).map(subItem => {
-                                            const isSubActive = subItem.route.includes(pathname);
-                                            const activeSubBg = isSubActive ? (isDarkMode ? "rgba(255, 255, 255, 0.15)" : "rgba(59, 130, 246, 0.1)") : "transparent";
+                                </View>
+
+                                {hasSubroutes ? (
+                                    <View className="ml-1">
+                                        {isMenuOpen ? (
+                                            <ChevronUp size={14} color={parentColor} />
+                                        ) : (
+                                            <ChevronDown size={14} color={parentColor} />
+                                        )}
+                                    </View>
+                                ) : null}
+                            </TouchableOpacity>
+
+                            {hasSubroutes && isMenuOpen && (
+                                <View
+                                    className="ml-5 pl-4 mt-0.5 mb-1"
+                                    style={{ borderLeftWidth: 1, borderLeftColor: dividerColor }}
+                                >
+                                    {link.subRoutes!
+                                        .filter(
+                                            (sub) => sub.showInSidebar && hasAccessPermission(sub.allowedRoles)
+                                        )
+                                        .map((subItem) => {
+                                            const isSubActive = cleanCurrentPath.startsWith(
+                                                cleanPath(subItem.route.split("?")[0])
+                                            );
+
+                                            // Label + icon share this color for sub rows
+                                            const subColor = isSubActive
+                                                ? theme.primary
+                                                : inactiveLabel;
+
                                             return (
-                                                <TouchableOpacity key={subItem.title} activeOpacity={0.6} onPress={() => { router.push(subItem.route as any); if (onCloseSidebarTrigger) onCloseSidebarTrigger(); }} style={{ backgroundColor: activeSubBg, borderColor: customBorderColor }} className="py-2.5 px-3 rounded-xl border my-0.5 transition-all">
-                                                    <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs, color: isSubActive ? theme.primary : theme.text }}>
+                                                <TouchableOpacity
+                                                    key={subItem.title}
+                                                    activeOpacity={0.6}
+                                                    accessibilityRole="button"
+                                                    accessibilityState={{ selected: isSubActive }}
+                                                    onPress={() => {
+                                                        router.push(subItem.route as any);
+                                                        if (onCloseSidebarTrigger) onCloseSidebarTrigger();
+                                                    }}
+                                                    style={{
+                                                        backgroundColor: isSubActive ? activeBg : "transparent",
+                                                    }}
+                                                    className="flex-row items-center gap-2.5 py-2 pl-2 pr-2 rounded-lg web:hover:bg-slate-500/5"
+                                                >
+                                                    <IconSlot
+                                                        item={subItem}
+                                                        color={subColor}
+                                                        size={16}
+                                                        iconSize={14}
+                                                    />
+                                                    <Text
+                                                        numberOfLines={1}
+                                                        className="text-[12px] flex-1"
+                                                        style={{
+                                                            fontFamily: isSubActive
+                                                                ? theme.font.bold
+                                                                : theme.font.medium,
+                                                            color: subColor,
+                                                        }}
+                                                    >
                                                         {subItem.title}
                                                     </Text>
                                                 </TouchableOpacity>
                                             );
                                         })}
-                                    </View>
-                                )}
-                            </View>
-                        );
-                    })}
-                </ScrollView>
-            </View>
-            <View style={{ borderTopColor: customBorderColor }} className="pt-4 border-t w-full gap-y-2 bg-transparent">
-                <TouchableOpacity activeOpacity={0.8} onPress={toggleTheme} style={{ backgroundColor: theme.panel, borderColor: customBorderColor }} className="w-full h-11 border rounded-xl flex-row items-center justify-center space-x-2 active:scale-95 transition-all">
-                    <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: theme.text }}>
-                        {isDarkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.8} onPress={logout} className="w-full h-11 rounded-xl bg-red-500/10 flex-row items-center justify-center active:scale-95 transition-all">
-                    <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm }} className="text-red-500 uppercase tracking-wider">
-                        🚪 Secure Log Out
-                    </Text>
-                </TouchableOpacity>
-            </View>
+                                </View>
+                            )}
+                        </View>
+                    );
+                })}
+            </ScrollView>
         </View>
     );
 }

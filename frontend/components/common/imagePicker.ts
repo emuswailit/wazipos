@@ -41,7 +41,7 @@ export type PickedImage =
  */
 export type ImageFieldValue = string | PickedImage | null;
 
-export interface PickImageOptions {
+interface PickImageOptions {
     /** [width, height], e.g. [16, 9]. Ignored on web. */
     aspect?: [number, number];
     /** 0–1. Ignored on web. */
@@ -54,7 +54,7 @@ export interface PickImageOptions {
  * Type guards
  * ======================================================= */
 
-export function isPickedImage(v: unknown): v is PickedImage {
+function isPickedImage(v: unknown): v is PickedImage {
     return (
         typeof v === "object" &&
         v !== null &&

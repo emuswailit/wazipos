@@ -6,6 +6,7 @@ import drugsApi, {
     type PreparationsRequest,
 } from "@/api/drugsApi";
 import { useAuth } from "@/context/AuthContext";
+import { usePreparationsSync } from "@/context/PreparationsSyncContext";
 import useApi from "@/hooks/useApi";
 import { Stack } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -29,8 +30,6 @@ import {
     type PageSize,
     type PreparationItem,
 } from "./types";
-
-export type { PreparationItem } from "./types";
 
 function showResultAlert(
     title: string,
@@ -64,17 +63,18 @@ function formatHumanDate(dateString: string): string {
     }
 }
 
-function toArray(val: any): any[] {
-    if (Array.isArray(val)) return val;
-    if (val == null) return [];
-    if (typeof val === "string" && val.trim() === "") return [];
-    return [val];
-}
-
 export default function AdminPreparationsList() {
     const { theme, isDarkMode } = useAuth();
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768;
+
+    // 🌟 Use the Context for READING data
+    const {
+        preparationsList,
+        isPreparationsSyncing,
+        isPreparationsRefreshing,
+        forcePreparationsRefresh
+    } = usePreparationsSync();
 
     const [selectedItem, setSelectedItem] =
         useState<PreparationItem | null>(null);
@@ -88,10 +88,7 @@ export default function AdminPreparationsList() {
         PAGE_SIZE_OPTIONS[0]
     );
 
-    const getPreparationsApi = useApi<any>(
-        async (payload: PreparationsRequest) =>
-            await drugsApi.preparationsAction(payload)
-    );
+    // Still need the mutation APIs for WRITING data (Create/Update)
     const addPreparationApi = useApi<any>(
         async (payload: PreparationsRequest) =>
             await drugsApi.preparationsAction(payload)
@@ -101,62 +98,40 @@ export default function AdminPreparationsList() {
             await drugsApi.preparationsAction(payload)
     );
 
-    const fetchPreparations = () => {
-        getPreparationsApi.request({ action: "GetPreparations" });
-    };
-
-    useEffect(() => {
-        fetchPreparations();
-    }, []);
-
+    // 🌟 Strictly map the context items to the local PreparationItem type
     const preparations: PreparationItem[] = useMemo(() => {
-        if (
-            getPreparationsApi.data &&
-            Array.isArray(getPreparationsApi.data)
-        ) {
-            return getPreparationsApi.data.map((item: any) => {
-                const f = item.fields ?? item;
-                return {
-                    id:
-                        item.pk ||
-                        item.id ||
-                        item.key ||
-                        Math.random().toString(),
-                    title: f?.title || "UNSPECIFIED",
-                    long_title: f?.long_title || "",
-                    description: f?.description || "",
-                    formulation_id:
-                        f?.formulation ||
-                        f?.formulation_id ||
-                        "",
-                    formulation_title:
-                        f?.formulation_title || "—",
-                    generics_string:
-                        f?.generics_string || "—",
-                    generics: toArray(f?.generics).filter(
-                        (x) => typeof x === "string"
-                    ),
-                    gen_array: Array.isArray(f?.gen_array)
-                        ? f.gen_array
-                        : [],
-                    created: f?.created || "",
-                    updated: f?.updated || "",
-                };
-            });
-        }
-        return [];
-    }, [getPreparationsApi.data]);
+        return preparationsList.map((item: any, index: number) => {
+            // Use local Dexie ID if available, then remote UUID, then stable index
+            const stableId = item.id ? String(item.id) : (item.remote_id || `prep-${index}`);
+
+            return {
+                id: stableId,
+                key: item.remote_id || item.key || undefined,
+                title: item.title || "UNSPECIFIED",
+                long_title: item.long_title || "",
+                description: item.description || "",
+                formulation: item.formulation || item.formulation_id || "",
+                formulation_id: item.formulation_id || item.formulation || "",
+                formulation_title: item.formulation_title || "—",
+                generics: Array.isArray(item.generics) ? item.generics : [],
+                gen_array: Array.isArray(item.gen_array) ? item.gen_array : [],
+                generics_string: item.generics_string || "—",
+                created: item.created || "",
+                updated: item.updated || "",
+            };
+        });
+    }, [preparationsList]);
 
     const filteredPreparations = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q) return preparations;
         return preparations.filter(
             (item) =>
-                item.title.toLowerCase().includes(q) ||
-                item.long_title.toLowerCase().includes(q) ||
-                item.description.toLowerCase().includes(q) ||
-                item.generics_string.toLowerCase().includes(q) ||
-                item.formulation_title.toLowerCase().includes(q)
+                (item.title || "").toLowerCase().includes(q) ||
+                (item.long_title || "").toLowerCase().includes(q) ||
+                (item.description || "").toLowerCase().includes(q) ||
+                (item.generics_string || "").toLowerCase().includes(q) ||
+                (item.formulation_title || "").toLowerCase().includes(q)
         );
     }, [preparations, query]);
 
@@ -196,6 +171,7 @@ export default function AdminPreparationsList() {
                 description: String(
                     values.description ?? ""
                 ).trim(),
+                // Send formulation_id as expected by the frontend form
                 formulation_id: String(
                     values.formulation_id ?? ""
                 ).trim(),
@@ -205,30 +181,21 @@ export default function AdminPreparationsList() {
             };
 
             if (editingItem) {
-                response =
-                    await updatePreparationApi.request({
-                        action: "UpdatePreparation",
-                        preparation_details: {
-                            id: editingItem.id,
-                            ...details,
-                        },
-                    });
+                response = await updatePreparationApi.request({
+                    action: "UpdatePreparation",
+                    preparation_details: {
+                        id: editingItem.key || editingItem.id, // Send the remote UUID if possible
+                        ...details,
+                    },
+                });
             } else {
-                response =
-                    await addPreparationApi.request({
-                        action: "CreatePreparation",
-                        preparation_details: details,
-                    });
+                response = await addPreparationApi.request({
+                    action: "CreatePreparation",
+                    preparation_details: details,
+                });
             }
 
             console.log("PreparationsAction", response);
-
-            console.log(
-                `📡 [Admin Inbound API Resolution] ${editingItem ? "Update" : "Create"
-                } Request Status: ${response?.status ?? "N/A"
-                } | Body:`,
-                JSON.stringify(response?.data)
-            );
 
             const data = response?.data ?? {};
 
@@ -252,7 +219,7 @@ export default function AdminPreparationsList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -266,7 +233,9 @@ export default function AdminPreparationsList() {
             resetForm();
             setIsFormModalOpen(false);
             setEditingItem(null);
-            fetchPreparations();
+
+            // 🌟 Trigger context refresh instead of local fetch
+            forcePreparationsRefresh();
         } catch (err) {
             console.error(
                 "Admin form workflow operation error:",
@@ -311,10 +280,10 @@ export default function AdminPreparationsList() {
         setPage(1);
     };
 
-    if (
-        getPreparationsApi.loading &&
-        preparations.length === 0
-    ) {
+    // 🌟 Use context syncing states
+    const isRefreshing = isPreparationsSyncing || isPreparationsRefreshing;
+
+    if (isPreparationsSyncing && preparations.length === 0) {
         return (
             <View
                 style={{ backgroundColor: theme.background }}
@@ -343,19 +312,18 @@ export default function AdminPreparationsList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminPreparationsSharedProps = {
         query,
         setQuery,
-        onRefresh: fetchPreparations,
-        refreshing: getPreparationsApi.loading,
+        onRefresh: forcePreparationsRefresh, // 🌟 Context refresh
+        refreshing: isRefreshing,            // 🌟 Context loading state
         sourceLabel,
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredPreparations,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,
@@ -389,19 +357,12 @@ export default function AdminPreparationsList() {
                     headerShown: true,
                     headerTintColor: theme.primary,
                     headerShadowVisible: false,
-                    headerStatusBarHeight: 0,
                     headerTitleStyle: {
                         fontWeight: "900",
                         fontSize: 14,
                     },
-                    headerTitleContainerStyle: {
-                        margin: 0,
-                        padding: 0,
-                    },
                     headerStyle: {
                         backgroundColor: theme.surface,
-                        height:
-                            Platform.OS === "ios" ? 44 : 40,
                     },
                 }}
             />

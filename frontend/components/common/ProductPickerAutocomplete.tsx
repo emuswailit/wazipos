@@ -84,7 +84,7 @@ function tryExtractImage(raw: any): string | undefined {
     return undefined;
 }
 
-export function resolveImageUri(
+function resolveImageUri(
     source: any,
     key: string = 'thumbnail_url'
 ): string | undefined {
@@ -129,7 +129,7 @@ function safeValidateField(formik: any, field: string) {
 /* =========================================================
  * Types
  * ======================================================= */
-export interface ProductPickerAutocompleteProps {
+interface ProductPickerAutocompleteProps {
     name?: string;
     fieldMap?: {
         id?: string;

@@ -1,44 +1,23 @@
 // components/retailers/retailerIndents/RetailerIndentDetailsModal.tsx
 //
-// Details view for a retailer indent.
+// Indent details on the shared details sheet: parameters, budget, line items,
+// and the two actions — Edit indent and Submit orders.
 //
-// Shows indent parameters, line items, and budget progress. The user
-// can edit individual items (when the indent is open and server-backed)
-// or submit the whole indent as orders.
-//
-// Draft handling
-//   Drafts (remote_id starts with `local-`) are indent rows that have
-//   never been confirmed by the server. Two consequences:
-//     1. A "Draft" chip is shown in the header.
-//     2. Parameter edits and item edits are hidden, because the local
-//        `local-*` ids cannot be sent to the API. The user must submit
-//        the indent (which routes through the offline queue and creates
-//        the server-backed indent) before editing further.
-//
-// Offline submission
-//   `closeIndent` on the context enqueues an `INDENT_CLOSE` op when the
-//   network call fails. The drainer later creates the remote indent (if
-//   it was a draft), flushes any pending item ops, and closes the
-//   indent. The modal currently shows the raw server failure because
-//   `CloseIndentResult` does not yet distinguish "queued for retry"
-//   from "permanently rejected". A `queued?: boolean` flag on that
-//   result would let the modal show a softer "will sync when online"
-//   banner instead.
+// Drafts (ids `<user>:<entity>:<ts>`, not yet on the server) cannot be edited:
+// the draft id cannot be sent to the API. Submitting a draft routes through the
+// offline queue, which creates the indent on the server, flushes pending items
+// and closes it. `closeIndent` reports failure without distinguishing "queued
+// for retry" from "rejected", so the raw message is shown either way.
 
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
-} from 'react-native';
-
-import { useAuth } from '@/context/AuthContext';
+import { AdminAvatarTile, AdminBadgePill, AdminDetailsSheet, SheetButton, formatDate, textOr, useListTokens, useSheetIsWide, webPointer } from '@/components/common/listScreen';
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
-import type { RetailerIndent } from '@/databases/types';
+import type { RetailerIndent, RetailerIndentItem } from '@/databases/types';
+import { resolveImageUrl } from '@/lib/images';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+
+import { budgetPct, campaignTitleOf, formatKES, hasBudgetSet, indentBadges, indentTitle, isDraftIndent, toBool } from './indentsConfig';
 
 interface Props {
     visible: boolean;
@@ -54,61 +33,19 @@ interface Banner {
     detail?: string;
 }
 
-/**
- * How long the success banner stays up before the modal closes.
- * Long enough to read `response_message`, short enough not to
- * feel like a hang.
- */
+/** How long the success banner stays up before the sheet closes. */
 const SUCCESS_BANNER_MS = 1200;
 
-/* =========================================================
- * Helpers
- * ======================================================= */
-
-const isDraftIndent = (i: RetailerIndent | null): boolean =>
-    !!i &&
-    typeof i.remote_id === 'string' &&
-    i.remote_id.startsWith('local-');
-
-/* =========================================================
- * Component
- * ======================================================= */
-
-export function RetailerIndentDetailsModal({
-    visible,
-    indent,
-    onClose,
-    onOpenEditItem,
-    onUpdateIndent,
-}: Props) {
-    const { theme, isDarkMode } = useAuth();
-    const { closeIndent, pendingIndentOpCount } =
-        useRetailerIndentsSync();
+export function RetailerIndentDetailsModal({ visible, indent, onClose, onOpenEditItem, onUpdateIndent }: Props) {
+    const wide = useSheetIsWide();
+    const { closeIndent, pendingIndentOpCount } = useRetailerIndentsSync();
 
     const [closing, setClosing] = useState(false);
     const [confirmSubmit, setConfirmSubmit] = useState(false);
     const [banner, setBanner] = useState<Banner | null>(null);
 
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
+    const items = useMemo(() => indent?.retailer_indent_items ?? [], [indent]);
 
-    const items = useMemo(
-        () => indent?.retailer_indent_items ?? [],
-        [indent],
-    );
-
-    const isOpen =
-        String(indent?.is_open ?? '').toLowerCase() === 'true';
-    const isDraft = isDraftIndent(indent);
-
-    const budget = Number(indent?.budget_amount ?? 0) || 0;
-    const totalCost = Number(indent?.total_cost ?? 0) || 0;
-    const budgetPct =
-        budget > 0
-            ? Math.min(100, (totalCost / budget) * 100)
-            : 0;
-
-    /* ---------------- Reset on open ---------------- */
     useEffect(() => {
         if (!visible) return;
         setClosing(false);
@@ -116,884 +53,254 @@ export function RetailerIndentDetailsModal({
         setBanner(null);
     }, [visible, indent?.remote_id]);
 
-    if (!indent) return null;
+    if (!indent) {
+        return <AdminDetailsSheet visible={false} onClose={onClose} heading="" icon="document-text-outline" title="" sections={[]} />;
+    }
 
+    const isOpen = toBool(indent.is_open);
+    const isDraft = isDraftIndent(indent);
     const busy = closing;
-
-    /* =========================================================
-     * SUBMIT ORDERS
-     * ======================================================= */
-
-    const handleSubmitPress = () => {
-        if (busy) return;
-        setBanner(null);
-        setConfirmSubmit(true);
-    };
-
-    const cancelSubmit = () => {
-        setConfirmSubmit(false);
-    };
+    const canEdit = isOpen && !isDraft && !busy;
+    const pct = budgetPct(indent);
+    const campaign = campaignTitleOf(indent);
 
     const performSubmit = async () => {
         setConfirmSubmit(false);
         setBanner(null);
         setClosing(true);
-
         try {
-            const result = await closeIndent({
-                indentId: indent.remote_id,
-            });
-
-            const errorsText =
-                result.errors && result.errors.length > 0
-                    ? result.errors.join('\n')
-                    : undefined;
-
+            const result = await closeIndent({ indentId: indent.remote_id });
+            const errorsText = result.errors && result.errors.length > 0 ? result.errors.join('\n') : undefined;
             if (!result.ok) {
-                setBanner({
-                    kind: 'error',
-                    title:
-                        result.message ??
-                        'Indent was not closed.',
-                    detail: errorsText,
-                });
+                setBanner({ kind: 'error', title: result.message ?? 'Indent was not closed.', detail: errorsText });
                 return;
             }
-
-            setBanner({
-                kind: 'success',
-                title:
-                    result.message ??
-                    'Retailer indent closed successfully',
-                detail: errorsText,
-            });
-
-            setTimeout(() => {
-                onClose();
-            }, SUCCESS_BANNER_MS);
+            setBanner({ kind: 'success', title: result.message ?? 'Indent submitted as orders.', detail: errorsText });
+            setTimeout(onClose, SUCCESS_BANNER_MS);
         } catch (e: any) {
             setBanner({
                 kind: 'error',
-                title:
-                    e?.response?.data?.response_message ??
-                    e?.response?.data?.message ??
-                    e?.message ??
-                    'Could not submit the indent.',
-                detail: Array.isArray(
-                    e?.response?.data?.errors,
-                )
-                    ? e.response.data.errors.join('\n')
-                    : undefined,
+                title: e?.response?.data?.response_message ?? e?.response?.data?.message ?? e?.message ?? 'Could not submit the indent.',
+                detail: Array.isArray(e?.response?.data?.errors) ? e.response.data.errors.join('\n') : undefined,
             });
         } finally {
             setClosing(false);
         }
     };
 
-    /* =========================================================
-     * Render
-     * ======================================================= */
+    const notices = (
+        <>
+            {banner ? <Notice tone={banner.kind === 'error' ? 'danger' : 'success'} title={banner.title} detail={banner.detail} /> : null}
+            {isDraft ? (
+                <Notice
+                    tone="warning"
+                    title="Draft: not on the server yet"
+                    detail={
+                        pendingIndentOpCount > 0
+                            ? `${pendingIndentOpCount} change${pendingIndentOpCount === 1 ? '' : 's'} will upload when you submit. Editing is available once it's on the server.`
+                            : "Editing is available once it's on the server."
+                    }
+                />
+            ) : null}
+            {confirmSubmit ? (
+                <ConfirmSubmit
+                    isDraft={isDraft}
+                    itemCount={items.length}
+                    onCancel={() => setConfirmSubmit(false)}
+                    onConfirm={performSubmit}
+                />
+            ) : null}
+        </>
+    );
 
     return (
-        <Modal
+        <AdminDetailsSheet
             visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={
-                busy
-                    ? undefined
-                    : confirmSubmit
-                        ? cancelSubmit
-                        : onClose
-            }
-        >
-            <View className="flex-1 bg-black/40 items-center justify-center p-3">
-                <View
-                    className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
-                    style={{ backgroundColor: theme.panel }}
-                >
-                    {/* ============ Header ============ */}
-                    <View
-                        className="px-5 pt-4 pb-3 border-b"
-                        style={{ borderBottomColor: borderColor }}
-                    >
-                        <View className="flex-row items-start justify-between">
-                            <View className="flex-1 min-w-0">
-                                <View className="flex-row items-center flex-wrap gap-2">
-                                    <Text
-                                        style={{
-                                            color: theme.text,
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.lg,
-                                        }}
-                                        numberOfLines={1}
-                                    >
-                                        {indent.entity_title ||
-                                            'Unknown retailer'}
-                                    </Text>
-                                    {isDraft ? (
-                                        <View
-                                            className="px-2 py-0.5 rounded-full"
-                                            style={{
-                                                backgroundColor:
-                                                    'rgba(245,158,11,0.15)',
-                                            }}
-                                        >
-                                            <Text
-                                                className="uppercase tracking-widest"
-                                                style={{
-                                                    color: '#f59e0b',
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 9,
-                                                }}
-                                            >
-                                                Draft
-                                            </Text>
-                                        </View>
-                                    ) : null}
-                                </View>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    {isOpen ? 'Open' : 'Closed'} ·{' '}
-                                    {items.length}{' '}
-                                    {items.length === 1
-                                        ? 'item'
-                                        : 'items'}
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={
-                                    busy ? undefined : onClose
-                                }
-                                disabled={busy}
-                                hitSlop={12}
-                                className="w-8 h-8 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor:
-                                        theme.background,
-                                    opacity: busy ? 0.4 : 1,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    ✕
-                                </Text>
-                            </Pressable>
-                        </View>
-
-                        {/* Params row */}
-                        <View className="flex-row items-center flex-wrap gap-3 mt-3">
-                            <Param
-                                label="Lead time"
-                                value={`${indent.lead_time ?? 0}d`}
-                            />
-                            <Param
-                                label="Order days"
-                                value={`${indent.order_days ?? 0}d`}
-                            />
-                            <Param
-                                label="Pricing %"
-                                value={`${indent.pricing_percentage ?? '0.00'}%`}
-                            />
-                            <Param
-                                label="Avg lead"
-                                value={`${indent.average_lead_time_days ?? '0.00'}d`}
-                            />
-                            <Param
-                                label="Budget"
-                                value={
-                                    budget > 0
-                                        ? budget.toLocaleString()
-                                        : 'Not set'
-                                }
-                            />
-                            <Param
-                                label="Enforced"
-                                value={
-                                    String(
-                                        indent.budget_enforced,
-                                    ).toLowerCase() === 'true'
-                                        ? 'Yes'
-                                        : 'No'
-                                }
-                            />
-                        </View>
-
-                        {/* Pending-ops note */}
-                        {pendingIndentOpCount > 0 && isDraft ? (
-                            <View
-                                className="mt-3 flex-row items-center px-2.5 py-1.5 rounded-lg"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(245,158,11,0.12)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        'rgba(245,158,11,0.35)',
-                                }}
-                            >
-                                <View
-                                    style={{
-                                        width: 6,
-                                        height: 6,
-                                        borderRadius: 3,
-                                        backgroundColor:
-                                            '#f59e0b',
-                                        marginRight: 6,
-                                    }}
-                                />
-                                <Text
-                                    style={{
-                                        color: '#b45309',
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    {pendingIndentOpCount} change
-                                    {pendingIndentOpCount === 1
-                                        ? ''
-                                        : 's'}{' '}
-                                    will be submitted to the
-                                    server on close.
-                                </Text>
-                            </View>
-                        ) : null}
-                    </View>
-
-                    {/* ============ Body ============ */}
-                    <ScrollView
-                        className="flex-1"
-                        contentContainerStyle={{ padding: 16 }}
-                    >
-                        {/* -------- Result banner -------- */}
-                        {banner ? (
-                            <View
-                                className="rounded-xl px-3 py-3 mb-3"
-                                style={{
-                                    backgroundColor:
-                                        banner.kind === 'error'
-                                            ? 'rgba(239,68,68,0.12)'
-                                            : 'rgba(16,185,129,0.12)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        banner.kind === 'error'
-                                            ? 'rgba(239,68,68,0.35)'
-                                            : 'rgba(16,185,129,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color:
-                                            banner.kind === 'error'
-                                                ? '#b91c1c'
-                                                : '#047857',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    {banner.kind === 'error'
-                                        ? '❌ '
-                                        : '✅ '}
-                                    {banner.title}
-                                </Text>
-                                {banner.detail ? (
-                                    <Text
-                                        className="mt-1"
-                                        style={{
-                                            color:
-                                                banner.kind ===
-                                                    'error'
-                                                    ? '#b91c1c'
-                                                    : '#047857',
-                                            fontFamily:
-                                                theme.font.regular,
-                                            fontSize:
-                                                theme.fontSize.xs,
-                                            opacity: 0.9,
-                                        }}
-                                    >
-                                        {banner.detail}
-                                    </Text>
-                                ) : null}
-                            </View>
-                        ) : null}
-
-                        {/* -------- Confirm-submit strip -------- */}
-                        {confirmSubmit ? (
-                            <View
-                                className="rounded-xl px-3 py-3 mb-3"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(220,38,38,0.08)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        'rgba(220,38,38,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#b91c1c',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    Submit this indent as orders?
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: '#b91c1c',
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        opacity: 0.9,
-                                    }}
-                                >
-                                    {isDraft
-                                        ? 'The indent will be created on the server, all pending items submitted, and the indent closed. This may take a moment if you are offline.'
-                                        : 'Every item will be committed to its wholesaler and the indent will close. You cannot edit it afterward.'}
-                                </Text>
-                                <View className="flex-row gap-2 mt-3">
-                                    <Pressable
-                                        onPress={cancelSubmit}
-                                        disabled={busy}
-                                        className="px-3 py-1.5 rounded-lg border"
-                                        style={{
-                                            borderColor:
-                                                'rgba(220,38,38,0.35)',
-                                            opacity: busy
-                                                ? 0.5
-                                                : 1,
-                                        }}
-                                    >
-                                        <Text
-                                            className="uppercase tracking-wide"
-                                            style={{
-                                                color: '#b91c1c',
-                                                fontFamily:
-                                                    theme.font
-                                                        .bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            Cancel
-                                        </Text>
-                                    </Pressable>
-                                    <Pressable
-                                        onPress={performSubmit}
-                                        disabled={busy}
-                                        className="px-3 py-1.5 rounded-lg"
-                                        style={{
-                                            backgroundColor:
-                                                '#DC2626',
-                                            opacity: busy
-                                                ? 0.5
-                                                : 1,
-                                        }}
-                                    >
-                                        <Text
-                                            className="uppercase tracking-wide text-white"
-                                            style={{
-                                                fontFamily:
-                                                    theme.font
-                                                        .bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            Yes, submit
-                                        </Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        ) : null}
-
-                        <Text
-                            className="uppercase tracking-widest mb-3"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                                fontSize: 10,
-                            }}
-                        >
-                            Indent items ({items.length})
-                        </Text>
-
-                        {items.length === 0 ? (
-                            <View className="items-center py-8">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    No items on this indent.
-                                </Text>
-                            </View>
-                        ) : (
-                            items.map((item, idx) => (
-                                <ItemRow
-                                    key={item.id ?? String(idx)}
-                                    item={item}
-                                    borderColor={borderColor}
-                                    subBg={subBg}
-                                    theme={theme}
-                                    onEdit={
-                                        // Editing a draft item is not
-                                        // possible — the local-* id
-                                        // cannot be sent to the API.
-                                        isOpen &&
-                                            !busy &&
-                                            !isDraft &&
-                                            onOpenEditItem
-                                            ? () =>
-                                                onOpenEditItem(
-                                                    item.id,
-                                                )
-                                            : undefined
-                                    }
-                                />
-                            ))
-                        )}
-
-                        {/* Budget progress */}
-                        {budget > 0 ? (
-                            <View className="mt-4">
-                                <View className="flex-row items-center justify-between mb-1">
-                                    <Text
-                                        className="uppercase tracking-widest"
-                                        style={{
-                                            color: theme.textDark,
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 9,
-                                        }}
-                                    >
-                                        Budget used
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            color: theme.text,
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.xs,
-                                        }}
-                                    >
-                                        KES{' '}
-                                        {totalCost.toLocaleString()}{' '}
-                                        / {budget.toLocaleString()}
-                                    </Text>
-                                </View>
-                                <View
-                                    className="rounded-full overflow-hidden"
-                                    style={{
-                                        height: 6,
-                                        backgroundColor: subBg,
-                                    }}
-                                >
-                                    <View
-                                        style={{
-                                            width: `${budgetPct}%`,
-                                            height: '100%',
-                                            backgroundColor:
-                                                budgetPct >= 100
-                                                    ? '#DC2626'
-                                                    : theme.primary,
-                                        }}
-                                    />
-                                </View>
-                                <Text
-                                    className="mt-1"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize: 10,
-                                        textAlign: 'right',
-                                    }}
-                                >
-                                    {budgetPct.toFixed(0)}%
-                                </Text>
-                            </View>
-                        ) : null}
-                    </ScrollView>
-
-                    {/* ============ Footer ============ */}
-                    <View
-                        className="px-5 py-3 border-t"
-                        style={{ borderTopColor: borderColor }}
-                    >
-                        <View className="flex-row items-center justify-end gap-2 flex-wrap">
-                            <Pressable
-                                onPress={onClose}
-                                disabled={busy}
-                                className="px-4 py-2 rounded-lg border"
-                                style={{
-                                    borderColor,
-                                    opacity: busy ? 0.5 : 1,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: 13,
-                                    }}
-                                >
-                                    Dismiss
-                                </Text>
-                            </Pressable>
-
-                            {isOpen ? (
-                                <Pressable
-                                    onPress={handleSubmitPress}
-                                    disabled={
-                                        busy || confirmSubmit
-                                    }
-                                    className="px-4 py-2 rounded-lg border flex-row items-center gap-2"
-                                    style={{
-                                        borderColor: '#DC2626',
-                                        opacity:
-                                            busy || confirmSubmit
-                                                ? 0.5
-                                                : 1,
-                                        minHeight: 40,
-                                    }}
-                                >
-                                    {closing ? (
-                                        <>
-                                            <ActivityIndicator
-                                                size="small"
-                                                color="#DC2626"
-                                            />
-                                            <Text
-                                                className="uppercase tracking-wide"
-                                                style={{
-                                                    color: '#DC2626',
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 13,
-                                                }}
-                                            >
-                                                Submitting…
-                                            </Text>
-                                        </>
-                                    ) : (
-                                        <Text
-                                            className="uppercase tracking-wide"
-                                            style={{
-                                                color: '#DC2626',
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            Submit Orders
-                                        </Text>
-                                    )}
-                                </Pressable>
-                            ) : null}
-
-                            {/* Editing parameters is only meaningful
-                                for server-backed indents. On drafts we
-                                hide it — the local-* id cannot reach
-                                the API. */}
-                            {isOpen &&
-                                !isDraft &&
-                                onUpdateIndent ? (
-                                <Pressable
-                                    onPress={onUpdateIndent}
-                                    disabled={busy}
-                                    className="px-4 py-2 rounded-lg"
-                                    style={{
-                                        backgroundColor:
-                                            theme.primary,
-                                        opacity: busy ? 0.5 : 1,
-                                    }}
-                                >
-                                    <Text
-                                        className="uppercase tracking-wide text-white"
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 13,
-                                        }}
-                                    >
-                                        Update Indent
-                                    </Text>
-                                </Pressable>
-                            ) : null}
-                        </View>
-                    </View>
-                </View>
-
-                {/* ============ Blocking overlay ============ */}
-                {busy ? (
-                    <View
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: 'rgba(0,0,0,0.45)',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 999,
+            onClose={busy ? () => { } : onClose}
+            heading="Indent"
+            icon="document-text-outline"
+            title={indentTitle(indent)}
+            subtitle={[textOr(indent.entity_title, ''), campaign].filter(Boolean).join(' · ') || null}
+            avatar={{ icon: 'document-text-outline', color: isOpen ? '#10b981' : '#64748b' }}
+            badges={indentBadges(indent)}
+            stats={[
+                { label: 'Total cost', value: formatKES(indent.total_cost) },
+                { label: 'Profit', value: formatKES(indent.total_profit), color: Number(indent.total_profit) > 0 ? '#10b981' : undefined },
+                { label: 'Items', value: items.length.toLocaleString() },
+            ]}
+            sections={[
+                ...(banner || isDraft || confirmSubmit ? [{ title: 'Status', icon: 'information-circle-outline' as const, children: notices }] : []),
+                {
+                    title: 'Parameters',
+                    icon: 'options-outline',
+                    fields: [
+                        { label: 'Lead time', value: `${indent.lead_time ?? 0} days` },
+                        { label: 'Order days', value: `${indent.order_days ?? 0} days` },
+                        { label: 'Average lead', value: `${indent.average_lead_time_days ?? '0'} days` },
+                        { label: 'Pricing', value: `${indent.pricing_percentage ?? '0'}%` },
+                        { label: 'Created', value: formatDate(indent.created) },
+                        { label: 'Campaign', value: campaign },
+                    ],
+                },
+                {
+                    title: 'Budget',
+                    icon: 'wallet-outline',
+                    children: <BudgetBlock indent={indent} pct={pct} />,
+                },
+                {
+                    title: `Items (${items.length})`,
+                    icon: 'cube-outline',
+                    children: (
+                        <ItemList
+                            items={items}
+                            onEdit={canEdit && onOpenEditItem ? (item) => onOpenEditItem(item.remote_id ?? item.draft_id ?? String(item.id ?? '')) : undefined}
+                        />
+                    ),
+                },
+            ]}
+            onEdit={canEdit && onUpdateIndent ? onUpdateIndent : undefined}
+            editLabel="Edit indent"
+            actions={
+                isOpen ? (
+                    <SheetButton
+                        label="Submit orders"
+                        icon="paper-plane-outline"
+                        variant="danger"
+                        onPress={() => {
+                            setBanner(null);
+                            setConfirmSubmit(true);
                         }}
-                    >
-                        <View
-                            className="rounded-2xl px-6 py-5 items-center"
-                            style={{
-                                backgroundColor: theme.panel,
-                                minWidth: 220,
-                            }}
-                        >
-                            <ActivityIndicator
-                                size="large"
-                                color={theme.primary}
-                            />
-                            <Text
-                                className="mt-3"
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                    textAlign: 'center',
-                                }}
-                            >
-                                Submitting indent…
-                            </Text>
-                            <Text
-                                className="mt-1"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.regular,
-                                    fontSize: theme.fontSize.xs,
-                                    textAlign: 'center',
-                                }}
-                            >
-                                {isDraft
-                                    ? 'Creating indent and orders'
-                                    : 'Creating orders with wholesalers'}
-                            </Text>
-                        </View>
-                    </View>
+                        loading={closing}
+                        loadingLabel="Submitting…"
+                        disabled={busy || confirmSubmit || items.length === 0}
+                        grow={!wide}
+                    />
+                ) : null
+            }
+        />
+    );
+}
+
+/* ------------------------------------------------------------------ */
+
+const TONES = {
+    danger: { fg: '#e11d48', bg: 'rgba(244,63,94,0.08)', icon: 'alert-circle' as const },
+    success: { fg: '#059669', bg: 'rgba(16,185,129,0.10)', icon: 'checkmark-circle' as const },
+    warning: { fg: '#b45309', bg: 'rgba(245,158,11,0.10)', icon: 'cloud-upload-outline' as const },
+};
+
+function Notice({ tone, title, detail }: { tone: keyof typeof TONES; title: string; detail?: string }) {
+    const { theme } = useListTokens();
+    const t = TONES[tone];
+    return (
+        <View style={{ flexDirection: 'row', gap: 10, borderRadius: 16, padding: 12, backgroundColor: t.bg }}>
+            <Ionicons name={t.icon} size={18} color={t.fg} style={{ marginTop: 1 }} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ color: t.fg, fontFamily: theme.font.bold, fontSize: 13 }}>{title}</Text>
+                {detail ? <Text style={{ color: t.fg, fontFamily: theme.font.medium, fontSize: 12, marginTop: 2, opacity: 0.9 }}>{detail}</Text> : null}
+            </View>
+        </View>
+    );
+}
+
+function ConfirmSubmit({ isDraft, itemCount, onCancel, onConfirm }: { isDraft: boolean; itemCount: number; onCancel: () => void; onConfirm: () => void }) {
+    const { theme } = useListTokens();
+    return (
+        <View style={{ borderRadius: 16, padding: 14, gap: 10, backgroundColor: 'rgba(244,63,94,0.08)', marginTop: 8 }}>
+            <Text style={{ color: '#be123c', fontFamily: theme.font.bold, fontSize: 14 }}>Submit {itemCount.toLocaleString()} item{itemCount === 1 ? '' : 's'} as orders?</Text>
+            <Text style={{ color: '#be123c', fontFamily: theme.font.medium, fontSize: 12.5 }}>
+                {isDraft
+                    ? 'The indent will be created on the server, its items uploaded, and the indent closed. This can take a moment when you are offline.'
+                    : 'Each item becomes an order with its wholesaler and the indent closes. You cannot edit it afterwards.'}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+                <SheetButton label="Cancel" variant="secondary" onPress={onCancel} grow />
+                <SheetButton label="Yes, submit" variant="danger" icon="paper-plane-outline" onPress={onConfirm} grow />
+            </View>
+        </View>
+    );
+}
+
+function BudgetBlock({ indent, pct }: { indent: RetailerIndent; pct: number | null }) {
+    const { theme, chipBg, divider } = useListTokens();
+    if (!hasBudgetSet(indent)) {
+        return <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>No budget set for this indent.</Text>;
+    }
+    const used = Math.min(100, Math.max(0, pct ?? 0));
+    const over = (pct ?? 0) >= 100;
+    const enforced = toBool(indent.budget_enforced);
+    return (
+        <View style={{ borderRadius: 16, padding: 14, gap: 8, backgroundColor: chipBg }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>
+                    {formatKES(indent.total_cost)} <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>of {formatKES(indent.budget_amount)}</Text>
+                </Text>
+                <Text style={{ color: over ? '#f43f5e' : theme.primary, fontFamily: theme.font.bold, fontSize: 14 }}>{(pct ?? 0).toFixed(0)}%</Text>
+            </View>
+            <View style={{ height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: divider }}>
+                <View style={{ width: `${used}%`, height: '100%', borderRadius: 4, backgroundColor: over ? '#f43f5e' : theme.primary }} />
+            </View>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                {enforced ? 'Enforced: items over budget are blocked.' : 'Not enforced: you are warned when over budget.'}
+            </Text>
+        </View>
+    );
+}
+
+function ItemList({ items, onEdit }: { items: RetailerIndentItem[]; onEdit?: (item: RetailerIndentItem) => void }) {
+    const { theme } = useListTokens();
+    if (items.length === 0) {
+        return <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>No items on this indent.</Text>;
+    }
+    return (
+        <View style={{ gap: 8 }}>
+            {items.map((item, idx) => (
+                <ItemRow key={item.remote_id ?? item.draft_id ?? String(item.id ?? idx)} item={item} onEdit={onEdit ? () => onEdit(item) : undefined} />
+            ))}
+        </View>
+    );
+}
+
+function ItemRow({ item, onEdit }: { item: RetailerIndentItem; onEdit?: () => void }) {
+    const { theme, chipBg } = useListTokens();
+    const it: any = item;
+    const title = item.wholesale_receipt_title || it.product_title || 'Untitled product';
+    const thumb = resolveImageUrl(it.images?.[0]);
+    const price = it.final_unit_price ?? it.cost_per_unit;
+    const pending = !item.remote_id && !!item.draft_id;
+    const qty = Number(item.required_quantity ?? 0);
+    const bonus = Number(item.bonus_quantity_earned ?? 0);
+    const meta = [textOr(item.wholesaler_title, ''), price !== undefined && price !== null ? `${formatKES(price)} each` : '', textOr(item.source_label, '')].filter(Boolean).join(' · ');
+
+    const body = (
+        <>
+            <AdminAvatarTile avatar={{ uri: thumb, icon: 'cube-outline' }} title={title} size={44} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text numberOfLines={2} style={{ flexShrink: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>
+                        {title}
+                    </Text>
+                    {pending ? <AdminBadgePill badge={{ label: 'Pending', tone: 'warning' }} /> : null}
+                </View>
+                {meta ? (
+                    <Text numberOfLines={1} style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 2 }}>
+                        {meta}
+                    </Text>
                 ) : null}
             </View>
-        </Modal>
-    );
-}
-
-/* =========================================================
- * Sub-components
- * ======================================================= */
-
-function Param({
-    label,
-    value,
-}: {
-    label: string;
-    value: string;
-}) {
-    const { theme } = useAuth();
-    return (
-        <View>
-            <Text
-                className="uppercase tracking-widest"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.bold,
-                    fontSize: 9,
-                }}
-            >
-                {label}
-            </Text>
-            <Text
-                className="mt-0.5"
-                style={{
-                    color: theme.text,
-                    fontFamily: theme.font.bold,
-                    fontSize: 12,
-                }}
-            >
-                {value}
-            </Text>
-        </View>
-    );
-}
-
-function ItemRow({
-    item,
-    borderColor,
-    subBg,
-    theme,
-    onEdit,
-}: {
-    item: any;
-    borderColor: string;
-    subBg: string;
-    theme: any;
-    onEdit?: () => void;
-}) {
-    const thumb =
-        item.images?.[0]?.thumbnail ||
-        item.images?.[0]?.image ||
-        null;
-    const price =
-        item.final_unit_price ?? item.cost_per_unit ?? '—';
-    const sourceLabel =
-        item.source_label || item.source || '';
-    const isDraftItem =
-        typeof item.id === 'string' &&
-        item.id.startsWith('local-');
-
-    return (
-        <View
-            className="rounded-xl border p-3 mb-2 flex-row items-center"
-            style={{ borderColor }}
-        >
-            {thumb ? (
-                <Image
-                    source={{ uri: thumb }}
-                    style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 8,
-                        marginRight: 12,
-                    }}
-                />
-            ) : (
-                <View
-                    style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 8,
-                        marginRight: 12,
-                        backgroundColor: subBg,
-                    }}
-                />
-            )}
-
-            <View className="flex-1 min-w-0">
-                <View className="flex-row items-center flex-wrap gap-2">
-                    <Text
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                            fontSize: theme.fontSize.sm,
-                        }}
-                        numberOfLines={2}
-                    >
-                        {item.wholesale_receipt_title ||
-                            item.product_title ||
-                            'Untitled product'}
-                    </Text>
-                    {isDraftItem ? (
-                        <View
-                            className="px-1.5 py-0.5 rounded-full"
-                            style={{
-                                backgroundColor:
-                                    'rgba(245,158,11,0.15)',
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color: '#f59e0b',
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 9,
-                                }}
-                            >
-                                Pending
-                            </Text>
-                        </View>
-                    ) : null}
-                </View>
-                <View className="flex-row items-center flex-wrap gap-2 mt-1">
-                    <Text
-                        className="uppercase tracking-wide"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: 10,
-                        }}
-                    >
-                        QTY {item.required_quantity ?? 0}
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wide"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: 10,
-                        }}
-                    >
-                        KES {price}
-                    </Text>
-                    {sourceLabel ? (
-                        <Text
-                            className="uppercase tracking-wide"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: 10,
-                                opacity: 0.7,
-                            }}
-                        >
-                            {sourceLabel}
-                        </Text>
-                    ) : null}
-                </View>
+            <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>×{qty.toLocaleString()}</Text>
+                {bonus > 0 ? <Text style={{ color: '#10b981', fontFamily: theme.font.bold, fontSize: 11.5 }}>+{bonus.toLocaleString()} free</Text> : null}
             </View>
+            {onEdit ? <Ionicons name="create-outline" size={18} color={theme.primary} /> : null}
+        </>
+    );
 
-            {onEdit ? (
-                <Pressable
-                    onPress={onEdit}
-                    className="px-3 py-1.5 rounded-lg border ml-2"
-                    style={{ borderColor }}
-                >
-                    <Text
-                        className="uppercase tracking-wide"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                            fontSize: 10,
-                        }}
-                    >
-                        Edit
-                    </Text>
-                </Pressable>
-            ) : null}
-        </View>
+    const rowStyle = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, borderRadius: 16, padding: 12, backgroundColor: chipBg };
+    if (!onEdit) return <View style={rowStyle}>{body}</View>;
+    return (
+        <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${title}`} style={({ pressed }) => ({ ...rowStyle, opacity: pressed ? 0.8 : 1, ...webPointer })}>
+            {body}
+        </Pressable>
     );
 }

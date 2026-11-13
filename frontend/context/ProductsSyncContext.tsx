@@ -26,6 +26,10 @@ interface ProductsContextType {
     productsList: ProductItem[];
     isProductsSyncing: boolean;
     isProductsRefreshing: boolean;
+    /** True while the live products socket is open. */
+    isLiveConnected: boolean;
+    /** Local time of the last successful sync, e.g. "14:05" (empty if never). */
+    lastSyncedTime: string;
     triggerProductsFetch: () => Promise<void>;
     forceProductsRefresh: () => Promise<void>;
 }
@@ -34,7 +38,6 @@ const ProductsSyncContext = createContext<
     ProductsContextType | undefined
 >(undefined);
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
 const EXPO_PRODUCTS_LAST_SYNC_KEY = 'products_last_sync_time';
 const isWeb = Platform.OS === 'web';
 
@@ -49,9 +52,6 @@ const IMAGE_BASE_URL = 'https://api.wazipos.co.ke';
  * done with this investigation.
  * ------------------------------------------------------- */
 
-const log = (...args: any[]) => {
-    if (__DEV__) console.log('[ProductsSync]', ...args);
-};
 const warn = (...args: any[]) => {
     if (__DEV__) console.warn('[ProductsSync]', ...args);
 };
@@ -378,6 +378,68 @@ function logRawResponse(res: any, label: string) {
 }
 
 /* ---------------------------------------------------------
+ * Live sync
+ *
+ * The server pushes a COMPLETE snapshot of this user's products over
+ * ws/products/all/: on connect, every 30 minutes, and on {"action":"refresh"}.
+ * A snapshot is authoritative — the local catalogue becomes exactly that list
+ * (anything not in it is deleted). HTTP GetAllProducts is the fallback while
+ * the socket is down; a complete HTTP response is applied the same way, a
+ * partial one (more pages) is only merged so nothing gets wrongly deleted.
+ * ------------------------------------------------------- */
+
+const WS_PRODUCTS_URL = 'wss://api.wazipos.co.ke/ws/products/all/';
+const FALLBACK_INTERVAL_MS = 30 * 60 * 1000;
+const RECONNECT_MIN_MS = 3_000;
+const RECONNECT_MAX_MS = 60_000;
+const REFRESH_TIMEOUT_MS = 20_000;
+/** Close codes from the backend TokenAuthMiddleware: no / invalid / expired token. */
+const AUTH_CLOSE_CODES = new Set([4001, 4002, 4003]);
+
+type SyncSource = 'socket' | 'http';
+
+async function readLocalProducts(): Promise<ProductItem[]> {
+    if (isWeb && dbInstance?.products) return dbInstance.products.toArray();
+    if (db?.getProducts) return db.getProducts();
+    return [];
+}
+
+async function writeLocalProducts(list: ProductItem[]): Promise<void> {
+    if (isWeb && dbInstance?.products) {
+        await dbInstance.transaction('rw', dbInstance.products, async () => {
+            await dbInstance.products.clear();
+            if (list.length > 0) await dbInstance.products.bulkPut(list);
+        });
+    } else if (db?.saveProducts) {
+        await db.saveProducts(list);
+    }
+}
+
+async function writeLastSync(ms: number): Promise<void> {
+    try {
+        if (isWeb) localStorage.setItem(EXPO_PRODUCTS_LAST_SYNC_KEY, String(ms));
+        else await SecureStore.setItemAsync(EXPO_PRODUCTS_LAST_SYNC_KEY, String(ms));
+    } catch {
+        /* non-fatal */
+    }
+}
+
+async function readLastSync(): Promise<number | null> {
+    try {
+        const raw = isWeb ? localStorage.getItem(EXPO_PRODUCTS_LAST_SYNC_KEY) : await SecureStore.getItemAsync(EXPO_PRODUCTS_LAST_SYNC_KEY);
+        const n = Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+        return null;
+    }
+}
+
+function formatSyncTime(ms: number | null): string {
+    if (!ms) return '';
+    return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ---------------------------------------------------------
  * Provider
  * ------------------------------------------------------- */
 
@@ -387,333 +449,303 @@ export const ProductsSyncProvider: React.FC<{
     const { token } = useAuth();
     const { isOnline } = useNetworkStatus();
 
-    const [productsList, setProductsList] = useState<
-        ProductItem[]
-    >([]);
-    const [isProductsRefreshing, setIsProductsRefreshing] =
-        useState(false);
+    const [productsList, setProductsList] = useState<ProductItem[]>([]);
+    const [isProductsRefreshing, setIsProductsRefreshing] = useState(false);
+    const [isLiveConnected, setIsLiveConnected] = useState(false);
+    const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
     const getProductsApi = useApi(productsApi.productsAction);
 
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const tokenRef = useRef(token);
     const isOnlineRef = useRef(isOnline);
     const inFlightRef = useRef(false);
-    const bootstrapCountRef = useRef(0);
+    const writeChainRef = useRef<Promise<void>>(Promise.resolve());
 
+    const wsRef = useRef<WebSocket | null>(null);
+    const wsGenerationRef = useRef(0);
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reconnectDelayRef = useRef(RECONNECT_MIN_MS);
+    const authBlockedRef = useRef(false);
+    const fallbackTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        tokenRef.current = token;
+    }, [token]);
     useEffect(() => {
         isOnlineRef.current = isOnline;
     }, [isOnline]);
 
-    const persistProducts = useCallback(
-        async (incoming: ProductItem[]) => {
-            try {
-                let existing: ProductItem[] = [];
-                if (isWeb && dbInstance?.products) {
-                    existing = await dbInstance.products.toArray();
-                } else if (db?.getProducts) {
-                    existing = await db.getProducts();
-                }
+    /** Run local-DB writes one at a time, in arrival order. */
+    const enqueueWrite = useCallback((job: () => Promise<void>) => {
+        const next = writeChainRef.current.then(job, job);
+        writeChainRef.current = next.catch(() => undefined);
+        return next;
+    }, []);
 
-                const byRemoteId = new Map<string, ProductItem>();
-                const orphans: ProductItem[] = [];
+    const markSynced = useCallback(async () => {
+        const now = Date.now();
+        setLastSyncedAt(now);
+        await writeLastSync(now);
+    }, []);
 
-                for (const row of existing) {
-                    const key = row.remote_id;
-                    if (!key) {
-                        orphans.push(row);
-                        continue;
+    /* ---------------- Authoritative replace ---------------- */
+    const replaceProducts = useCallback(
+        (incoming: ProductItem[], source: SyncSource) =>
+            enqueueWrite(async () => {
+                const existing = await readLocalProducts();
+                const localByRemote = new Map<string, ProductItem>();
+                for (const row of existing) if (row.remote_id && !localByRemote.has(row.remote_id)) localByRemote.set(row.remote_id, row);
+
+                const seen = new Set<string>();
+                const next: ProductItem[] = [];
+                let kept = 0;
+                let added = 0;
+                for (const inc of incoming) {
+                    if (!inc.remote_id || seen.has(inc.remote_id)) continue;
+                    seen.add(inc.remote_id);
+                    const local = localByRemote.get(inc.remote_id);
+                    if (local) {
+                        kept += 1;
+                        // Keep the local row key so Dexie rows stay stable across syncs.
+                        next.push(local.id !== undefined ? { ...mergeProduct(local, inc), id: local.id } : mergeProduct(local, inc));
+                    } else {
+                        added += 1;
+                        next.push(inc);
                     }
-
-                    const kept = byRemoteId.get(key);
-                    if (!kept) {
-                        byRemoteId.set(key, row);
-                    } else if (
-                        kept.id === undefined &&
-                        row.id !== undefined
-                    ) {
-                        byRemoteId.set(key, row);
-                    }
                 }
+                const removed = existing.length - kept;
 
-                let matched = 0;
-                let updated = 0;
-                let inserted = 0;
+                await writeLocalProducts(next);
+                setProductsList(next);
+                await markSynced();
+                always(`Replaced from ${source} — ${next.length} products (kept ${kept}, added ${added}, removed ${removed})`);
+            }),
+        [enqueueWrite, markSynced]
+    );
 
+    /* ---------------- Merge (partial HTTP pages only) ---------------- */
+    const mergeProducts = useCallback(
+        (incoming: ProductItem[]) =>
+            enqueueWrite(async () => {
+                const existing = await readLocalProducts();
+                const byRemote = new Map<string, ProductItem>();
+                for (const row of existing) if (row.remote_id) byRemote.set(row.remote_id, row);
                 for (const inc of incoming) {
                     if (!inc.remote_id) continue;
-                    const local = byRemoteId.get(inc.remote_id);
-
-                    if (local) {
-                        matched += 1;
-                        const merged = mergeProduct(local, inc);
-                        if (merged !== local) updated += 1;
-                        byRemoteId.set(inc.remote_id, merged);
-                    } else {
-                        byRemoteId.set(inc.remote_id, inc);
-                        inserted += 1;
-                    }
+                    const local = byRemote.get(inc.remote_id);
+                    byRemote.set(inc.remote_id, local ? mergeProduct(local, inc) : inc);
                 }
-
-                const mergedList: ProductItem[] = [
-                    ...byRemoteId.values(),
-                    ...orphans,
-                ];
-
-                if (isWeb && dbInstance?.products) {
-                    await dbInstance.transaction(
-                        'rw',
-                        dbInstance.products,
-                        async () => {
-                            await dbInstance.products.clear();
-                            if (mergedList.length > 0) {
-                                await dbInstance.products.bulkPut(
-                                    mergedList
-                                );
-                            }
-                        }
-                    );
-                } else if (db?.saveProducts) {
-                    await db.saveProducts(mergedList);
-                }
-
-                setProductsList((prev) => {
-                    if (prev.length === mergedList.length) {
-                        const same = prev.every(
-                            (p, idx) => p === mergedList[idx]
-                        );
-                        if (same) return prev;
-                    }
-                    return mergedList;
-                });
-
-                const nowStr = String(Date.now());
-                if (isWeb) {
-                    localStorage.setItem(
-                        EXPO_PRODUCTS_LAST_SYNC_KEY,
-                        nowStr
-                    );
-                } else {
-                    await SecureStore.setItemAsync(
-                        EXPO_PRODUCTS_LAST_SYNC_KEY,
-                        nowStr
-                    );
-                }
-
-                always(
-                    `Persisted — total ${mergedList.length}, ` +
-                    `matched ${matched}, updated ${updated}, ` +
-                    `inserted ${inserted}, ` +
-                    `local-only ${orphans.length}, ` +
-                    `incoming ${incoming.length}`
-                );
-            } catch (e) {
-                always('Persist failed:', e);
-            }
-        },
-        []
+                const next = [...byRemote.values()];
+                await writeLocalProducts(next);
+                setProductsList(next);
+                await markSynced();
+                always(`Merged partial HTTP page — ${incoming.length} incoming, ${next.length} total`);
+            }),
+        [enqueueWrite, markSynced]
     );
 
-    const runRemoteProductsSynchronizer = useCallback(
-        async () => {
-            always('Fetch starting…');
-
-            if (!token) {
-                always('No token yet — skipping');
+    /* ---------------- HTTP fallback ---------------- */
+    const runRemoteProductsSynchronizer = useCallback(async () => {
+        if (!tokenRef.current || !isOnlineRef.current || inFlightRef.current) return;
+        inFlightRef.current = true;
+        try {
+            const res = await getProductsApi.request({ action: 'GetAllProducts' });
+            logRawResponse(res, 'HTTP response');
+            if (!res?.ok) {
+                always('HTTP fetch failed:', res?.problem, res?.status);
                 return;
             }
-            if (!isOnlineRef.current) {
-                always('Offline — skipping');
-                return;
-            }
-            if (inFlightRef.current) {
-                always('Fetch already in flight — skipping');
-                return;
-            }
+            const body: any = res.data;
+            const normalized = resolveProductArray(body).map(normalizeProduct);
+            // Paginated responses say whether more pages exist; only a complete list may delete.
+            const complete = Array.isArray(body) || (body && typeof body === 'object' && !body.next);
+            if (complete) await replaceProducts(normalized, 'http');
+            else await mergeProducts(normalized);
+        } catch (e) {
+            always('HTTP fetch threw:', e);
+        } finally {
+            inFlightRef.current = false;
+        }
+    }, [getProductsApi, replaceProducts, mergeProducts]);
 
-            inFlightRef.current = true;
-            const startedAt = Date.now();
+    /* ---------------- WebSocket ---------------- */
+    const clearRefreshWait = useCallback(() => {
+        if (refreshTimeoutRef.current) {
+            clearTimeout(refreshTimeoutRef.current);
+            refreshTimeoutRef.current = null;
+        }
+        setIsProductsRefreshing(false);
+    }, []);
 
+    const closeSocket = useCallback(() => {
+        wsGenerationRef.current += 1; // invalidates handlers of the old socket
+        if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+        }
+        const ws = wsRef.current;
+        wsRef.current = null;
+        if (ws) {
+            ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
             try {
-                always('→ POST GetAllProducts');
-
-                const res = await getProductsApi.request({
-                    action: 'GetAllProducts',
-                });
-
-                logRawResponse(res, 'Raw response');
-
-                if (!res?.ok) {
-                    always(
-                        'Fetch failed:',
-                        res?.problem ||
-                        res?.status ||
-                        'unknown error'
-                    );
-                    return;
-                }
-
-                const list = resolveProductArray(res?.data);
-                always(`Resolved ${list.length} raw items`);
-
-                if (list.length === 0) {
-                    always(
-                        'Fetch returned 0 products — skipping persist'
-                    );
-                    return;
-                }
-
-                const normalized: ProductItem[] = list.map(
-                    normalizeProduct
-                );
-
-                const missingRemote = normalized.filter(
-                    (p) => !p.remote_id
-                ).length;
-                if (missingRemote > 0) {
-                    always(
-                        `${missingRemote}/${normalized.length} normalized products have no remote_id`
-                    );
-                }
-
-                always(`Normalized ${normalized.length} products`);
-                always(
-                    'Sample normalized:',
-                    normalized[0]
-                        ? {
-                            remote_id: normalized[0].remote_id,
-                            title: normalized[0].title,
-                            bar_code: normalized[0].bar_code,
-                            images: normalized[0].images.length,
-                            category_title:
-                                normalized[0].category_title,
-                        }
-                        : null
-                );
-
-                await persistProducts(normalized);
-
-                always(
-                    `Fetch complete in ${Date.now() - startedAt}ms`
-                );
-            } catch (e) {
-                always('Request threw:', e);
-            } finally {
-                inFlightRef.current = false;
+                ws.close();
+            } catch {
+                /* already closed */
             }
-        },
-        [token, getProductsApi, persistProducts]
-    );
+        }
+        setIsLiveConnected(false);
+    }, []);
 
+    const connectSocket = useCallback(() => {
+        closeSocket();
+        const currentToken = tokenRef.current;
+        if (!currentToken || !isOnlineRef.current || authBlockedRef.current) return;
+
+        const generation = ++wsGenerationRef.current;
+        let ws: WebSocket;
+        try {
+            ws = new WebSocket(`${WS_PRODUCTS_URL}?token=${encodeURIComponent(currentToken)}`);
+        } catch (e) {
+            warn('WebSocket constructor threw', e);
+            return;
+        }
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+            if (generation !== wsGenerationRef.current) return;
+            reconnectDelayRef.current = RECONNECT_MIN_MS;
+            setIsLiveConnected(true);
+            always('Live sync connected — waiting for snapshot');
+        };
+
+        ws.onmessage = async (event) => {
+            if (generation !== wsGenerationRef.current) return;
+            let msg: any;
+            try {
+                msg = JSON.parse(String(event.data));
+            } catch {
+                warn('Ignoring non-JSON socket message');
+                return;
+            }
+            if (msg?.type === 'products.snapshot' || (Array.isArray(msg?.products) && msg?.type === undefined)) {
+                const products = Array.isArray(msg.products) ? msg.products : [];
+                always(`Snapshot (${msg.reason ?? 'push'}) — ${products.length} products`);
+                try {
+                    await replaceProducts(products.map(normalizeProduct), 'socket');
+                } finally {
+                    clearRefreshWait();
+                }
+            } else if (msg?.type === 'products.error') {
+                warn('Server could not build a snapshot:', msg.message);
+                clearRefreshWait();
+            }
+        };
+
+        ws.onclose = (event) => {
+            if (generation !== wsGenerationRef.current) return;
+            wsRef.current = null;
+            setIsLiveConnected(false);
+            if (AUTH_CLOSE_CODES.has(event?.code)) {
+                // Don't hammer the server with a bad token; a new token reconnects.
+                authBlockedRef.current = true;
+                always(`Live sync rejected (code ${event.code}) — waiting for a new token`);
+                return;
+            }
+            if (!tokenRef.current || !isOnlineRef.current) return;
+            const delay = reconnectDelayRef.current;
+            reconnectDelayRef.current = Math.min(RECONNECT_MAX_MS, delay * 2);
+            reconnectTimerRef.current = setTimeout(() => connectRef.current(), delay);
+        };
+
+        ws.onerror = () => {
+            /* onclose follows and handles reconnecting */
+        };
+    }, [closeSocket, replaceProducts, clearRefreshWait]);
+
+    const connectRef = useRef(connectSocket);
+    useEffect(() => {
+        connectRef.current = connectSocket;
+    }, [connectSocket]);
+
+    /* ---------------- Manual refresh ---------------- */
     const forceProductsRefresh = useCallback(async () => {
-        always('Manual refresh triggered');
         setIsProductsRefreshing(true);
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ action: 'refresh' }));
+            // If no snapshot arrives in time, fall back to HTTP.
+            if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+            refreshTimeoutRef.current = setTimeout(async () => {
+                refreshTimeoutRef.current = null;
+                await runRemoteProductsSynchronizer();
+                setIsProductsRefreshing(false);
+            }, REFRESH_TIMEOUT_MS);
+            return;
+        }
         try {
             await runRemoteProductsSynchronizer();
-        } catch (e) {
-            always('Force refresh failed:', e);
         } finally {
             setIsProductsRefreshing(false);
         }
+        if (!wsRef.current) connectRef.current();
     }, [runRemoteProductsSynchronizer]);
 
-    const actionsRef = useRef({
-        runRemoteProductsSynchronizer,
-    });
-
-    useEffect(() => {
-        actionsRef.current = {
-            runRemoteProductsSynchronizer,
-        };
-    });
-
-    /* ---------------------------------------------------------
-     * Bootstrap — load cache, then fetch, then hourly.
-     *
-     * Fires on mount AND whenever `token` changes. Logs a
-     * bootstrap counter so you can see it re-firing on reload.
-     * ------------------------------------------------------- */
+    /* ---------------- Bootstrap: cache first, then live ---------------- */
     useEffect(() => {
         let cancelled = false;
-        bootstrapCountRef.current += 1;
-        const bootstrapId = bootstrapCountRef.current;
+        authBlockedRef.current = false;
+        reconnectDelayRef.current = RECONNECT_MIN_MS;
 
-        const initSync = async () => {
-            always(
-                `Bootstrap #${bootstrapId} starting… (token=${token ? 'present' : 'missing'
-                }, online=${isOnlineRef.current})`
-            );
-
-            /* 1. Load cache */
+        (async () => {
             try {
-                let cached: ProductItem[] = [];
-
-                if (isWeb && dbInstance?.products) {
-                    cached = await dbInstance.products.toArray();
-                } else if (db?.getProducts) {
-                    cached = await db.getProducts();
-                }
-
-                if (!cancelled && cached?.length) {
-                    setProductsList(cached);
-                    always(
-                        `Bootstrap #${bootstrapId}: loaded ${cached.length} cached products`
-                    );
-                } else {
-                    always(
-                        `Bootstrap #${bootstrapId}: no cached products`
-                    );
-                }
+                const [cached, last] = await Promise.all([readLocalProducts(), readLastSync()]);
+                if (cancelled) return;
+                if (cached?.length) setProductsList(cached);
+                setLastSyncedAt(last);
+                always(`Loaded ${cached?.length ?? 0} cached products`);
             } catch (e) {
-                always(
-                    `Bootstrap #${bootstrapId}: load cache failed`,
-                    e
-                );
+                always('Loading cached products failed', e);
             }
+            if (cancelled || !token) return;
+            connectRef.current();
+        })();
 
-            if (cancelled) return;
-
-            /* 2. Fetch immediately */
-            always(
-                `Bootstrap #${bootstrapId}: firing remote fetch`
-            );
-            await actionsRef.current.runRemoteProductsSynchronizer();
-
-            if (cancelled) return;
-
-            /* 3. Hourly refresh */
-            if (intervalRef.current)
-                clearInterval(intervalRef.current);
-            intervalRef.current = setInterval(() => {
-                always('Hourly refresh tick');
-                actionsRef.current.runRemoteProductsSynchronizer();
-            }, ONE_HOUR_MS);
-
-            always(
-                `Bootstrap #${bootstrapId} complete — hourly refresh armed`
-            );
-        };
-
-        initSync();
+        // HTTP safety net: only fetch when the socket isn't delivering.
+        if (fallbackTimerRef.current) clearInterval(fallbackTimerRef.current);
+        fallbackTimerRef.current = setInterval(() => {
+            const open = wsRef.current?.readyState === WebSocket.OPEN;
+            if (!open) {
+                always('Socket down at sync interval — using HTTP');
+                void runRemoteProductsSynchronizer();
+                if (!wsRef.current) connectRef.current();
+            }
+        }, FALLBACK_INTERVAL_MS);
 
         return () => {
             cancelled = true;
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
+            if (fallbackTimerRef.current) {
+                clearInterval(fallbackTimerRef.current);
+                fallbackTimerRef.current = null;
             }
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+                refreshTimeoutRef.current = null;
+            }
+            closeSocket();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
-    /* ---------------------------------------------------------
-     * Online / offline transition
-     * ------------------------------------------------------- */
+    /* ---------------- Offline / online ---------------- */
     useEffect(() => {
         if (!token) return;
-
         if (isOnline) {
-            always('Back online — refetching');
-            actionsRef.current.runRemoteProductsSynchronizer();
+            // Reconnecting delivers a fresh snapshot; HTTP covers servers without the socket.
+            reconnectDelayRef.current = RECONNECT_MIN_MS;
+            if (!wsRef.current) connectRef.current();
+        } else {
+            closeSocket();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOnline, token]);
@@ -723,33 +755,21 @@ export const ProductsSyncProvider: React.FC<{
             productsList,
             isProductsSyncing: getProductsApi.loading,
             isProductsRefreshing,
+            isLiveConnected,
+            lastSyncedTime: formatSyncTime(lastSyncedAt),
             triggerProductsFetch: runRemoteProductsSynchronizer,
             forceProductsRefresh,
         }),
-        [
-            productsList,
-            getProductsApi.loading,
-            isProductsRefreshing,
-            runRemoteProductsSynchronizer,
-            forceProductsRefresh,
-        ]
+        [productsList, getProductsApi.loading, isProductsRefreshing, isLiveConnected, lastSyncedAt, runRemoteProductsSynchronizer, forceProductsRefresh]
     );
 
-    return (
-        <ProductsSyncContext.Provider value={value}>
-            {children}
-        </ProductsSyncContext.Provider>
-    );
+    return <ProductsSyncContext.Provider value={value}>{children}</ProductsSyncContext.Provider>;
 };
 
 export const useProductsSync = () => {
     const context = useContext(ProductsSyncContext);
-
     if (!context) {
-        throw new Error(
-            'useProductsSync must be used within a ProductsSyncProvider'
-        );
+        throw new Error('useProductsSync must be used within a ProductsSyncProvider');
     }
-
     return context;
 };

@@ -1,16 +1,7 @@
 import { ApiResponse } from "apisauce";
 import client from "../client";
 
-export type UploadProgressCallback = (progressFraction: number) => void;
-
-export interface GenericPayload {
-  title: string;
-  description: string;
-  drug_class: string;
-  drug_sub_class: string;
-  id?: string;
-  [key: string]: any;
-}
+type UploadProgressCallback = (progressFraction: number) => void;
 
 const addGeneric = (
   data: any,

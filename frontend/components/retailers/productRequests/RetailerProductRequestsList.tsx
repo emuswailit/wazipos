@@ -51,22 +51,13 @@ import { ViewRequestDetailsModal } from './ViewRequestDetailsModal';
  * evaluation ("can't redefine non-configurable property").
  * ======================================================= */
 
-export type {
-    ProductRequest,
-    ProductRequestSummary
-} from '@/databases/types';
-
-export {
-    STATUS_FILTERS,
-    STATUS_OPTIONS
-} from './statusPrimitives';
+import { isServerOk } from '@/utils/serverResponse';
 
 /* =========================================================
  * Constants
  * ======================================================= */
 
-export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+import type { PageSize } from './types';
 
 /* =========================================================
  * Status routing
@@ -168,7 +159,7 @@ function summaryToProductRequest(
 interface Props {
     onCreatePress?: () => void;
     onRequestPress?: (req: ProductRequestSummary) => void;
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
 }
 
 /* =========================================================
@@ -416,13 +407,7 @@ export default function RetailerProductRequestsList({
                 );
             }
 
-
-
-            const ok =
-                res?.ok === true ||
-                String(
-                    (res as any)?.data?.response_code ?? ''
-                ) === '0';
+            const ok = isServerOk(res, (res as any)?.data);
 
             if (!ok) {
                 const msg =
@@ -500,9 +485,7 @@ export default function RetailerProductRequestsList({
                     );
 
                 const body = (res as any)?.data;
-                const ok =
-                    res?.ok === true ||
-                    String(body?.response_code ?? '') === '0';
+                const ok = isServerOk(res, (res as any)?.data);
 
                 if (__DEV__) {
                     console.log(
@@ -588,11 +571,7 @@ export default function RetailerProductRequestsList({
                     summary.remote_id ?? summary.draft_id,
             });
 
-        const ok =
-            res?.ok === true ||
-            String(
-                (res as any)?.data?.response_code ?? ''
-            ) === '0';
+        const ok = isServerOk(res, (res as any)?.data);
 
         if (!ok) {
             const msg =
@@ -644,6 +623,7 @@ export default function RetailerProductRequestsList({
         pendingRequestCount: 0,
         pendingOfferCount,
         items: paginated,
+        allItems: filtered,
         emptyComponent,
         onOpenCreate: openCreate,
         onPressRequest: openRequest,

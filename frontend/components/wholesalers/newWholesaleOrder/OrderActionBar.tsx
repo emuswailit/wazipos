@@ -20,7 +20,6 @@ export default function OrderActionBar({
 }: OrderActionBarProps) {
     const { isDarkMode } = useAuth();
 
-    const borderColor = isDarkMode ? '#334155' : '#cbd5e1';
     const cardBg = isDarkMode ? '#0f172a' : '#ffffff';
 
     return (

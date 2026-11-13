@@ -35,7 +35,8 @@ export const NetworkMonitorProvider: React.FC<{ children: React.ReactNode }> = (
             {children}
             {!isOnline && (
                 <View style={{ backgroundColor: '#f43f5e', zIndex: 99999 }} className="absolute bottom-0 left-0 right-0 py-2 items-center justify-center shadow-lg">
-                    <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: 12 }} className="text-white font-bold tracking-wider uppercase text-center">⚠️ Connection Interrupted. Operating in Offline Mode.</Text>
+                    <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: 12 }} className="text-white font-bold tracking-wider uppercase text-center">⚠️ You're offline. Data shown may have changed on the server.</Text>
+                    <Text style={{ fontFamily: theme?.font?.medium || 'System', fontSize: 11 }} className="text-white text-center mt-0.5">It will update automatically when you're back online.</Text>
                 </View>
             )}
         </NetworkMonitorContext.Provider>

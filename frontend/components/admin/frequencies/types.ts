@@ -28,7 +28,9 @@ export interface AdminFrequenciesSharedProps {
     sourceTone: "server" | "cache" | "none";
     lastSyncedTime: string;
     items: FrequencyItem[];
-    emptyComponent?: React.ReactNode;
+    /** Whole filtered list; the mobile view shows all of it. */
+    allItems?: FrequencyItem[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
     onPressItem: (item: FrequencyItem) => void;
     onEditItem: (item: FrequencyItem) => void;

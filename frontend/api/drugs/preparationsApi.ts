@@ -1,9 +1,9 @@
 import { ApiResponse } from "apisauce";
 import client from "../client";
 
-export type UploadProgressCallback = (progressFraction: number) => void;
+type UploadProgressCallback = (progressFraction: number) => void;
 
-export interface PreparationPayload {
+interface PreparationPayload {
   title: string;
   description: string;
   formulation_id: string;

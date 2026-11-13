@@ -1,18 +1,21 @@
 // components/retailers/customerOrders/InvoiceModal.tsx
+//
+// Customer order details + invoice on the shared details sheet (bottom sheet on
+// phones, centred card on wide screens). Used by both the web table and the
+// phone cards: totals, credit reminder, details, items, Print and Make payment.
 
-import RecordPaymentModal, {
-    CUSTOMER_PAYMENT_CONFIG,
-} from '@/components/common/RecordPaymentModal';
-import { useAuth } from '@/context/AuthContext';
-import { CustomerOrder } from '@/databases/types';
-
+import { AdminDetailsSheet, SheetButton, useListTokens, useSheetIsWide, webPointer } from '@/components/common/listScreen';
+import RecordPaymentModal, { CUSTOMER_ORDER_PAYMENT_CONFIG } from '@/components/common/RecordPaymentModal';
+import type { CustomerOrder } from '@/databases/types';
+import { printHtmlDocument } from '@/services/printHtml';
+import { isTrueFlag } from '@/utils/flags';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
+
+import { CreditReminderPanel, isUnpaidCredit, serverOrderId } from './CreditReminderPanel';
+import { formatDate, formatKES, orderAmount, orderItemCount, orderRef } from './CustomerOrdersWebView';
+import { buildCustomerOrderInvoiceHtml } from './invoiceHtml';
 
 interface InvoiceModalProps {
     order: CustomerOrder | null;
@@ -20,490 +23,214 @@ interface InvoiceModalProps {
     onRefresh?: () => void;
 }
 
-export const InvoiceModal: React.FC<InvoiceModalProps> = ({
-    order,
-    onClose,
-    onRefresh,
-}) => {
-    const { theme } = useAuth();
+const num = (v: any): number => {
+    const n = parseFloat(String(v ?? ''));
+    return isNaN(n) ? 0 : n;
+};
+
+const titleCase = (s?: string | null) => (s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ') : '');
+
+function cleanCustomerName(name?: string | null): string {
+    if (!name) return 'Walk-in customer';
+    return (
+        name
+            .replace(/\d+/g, '')
+            .trim()
+            .split(/\s+/)
+            .filter((w) => w.toUpperCase() !== 'TEST')
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(' ') || name
+    );
+}
+
+export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onRefresh }) => {
+    const wide = useSheetIsWide();
     const [isPayOpen, setIsPayOpen] = useState(false);
-    const [statusMessage, setStatusMessage] = useState<
-        string | null
-    >(null);
+    const [printing, setPrinting] = useState(false);
+    const [printError, setPrintError] = useState<string | null>(null);
 
-    // Auto-clear the status message after 4s.
+    const orderKey = order?.remote_id || order?.draft_id || '';
     useEffect(() => {
-        if (statusMessage) {
-            const timer = setTimeout(
-                () => setStatusMessage(null),
-                4000
-            );
-            return () => clearTimeout(timer);
+        setIsPayOpen(false);
+        setPrintError(null);
+    }, [orderKey]);
+
+    const customerName = useMemo(() => cleanCustomerName(order?.customer_name), [order?.customer_name]);
+
+    if (!order) {
+        return <AdminDetailsSheet visible={false} onClose={onClose} heading="" icon="receipt-outline" title="" sections={[]} />;
+    }
+
+    const o: any = order;
+    const paid = isTrueFlag(order.is_paid);
+    const amount = orderAmount(order);
+    const items: any[] = order.order_items ?? [];
+    const itemCount = orderItemCount(order);
+    const pendingUpload = String(o.synced).toUpperCase() === 'FALSE';
+    const isCredit = String(order.selected_payment_method_title || '').toUpperCase() === 'CREDIT';
+    // Unpaid credit orders show phone and due date in the CreditReminderPanel instead.
+    const showCreditPanel = isUnpaidCredit(order);
+    // Must be the server UUID: drafts have no items on the backend. WebSocket orders carry it in `id`.
+    const remoteOrderId = serverOrderId(order) || order.draft_id || '';
+
+    const handlePrint = async () => {
+        if (printing) return;
+        setPrinting(true);
+        setPrintError(null);
+        try {
+            const html = buildCustomerOrderInvoiceHtml(order, { customerName });
+            await printHtmlDocument(html, { title: `Invoice ${order.order_number || ''}`.trim() });
+        } catch (e: any) {
+            setPrintError(`Couldn't print the invoice: ${e?.message || 'unknown error'}`);
+        } finally {
+            setPrinting(false);
         }
-    }, [statusMessage]);
+    };
 
-    // Friendly client name — strip digits / TEST tokens and title-case.
-    const derivedClientName = useMemo(() => {
-        if (!order?.customer_name) return 'Walk-in Customer';
-        return (
-            order.customer_name
-                .replace(/\d+/g, '')
-                .trim()
-                .split(/\s+/)
-                .filter(
-                    (w) => w.toUpperCase() !== 'TEST'
-                )
-                .map(
-                    (w) =>
-                        w.charAt(0).toUpperCase() +
-                        w.slice(1).toLowerCase()
-                )
-                .join(' ') || order.customer_name
-        );
-    }, [order?.customer_name]);
-
-    // Amount — prefer normalized `total_amount`.
-    const formattedTotal = useMemo(() => {
-        const raw =
-            order?.total_amount ||
-            order?.order_price_total ||
-            order?.order_net_price_total ||
-            '0';
-        const val = parseFloat(String(raw));
-        return isNaN(val) ? '0.00' : val.toFixed(2);
-    }, [
-        order?.total_amount,
-        order?.order_price_total,
-        order?.order_net_price_total,
-    ]);
-
-    // Safe guard clause (all hooks above).
-    if (!order) return null;
-
-    const isPaid = order.is_paid === 'true';
-
-    // The server UUID is the identity the payment modal needs.
-    const remoteOrderId =
-        order.remote_id || order.draft_id || '';
+    const phone = order.customer_phone?.trim();
+    const fields = [
+        { label: 'Store', value: order.entity_title ?? '', icon: 'storefront-outline' as const },
+        ...(!showCreditPanel && phone ? [{ label: 'Phone', value: <PhoneLink phone={phone} />, icon: 'call-outline' as const }] : []),
+        { label: 'Payment method', value: order.selected_payment_method_title ?? '', icon: 'card-outline' as const },
+        { label: 'Paying number', value: o.payment_account_number ?? '', mono: true },
+        { label: 'Provider ref', value: order.provider_reference_number || o.psp_reference_number || '', mono: true },
+        { label: 'Delivery', value: o.delivery_method ?? '' },
+        { label: 'Created', value: formatDate(order.created) },
+        paid
+            ? { label: 'Paid on', value: o.paid_at ? formatDate(o.paid_at) : '' }
+            : showCreditPanel
+                ? null
+                : { label: isCredit ? 'Credit due' : 'Due date', value: o.due_date ? formatDate(o.due_date) : '' },
+    ].filter((f): f is NonNullable<typeof f> => !!f && (typeof f.value !== 'string' || (f.value.trim() !== '' && f.value !== '—')));
 
     return (
-        <View className="absolute inset-0 bg-black/50 justify-center items-center p-4 z-40">
-            <View
-                style={{
-                    backgroundColor: theme.panel,
-                    borderColor: theme.isDarkMode
-                        ? '#334155'
-                        : '#cbd5e1',
-                }}
-                className="w-full max-w-2xl rounded-2xl p-6 h-[80%] shadow-2xl border"
-            >
-                {/* Header */}
-                <View
-                    style={{
-                        borderBottomColor: theme.isDarkMode
-                            ? '#334155'
-                            : '#e2e8f0',
-                    }}
-                    className="flex-row justify-between items-center pb-3 mb-4 border-b flex-none"
-                >
-                    <View>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.lg,
-                                color: theme.text,
-                            }}
-                            className="uppercase font-bold"
-                        >
-                            Invoice Details
-                        </Text>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.mono,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.textDark,
-                            }}
-                            className="font-mono mt-0.5"
-                        >
-                            REF: {order.order_number}
-                        </Text>
-                    </View>
-                    <TouchableOpacity
-                        onPress={() => onClose()}
-                        className="p-1"
-                        accessibilityRole="button"
-                        accessibilityLabel="Close invoice"
-                    >
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.sm,
-                                color: theme.textDark,
-                            }}
-                            className="font-bold"
-                        >
-                            ✕
-                        </Text>
-                    </TouchableOpacity>
-                </View>
+        <>
+            <AdminDetailsSheet
+                visible={!isPayOpen}
+                onClose={onClose}
+                heading="Customer order"
+                icon="receipt-outline"
+                title={customerName}
+                subtitle={`${orderRef(order)} · ${itemCount} item${itemCount === 1 ? '' : 's'}`}
+                avatar={{ label: customerName }}
+                badges={[
+                    paid ? { label: 'Paid', tone: 'success', icon: 'checkmark-circle' } : { label: 'Unpaid', tone: 'danger', icon: 'alert-circle' },
+                    ...(order.status ? [{ label: titleCase(order.status), tone: 'info' as const }] : []),
+                    ...(pendingUpload ? [{ label: 'Waiting to upload', tone: 'warning' as const, icon: 'cloud-upload-outline' as const }] : []),
+                ]}
+                stats={[
+                    { label: 'Total', value: `KES ${formatKES(amount)}`, color: paid ? '#10b981' : '#f43f5e' },
+                    { label: 'Items', value: String(itemCount) },
+                    { label: 'Method', value: order.selected_payment_method_title || '—' },
+                ]}
+                sections={[
+                    ...(printError ? [{ title: 'Print', icon: 'print-outline' as const, children: <Notice text={printError} /> }] : []),
+                    ...(showCreditPanel
+                        ? [{ title: 'Credit', icon: 'time-outline' as const, children: <CreditReminderPanel key={orderKey} order={order} onChanged={onRefresh} /> }]
+                        : []),
+                    { title: 'Order', icon: 'document-text-outline', fields },
+                    { title: `Items (${items.length})`, icon: 'cube-outline', children: <LineItems items={items} /> },
+                    { title: 'Invoice', icon: 'receipt-outline', children: <Totals order={order} amount={amount} /> },
+                ]}
+                actions={
+                    <>
+                        <SheetButton label="Print" variant="secondary" icon="print-outline" onPress={handlePrint} loading={printing} loadingLabel="Preparing…" grow={!wide} />
+                        {!paid ? <SheetButton label="Make payment" icon="wallet-outline" onPress={() => setIsPayOpen(true)} grow={!wide} /> : null}
+                    </>
+                }
+            />
 
-                {statusMessage && (
-                    <View className="mb-4 bg-blue-50/10 border border-blue-500/30 rounded-xl p-3 flex-none">
-                        <Text
-                            style={{
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.primary,
-                            }}
-                            className="text-center"
-                        >
-                            {statusMessage}
-                        </Text>
-                    </View>
-                )}
-
-                {/* Scrollable summary */}
-                <ScrollView
-                    className="flex-1"
-                    showsVerticalScrollIndicator={false}
-                >
-                    <View
-                        style={{
-                            backgroundColor: theme.isDarkMode
-                                ? '#0f172a'
-                                : '#f8fafc',
-                        }}
-                        className="p-4 rounded-xl mb-5 flex-row flex-wrap justify-between gap-y-3"
-                    >
-                        <View className="w-1/2">
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                    color: theme.textDark,
-                                }}
-                            >
-                                Vendor Store
-                            </Text>
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                    color: theme.text,
-                                }}
-                            >
-                                {order.entity_title}
-                            </Text>
-                        </View>
-                        <View className="w-1/2">
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                    color: theme.textDark,
-                                }}
-                            >
-                                Client
-                            </Text>
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                    color: theme.text,
-                                }}
-                            >
-                                {derivedClientName}
-                            </Text>
-                        </View>
-                        <View
-                            style={{
-                                borderTopColor: theme.isDarkMode
-                                    ? '#334155'
-                                    : '#e2e8f0',
-                            }}
-                            className="w-1/2 border-t pt-2"
-                        >
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                    color: theme.textDark,
-                                }}
-                                className="mb-0.5"
-                            >
-                                Status
-                            </Text>
-                            <View className="flex-row">
-                                <View
-                                    className={`px-2 py-0.5 rounded ${isPaid
-                                            ? 'bg-emerald-500/10'
-                                            : 'bg-rose-500/10'
-                                        }`}
-                                >
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.xs,
-                                        }}
-                                        className={
-                                            isPaid
-                                                ? 'text-emerald-500'
-                                                : 'text-rose-500'
-                                        }
-                                    >
-                                        {isPaid
-                                            ? 'PAID'
-                                            : 'UNPAID'}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                        <View
-                            style={{
-                                borderTopColor: theme.isDarkMode
-                                    ? '#334155'
-                                    : '#e2e8f0',
-                            }}
-                            className="w-1/2 border-t pt-2"
-                        >
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                    color: theme.textDark,
-                                }}
-                            >
-                                Method
-                            </Text>
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                    color: theme.text,
-                                }}
-                                className="uppercase font-bold"
-                            >
-                                {order
-                                    .selected_payment_method_title ||
-                                    'N/A'}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Table header */}
-                    <View
-                        style={{
-                            backgroundColor: theme.isDarkMode
-                                ? '#1e293b'
-                                : '#e2e8f0',
-                        }}
-                        className="flex-row p-2 rounded-lg mb-2"
-                    >
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.text,
-                            }}
-                            className="w-6/12 font-bold pl-1"
-                        >
-                            Description
-                        </Text>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.text,
-                            }}
-                            className="w-2/12 font-bold text-center"
-                        >
-                            Qty
-                        </Text>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.text,
-                            }}
-                            className="w-4/12 font-bold text-right pr-2"
-                        >
-                            Total
-                        </Text>
-                    </View>
-
-                    {/* Line items */}
-                    {order.order_items?.map(
-                        (item: any, idx: number) => (
-                            <View
-                                key={item.id || String(idx)}
-                                style={{
-                                    borderBottomColor:
-                                        theme.isDarkMode
-                                            ? '#1e293b'
-                                            : '#f1f5f9',
-                                }}
-                                className="flex-row items-center py-3 border-b bg-white"
-                            >
-                                <Text
-                                    style={{
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        color: theme.text,
-                                    }}
-                                    className="w-6/12 px-1"
-                                    numberOfLines={2}
-                                >
-                                    {item.title ||
-                                        item
-                                            .receipt_details
-                                            ?.product_title ||
-                                        'Product'}
-                                </Text>
-                                <Text
-                                    style={{
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        color: theme.textDark,
-                                    }}
-                                    className="w-2/12 text-center"
-                                >
-                                    {item.purchased_quantity ||
-                                        1}
-                                </Text>
-                                <Text
-                                    style={{
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        color: theme.text,
-                                    }}
-                                    className="w-4/12 font-bold text-right pr-2"
-                                >
-                                    KES{' '}
-                                    {parseFloat(
-                                        item.item_price_total ||
-                                        '0'
-                                    ).toFixed(2)}
-                                </Text>
-                            </View>
-                        )
-                    )}
-
-                    {/* Aggregate total */}
-                    <View
-                        style={{
-                            borderTopColor: theme.isDarkMode
-                                ? '#334155'
-                                : '#e2e8f0',
-                        }}
-                        className="mt-6 pt-4 border-t items-end pr-2"
-                    >
-                        <Text
-                            style={{
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.textDark,
-                            }}
-                        >
-                            Total Due
-                        </Text>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.xl,
-                                color: theme.primary,
-                            }}
-                            className="font-black mt-0.5"
-                        >
-                            KES {formattedTotal}
-                        </Text>
-                    </View>
-                </ScrollView>
-
-                {/* Footer actions */}
-                <View
-                    style={{
-                        borderTopColor: theme.isDarkMode
-                            ? '#334155'
-                            : '#e2e8f0',
-                    }}
-                    className="flex-row justify-end gap-3 mt-4 pt-4 border-t flex-none"
-                >
-                    <TouchableOpacity
-                        style={{
-                            backgroundColor: theme.isDarkMode
-                                ? '#0f172a'
-                                : '#f8fafc',
-                            borderColor: theme.isDarkMode
-                                ? '#334155'
-                                : '#cbd5e1',
-                        }}
-                        className="py-2.5 px-5 rounded-xl border"
-                        onPress={() =>
-                            setStatusMessage(
-                                `🖨️ Printing receipt document flow for Order #${order.order_number}...`
-                            )
-                        }
-                        accessibilityRole="button"
-                        accessibilityLabel="Print PDF"
-                    >
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.textDark,
-                            }}
-                            className="font-bold uppercase"
-                        >
-                            Print PDF
-                        </Text>
-                    </TouchableOpacity>
-                    {!isPaid && (
-                        <TouchableOpacity
-                            style={{
-                                backgroundColor: theme.primary,
-                            }}
-                            className="py-2.5 px-5 rounded-xl shadow-md"
-                            onPress={() => setIsPayOpen(true)}
-                            accessibilityRole="button"
-                            accessibilityLabel="Make payment"
-                        >
-                            <Text
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                                className="text-white font-bold uppercase"
-                            >
-                                Make Payment
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-
-            {/* Payment overlay — customer config.
-                Cache mutation on success is handled by the parent
-                via onRefresh (which triggers a re-fetch), so no
-                storageService hook is needed here. */}
             <RecordPaymentModal
                 isOpen={isPayOpen}
                 orderId={remoteOrderId}
                 orderRef={order.order_number}
-                config={CUSTOMER_PAYMENT_CONFIG}
+                config={CUSTOMER_ORDER_PAYMENT_CONFIG}
                 onClose={() => {
                     setIsPayOpen(false);
                     onClose();
                 }}
                 onRefreshParentLedger={onRefresh}
             />
-        </View>
+        </>
     );
 };
+
+function PhoneLink({ phone }: { phone: string }) {
+    const { theme } = useListTokens();
+    return (
+        <Pressable
+            onPress={() => Linking.openURL(`tel:${phone}`).catch(() => { })}
+            accessibilityRole="link"
+            accessibilityLabel={`Call ${phone}`}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, ...webPointer }}
+        >
+            <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 14 }}>{phone}</Text>
+            <Ionicons name="call" size={13} color={theme.primary} />
+        </Pressable>
+    );
+}
+
+function Notice({ text }: { text: string }) {
+    const { theme } = useListTokens();
+    return (
+        <View style={{ borderRadius: 14, padding: 12, backgroundColor: 'rgba(244,63,94,0.08)' }}>
+            <Text style={{ color: '#e11d48', fontFamily: theme.font.medium, fontSize: 13 }}>{text}</Text>
+        </View>
+    );
+}
+
+function LineItems({ items }: { items: any[] }) {
+    const { theme, chipBg } = useListTokens();
+    if (items.length === 0) {
+        return <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>No item details available.</Text>;
+    }
+    return (
+        <View style={{ gap: 8 }}>
+            {items.map((it, i) => {
+                const qty = num(it.purchased_quantity) || 1;
+                const lineTotal = num(it.item_price_total) || num(it.final_unit_selling_price ?? it.unit_selling_price) * qty;
+                const unit = qty ? lineTotal / qty : 0;
+                return (
+                    <View key={it.id || String(i)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 12, backgroundColor: chipBg }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }} numberOfLines={2}>
+                                {it.title || it.receipt_details?.product_title || 'Product'}
+                            </Text>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 1 }}>
+                                {qty.toLocaleString()} × KES {formatKES(unit)}
+                            </Text>
+                        </View>
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>KES {formatKES(lineTotal)}</Text>
+                    </View>
+                );
+            })}
+        </View>
+    );
+}
+
+function Totals({ order, amount }: { order: CustomerOrder; amount: number }) {
+    const { theme, chipBg, divider } = useListTokens();
+    const o: any = order;
+    const discount = num(o.order_price_discount_total);
+    const shipping = num(o.shipping_cost);
+    return (
+        <View style={{ borderRadius: 16, padding: 14, gap: 6, backgroundColor: chipBg }}>
+            {discount > 0 ? <TotalRow label="Discount" value={`− KES ${formatKES(discount)}`} color="#10b981" /> : null}
+            {shipping > 0 ? <TotalRow label="Shipping" value={`KES ${formatKES(shipping)}`} /> : null}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: discount > 0 || shipping > 0 ? 8 : 0, borderTopWidth: discount > 0 || shipping > 0 ? 1 : 0, borderTopColor: divider }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>Total due</Text>
+                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 16 }}>KES {formatKES(amount)}</Text>
+            </View>
+        </View>
+    );
+}
+
+function TotalRow({ label, value, color }: { label: string; value: string; color?: string }) {
+    const { theme } = useListTokens();
+    return (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>{label}</Text>
+            <Text style={{ color: color ?? theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{value}</Text>
+        </View>
+    );
+}

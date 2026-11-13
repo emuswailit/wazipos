@@ -135,7 +135,7 @@ const campaignAction = (data: {
 }) => {
     LOG("campaignAction →", data);
 
-    return client.post(DISPATCHER_ENDPOINT, data).then((res) => {
+    return client.post<any>(DISPATCHER_ENDPOINT, data).then((res) => {
         LOG("campaignAction ←", {
             action: data.action,
             ok: res.ok,
@@ -205,58 +205,6 @@ const postUpdateCampaign = (id: UUID, formData: FormData) => {
 };
 
 /* =========================================================
- * FormData builders
- * ======================================================= */
-
-export function buildCreateForm(
-    fields: {
-        title: string;
-        description?: string;
-        start: string;
-        end: string;
-        budget_cap?: string;
-    },
-    banners?: File[]
-): FormData {
-    const fd = new FormData();
-    fd.append("title", fields.title);
-    if (fields.description !== undefined) {
-        fd.append("description", fields.description);
-    }
-    fd.append("start", fields.start);
-    fd.append("end", fields.end);
-    if (fields.budget_cap !== undefined) {
-        fd.append("budget_cap", fields.budget_cap);
-    }
-    for (const f of banners ?? []) {
-        fd.append("campaign_banners", f);
-    }
-    return fd;
-}
-
-export function buildUpdateForm(
-    fields: {
-        title?: string;
-        description?: string;
-        start?: string;
-        end?: string;
-        budget_cap?: string;
-    },
-    banners?: File[]
-): FormData {
-    const fd = new FormData();
-    if (fields.title !== undefined) fd.append("title", fields.title);
-    if (fields.description !== undefined) fd.append("description", fields.description);
-    if (fields.start !== undefined) fd.append("start", fields.start);
-    if (fields.end !== undefined) fd.append("end", fields.end);
-    if (fields.budget_cap !== undefined) fd.append("budget_cap", fields.budget_cap);
-    for (const f of banners ?? []) {
-        fd.append("campaign_banners", f);
-    }
-    return fd;
-}
-
-/* =========================================================
  * Named wrappers — one per server action
  * ======================================================= */
 
@@ -290,6 +238,23 @@ const getEntityCampaignsAction = (
 const getCampaignDetailsAction = (data: { campaign_id: UUID }) => {
     return campaignAction({
         action: "GetCampaignDetails",
+        ...data,
+    });
+};
+
+/**
+ * Quantity suggestion for a campaign item (backend GetCampaignItemSuggestion).
+ * Builder mode: pass the receipt + live audience before the item exists.
+ * Returns { suggested_quantity, audience_size, expected_total_volume, confidence, reason }.
+ */
+const getCampaignItemSuggestionAction = (data: {
+    campaign_id: UUID;
+    wholesaler_receipt_id?: UUID;
+    retailer_ids?: UUID[];
+    [key: string]: any;
+}) => {
+    return campaignAction({
+        action: "GetCampaignItemSuggestion",
         ...data,
     });
 };
@@ -474,6 +439,7 @@ export default {
     createCampaignAction,
     getEntityCampaignsAction,
     getCampaignDetailsAction,
+    getCampaignItemSuggestionAction,
     updateCampaignAction,
     deleteCampaignAction,
     publishCampaignAction,

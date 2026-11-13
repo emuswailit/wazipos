@@ -2,20 +2,20 @@ import { ApiResponse } from "apisauce";
 import client from "./client";
 import clientWithCache from "./clientWithCache";
 
-export interface PaymentMethodItem {
+interface PaymentMethodItem {
     id: string;
     title: string;
     description?: string;
 }
 
-export interface PaymentAccountItem {
+interface PaymentAccountItem {
     id: string;
     account_name: string;
     account_number: string;
     provider_name: string;
 }
 
-export interface PaymentsApiContract {
+interface PaymentsApiContract {
     getPaymentMethodsAction: (data?: Record<string, any>) => Promise<ApiResponse<PaymentMethodItem[]>>;
     getPaymentAccountsAction: (data?: Record<string, any>) => Promise<ApiResponse<PaymentAccountItem[]>>;
 }

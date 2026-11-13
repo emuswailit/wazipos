@@ -37,8 +37,6 @@ import {
     type PageSize,
 } from "./types";
 
-export type { FrequencyItem } from "./types";
-
 /* =========================================================
  * Alert helper
  * ======================================================= */
@@ -266,7 +264,7 @@ export default function AdminFrequenciesList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -360,9 +358,7 @@ export default function AdminFrequenciesList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminFrequenciesSharedProps = {
         query,
@@ -373,6 +369,7 @@ export default function AdminFrequenciesList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredFrequencies,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,
@@ -436,10 +433,6 @@ export default function AdminFrequenciesList() {
                 }
                 onSubmitTrigger={handleFormSubmit}
                 initialData={editingItem}
-                remoteErrors={
-                    addFrequencyApi.data?.errors ||
-                    updateFrequencyApi.data?.errors
-                }
             />
 
             <AdminFrequencyDetailsModal

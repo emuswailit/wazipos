@@ -7,12 +7,15 @@
 // wholesaler, where individual products are shown and can be added to
 // the current open retailer indent.
 //
-// This file also exports the shared utilities consumed by the two
-// platform views (Web + Mobile) and by the product card:
-//   - MarketplaceProduct — the view model rendered on each card
-//   - ProductCard — the reusable product tile
-//   - useWholesalerProducts — the receipt fetch + aggregate hook
-//   - resolveEntityId — the identifier resolver for the wholesaler rows
+// RESPONSIVE FILTER LAYOUT
+//   Large screens (≥ 768px):
+//     Filters render inline inside the toolbar — county picker, sub-county
+//     picker, town chips, and sort pills are all visible at once.
+//   Small screens (< 768px):
+//     The toolbar collapses to just search + a "Filters" button. All
+//     filters (county, sub-county, town, sort) move into a slide-up
+//     bottom sheet, which is dismissed by tapping the backdrop or
+//     pressing "Show N results".
 //
 // NESTED INTERACTIVES
 //   On react-native-web both Pressable and TouchableOpacity render as
@@ -23,6 +26,7 @@
 //     native → onStartShouldSetResponder + onResponderRelease
 
 import wholesalersApi from '@/api/wholesalersApi';
+import LocationFilterBar from '@/components/common/LocationFilterBar';
 import { useAuth } from '@/context/AuthContext';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import type { EntityItem } from '@/databases/types';
@@ -37,7 +41,9 @@ import {
     RefreshCw,
     Search,
     ShoppingCart,
+    SlidersHorizontal,
     Tag,
+    X,
 } from 'lucide-react-native';
 import React, {
     useCallback,
@@ -49,8 +55,10 @@ import {
     ActivityIndicator,
     FlatList,
     Image,
+    Modal,
     Platform,
     Pressable,
+    ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
@@ -332,11 +340,6 @@ export function useWholesalerProducts(
 
 /* ════════════════════════════════════════════════════════════
  *  Product card
- *
- *  The cart icon is a `View` (not a Pressable), because on web both
- *  Pressable and TouchableOpacity render as <button>, and nested
- *  <button> elements are invalid HTML. Web uses onClick, native uses
- *  responder props.
  * ════════════════════════════════════════════════════════════ */
 
 export const HOVER_SCALE = 1.3;
@@ -349,11 +352,6 @@ interface ProductCardProps {
     hoverScale?: number;
     onPress?: () => void;
     onAddPress?: () => void;
-    /**
-     * Quantity currently on the open indent, if any.
-     * 0 / undefined → not on indent → cart icon shows primary color.
-     * > 0 → on indent → cart icon shows green + a small badge.
-     */
     indentQuantity?: number;
 }
 
@@ -401,7 +399,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     : null,
             ]}
         >
-            {/* ── Cover + floating cart button ─────────── */}
             <View
                 style={{
                     aspectRatio: 1,
@@ -560,7 +557,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 )}
             </View>
 
-            {/* ── Details ──────────────────────────────── */}
             <View style={{ padding: 10 }}>
                 <Text
                     numberOfLines={1}
@@ -687,10 +683,12 @@ const ACCENTS = [
     '#fef9c3',
 ];
 const MAX_CONTENT_WIDTH = 720;
-const PAGE_SIZE = 15;
-const H_PADDING = 12;
-const THUMB = 84;
+const H_PADDING_DESKTOP = 12;
+const H_PADDING_MOBILE = 10;
+const THUMB_DESKTOP = 84;
+const THUMB_MOBILE = 64;
 const ALL = 'All';
+const LARGE_SCREEN_MIN_WIDTH = 768;
 
 function pickCover(entity: EntityItem): string | undefined {
     const logo = entity.logos?.[0];
@@ -717,6 +715,10 @@ function formatLocation(entity: EntityItem): string {
     return parts.length ? parts.join(', ') : 'Location not set';
 }
 
+/* ════════════════════════════════════════════════════════════
+ *  Chip row — town pills
+ * ════════════════════════════════════════════════════════════ */
+
 interface ChipRowProps {
     label: string;
     options: string[];
@@ -736,9 +738,7 @@ const ChipRow: React.FC<ChipRowProps> = ({
 }) => {
     if (options.length <= 1) return null;
     return (
-        <View
-            style={{ flexDirection: 'row', alignItems: 'center' }}
-        >
+        <View>
             <Text
                 style={{
                     fontFamily: theme.font.bold,
@@ -746,58 +746,143 @@ const ChipRow: React.FC<ChipRowProps> = ({
                     letterSpacing: 0.6,
                     textTransform: 'uppercase',
                     color: theme.textDark,
-                    marginRight: 8,
+                    marginBottom: 6,
                 }}
             >
                 {label}
             </Text>
-            <View style={{ flex: 1 }}>
-                <FlatList
-                    horizontal
-                    data={options}
-                    keyExtractor={(c) => `${label}-${c}`}
-                    showsHorizontalScrollIndicator={false}
-                    ItemSeparatorComponent={() => (
-                        <View style={{ width: 6 }} />
-                    )}
-                    renderItem={({ item: c }) => {
-                        const active = value === c;
-                        return (
-                            <TouchableOpacity
-                                onPress={() => onChange(c)}
-                                activeOpacity={0.8}
-                                accessibilityRole="button"
+            <FlatList
+                horizontal
+                data={options}
+                keyExtractor={(c) => `${label}-${c}`}
+                showsHorizontalScrollIndicator={false}
+                ItemSeparatorComponent={() => (
+                    <View style={{ width: 6 }} />
+                )}
+                renderItem={({ item: c }) => {
+                    const active = value === c;
+                    return (
+                        <TouchableOpacity
+                            onPress={() => onChange(c)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            style={{
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                borderRadius: 999,
+                                borderWidth: 1,
+                                backgroundColor: active
+                                    ? theme.primary
+                                    : 'transparent',
+                                borderColor: active
+                                    ? theme.primary
+                                    : borderColor,
+                            }}
+                        >
+                            <Text
                                 style={{
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 5,
-                                    borderRadius: 999,
-                                    borderWidth: 1,
-                                    backgroundColor: active
-                                        ? theme.primary
-                                        : 'transparent',
-                                    borderColor: active
-                                        ? theme.primary
-                                        : borderColor,
+                                    fontFamily: active
+                                        ? theme.font.bold
+                                        : theme.font.medium,
+                                    fontSize: theme.fontSize.xs,
+                                    color: active
+                                        ? '#fff'
+                                        : theme.textDark,
                                 }}
                             >
-                                <Text
-                                    style={{
-                                        fontFamily: active
-                                            ? theme.font.bold
-                                            : theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        color: active
-                                            ? '#fff'
-                                            : theme.textDark,
-                                    }}
-                                >
-                                    {c}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    }}
+                                {c}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                }}
+            />
+        </View>
+    );
+};
+
+/* ════════════════════════════════════════════════════════════
+ *  Sort pills row
+ * ════════════════════════════════════════════════════════════ */
+
+interface SortRowProps {
+    value: SortKey;
+    onChange: (k: SortKey) => void;
+    theme: any;
+    subtleBg: string;
+}
+
+const SortRow: React.FC<SortRowProps> = ({
+    value,
+    onChange,
+    theme,
+    subtleBg,
+}) => {
+    return (
+        <View>
+            <View
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                }}
+            >
+                <ArrowUpDown
+                    size={12}
+                    color={theme.textDark}
+                    style={{ marginRight: 6 }}
                 />
+                <Text
+                    style={{
+                        fontFamily: theme.font.bold,
+                        fontSize: 10,
+                        letterSpacing: 0.6,
+                        textTransform: 'uppercase',
+                        color: theme.textDark,
+                    }}
+                >
+                    Sort
+                </Text>
+            </View>
+            <View
+                style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: 4,
+                }}
+            >
+                {SORTS.map((s) => {
+                    const active = value === s.key;
+                    return (
+                        <TouchableOpacity
+                            key={s.key}
+                            onPress={() => onChange(s.key)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            style={{
+                                paddingHorizontal: 10,
+                                paddingVertical: 5,
+                                borderRadius: 7,
+                                backgroundColor: active
+                                    ? subtleBg
+                                    : 'transparent',
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    fontFamily: active
+                                        ? theme.font.bold
+                                        : theme.font.regular,
+                                    fontSize: theme.fontSize.xs,
+                                    color: active
+                                        ? theme.primary
+                                        : theme.textDark,
+                                }}
+                            >
+                                {s.label}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
         </View>
     );
@@ -841,13 +926,20 @@ export default function MarketplaceListManager({
     ]);
 
     const [search, setSearch] = useState('');
-    const [county, setCounty] = useState<string>(ALL);
     const [town, setTown] = useState<string>(ALL);
     const [sort, setSort] = useState<SortKey>('relevance');
     const [isMounted, setIsMounted] = useState(false);
-    const [page, setPage] = useState(1);
     const [activeWholesaler, setActiveWholesaler] =
         useState<EntityItem | null>(null);
+
+    /* ── Location filter (county + sub-county, UUID-based) ── */
+    const [locationCountyId, setLocationCountyId] =
+        useState<string>('');
+    const [locationSubCountyId, setLocationSubCountyId] =
+        useState<string>('');
+
+    /* ── Mobile filters bottom sheet ──────────────────────── */
+    const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
 
     useEffect(() => {
         setIsMounted(true);
@@ -857,31 +949,23 @@ export default function MarketplaceListManager({
     );
 
     const width = isMounted ? windowWidth : 375;
+    const isLargeScreen = width >= LARGE_SCREEN_MIN_WIDTH;
     const contentWidth = Math.min(width, MAX_CONTENT_WIDTH);
+    const H_PADDING = isLargeScreen
+        ? H_PADDING_DESKTOP
+        : H_PADDING_MOBILE;
+    const THUMB = isLargeScreen ? THUMB_DESKTOP : THUMB_MOBILE;
+
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
     const subtleBg = isDarkMode ? '#0f172a' : '#f1f5f9';
 
-    /* ── Filter options ───────────────────────────────────── */
-
-    const countyOptions = useMemo(
-        () => [
-            ALL,
-            ...Array.from(
-                new Set(
-                    listings
-                        .map(countyOf)
-                        .filter(Boolean) as string[],
-                ),
-            ).sort((a, b) => a.localeCompare(b)),
-        ],
-        [listings],
-    );
-
+    /* ── Town options — narrowed by the county picker ─── */
     const townOptions = useMemo(() => {
-        const pool =
-            county === ALL
-                ? listings
-                : listings.filter((e) => countyOf(e) === county);
+        const pool = locationCountyId
+            ? listings.filter(
+                (e) => e.county === locationCountyId
+            )
+            : listings;
         return [
             ALL,
             ...Array.from(
@@ -892,15 +976,18 @@ export default function MarketplaceListManager({
                 ),
             ).sort((a, b) => a.localeCompare(b)),
         ];
-    }, [listings, county]);
+    }, [listings, locationCountyId]);
 
     useEffect(() => {
         if (town !== ALL && !townOptions.includes(town))
             setTown(ALL);
     }, [townOptions, town]);
 
+    /* ── Filter + sort ────────────────────────────────────── */
+
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
+
         const rows = listings.filter((e) => {
             const matchesQuery =
                 !q ||
@@ -909,10 +996,24 @@ export default function MarketplaceListManager({
                     } ${e.email ?? ''}`
                     .toLowerCase()
                     .includes(q);
-            const matchesCounty =
-                county === ALL || countyOf(e) === county;
-            const matchesTown = town === ALL || e.town === town;
-            return matchesQuery && matchesCounty && matchesTown;
+
+            const matchesLocationCounty =
+                !locationCountyId ||
+                e.county === locationCountyId;
+
+            const matchesLocationSubCounty =
+                !locationSubCountyId ||
+                e.sub_county === locationSubCountyId;
+
+            const matchesTownChip =
+                town === ALL || e.town === town;
+
+            return (
+                matchesQuery &&
+                matchesLocationCounty &&
+                matchesLocationSubCounty &&
+                matchesTownChip
+            );
         });
 
         switch (sort) {
@@ -933,23 +1034,24 @@ export default function MarketplaceListManager({
             default:
                 return rows;
         }
-    }, [listings, search, county, town, sort]);
-
-    useEffect(() => {
-        setPage(1);
-    }, [search, county, town, sort]);
-
-    const visible = useMemo(
-        () => filtered.slice(0, page * PAGE_SIZE),
-        [filtered, page],
-    );
-    const hasMore = visible.length < filtered.length;
+    }, [
+        listings,
+        search,
+        locationCountyId,
+        locationSubCountyId,
+        town,
+        sort,
+    ]);
 
     const activeFilters =
-        (county !== ALL ? 1 : 0) + (town !== ALL ? 1 : 0);
+        (locationCountyId ? 1 : 0) +
+        (locationSubCountyId ? 1 : 0) +
+        (town !== ALL ? 1 : 0);
+
     const clearFilters = () => {
-        setCounty(ALL);
         setTown(ALL);
+        setLocationCountyId('');
+        setLocationSubCountyId('');
     };
 
     const handleWholesalerPress = (item: EntityItem) => {
@@ -1020,10 +1122,10 @@ export default function MarketplaceListManager({
                     flexDirection: 'row',
                     alignItems: 'stretch',
                     backgroundColor: theme.panel,
-                    borderRadius: 14,
+                    borderRadius: isLargeScreen ? 14 : 12,
                     borderWidth: 1,
                     borderColor,
-                    marginBottom: 10,
+                    marginBottom: isLargeScreen ? 10 : 8,
                     overflow: 'hidden',
                     opacity: pressed ? 0.9 : 1,
                     ...webPointer,
@@ -1059,7 +1161,7 @@ export default function MarketplaceListManager({
                         />
                     ) : (
                         <Building2
-                            size={22}
+                            size={isLargeScreen ? 22 : 18}
                             color="rgba(15,23,42,0.35)"
                         />
                     )}
@@ -1069,15 +1171,18 @@ export default function MarketplaceListManager({
                                 position: 'absolute',
                                 top: 6,
                                 left: 6,
-                                width: 18,
-                                height: 18,
-                                borderRadius: 9,
+                                width: isLargeScreen ? 18 : 16,
+                                height: isLargeScreen ? 18 : 16,
+                                borderRadius: isLargeScreen ? 9 : 8,
                                 backgroundColor: '#16a34a',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                             }}
                         >
-                            <BadgeCheck size={10} color="#fff" />
+                            <BadgeCheck
+                                size={isLargeScreen ? 10 : 9}
+                                color="#fff"
+                            />
                         </View>
                     )}
                 </View>
@@ -1086,7 +1191,7 @@ export default function MarketplaceListManager({
                 <View
                     style={{
                         flex: 1,
-                        padding: 10,
+                        padding: isLargeScreen ? 10 : 8,
                         justifyContent: 'space-between',
                     }}
                 >
@@ -1095,11 +1200,11 @@ export default function MarketplaceListManager({
                             style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                marginBottom: 3,
+                                marginBottom: 2,
                             }}
                         >
                             <Tag
-                                size={10}
+                                size={isLargeScreen ? 10 : 9}
                                 color={
                                     isDarkMode
                                         ? '#93c5fd'
@@ -1111,8 +1216,8 @@ export default function MarketplaceListManager({
                                 style={{
                                     marginLeft: 4,
                                     fontFamily: theme.font.bold,
-                                    fontSize: 9,
-                                    letterSpacing: 0.6,
+                                    fontSize: isLargeScreen ? 9 : 8,
+                                    letterSpacing: 0.5,
                                     textTransform: 'uppercase',
                                     color: isDarkMode
                                         ? '#93c5fd'
@@ -1121,7 +1226,7 @@ export default function MarketplaceListManager({
                             >
                                 {item.entity_type}
                             </Text>
-                            {item.entity_code ? (
+                            {item.entity_code && isLargeScreen ? (
                                 <Text
                                     numberOfLines={1}
                                     style={{
@@ -1141,7 +1246,9 @@ export default function MarketplaceListManager({
                             numberOfLines={1}
                             style={{
                                 fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.base,
+                                fontSize: isLargeScreen
+                                    ? theme.fontSize.base
+                                    : theme.fontSize.sm,
                                 color: theme.text,
                             }}
                         >
@@ -1152,12 +1259,12 @@ export default function MarketplaceListManager({
                             style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                marginTop: 3,
+                                marginTop: 2,
                             }}
                         >
                             <View style={{ marginRight: 4 }}>
                                 <Package
-                                    size={11}
+                                    size={isLargeScreen ? 11 : 10}
                                     color={theme.textDark}
                                 />
                             </View>
@@ -1167,7 +1274,9 @@ export default function MarketplaceListManager({
                                     flex: 1,
                                     fontFamily:
                                         theme.font.regular,
-                                    fontSize: theme.fontSize.xs,
+                                    fontSize: isLargeScreen
+                                        ? theme.fontSize.xs
+                                        : 10,
                                     color: theme.textDark,
                                 }}
                             >
@@ -1180,12 +1289,14 @@ export default function MarketplaceListManager({
                                 style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
-                                    marginTop: 2,
+                                    marginTop: 1,
                                 }}
                             >
                                 <View style={{ marginRight: 4 }}>
                                     <Phone
-                                        size={11}
+                                        size={
+                                            isLargeScreen ? 11 : 10
+                                        }
                                         color={theme.textDark}
                                     />
                                 </View>
@@ -1195,8 +1306,9 @@ export default function MarketplaceListManager({
                                         flex: 1,
                                         fontFamily:
                                             theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.xs,
+                                        fontSize: isLargeScreen
+                                            ? theme.fontSize.xs
+                                            : 10,
                                         color: theme.textDark,
                                     }}
                                 >
@@ -1211,11 +1323,9 @@ export default function MarketplaceListManager({
                             flexDirection: 'row',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            marginTop: 8,
+                            marginTop: isLargeScreen ? 8 : 6,
                         }}
                     >
-                        {/* Contact — View (not TouchableOpacity) so it
-                            doesn't render as a nested <button> on web. */}
                         <View
                             {...(isWeb
                                 ? ({
@@ -1239,19 +1349,26 @@ export default function MarketplaceListManager({
                             style={{
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                paddingHorizontal: 10,
-                                paddingVertical: 5,
+                                paddingHorizontal: isLargeScreen
+                                    ? 10
+                                    : 8,
+                                paddingVertical: isLargeScreen
+                                    ? 5
+                                    : 4,
                                 borderRadius: 8,
                                 backgroundColor: theme.primary,
                                 ...webPointer,
                             }}
                         >
-                            <Phone size={11} color="#fff" />
+                            <Phone
+                                size={isLargeScreen ? 11 : 10}
+                                color="#fff"
+                            />
                             <Text
                                 style={{
                                     marginLeft: 5,
                                     fontFamily: theme.font.bold,
-                                    fontSize: 11,
+                                    fontSize: isLargeScreen ? 11 : 10,
                                     color: '#fff',
                                 }}
                             >
@@ -1260,7 +1377,7 @@ export default function MarketplaceListManager({
                         </View>
 
                         <ChevronRight
-                            size={16}
+                            size={isLargeScreen ? 16 : 14}
                             color={theme.textDark}
                         />
                     </View>
@@ -1276,6 +1393,7 @@ export default function MarketplaceListManager({
             style={{
                 flex: 1,
                 backgroundColor: theme.background,
+                position: 'relative',
             }}
         >
             {/* ── Toolbar ──────────────────────────────── */}
@@ -1284,13 +1402,20 @@ export default function MarketplaceListManager({
                     borderBottomWidth: 1,
                     borderBottomColor: borderColor,
                     backgroundColor: theme.panel,
+                    position: 'relative',
+                    zIndex: 10,
+                    ...({ overflow: 'visible' } as any),
                 }}
             >
                 <View
                     style={{
                         width: contentWidth,
                         alignSelf: 'center',
-                        padding: 12,
+                        paddingHorizontal: H_PADDING,
+                        paddingTop: 10,
+                        paddingBottom: 8,
+                        position: 'relative',
+                        ...({ overflow: 'visible' } as any),
                     }}
                 >
                     {/* Title row */}
@@ -1299,7 +1424,7 @@ export default function MarketplaceListManager({
                             flexDirection: 'row',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            marginBottom: 10,
+                            marginBottom: 8,
                         }}
                     >
                         <View
@@ -1308,8 +1433,11 @@ export default function MarketplaceListManager({
                             <Text
                                 style={{
                                     fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.lg,
+                                    fontSize: isLargeScreen
+                                        ? theme.fontSize.lg
+                                        : theme.fontSize.base,
                                     color: theme.text,
+                                    letterSpacing: -0.3,
                                 }}
                             >
                                 Marketplace
@@ -1319,15 +1447,19 @@ export default function MarketplaceListManager({
                                 style={{
                                     fontFamily:
                                         theme.font.regular,
-                                    fontSize: theme.fontSize.sm,
+                                    fontSize: isLargeScreen
+                                        ? theme.fontSize.sm
+                                        : 11,
                                     color: theme.textDark,
                                 }}
                             >
                                 {filtered.length}{' '}
                                 {filtered.length === 1
                                     ? 'listing'
-                                    : 'listings'}{' '}
-                                · {wholesalerType}
+                                    : 'listings'}
+                                {isLargeScreen
+                                    ? ` · ${wholesalerType}`
+                                    : ''}
                             </Text>
                         </View>
 
@@ -1338,9 +1470,11 @@ export default function MarketplaceListManager({
                             accessibilityLabel="Refresh listings"
                             activeOpacity={0.8}
                             style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: 17,
+                                width: isLargeScreen ? 34 : 30,
+                                height: isLargeScreen ? 34 : 30,
+                                borderRadius: isLargeScreen
+                                    ? 17
+                                    : 15,
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 backgroundColor: subtleBg,
@@ -1350,158 +1484,265 @@ export default function MarketplaceListManager({
                             }}
                         >
                             <RefreshCw
-                                size={15}
+                                size={isLargeScreen ? 15 : 14}
                                 color={theme.textDark}
                             />
                         </TouchableOpacity>
                     </View>
 
-                    {/* Search */}
+                    {/* Search row — small screens pair search + Filters */}
                     <View
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            borderRadius: 10,
-                            borderWidth: 1,
-                            borderColor,
-                            backgroundColor: subtleBg,
-                            paddingHorizontal: 10,
-                            height: 40,
-                            marginBottom: 10,
+                            marginBottom: 8,
                         }}
                     >
-                        <View style={{ marginRight: 8 }}>
-                            <Search
-                                size={15}
-                                color={theme.textDark}
-                            />
-                        </View>
-                        <TextInput
-                            placeholder="Search name, town, county, phone, email..."
-                            placeholderTextColor={theme.textDark}
-                            value={search}
-                            onChangeText={setSearch}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            clearButtonMode="while-editing"
+                        <View
                             style={{
                                 flex: 1,
-                                height: '100%',
-                                fontFamily: theme.font.regular,
-                                fontSize: theme.fontSize.base,
-                                color: theme.text,
-                                ...webNoOutline,
-                            }}
-                        />
-                    </View>
-
-                    {/* Filters */}
-                    <View style={{ marginBottom: 8 }}>
-                        <ChipRow
-                            label="County"
-                            options={countyOptions}
-                            value={county}
-                            onChange={setCounty}
-                            theme={theme}
-                            borderColor={borderColor}
-                        />
-                    </View>
-                    <View style={{ marginBottom: 8 }}>
-                        <ChipRow
-                            label="Town"
-                            options={townOptions}
-                            value={town}
-                            onChange={setTown}
-                            theme={theme}
-                            borderColor={borderColor}
-                        />
-                    </View>
-
-                    {activeFilters > 0 && (
-                        <TouchableOpacity
-                            onPress={clearFilters}
-                            activeOpacity={0.8}
-                            style={{
-                                alignSelf: 'flex-start',
-                                paddingHorizontal: 10,
-                                paddingVertical: 4,
-                                borderRadius: 7,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                borderColor,
                                 backgroundColor: subtleBg,
-                                marginBottom: 8,
+                                paddingHorizontal: 10,
+                                height: isLargeScreen ? 40 : 38,
+                                marginRight: isLargeScreen ? 0 : 8,
+                            }}
+                        >
+                            <View style={{ marginRight: 8 }}>
+                                <Search
+                                    size={isLargeScreen ? 15 : 14}
+                                    color={theme.textDark}
+                                />
+                            </View>
+                            <TextInput
+                                placeholder="Search name, town, county..."
+                                placeholderTextColor={theme.textDark}
+                                value={search}
+                                onChangeText={setSearch}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                clearButtonMode="while-editing"
+                                style={{
+                                    flex: 1,
+                                    height: '100%',
+                                    fontFamily: theme.font.regular,
+                                    fontSize: isLargeScreen
+                                        ? theme.fontSize.base
+                                        : theme.fontSize.sm,
+                                    color: theme.text,
+                                    ...webNoOutline,
+                                }}
+                            />
+                        </View>
+
+                        {/* Mobile-only Filters button */}
+                        {!isLargeScreen && (
+                            <TouchableOpacity
+                                onPress={() =>
+                                    setFiltersSheetOpen(true)
+                                }
+                                activeOpacity={0.85}
+                                accessibilityRole="button"
+                                accessibilityLabel="Open filters"
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingHorizontal: 12,
+                                    height: 38,
+                                    borderRadius: 10,
+                                    borderWidth: 1,
+                                    borderColor:
+                                        activeFilters > 0
+                                            ? theme.primary
+                                            : borderColor,
+                                    backgroundColor:
+                                        activeFilters > 0
+                                            ? `${theme.primary}15`
+                                            : 'transparent',
+                                }}
+                            >
+                                <SlidersHorizontal
+                                    size={14}
+                                    color={
+                                        activeFilters > 0
+                                            ? theme.primary
+                                            : theme.textDark
+                                    }
+                                />
+                                <Text
+                                    style={{
+                                        marginLeft: 6,
+                                        fontFamily: theme.font.bold,
+                                        fontSize: 12,
+                                        color:
+                                            activeFilters > 0
+                                                ? theme.primary
+                                                : theme.textDark,
+                                    }}
+                                >
+                                    Filters
+                                </Text>
+                                {activeFilters > 0 && (
+                                    <View
+                                        style={{
+                                            marginLeft: 6,
+                                            minWidth: 18,
+                                            height: 18,
+                                            borderRadius: 9,
+                                            paddingHorizontal: 5,
+                                            backgroundColor:
+                                                theme.primary,
+                                            alignItems: 'center',
+                                            justifyContent:
+                                                'center',
+                                        }}
+                                    >
+                                        <Text
+                                            style={{
+                                                fontFamily:
+                                                    theme.font.bold,
+                                                fontSize: 10,
+                                                color: '#fff',
+                                                lineHeight: 12,
+                                            }}
+                                        >
+                                            {activeFilters}
+                                        </Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {/* ── Inline filters (large screens only) ── */}
+                    {isLargeScreen && (
+                        <>
+                            <View
+                                style={{
+                                    marginBottom: 8,
+                                    position: 'relative',
+                                    zIndex: 100,
+                                    ...({
+                                        overflow: 'visible',
+                                    } as any),
+                                }}
+                            >
+                                <LocationFilterBar
+                                    county={locationCountyId}
+                                    subCounty={locationSubCountyId}
+                                    onChangeCounty={(id) =>
+                                        setLocationCountyId(id)
+                                    }
+                                    onChangeSubCounty={(id) =>
+                                        setLocationSubCountyId(id)
+                                    }
+                                    theme={theme}
+                                    isDarkMode={isDarkMode}
+                                    countyLabel="Filter by county"
+                                    subCountyLabel="Filter by sub-county"
+                                    gap={8}
+                                />
+                            </View>
+
+                            <View style={{ marginBottom: 6 }}>
+                                <ChipRow
+                                    label="Town"
+                                    options={townOptions}
+                                    value={town}
+                                    onChange={setTown}
+                                    theme={theme}
+                                    borderColor={borderColor}
+                                />
+                            </View>
+
+                            {activeFilters > 0 && (
+                                <TouchableOpacity
+                                    onPress={clearFilters}
+                                    activeOpacity={0.8}
+                                    style={{
+                                        alignSelf: 'flex-start',
+                                        paddingHorizontal: 9,
+                                        paddingVertical: 3,
+                                        borderRadius: 7,
+                                        backgroundColor: subtleBg,
+                                        marginBottom: 6,
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize:
+                                                theme.fontSize.xs,
+                                            color: theme.primary,
+                                        }}
+                                    >
+                                        Clear {activeFilters}{' '}
+                                        {activeFilters === 1
+                                            ? 'filter'
+                                            : 'filters'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <SortRow
+                                value={sort}
+                                onChange={setSort}
+                                theme={theme}
+                                subtleBg={subtleBg}
+                            />
+                        </>
+                    )}
+
+                    {/* ── Active filter pills (small screens only) ── */}
+                    {!isLargeScreen && activeFilters > 0 && (
+                        <View
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: 4,
                             }}
                         >
                             <Text
                                 style={{
                                     fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.xs,
-                                    color: theme.primary,
+                                    fontSize: 11,
+                                    color: theme.textDark,
+                                    marginRight: 2,
                                 }}
                             >
-                                Clear {activeFilters}{' '}
+                                {activeFilters}{' '}
                                 {activeFilters === 1
                                     ? 'filter'
                                     : 'filters'}
                             </Text>
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Sort pills */}
-                    <View
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                        }}
-                    >
-                        <View
-                            style={{
-                                marginRight: 6,
-                                marginBottom: 4,
-                            }}
-                        >
-                            <ArrowUpDown
-                                size={13}
-                                color={theme.textDark}
-                            />
-                        </View>
-                        {SORTS.map((s) => {
-                            const active = sort === s.key;
-                            return (
-                                <TouchableOpacity
-                                    key={s.key}
-                                    onPress={() => setSort(s.key)}
-                                    activeOpacity={0.8}
-                                    accessibilityRole="button"
+                            <TouchableOpacity
+                                onPress={clearFilters}
+                                activeOpacity={0.8}
+                                style={{
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 3,
+                                    borderRadius: 999,
+                                    backgroundColor: `${theme.primary}15`,
+                                }}
+                            >
+                                <Text
                                     style={{
-                                        paddingHorizontal: 10,
-                                        paddingVertical: 4,
-                                        borderRadius: 7,
-                                        backgroundColor: active
-                                            ? subtleBg
-                                            : 'transparent',
-                                        marginRight: 4,
-                                        marginBottom: 4,
+                                        fontFamily: theme.font.bold,
+                                        fontSize: 10,
+                                        color: theme.primary,
                                     }}
                                 >
-                                    <Text
-                                        style={{
-                                            fontFamily: active
-                                                ? theme.font.bold
-                                                : theme.font
-                                                    .regular,
-                                            fontSize:
-                                                theme.fontSize.xs,
-                                            color: active
-                                                ? theme.primary
-                                                : theme.textDark,
-                                        }}
-                                    >
-                                        {s.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
+                                    Clear all
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
             </View>
 
@@ -1512,6 +1753,8 @@ export default function MarketplaceListManager({
                         flex: 1,
                         justifyContent: 'center',
                         alignItems: 'center',
+                        position: 'relative',
+                        zIndex: 1,
                     }}
                 >
                     <ActivityIndicator
@@ -1535,10 +1778,12 @@ export default function MarketplaceListManager({
                         flex: 1,
                         width: contentWidth,
                         alignSelf: 'center',
+                        position: 'relative',
+                        zIndex: 1,
                     }}
                 >
                     <FlatList
-                        data={visible}
+                        data={filtered}
                         keyExtractor={(item) =>
                             resolveEntityId(item) ||
                             String(Math.random())
@@ -1552,29 +1797,8 @@ export default function MarketplaceListManager({
                                 H_PADDING + 24 + insets.bottom,
                             flexGrow: 1,
                         }}
-                        onEndReachedThreshold={0.4}
-                        onEndReached={() => {
-                            if (hasMore) setPage((p) => p + 1);
-                        }}
                         refreshing={isEntitiesRefreshing}
                         onRefresh={forceEntitiesRefresh}
-                        ListFooterComponent={
-                            hasMore ? (
-                                <Text
-                                    style={{
-                                        textAlign: 'center',
-                                        paddingVertical: 16,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                        color: theme.textDark,
-                                    }}
-                                >
-                                    Loading more…
-                                </Text>
-                            ) : null
-                        }
                         ListEmptyComponent={
                             <View
                                 style={{
@@ -1610,6 +1834,213 @@ export default function MarketplaceListManager({
                     />
                 </View>
             )}
+
+            {/* ═══ Filters bottom sheet (small screens) ══════ */}
+            <Modal
+                visible={filtersSheetOpen}
+                transparent
+                animationType="slide"
+                onRequestClose={() =>
+                    setFiltersSheetOpen(false)
+                }
+                statusBarTranslucent
+            >
+                <Pressable
+                    onPress={() => setFiltersSheetOpen(false)}
+                    style={{
+                        flex: 1,
+                        backgroundColor: 'rgba(0,0,0,0.45)',
+                        justifyContent: 'flex-end',
+                    }}
+                >
+                    <Pressable
+                        onPress={(e) => e.stopPropagation?.()}
+                        style={{
+                            backgroundColor: theme.panel,
+                            borderTopLeftRadius: 20,
+                            borderTopRightRadius: 20,
+                            maxHeight: '85%',
+                            paddingBottom: insets.bottom,
+                        }}
+                    >
+                        {/* Drag handle */}
+                        <View
+                            style={{
+                                alignItems: 'center',
+                                paddingTop: 10,
+                                paddingBottom: 4,
+                            }}
+                        >
+                            <View
+                                style={{
+                                    width: 40,
+                                    height: 4,
+                                    borderRadius: 2,
+                                    backgroundColor: borderColor,
+                                }}
+                            />
+                        </View>
+
+                        {/* Header */}
+                        <View
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                paddingHorizontal: 16,
+                                paddingVertical: 12,
+                                borderBottomWidth: 1,
+                                borderBottomColor: borderColor,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    fontFamily: theme.font.bold,
+                                    fontSize: theme.fontSize.lg,
+                                    color: theme.text,
+                                }}
+                            >
+                                Filters
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() =>
+                                    setFiltersSheetOpen(false)
+                                }
+                                activeOpacity={0.8}
+                                accessibilityRole="button"
+                                accessibilityLabel="Close filters"
+                                style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: 15,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: subtleBg,
+                                }}
+                            >
+                                <X
+                                    size={14}
+                                    color={theme.text}
+                                />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Scrollable body */}
+                        <ScrollView
+                            contentContainerStyle={{
+                                padding: 16,
+                                gap: 16,
+                            }}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            <LocationFilterBar
+                                county={locationCountyId}
+                                subCounty={locationSubCountyId}
+                                onChangeCounty={(id) =>
+                                    setLocationCountyId(id)
+                                }
+                                onChangeSubCounty={(id) =>
+                                    setLocationSubCountyId(id)
+                                }
+                                theme={theme}
+                                isDarkMode={isDarkMode}
+                                countyLabel="Filter by county"
+                                subCountyLabel="Filter by sub-county"
+                                gap={12}
+                            />
+
+                            <ChipRow
+                                label="Town"
+                                options={townOptions}
+                                value={town}
+                                onChange={setTown}
+                                theme={theme}
+                                borderColor={borderColor}
+                            />
+
+                            <SortRow
+                                value={sort}
+                                onChange={setSort}
+                                theme={theme}
+                                subtleBg={subtleBg}
+                            />
+                        </ScrollView>
+
+                        {/* Footer CTA */}
+                        <View
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 10,
+                                paddingHorizontal: 16,
+                                paddingTop: 12,
+                                paddingBottom: 12,
+                                borderTopWidth: 1,
+                                borderTopColor: borderColor,
+                                backgroundColor: theme.panel,
+                            }}
+                        >
+                            {activeFilters > 0 ? (
+                                <TouchableOpacity
+                                    onPress={clearFilters}
+                                    activeOpacity={0.8}
+                                    accessibilityRole="button"
+                                    style={{
+                                        paddingHorizontal: 14,
+                                        height: 44,
+                                        borderRadius: 10,
+                                        borderWidth: 1,
+                                        borderColor: borderColor,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                    }}
+                                >
+                                    <Text
+                                        style={{
+                                            fontFamily:
+                                                theme.font.bold,
+                                            fontSize: 13,
+                                            color: theme.textDark,
+                                        }}
+                                    >
+                                        Clear all
+                                    </Text>
+                                </TouchableOpacity>
+                            ) : null}
+
+                            <TouchableOpacity
+                                onPress={() =>
+                                    setFiltersSheetOpen(false)
+                                }
+                                activeOpacity={0.85}
+                                accessibilityRole="button"
+                                style={{
+                                    flex: 1,
+                                    height: 44,
+                                    borderRadius: 10,
+                                    backgroundColor: theme.primary,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <Text
+                                    style={{
+                                        fontFamily: theme.font.bold,
+                                        fontSize: 14,
+                                        color: '#fff',
+                                    }}
+                                >
+                                    Show {filtered.length}{' '}
+                                    {filtered.length === 1
+                                        ? 'result'
+                                        : 'results'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
 
             {/* ── Full-screen marketplace modal ────────── */}
             <WholesalerMarketplaceModal

@@ -13,11 +13,24 @@
 // Options fire on `onPressIn` (touch-down) so selection lands
 // before the input blurs and unmounts the dropdown — single
 // click to select.
+//
+// Visual style: delimiters (borders, dividers) are intentionally
+// soft. The container and dropdown read as one surface without
+// harsh edges.
+//
+// Scrolling: the dropdown owns its own scroll. Nested scroll is
+// enabled so it works when the field lives inside a parent
+// ScrollView (e.g. a modal form).
 
 import { useField } from "formik";
-import { useMemo, useRef, useState } from "react";
+import {
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import {
     ActivityIndicator,
+    Platform,
     Pressable,
     ScrollView,
     Text,
@@ -29,7 +42,7 @@ import {
  * Types
  * ======================================================= */
 
-export interface MultiselectOption {
+interface MultiselectOption {
     id: string;
     title: string;
     meta?: Record<string, any>;
@@ -47,6 +60,11 @@ interface Props {
     emptyText?: string;
     noMatchText?: string;
     allPickedText?: string;
+    /**
+     * Maximum height of the dropdown list, in pixels.
+     * Defaults to ~half a typical small-screen viewport, so a
+     * long list scrolls instead of dominating the form.
+     */
     dropdownMaxHeight?: number;
     onAfterSelect?: (
         id: string,
@@ -59,6 +77,25 @@ interface Props {
         option: MultiselectOption
     ) => void;
 }
+
+/* =========================================================
+ * Soft delimiter tokens
+ * ======================================================= */
+const DELIMITER_DARK = "rgba(148,163,184,0.15)";
+const DELIMITER_LIGHT = "rgba(15,23,42,0.06)";
+const FOCUS_DELIMITER_DARK = "rgba(148,163,184,0.28)";
+const FOCUS_DELIMITER_LIGHT = "rgba(15,23,42,0.14)";
+
+/* =========================================================
+ * Default dropdown sizing
+ *
+ * Bumped from 180 → 320 so several rows are visible without
+ * scrolling. On very small screens the actual rendered height
+ * is clamped below (see dynamicMaxHeight).
+ * ======================================================= */
+const DEFAULT_DROPDOWN_MAX_HEIGHT = 320;
+const MIN_DROPDOWN_HEIGHT = 160;
+const APPROX_ROW_HEIGHT = 44;
 
 /* =========================================================
  * Component
@@ -76,7 +113,7 @@ export default function CustomMultiselectAutocompletePicker({
     emptyText = "No options available.",
     noMatchText = "No matches.",
     allPickedText = "All options selected.",
-    dropdownMaxHeight = 180,
+    dropdownMaxHeight = DEFAULT_DROPDOWN_MAX_HEIGHT,
     onAfterSelect,
     onAfterRemove,
 }: Props) {
@@ -113,7 +150,35 @@ export default function CustomMultiselectAutocompletePicker({
             .filter(Boolean) as MultiselectOption[];
     }, [selectedIds, options]);
 
-    /* Debounced double-fire guard for onPressIn + onPress */
+    /* ---------------------------------------------------------
+     * Dropdown height
+     *
+     * Three constraints, take the smallest:
+     *   1. Caller's dropdownMaxHeight (default 320).
+     *   2. A height that fits `filtered.length` rows without
+     *      scrolling — no point forcing a scroll for 3 items.
+     *   3. Not smaller than MIN_DROPDOWN_HEIGHT for one or two
+     *      rows, so the box doesn't look cramped.
+     * ------------------------------------------------------- */
+    const dynamicMaxHeight = useMemo(() => {
+        const contentHeight =
+            filtered.length * APPROX_ROW_HEIGHT + 8;
+        const desired = Math.min(dropdownMaxHeight, contentHeight);
+        return Math.max(MIN_DROPDOWN_HEIGHT, desired);
+    }, [filtered.length, dropdownMaxHeight]);
+
+    /* Delimiter colors */
+    const baseDelimiter = isDarkMode
+        ? DELIMITER_DARK
+        : DELIMITER_LIGHT;
+    const focusDelimiter = isDarkMode
+        ? FOCUS_DELIMITER_DARK
+        : FOCUS_DELIMITER_LIGHT;
+
+    /* ---------------------------------------------------------
+     * Selection / removal handlers
+     * ------------------------------------------------------- */
+
     const addOnce = (opt: MultiselectOption) => {
         if (lastAddedId.current === opt.id) return;
         lastAddedId.current = opt.id;
@@ -173,25 +238,36 @@ export default function CustomMultiselectAutocompletePicker({
                 zIndex: dropdownOpen ? 9999 : 0,
             }}
         >
-            <Text
-                style={{ color: theme.textDark }}
-                className="text-[10px] uppercase font-black tracking-wider mb-1"
-            >
-                {label}
-            </Text>
+            {label ? (
+                <Text
+                    style={{
+                        color: theme.textDark,
+                        fontFamily: theme.font?.bold,
+                        fontSize: 10,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        paddingHorizontal: 4,
+                        marginBottom: 4,
+                    }}
+                >
+                    {label}
+                </Text>
+            ) : null}
 
-            {/* Tag-input container */}
+            {/* ───────── Tag-input container ───────── */}
             <Pressable
                 onPress={focusInput}
                 style={{
-                    backgroundColor: theme.background,
+                    backgroundColor: isDarkMode
+                        ? "#0f172a"
+                        : theme.surface ?? theme.background,
                     borderColor: hasError
                         ? "#ef4444"
                         : isFocused
-                            ? theme.primary
-                            : theme.border,
+                            ? focusDelimiter
+                            : baseDelimiter,
                     borderWidth: 1,
-                    borderRadius: 12,
+                    borderRadius: 10,
                     minHeight: 42,
                     paddingHorizontal: 10,
                     paddingVertical: 6,
@@ -215,7 +291,7 @@ export default function CustomMultiselectAutocompletePicker({
                             borderRadius: 999,
                             backgroundColor: `${theme.primary}15`,
                             borderWidth: 1,
-                            borderColor: `${theme.primary}40`,
+                            borderColor: `${theme.primary}30`,
                             maxWidth: "100%",
                         }}
                     >
@@ -224,8 +300,7 @@ export default function CustomMultiselectAutocompletePicker({
                                 color: theme.primary,
                                 fontFamily: theme.font.bold,
                                 fontSize: 11,
-                                textTransform: "uppercase",
-                                letterSpacing: 0.4,
+                                letterSpacing: 0.3,
                             }}
                             numberOfLines={1}
                         >
@@ -240,7 +315,7 @@ export default function CustomMultiselectAutocompletePicker({
                                 borderRadius: 9,
                                 alignItems: "center",
                                 justifyContent: "center",
-                                backgroundColor: `${theme.primary}30`,
+                                backgroundColor: `${theme.primary}25`,
                             }}
                         >
                             <Text
@@ -273,7 +348,9 @@ export default function CustomMultiselectAutocompletePicker({
                                 ? loadingPlaceholder
                                 : placeholder
                     }
-                    placeholderTextColor="#64748b"
+                    placeholderTextColor={
+                        isDarkMode ? "#64748b" : "#94a3b8"
+                    }
                     style={{
                         flexGrow: 1,
                         flexShrink: 1,
@@ -284,17 +361,23 @@ export default function CustomMultiselectAutocompletePicker({
                         paddingVertical: 0,
                         color: theme.text,
                         fontFamily: theme.font.medium,
-                        fontSize: 14,
+                        fontSize: 13,
                         borderWidth: 0,
                         backgroundColor: "transparent",
-                        // @ts-ignore web-only
-                        outlineStyle: "none",
+                        ...({ outlineStyle: "none" } as any),
                     }}
                 />
             </Pressable>
 
             {hasError && errorText && (
-                <Text className="text-red-500 text-[11px] font-semibold mt-1">
+                <Text
+                    style={{
+                        color: "#ef4444",
+                        fontSize: 11,
+                        paddingHorizontal: 4,
+                        marginTop: 4,
+                    }}
+                >
                     {errorText}
                 </Text>
             )}
@@ -308,19 +391,53 @@ export default function CustomMultiselectAutocompletePicker({
                         right: 0,
                         marginTop: 4,
                         backgroundColor: theme.panel,
-                        borderColor: theme.border,
+                        borderColor: baseDelimiter,
                         borderWidth: 1,
-                        borderRadius: 12,
-                        maxHeight: dropdownMaxHeight,
+                        borderRadius: 10,
+
+                        // ✅ Taller dropdown, clamped so it fits on
+                        // small screens and grows naturally with
+                        // the list (see dynamicMaxHeight).
+                        height: dynamicMaxHeight,
+                        maxHeight: dynamicMaxHeight,
+
                         overflow: "hidden",
                         zIndex: 9999,
                         // @ts-ignore web-only
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                        boxShadow: isDarkMode
+                            ? "0 8px 24px rgba(0,0,0,0.35)"
+                            : "0 8px 24px rgba(15,23,42,0.08)",
                     }}
                 >
+                    {/* ✅ Independent scroll.
+                         • keyboardShouldPersistTaps="always" keeps the
+                           dropdown open when the user taps a row on
+                           iOS — otherwise the first tap is consumed
+                           by dismissing the keyboard.
+                         • nestedScrollEnabled lets the inner scroll
+                           win over the outer modal's ScrollView on
+                           Android.
+                         • On web, React Native Web maps ScrollView to
+                           a div with overflow:auto, so it scrolls
+                           natively. overscrollBehavior: 'contain'
+                           prevents the wheel from bubbling to the
+                           outer scroll when the list reaches its end. */}
                     <ScrollView
+                        style={{
+                            flex: 1,
+                            // @ts-ignore web-only
+                            overscrollBehavior: "contain",
+                        }}
+                        contentContainerStyle={{
+                            paddingVertical: 2,
+                        }}
                         keyboardShouldPersistTaps="always"
                         nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                        // On iOS, bounce gives a clearer "this list
+                        // scrolls independently" signal.
+                        bounces={Platform.OS === 'ios'}
+                        scrollEventThrottle={16}
                     >
                         {loading ? (
                             <View className="p-4 items-center">
@@ -334,8 +451,9 @@ export default function CustomMultiselectAutocompletePicker({
                                 <Text
                                     style={{
                                         color: theme.textDark,
+                                        fontSize: 12,
                                     }}
-                                    className="text-xs font-medium text-center"
+                                    className="font-medium text-center"
                                 >
                                     {options.length === 0
                                         ? emptyText
@@ -353,19 +471,18 @@ export default function CustomMultiselectAutocompletePicker({
                                         onPressIn={() =>
                                             addOnce(item)
                                         }
-                                        style={({
-                                            pressed,
-                                        }) => ({
+                                        style={({ pressed }) => ({
                                             backgroundColor:
                                                 pressed
                                                     ? isDarkMode
-                                                        ? "#1e293b"
-                                                        : "#f1f5f9"
+                                                        ? "rgba(148,163,184,0.08)"
+                                                        : "rgba(15,23,42,0.04)"
                                                     : "transparent",
                                             borderBottomColor:
-                                                theme.border,
+                                                baseDelimiter,
+                                            borderBottomWidth: 1,
                                         })}
-                                        className="px-4 py-3 border-b"
+                                        className="px-4 py-3"
                                     >
                                         <Text
                                             style={{

@@ -30,8 +30,6 @@ import {
     type PageSize,
 } from "./types";
 
-export type { DrugClassItem } from "./types";
-
 function showResultAlert(
     title: string,
     responseMessage: string,
@@ -226,7 +224,7 @@ export default function AdminDrugClassesList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -317,9 +315,7 @@ export default function AdminDrugClassesList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminDrugClassesSharedProps = {
         query,
@@ -330,6 +326,7 @@ export default function AdminDrugClassesList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredClassifications,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,

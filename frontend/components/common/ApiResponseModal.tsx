@@ -99,19 +99,11 @@ export function routeEnvelope(
     return 'error';
 }
 
-/** Convenience wrapper: is this envelope a success? */
-export function responseIsSuccess(
-    env: ApiResponseEnvelope | null,
-    successCode = '0'
-): boolean {
-    return routeEnvelope(env, { successCode }) === 'success';
-}
-
 /* =========================================================
  * Modal
  * ======================================================= */
 
-export interface ApiResponseModalProps {
+interface ApiResponseModalProps {
     isOpen: boolean;
     /** 'error' (default) or 'success'. */
     variant?: 'error' | 'success';
@@ -367,7 +359,7 @@ export default function ApiResponseModal({
  * Errors
  * ======================================================= */
 
-export function hasErrors(errors: any): boolean {
+function hasErrors(errors: any): boolean {
     if (!errors) return false;
     if (Array.isArray(errors)) return errors.length > 0;
     if (typeof errors === 'object') {

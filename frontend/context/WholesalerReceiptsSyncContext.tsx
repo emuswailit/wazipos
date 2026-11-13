@@ -25,7 +25,7 @@ import { Alert, Platform } from 'react-native';
  * Types
  * ======================================================= */
 
-export interface SyncUiState {
+interface SyncUiState {
     syncing: boolean;
     offline: boolean;
     hasPending: boolean;
@@ -241,7 +241,7 @@ function formatSyncTime() {
  * Expiry helpers
  * ======================================================= */
 
-export function computeDaysToExpiry(
+function computeDaysToExpiry(
     expiryDate?: string | null
 ): number | null {
     if (!expiryDate) return null;
@@ -270,7 +270,7 @@ export function computeDaysToExpiry(
     );
 }
 
-export function computeExpiryStatus(
+function computeExpiryStatus(
     days: number | null
 ): string {
     if (days === null) return 'UNKNOWN';
@@ -439,6 +439,20 @@ function normalizeReceipt(
         long_title: String(item.long_title ?? ''),
         product_title: productTitle,
         product_id: productId,
+        category: String(item.category ?? ''),
+        category_title: String(item.category_title ?? ''),
+        // Alias read by the order form / edit modal as `receipt.product`.
+        product: productId,
+
+        // Optional extras: keep them when the API sends them (previously dropped).
+        packaging: item.packaging ?? undefined,
+        units_per_pack: item.units_per_pack != null ? Number(item.units_per_pack) : undefined,
+        notes: item.notes ?? undefined,
+        is_expired: item.is_expired ?? undefined,
+        is_near_expiry: item.is_near_expiry ?? undefined,
+        batches: Array.isArray(item.batches) ? item.batches : undefined,
+        placements: Array.isArray(item.placements) ? item.placements : undefined,
+        price_tiers: Array.isArray(item.price_tiers) ? item.price_tiers : undefined,
 
         entity: String(item.entity ?? ''),
         entity_title: String(item.entity_title ?? ''),
@@ -674,7 +688,7 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
     /* -------- Refs -------- */
     const wsRef = useRef<WebSocket | null>(null);
     const receiptsStateRef = useRef<WholesalerReceipt[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
     );
     const reconnectAttemptRef = useRef(0);

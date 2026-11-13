@@ -21,7 +21,9 @@ import {
     ProductPickerAutocomplete,
     type EntityPickerOption,
 } from '@/components/common';
-import { useAuth } from '@/context/AuthContext';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { AdminSheet, ChoiceChips, FormRow, FormSection, SheetButton, useListTokens, useSheetIsWide, webPointer, type ChoiceOption } from '@/components/common/listScreen';
+import { Ionicons } from '@expo/vector-icons';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { useProductsSync } from '@/context/ProductsSyncContext';
 import type {
@@ -37,17 +39,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { Alert, Platform, Pressable, Text, View } from 'react-native';
 
 /* =========================================================
  * Shapes
@@ -87,7 +79,7 @@ interface SubmitLine {
     target_wholesaler_ids: string[];
 }
 
-export interface CreateRequestResult {
+interface CreateRequestResult {
     ok: boolean;
     message?: string;
 }
@@ -113,15 +105,6 @@ interface LineTouched {
     quantity?: boolean;
     wholesalers?: boolean;
 }
-
-const URGENCY_OPTIONS: Array<{
-    value: 'low' | 'medium' | 'high';
-    label: string;
-}> = [
-        { value: 'low', label: 'Low' },
-        { value: 'medium', label: 'Medium' },
-        { value: 'high', label: 'High' },
-    ];
 
 const DEFAULT_QUANTITY = '1';
 
@@ -276,13 +259,11 @@ export function CreateRequestModal({
     onClose,
     onSubmit,
 }: Props) {
-    const { theme, isDarkMode } = useAuth();
+    const { theme, chipBg, divider } = useListTokens();
+    const sheetWide = useSheetIsWide();
     const { productsList } = useProductsSync();
     const { allWholesalers } = useEntitiesSync();
 
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const dividerColor = isDarkMode ? '#334155' : '#f1f5f9';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
 
     const [lines, setLines] = useState<DraftLine[]>([]);
     const [touched, setTouched] = useState<
@@ -631,588 +612,164 @@ export function CreateRequestModal({
         onClose,
     ]);
 
-    if (!visible) return null;
+    const totalUnits = requiredLineIndices.reduce((s, i) => s + parseQty(lines[i].requested_quantity), 0);
 
     return (
-        <Modal
+        <AdminSheet
             visible={visible}
-            animationType="fade"
-            transparent
-            onRequestClose={isSubmitting ? () => { } : onClose}
-        >
-            <View className="flex-1 bg-black/55 items-center justify-center p-4">
-                <View
-                    className="w-full max-w-[720px] max-h-[92%] rounded-2xl border overflow-hidden"
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderColor,
-                    }}
-                >
-                    {/* Header */}
-                    <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{
-                            borderBottomColor: dividerColor,
-                        }}
-                    >
-                        <View className="flex-1">
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.lg,
-                                }}
-                            >
-                                New request
-                            </Text>
-                            <Text
-                                className="mt-0.5"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                            >
-                                Each line needs a product, a quantity
-                                and at least one wholesaler
-                            </Text>
-                        </View>
-                        <Pressable
-                            onPress={
-                                isSubmitting ? undefined : onClose
-                            }
-                            disabled={isSubmitting}
-                            hitSlop={10}
-                            className="p-1.5"
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {/* Body */}
-                    <ScrollView
-                        contentContainerStyle={{ padding: 16 }}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {lines.length === 0 ? (
-                            <View
-                                className="rounded-xl p-6 items-center"
-                                style={{ backgroundColor: subBg }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    No lines yet. Add one below.
-                                </Text>
-                            </View>
-                        ) : (
-                            lines.map((line, idx) => {
-                                const errs = perLineErrors[idx];
-                                const t = touched[idx] ?? {};
-                                const productError =
-                                    t.product && errs.product
-                                        ? errs.product
-                                        : undefined;
-                                const qtyError =
-                                    t.quantity && errs.quantity
-                                        ? errs.quantity
-                                        : undefined;
-                                const wholesalerError =
-                                    t.wholesalers &&
-                                        errs.wholesalers
-                                        ? errs.wholesalers
-                                        : undefined;
-
-                                return (
-                                    <View
-                                        key={idx}
-                                        className="rounded-xl border p-3 mb-2"
-                                        style={{
-                                            backgroundColor: subBg,
-                                            borderColor,
-                                        }}
-                                    >
-                                        <View className="flex-row items-center justify-between mb-2">
-                                            <Text
-                                                className="uppercase tracking-widest"
-                                                style={{
-                                                    color: theme.textDark,
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 10,
-                                                }}
-                                            >
-                                                Line {idx + 1}
-                                            </Text>
-                                            <Pressable
-                                                onPress={() =>
-                                                    removeLine(idx)
-                                                }
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                hitSlop={8}
-                                            >
-                                                <Text
-                                                    style={{
-                                                        color:
-                                                            isSubmitting
-                                                                ? 'rgba(239,68,68,0.5)'
-                                                                : '#ef4444',
-                                                        fontFamily:
-                                                            theme
-                                                                .font
-                                                                .bold,
-                                                        fontSize: 11,
-                                                    }}
-                                                >
-                                                    Remove
-                                                </Text>
-                                            </Pressable>
-                                        </View>
-
-                                        {/* Product */}
-                                        <View className="mb-2">
-                                            <Text
-                                                className="uppercase tracking-widest mb-1"
-                                                style={{
-                                                    color: theme.textDark,
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 9,
-                                                }}
-                                            >
-                                                Product *
-                                            </Text>
-                                            <ProductPickerAutocomplete
-                                                products={
-                                                    products as unknown as Product[]
-                                                }
-                                                titleKey="title"
-                                                subtitleKey="bar_code"
-                                                imageKey="thumbnail_url"
-                                                value={
-                                                    line.product_id
-                                                        ? ({
-                                                            id: line.product_id,
-                                                            title:
-                                                                line.product_title ??
-                                                                '',
-                                                            bar_code:
-                                                                line.bar_code,
-                                                            thumbnail_url:
-                                                                line.thumbnail_url,
-                                                        } as unknown as Product)
-                                                        : null
-                                                }
-                                                onSelect={(p: any) => {
-                                                    updateLine(idx, {
-                                                        product_id: String(
-                                                            p?.id ?? ''
-                                                        ),
-                                                        product_title: String(
-                                                            p?.title ?? ''
-                                                        ),
-                                                        bar_code: p?.bar_code
-                                                            ? String(
-                                                                p.bar_code
-                                                            )
-                                                            : undefined,
-                                                        thumbnail_url:
-                                                            p?.thumbnail_url
-                                                                ? String(
-                                                                    p.thumbnail_url
-                                                                )
-                                                                : undefined,
-                                                    });
-                                                    markTouched(
-                                                        idx,
-                                                        'product'
-                                                    );
-                                                }}
-                                                onClear={() => {
-                                                    updateLine(idx, {
-                                                        product_id: '',
-                                                        product_title: '',
-                                                        bar_code: undefined,
-                                                        thumbnail_url:
-                                                            undefined,
-                                                    });
-                                                    markTouched(
-                                                        idx,
-                                                        'product'
-                                                    );
-                                                }}
-                                                error={productError}
-                                                placeholder="Select a product…"
-                                            />
-                                        </View>
-
-                                        {/* Quantity */}
-                                        <View className="mb-2">
-                                            <Text
-                                                className="uppercase tracking-widest mb-1"
-                                                style={{
-                                                    color: theme.textDark,
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 9,
-                                                }}
-                                            >
-                                                Quantity *
-                                            </Text>
-                                            <TextInput
-                                                value={
-                                                    line.requested_quantity
-                                                }
-                                                onChangeText={(v) => {
-                                                    const digits =
-                                                        v.replace(
-                                                            /[^0-9]/g,
-                                                            ''
-                                                        );
-                                                    updateLine(idx, {
-                                                        requested_quantity:
-                                                            digits,
-                                                    });
-                                                }}
-                                                onFocus={() =>
-                                                    handleQtyFocus(
-                                                        idx,
-                                                        line.requested_quantity
-                                                    )
-                                                }
-                                                onBlur={() =>
-                                                    handleQtyBlur(
-                                                        idx,
-                                                        line.requested_quantity
-                                                    )
-                                                }
-                                                editable={!isSubmitting}
-                                                keyboardType="number-pad"
-                                                inputMode="numeric"
-                                                placeholder={
-                                                    DEFAULT_QUANTITY
-                                                }
-                                                placeholderTextColor="#94a3b8"
-                                                className="h-10 rounded-lg border px-3 text-center"
-                                                style={{
-                                                    borderColor:
-                                                        qtyError
-                                                            ? '#ef4444'
-                                                            : borderColor,
-                                                    color: theme.text,
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize:
-                                                        theme.fontSize
-                                                            .base,
-                                                    backgroundColor:
-                                                        isDarkMode
-                                                            ? '#0f172a'
-                                                            : '#ffffff',
-                                                }}
-                                            />
-                                            {qtyError ? (
-                                                <Text
-                                                    className="mt-1 text-[10px]"
-                                                    style={{
-                                                        color: '#ef4444',
-                                                        fontFamily:
-                                                            theme
-                                                                .font
-                                                                .medium,
-                                                    }}
-                                                >
-                                                    {qtyError}
-                                                </Text>
-                                            ) : null}
-                                        </View>
-
-                                        {/* Urgency */}
-                                        <View className="mb-2">
-                                            <Text
-                                                className="uppercase tracking-widest mb-1"
-                                                style={{
-                                                    color: theme.textDark,
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 9,
-                                                }}
-                                            >
-                                                Urgency
-                                            </Text>
-                                            <View className="flex-row gap-1.5">
-                                                {URGENCY_OPTIONS.map(
-                                                    (u) => (
-                                                        <Pressable
-                                                            key={
-                                                                u.value
-                                                            }
-                                                            onPress={() =>
-                                                                updateLine(
-                                                                    idx,
-                                                                    {
-                                                                        urgency:
-                                                                            u.value,
-                                                                    }
-                                                                )
-                                                            }
-                                                            disabled={
-                                                                isSubmitting
-                                                            }
-                                                            className="flex-1 py-2 rounded-lg border items-center"
-                                                            style={{
-                                                                borderColor:
-                                                                    line.urgency ===
-                                                                        u.value
-                                                                        ? theme.primary
-                                                                        : borderColor,
-                                                                backgroundColor:
-                                                                    line.urgency ===
-                                                                        u.value
-                                                                        ? `${theme.primary}15`
-                                                                        : isDarkMode
-                                                                            ? '#0f172a'
-                                                                            : '#ffffff',
-                                                                opacity:
-                                                                    isSubmitting
-                                                                        ? 0.6
-                                                                        : 1,
-                                                            }}
-                                                        >
-                                                            <Text
-                                                                className="uppercase tracking-wide"
-                                                                style={{
-                                                                    color:
-                                                                        line.urgency ===
-                                                                            u.value
-                                                                            ? theme.primary
-                                                                            : theme.textDark,
-                                                                    fontFamily:
-                                                                        theme
-                                                                            .font
-                                                                            .bold,
-                                                                    fontSize: 10,
-                                                                }}
-                                                            >
-                                                                {
-                                                                    u.label
-                                                                }
-                                                            </Text>
-                                                        </Pressable>
-                                                    )
-                                                )}
-                                            </View>
-                                        </View>
-
-                                        {/* Target wholesalers (required) */}
-                                        <View>
-                                            <Text
-                                                className="uppercase tracking-widest mb-1"
-                                                style={{
-                                                    color: theme.textDark,
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 9,
-                                                }}
-                                            >
-                                                Wholesalers *
-                                            </Text>
-                                            <EntitiesMultiselectPicker
-                                                options={
-                                                    wholesalerOptions
-                                                }
-                                                value={
-                                                    line.target_wholesaler_ids
-                                                }
-                                                onChange={(ids) =>
-                                                    handleWholesalersChange(
-                                                        idx,
-                                                        ids
-                                                    )
-                                                }
-                                                disabled={
-                                                    isSubmitting
-                                                }
-                                                required
-                                                error={
-                                                    wholesalerError
-                                                }
-                                                placeholder="Select at least one wholesaler…"
-                                                searchPlaceholder="Search wholesalers…"
-                                                emptyText="No wholesalers available"
-                                            />
-                                        </View>
-                                    </View>
-                                );
-                            })
-                        )}
-
-                        <Pressable
-                            onPress={addEmptyLine}
-                            disabled={isSubmitting}
-                            className="py-3 rounded-xl border items-center mt-1"
-                            style={{
-                                borderColor: theme.primary,
-                                borderStyle: 'dashed',
-                                opacity: isSubmitting ? 0.5 : 1,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: theme.primary,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                + Add line
-                            </Text>
-                        </Pressable>
-
-                        {/* Overall note */}
-                        <Text
-                            className="uppercase tracking-widest mb-2 mt-4"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                                fontSize: 10,
-                            }}
-                        >
-                            Overall note (optional)
+            onClose={isSubmitting ? () => { } : onClose}
+            dismissible={!isSubmitting}
+            title="New product request"
+            subtitle="Ask wholesalers for products you can't find"
+            icon="search-circle-outline"
+            width={760}
+            footer={
+                <>
+                    {sheetWide ? (
+                        <Text style={{ flex: 1, color: footerHint ? '#b45309' : theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={2}>
+                            {footerHint ?? `${requiredLineIndices.length} product${requiredLineIndices.length === 1 ? '' : 's'} · ${totalUnits.toLocaleString()} units`}
                         </Text>
-                        <TextInput
-                            value={overallNote}
-                            onChangeText={setOverallNote}
-                            editable={!isSubmitting}
-                            placeholder="Anything you want wholesalers to know"
-                            placeholderTextColor="#94a3b8"
-                            multiline
-                            numberOfLines={2}
-                            className="rounded-xl border px-3 py-2 min-h-[60px]"
-                            style={{
-                                borderColor,
-                                backgroundColor: subBg,
-                                color: theme.text,
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.sm,
-                                textAlignVertical: 'top',
-                            }}
-                        />
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View
-                        className="border-t"
-                        style={{ borderTopColor: dividerColor }}
-                    >
-                        {footerHint ? (
-                            <View
-                                className="px-4 pt-2.5"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(251,191,36,0.08)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#b45309',
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    {footerHint}
-                                </Text>
-                            </View>
-                        ) : null}
-
-                        <View className="flex-row justify-end gap-2 p-4">
-                            <Pressable
-                                onPress={onClose}
-                                disabled={isSubmitting}
-                                className="px-4 py-2.5 rounded-xl border"
-                                style={{
-                                    borderColor,
-                                    opacity: isSubmitting ? 0.5 : 1,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    Cancel
-                                </Text>
-                            </Pressable>
-                            <Pressable
-                                onPress={handleSubmit}
-                                disabled={!canSubmit}
-                                className="px-4 py-2.5 rounded-xl flex-row items-center justify-center gap-2"
-                                style={{
-                                    backgroundColor: theme.primary,
-                                    opacity: canSubmit ? 1 : 0.5,
-                                    minWidth: 130,
-                                }}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <ActivityIndicator
-                                            size="small"
-                                            color="#ffffff"
-                                        />
-                                        <Text
-                                            className="uppercase tracking-wide text-white"
-                                            style={{
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            Sending…
-                                        </Text>
-                                    </>
-                                ) : (
-                                    <Text
-                                        className="uppercase tracking-wide text-white"
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 12,
-                                        }}
-                                    >
-                                        Send request
-                                    </Text>
-                                )}
-                            </Pressable>
-                        </View>
-                    </View>
+                    ) : null}
+                    <SheetButton label="Cancel" variant="secondary" onPress={onClose} disabled={isSubmitting} grow={!sheetWide} />
+                    <SheetButton label="Send request" icon="paper-plane-outline" onPress={handleSubmit} disabled={!canSubmit} loading={isSubmitting} loadingLabel="Sending…" grow={!sheetWide} />
+                </>
+            }
+        >
+            {!sheetWide && footerHint && lines.length > 0 ? (
+                <View style={{ borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(245,158,11,0.10)' }}>
+                    <Text style={{ color: '#b45309', fontFamily: theme.font.medium, fontSize: 12.5 }}>{footerHint}</Text>
                 </View>
-            </View>
-        </Modal>
+            ) : null}
+
+            {lines.length === 0 ? (
+                <Pressable
+                    onPress={addEmptyLine}
+                    disabled={isSubmitting}
+                    accessibilityRole="button"
+                    style={({ pressed }) => ({ alignItems: 'center', gap: 8, borderRadius: 18, paddingVertical: 28, paddingHorizontal: 16, borderWidth: 1.5, borderStyle: 'dashed', borderColor: divider, opacity: pressed ? 0.8 : 1, ...webPointer })}
+                >
+                    <View style={{ width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: `${theme.primary}14` }}>
+                        <Ionicons name="add" size={24} color={theme.primary} />
+                    </View>
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>Add a product</Text>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5, textAlign: 'center' }}>Pick the product, how many you need and which wholesalers to ask.</Text>
+                </Pressable>
+            ) : (
+                lines.map((line, idx) => {
+                    const errs = perLineErrors[idx];
+                    const t = touched[idx] ?? {};
+                    const productError = t.product && errs.product ? errs.product : undefined;
+                    const qtyError = t.quantity && errs.quantity ? errs.quantity : undefined;
+                    const wholesalerError = t.wholesalers && errs.wholesalers ? errs.wholesalers : undefined;
+                    return (
+                        <View key={idx} style={{ borderRadius: 18, padding: 14, gap: 12, backgroundColor: chipBg, zIndex: lines.length - idx }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' }}>Product {idx + 1}</Text>
+                                <Pressable
+                                    onPress={() => removeLine(idx)}
+                                    disabled={isSubmitting}
+                                    hitSlop={8}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Remove product ${idx + 1}`}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: isSubmitting ? 0.5 : 1, ...webPointer }}
+                                >
+                                    <Ionicons name="trash-outline" size={14} color="#e11d48" />
+                                    <Text style={{ color: '#e11d48', fontFamily: theme.font.bold, fontSize: 12 }}>Remove</Text>
+                                </Pressable>
+                            </View>
+
+                            <View style={{ zIndex: 30 }}>
+                                <ProductPickerAutocomplete
+                                    label="Product"
+                                    products={products as unknown as Product[]}
+                                    titleKey="title"
+                                    subtitleKey="bar_code"
+                                    imageKey="thumbnail_url"
+                                    value={
+                                        line.product_id
+                                            ? ({ id: line.product_id, title: line.product_title ?? '', bar_code: line.bar_code, thumbnail_url: line.thumbnail_url } as unknown as Product)
+                                            : null
+                                    }
+                                    onSelect={(p: any) => {
+                                        updateLine(idx, {
+                                            product_id: String(p?.id ?? ''),
+                                            product_title: String(p?.title ?? ''),
+                                            bar_code: p?.bar_code ? String(p.bar_code) : undefined,
+                                            thumbnail_url: p?.thumbnail_url ? String(p.thumbnail_url) : undefined,
+                                        });
+                                        markTouched(idx, 'product');
+                                    }}
+                                    onClear={() => {
+                                        updateLine(idx, { product_id: '', product_title: '', bar_code: undefined, thumbnail_url: undefined });
+                                        markTouched(idx, 'product');
+                                    }}
+                                    error={productError}
+                                    placeholder="Search products…"
+                                />
+                            </View>
+
+                            <FormRow>
+                                <CustomTextField
+                                    label="Quantity"
+                                    required
+                                    value={line.requested_quantity}
+                                    onChangeText={(v) => updateLine(idx, { requested_quantity: v.replace(/[^0-9]/g, '') })}
+                                    onFocus={() => handleQtyFocus(idx, line.requested_quantity)}
+                                    onBlur={() => handleQtyBlur(idx, line.requested_quantity)}
+                                    editable={!isSubmitting}
+                                    keyboardType="number-pad"
+                                    inputMode="numeric"
+                                    placeholder={DEFAULT_QUANTITY}
+                                    error={qtyError}
+                                />
+                                <ChoiceChips
+                                    label="Urgency"
+                                    options={URGENCY_CHOICES}
+                                    value={line.urgency ?? 'medium'}
+                                    onChange={(v) => updateLine(idx, { urgency: v })}
+                                    disabled={isSubmitting}
+                                />
+                            </FormRow>
+
+                            <View style={{ zIndex: 20 }}>
+                                <EntitiesMultiselectPicker
+                                    label="Wholesalers"
+                                    options={wholesalerOptions}
+                                    value={line.target_wholesaler_ids}
+                                    onChange={(ids) => handleWholesalersChange(idx, ids)}
+                                    disabled={isSubmitting}
+                                    required
+                                    error={wholesalerError}
+                                    placeholder="Select at least one wholesaler…"
+                                    searchPlaceholder="Search wholesalers…"
+                                    emptyText="No wholesalers available"
+                                />
+                            </View>
+                        </View>
+                    );
+                })
+            )}
+
+            {lines.length > 0 ? <SheetButton label="Add another product" variant="secondary" icon="add" onPress={addEmptyLine} disabled={isSubmitting} /> : null}
+
+            <FormSection title="Note">
+                <CustomTextField
+                    label="Note to wholesalers"
+                    value={overallNote}
+                    onChangeText={setOverallNote}
+                    placeholder="Anything you want wholesalers to know"
+                    multiline
+                    numberOfLines={3}
+                    editable={!isSubmitting}
+                />
+            </FormSection>
+        </AdminSheet>
     );
 }
+
+const URGENCY_CHOICES: ChoiceOption<'low' | 'medium' | 'high'>[] = [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium', color: '#f59e0b' },
+    { value: 'high', label: 'High', icon: 'flame-outline', color: '#f43f5e' },
+];
+

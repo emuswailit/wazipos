@@ -44,14 +44,12 @@ multipartClient.addAsyncRequestTransform(async (request) => {
 
     if (!authToken) {
       console.log("Auth token at client", "Haiko");
-      router.push("/(routes)/login");
+      router.push("/(auth)/login");
       return;
     }
 
-    if (!request.headers) {
-      request.headers = {} as any;
-    }
-    request.headers["Authorization"] = `Bearer ${authToken}`;
+    const headers = (request.headers ??= {} as any);
+    headers["Authorization"] = `Bearer ${authToken}`;
   } catch (err) {
     console.error("[multipartClient] auth transform error:", err);
   }

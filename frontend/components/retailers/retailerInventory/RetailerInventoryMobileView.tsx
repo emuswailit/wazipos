@@ -1,58 +1,48 @@
 // components/retailers/retailerInventory/RetailerInventoryMobileView.tsx
 //
-// Small-screen view for retailer inventory — mirrors the
-// requisitions MobileView structure.
+// Small-screen view for the retailer's inventory (native apps and narrow web).
+//   - Minimal header: one bar with search · filters · add, and one line of context.
+//   - Filters (and sync status / refresh) live in a bottom sheet.
+//   - No pagination: every item in one scrolling list; pull to refresh.
+//   - Tapping a card opens the details modal (which has Edit).
+//
+// Pills, formatters and filters are shared with the web view.
 
 import ImageWithFallback from '@/components/common/ImageWithFallback';
-import { useAuth, type ThemeShape } from '@/context/AuthContext';
-import { resolveImageUrl } from '@/lib/images';
-import React from 'react';
-import {
-    FlatList,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { useAuth } from '@/context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
+import React, { memo, useState } from 'react';
+import { FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
     expiryLabel,
-    FilterPill,
+    expiryRelative,
     formatDate,
     formatKES,
+    healthColor,
+    INVENTORY_FILTER_COLORS,
+    INVENTORY_FILTER_ICONS,
+    INVENTORY_FILTER_LABELS,
+    INVENTORY_FILTERS,
     isExpired,
+    isExpiringSoon,
+    isLowStock,
+    itemImageUrl,
+    preparationTitle,
+    productTitle,
     StatusPill,
-    SummaryBadge,
-    SyncPill,
+    statusToneOf,
+    StockBar,
+    stockQty,
+    stockValue,
+    unitPrice,
     type InventoryCounts,
     type InventoryFilter,
+    type InventoryViewProps,
 } from './RetailerInventoryWebView';
 
-/* =========================================================
- * Props
- * ======================================================= */
-interface Props {
-    query: string;
-    setQuery: (v: string) => void;
-    activeFilter: InventoryFilter;
-    setActiveFilter: (v: InventoryFilter) => void;
-    onOpenCreate: () => void;
-    onRefresh: () => void;
-    refreshing: boolean;
-    isLiveConnected: boolean;
-    lastSyncedTime: string;
-    counts: InventoryCounts;
-    totalValue: number;
-    items: any[];
-    onView?: (item: any) => void;
-    onEdit?: (item: any) => void;
-}
-
-/* =========================================================
- * Component
- * ======================================================= */
+const isWeb = Platform.OS === 'web';
 
 export function RetailerInventoryMobileView({
     query,
@@ -68,262 +58,295 @@ export function RetailerInventoryMobileView({
     totalValue,
     items,
     onView,
-    onEdit,
-}: Props) {
+}: InventoryViewProps) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const searchBg = isDarkMode ? '#0f172a' : '#f1f5f9';
 
-    const sourceLabel = isLiveConnected ? 'Live' : 'Offline';
-
-    const sourceTint = isLiveConnected
-        ? { bg: 'rgba(16,185,129,0.12)', fg: '#10b981', dot: '#10b981' }
-        : { bg: 'rgba(244,63,94,0.12)', fg: '#f43f5e', dot: '#f43f5e' };
-
-    const hasActiveFilter =
-        activeFilter !== 'ALL' || query.trim() !== '';
-
+    const filtered = activeFilter !== 'ALL';
+    const filterColor = INVENTORY_FILTER_COLORS[activeFilter] ?? theme.primary;
+    const hasActiveFilter = filtered || query.trim() !== '';
     const clearFilters = () => {
-        if (activeFilter !== 'ALL') setActiveFilter('ALL');
+        if (filtered) setActiveFilter('ALL');
         if (query.trim() !== '') setQuery('');
     };
 
-    return (
-        <View
-            className="flex-1 w-full"
-            style={{ backgroundColor: theme.background }}
-        >
-            {/* ============ Header ============ */}
-            <View
-                className="p-4 border-b"
-                style={{
-                    backgroundColor: theme.panel,
-                    borderBottomColor: borderColor,
-                }}
-            >
-                <View className="flex-row items-start justify-between mb-3 gap-3">
-                    <View className="flex-1 min-w-0">
-                        <Text
-                            className="tracking-tight"
-                            style={{
-                                color: theme.text,
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.lg,
-                            }}
-                        >
-                            Inventory
-                        </Text>
-                        <View className="flex-row items-center gap-2 mt-1 flex-wrap">
-                            <FilterPill
-                                label={sourceLabel}
-                                active
-                                tint={sourceTint}
-                                onPress={() => { }}
-                            />
-                            <SummaryBadge
-                                label={`${counts.total} item${counts.total === 1 ? '' : 's'
-                                    }`}
-                            />
-                            {counts.expired > 0 ? (
-                                <SummaryBadge
-                                    label={`${counts.expired} expired`}
-                                    tone="danger"
-                                />
-                            ) : null}
-                        </View>
-
-                        <View className="flex-row items-center gap-2 mt-1 flex-wrap">
-                            <Text
-                                className="text-[11px]"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.medium,
-                                }}
-                            >
-                                Value:{' '}
-                                <Text
-                                    style={{
-                                        color: theme.primary,
-                                        fontFamily: theme.font.bold,
-                                    }}
-                                >
-                                    KES {formatKES(totalValue)}
-                                </Text>
-                            </Text>
-                            {lastSyncedTime ? (
-                                <Text
-                                    className="text-[11px]"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily: theme.font.medium,
-                                    }}
-                                >
-                                    • Synced {lastSyncedTime}
-                                </Text>
-                            ) : null}
-                        </View>
-                    </View>
-
-                    <View className="flex-row items-center gap-2">
-                        <Pressable
-                            onPress={onOpenCreate}
-                            accessibilityRole="button"
-                            accessibilityLabel="Add inventory"
-                            className="px-3 min-h-[40px] rounded-full border items-center justify-center"
-                            style={{
-                                borderColor: theme.primary,
-                                backgroundColor: `${theme.primary}15`,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest text-sm"
-                                style={{
-                                    color: theme.primary,
-                                    fontFamily: theme.font.bold,
-                                }}
-                            >
-                                + Add
-                            </Text>
+    const header = (
+        <View className="pb-3">
+            {/* Search · filters · add */}
+            <View className="flex-row items-center gap-2">
+                <View className="flex-1 flex-row items-center h-11 rounded-2xl px-3.5" style={{ backgroundColor: searchBg }}>
+                    <Ionicons name="search" size={17} color={theme.textDark} />
+                    <TextInput
+                        value={query}
+                        onChangeText={setQuery}
+                        placeholder="Search inventory…"
+                        placeholderTextColor="#94a3b8"
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        returnKeyType="search"
+                        className="flex-1 h-full ml-2"
+                        style={{
+                            color: theme.text,
+                            fontFamily: theme.font.medium,
+                            fontSize: 13,
+                            ...(isWeb ? ({ outlineStyle: 'none' } as any) : {}),
+                        }}
+                    />
+                    {query ? (
+                        <Pressable onPress={() => setQuery('')} hitSlop={10}>
+                            <Ionicons name="close-circle" size={17} color={theme.textDark} />
                         </Pressable>
-
-                        <Pressable
-                            onPress={onRefresh}
-                            disabled={refreshing}
-                            accessibilityRole="button"
-                            accessibilityState={{
-                                disabled: refreshing,
-                            }}
-                            className="px-4 min-h-[40px] rounded-full items-center justify-center"
-                            style={{
-                                backgroundColor: theme.primary,
-                                opacity: refreshing ? 0.5 : 1,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest text-white text-sm"
-                                style={{ fontFamily: theme.font.bold }}
-                            >
-                                {refreshing ? '…' : 'Refresh'}
-                            </Text>
-                        </Pressable>
-                    </View>
+                    ) : null}
                 </View>
 
-                {/* Pill row */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    className="-mx-1 mb-2"
-                    contentContainerStyle={{ paddingHorizontal: 4 }}
+                <Pressable
+                    onPress={() => setFiltersOpen(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={filtered ? `Filters, ${INVENTORY_FILTER_LABELS[activeFilter]} applied` : 'Filters'}
+                    className="w-11 h-11 rounded-2xl items-center justify-center"
+                    style={{ backgroundColor: filtered ? `${filterColor}18` : searchBg }}
                 >
-                    <FilterPill
-                        label="All"
-                        active={activeFilter === 'ALL'}
-                        count={counts.total}
-                        tint={{
-                            fg: theme.primary,
-                            dot: theme.primary,
-                            bg: `${theme.primary}15`,
-                        }}
-                        onPress={() => setActiveFilter('ALL')}
-                    />
-                    <FilterPill
-                        label="Active"
-                        active={activeFilter === 'ACTIVE'}
-                        count={counts.active}
-                        tint={{
-                            fg: '#10b981',
-                            dot: '#10b981',
-                            bg: 'rgba(16,185,129,0.12)',
-                        }}
-                        onPress={() => setActiveFilter('ACTIVE')}
-                    />
-                    <FilterPill
-                        label="Expired"
-                        active={activeFilter === 'EXPIRED'}
-                        count={counts.expired}
-                        tint={{
-                            fg: '#f43f5e',
-                            dot: '#f43f5e',
-                            bg: 'rgba(244,63,94,0.12)',
-                        }}
-                        onPress={() => setActiveFilter('EXPIRED')}
-                    />
-                </ScrollView>
-
-                <TextInput
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search product, barcode, supplier…"
-                    placeholderTextColor="#94a3b8"
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    className="h-11 rounded-xl border px-3.5 text-sm"
-                    style={{
-                        borderColor,
-                        backgroundColor: inputBg,
-                        color: theme.text,
-                        fontFamily: theme.font.medium,
-                    }}
-                />
-
-                {hasActiveFilter && (
-                    <Pressable
-                        onPress={clearFilters}
-                        className="mt-2 self-start"
-                    >
-                        <Text
-                            className="uppercase tracking-widest text-[10px]"
+                    <Ionicons name="options-outline" size={19} color={filtered ? filterColor : theme.text} />
+                    {filtered ? (
+                        <View
                             style={{
-                                color: theme.primary,
-                                fontFamily: theme.font.bold,
+                                position: 'absolute',
+                                top: 7,
+                                right: 7,
+                                width: 9,
+                                height: 9,
+                                borderRadius: 4.5,
+                                backgroundColor: filterColor,
+                                borderWidth: 1.5,
+                                borderColor: theme.background,
                             }}
-                        >
-                            Clear filters
-                        </Text>
-                    </Pressable>
-                )}
+                        />
+                    ) : null}
+                </Pressable>
+
+                <Pressable
+                    onPress={onOpenCreate}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add stock"
+                    className="w-11 h-11 rounded-2xl items-center justify-center"
+                    style={{ backgroundColor: theme.primary }}
+                >
+                    <Ionicons name="add" size={22} color="#fff" />
+                </Pressable>
             </View>
 
-            {/* ============ List ============ */}
+            {/* One line of context: live · count · value · active filter (tap ✕ to clear) */}
+            <View className="flex-row items-center mt-2.5 px-1 gap-1.5">
+                <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isLiveConnected ? '#10b981' : '#f59e0b' }} />
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
+                    {counts.visible.toLocaleString()} {counts.visible === 1 ? 'item' : 'items'} · KES {formatKES(totalValue)}
+                </Text>
+                <View className="flex-1" />
+                {filtered ? (
+                    <Pressable
+                        onPress={() => setActiveFilter('ALL')}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Clear ${INVENTORY_FILTER_LABELS[activeFilter]} filter`}
+                        className="flex-row items-center gap-1 px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: `${filterColor}18` }}
+                    >
+                        <Text style={{ color: filterColor, fontFamily: theme.font.bold, fontSize: 11 }}>{INVENTORY_FILTER_LABELS[activeFilter]}</Text>
+                        <Ionicons name="close" size={12} color={filterColor} />
+                    </Pressable>
+                ) : null}
+            </View>
+        </View>
+    );
+
+    return (
+        <View className="flex-1 w-full" style={{ backgroundColor: theme.background }}>
             <FlatList
                 data={items}
-                keyExtractor={(item, idx) =>
-                    `${item?.remote_id ??
-                    item?.key ??
-                    item?.id ??
-                    'item'
-                    }-${idx}`
-                }
-                contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingTop: 16,
-                    paddingBottom: 32,
-                }}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={theme.primary}
-                    />
-                }
-                ListEmptyComponent={
-                    <EmptyState
-                        theme={theme}
-                        hasActiveFilter={hasActiveFilter}
-                        hasItems={counts.total > 0}
-                        onClearFilters={clearFilters}
-                    />
-                }
-                renderItem={({ item }) => (
-                    <InventoryCard
-                        item={item}
-                        onView={() => onView?.(item)}
-                        onEdit={() => onEdit?.(item)}
-                    />
-                )}
+                keyExtractor={(item, idx) => `${item?.remote_id ?? item?.key ?? item?.id ?? 'item'}-${idx}`}
+                ListHeaderComponent={header}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
+                keyboardShouldPersistTaps="handled"
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+                ListEmptyComponent={<EmptyState hasActiveFilter={hasActiveFilter} onClearFilters={clearFilters} onAdd={onOpenCreate} />}
+                renderItem={({ item }) => <InventoryCard item={item} onPress={onView} />}
+                ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
                 showsVerticalScrollIndicator={false}
+                initialNumToRender={12}
+                windowSize={11}
             />
+
+            <FiltersSheet
+                visible={filtersOpen}
+                onClose={() => setFiltersOpen(false)}
+                value={activeFilter}
+                onChange={(f) => {
+                    setActiveFilter(f);
+                    setFiltersOpen(false);
+                }}
+                counts={counts}
+                totalValue={totalValue}
+                isLiveConnected={isLiveConnected}
+                lastSyncedTime={lastSyncedTime}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+            />
+        </View>
+    );
+}
+
+/* =========================================================
+ * Filters bottom sheet
+ * ======================================================= */
+
+function FiltersSheet({
+    visible,
+    onClose,
+    value,
+    onChange,
+    counts,
+    totalValue,
+    isLiveConnected,
+    lastSyncedTime,
+    refreshing,
+    onRefresh,
+}: {
+    visible: boolean;
+    onClose: () => void;
+    value: InventoryFilter;
+    onChange: (f: InventoryFilter) => void;
+    counts: InventoryCounts;
+    totalValue: number;
+    isLiveConnected: boolean;
+    lastSyncedTime: string;
+    refreshing: boolean;
+    onRefresh: () => void;
+}) {
+    const { theme, isDarkMode } = useAuth();
+    const insets = useSafeAreaInsets();
+    const divider = isDarkMode ? 'rgba(148,163,184,0.12)' : 'rgba(15,23,42,0.06)';
+    const tileBg = isDarkMode ? '#0f172a' : '#f8fafc';
+
+    return (
+        <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+            <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Close filters"
+                    onPress={onClose}
+                    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(15,23,42,0.45)' }}
+                />
+                <View
+                    style={{
+                        backgroundColor: theme.panel,
+                        borderTopLeftRadius: 28,
+                        borderTopRightRadius: 28,
+                        paddingBottom: insets.bottom + 16,
+                        maxHeight: '85%',
+                        width: '100%',
+                        maxWidth: 640,
+                        alignSelf: 'center',
+                    }}
+                >
+                    {/* Grabber */}
+                    <View className="items-center pt-2.5 pb-1">
+                        <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: isDarkMode ? '#334155' : '#cbd5e1' }} />
+                    </View>
+
+                    {/* Title row */}
+                    <View className="flex-row items-center px-5 pt-2 pb-3">
+                        <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 18 }}>Filter inventory</Text>
+                        {value !== 'ALL' ? (
+                            <Pressable onPress={() => onChange('ALL')} hitSlop={8} style={{ marginRight: 16 }}>
+                                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 13 }}>Reset</Text>
+                            </Pressable>
+                        ) : null}
+                        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+                            <Ionicons name="close" size={22} color={theme.textDark} />
+                        </Pressable>
+                    </View>
+
+                    <ScrollView contentContainerStyle={{ paddingHorizontal: 12 }}>
+                        {/* Overview (what used to sit in the header) */}
+                        <View className="flex-row gap-2 px-1 mb-4">
+                            <Tile label="Stock value" value={`KES ${formatKES(totalValue)}`} color={theme.primary} bg={tileBg} />
+                            <Tile label="Items" value={counts.total.toLocaleString()} color={theme.text} bg={tileBg} />
+                        </View>
+
+                        <Text
+                            style={{
+                                color: theme.textDark,
+                                fontFamily: theme.font.bold,
+                                fontSize: 11,
+                                letterSpacing: 0.6,
+                                textTransform: 'uppercase',
+                                marginLeft: 8,
+                                marginBottom: 6,
+                            }}
+                        >
+                            Show
+                        </Text>
+                        {INVENTORY_FILTERS.map((f) => {
+                            const active = f === value;
+                            const color = INVENTORY_FILTER_COLORS[f] ?? theme.primary;
+                            return (
+                                <Pressable
+                                    key={f}
+                                    onPress={() => onChange(f)}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected: active }}
+                                    className="flex-row items-center px-3 py-3 rounded-2xl mb-1"
+                                    style={({ pressed }) => ({ backgroundColor: active ? `${color}14` : pressed ? divider : 'transparent' })}
+                                >
+                                    <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: `${color}18` }}>
+                                        <Ionicons name={INVENTORY_FILTER_ICONS[f]} size={18} color={color} />
+                                    </View>
+                                    <Text style={{ flex: 1, color: active ? color : theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>
+                                        {INVENTORY_FILTER_LABELS[f]}
+                                    </Text>
+                                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, marginRight: 10 }}>
+                                        {(counts.byFilter?.[f] ?? 0).toLocaleString()}
+                                    </Text>
+                                    <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={active ? color : theme.textDark} />
+                                </Pressable>
+                            );
+                        })}
+
+                        {/* Sync status + manual refresh (pull-to-refresh on the list works too) */}
+                        <View className="flex-row items-center mx-2 mt-3 pt-4" style={{ borderTopWidth: 1, borderTopColor: divider }}>
+                            <View className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: isLiveConnected ? '#10b981' : '#f59e0b' }} />
+                            <Text style={{ flex: 1, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
+                                {isLiveConnected ? 'Live' : 'Offline'}
+                                {lastSyncedTime ? ` · synced ${lastSyncedTime}` : ''}
+                            </Text>
+                            <Pressable
+                                onPress={onRefresh}
+                                disabled={refreshing}
+                                accessibilityRole="button"
+                                accessibilityLabel="Refresh inventory"
+                                className="flex-row items-center gap-1.5 px-3 h-9 rounded-full"
+                                style={{ backgroundColor: `${theme.primary}14`, opacity: refreshing ? 0.5 : 1 }}
+                            >
+                                <Ionicons name="refresh" size={15} color={theme.primary} />
+                                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12 }}>{refreshing ? 'Refreshing…' : 'Refresh'}</Text>
+                            </Pressable>
+                        </View>
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+function Tile({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
+    const { theme } = useAuth();
+    return (
+        <View className="flex-1 rounded-2xl px-3.5 py-3" style={{ backgroundColor: bg }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>{label}</Text>
+            <Text style={{ color, fontFamily: theme.font.bold, fontSize: 16, marginTop: 2 }} numberOfLines={1}>
+                {value}
+            </Text>
         </View>
     );
 }
@@ -332,267 +355,100 @@ export function RetailerInventoryMobileView({
  * Card
  * ======================================================= */
 
-function InventoryCard({
-    item,
-    onEdit,
-    onView,
-}: {
-    item: any;
-    onEdit: () => void;
-    onView: () => void;
-}) {
+const InventoryCard = memo(function InventoryCard({ item, onPress }: { item: any; onPress?: (item: any) => void }) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
-
-    const exp = isExpired(item);
-    const qty = Number(item?.current_unit_quantity ?? 0);
-    const fp = parseFloat(
-        item?.final_unit_selling_price || '0'
-    );
-    const stockValue = qty * fp;
-
-    const url = resolveImageUrl(
-        item?.thumbnail_url ||
-        item?.image_url ||
-        item?.images?.[0]
-    );
-
-    const statusTone: 'active' | 'expired' | 'warning' = exp
-        ? 'expired'
-        : item?.expiry_status === 'EXPIRING' ||
-            item?.expiry_status === 'EXPIRING_SOON'
-            ? 'warning'
-            : 'active';
+    const qty = stockQty(item);
+    const health = healthColor(item);
+    const low = isLowStock(item);
+    const notUploaded = item?.synced === false || !!item?.sync_error;
+    const divider = isDarkMode ? 'rgba(148,163,184,0.12)' : 'rgba(15,23,42,0.06)';
+    const sub = [item?.batch ? `Batch ${item.batch}` : null, item?.manufacturer_title].filter(Boolean).join(' · ');
+    const rel = expiryRelative(item);
+    const expiryWarn = isExpired(item) || isExpiringSoon(item);
+    const showLow = low && !isExpired(item);
+    const prep = preparationTitle(item);
 
     return (
-        <View
-            className="rounded-2xl border p-3.5 mb-3"
-            style={{
+        <Pressable
+            onPress={() => onPress?.(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`${productTitle(item)}, ${qty} in stock, ${expiryLabel(item).toLowerCase()}`}
+            style={({ pressed }) => ({
                 backgroundColor: theme.panel,
-                borderColor,
-            }}
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: isDarkMode ? '#1e293b' : '#eef2f7',
+                transform: [{ scale: pressed ? 0.985 : 1 }],
+                ...(isWeb
+                    ? ({ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 6px 18px rgba(15,23,42,0.05)', cursor: 'pointer' } as any)
+                    : { shadowColor: '#0f172a', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 }),
+            })}
         >
-            {/* Top row: barcode + sync + status */}
-            <View className="flex-row items-center mb-2 gap-2">
-                <Text
-                    className="flex-1 uppercase tracking-widest text-[10px]"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.bold,
-                    }}
-                    numberOfLines={1}
-                >
-                    {item?.bar_code || '—'}
-                </Text>
-                <SyncPill
-                    synced={item?.synced}
-                    error={item?.sync_error}
-                    size="sm"
-                />
-                <StatusPill
-                    label={expiryLabel(item)}
-                    tone={statusTone}
-                    size="sm"
-                />
-            </View>
-
-            {/* Image + title */}
-            <View className="flex-row items-center gap-3 mb-2">
-                <View className="w-12 h-12 rounded-lg overflow-hidden items-center justify-center shrink-0">
-                    <ImageWithFallback
-                        uri={url}
-                        width={48}
-                        height={48}
-                        fallback="📦"
-                        fallbackSize={20}
-                        borderRadius={10}
-                    />
+            <View className="p-4">
+                {/* Product + stock */}
+                <View className="flex-row items-start gap-3">
+                    <View className="w-12 h-12 rounded-2xl overflow-hidden items-center justify-center" style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9' }}>
+                        <ImageWithFallback uri={itemImageUrl(item)} width={48} height={48} fallback="📦" fallbackSize={20} borderRadius={14} />
+                    </View>
+                    <View className="flex-1 min-w-0">
+                        <View className="flex-row items-center gap-1">
+                            {/* Full title, wrapping as needed — never truncated */}
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15, lineHeight: 20, flexShrink: 1 }}>
+                                {productTitle(item)}
+                            </Text>
+                            {notUploaded ? <Ionicons name="cloud-upload-outline" size={13} color={item?.sync_error ? '#ef4444' : '#f59e0b'} /> : null}
+                        </View>
+                        {prep ? (
+                            <Text style={{ color: theme.primary, fontFamily: theme.font.semibold, fontSize: 13, lineHeight: 18, marginTop: 1 }}>
+                                {prep}
+                            </Text>
+                        ) : null}
+                        {sub ? (
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
+                                {sub}
+                            </Text>
+                        ) : null}
+                    </View>
+                    <View className="items-end">
+                        <Text style={{ color: low ? health : theme.text, fontFamily: theme.font.bold, fontSize: 18 }} numberOfLines={1}>
+                            {qty.toLocaleString()}
+                        </Text>
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>in stock</Text>
+                    </View>
                 </View>
-                <View className="flex-1 min-w-0">
-                    <Text
-                        className="text-[15px]"
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                        }}
-                        numberOfLines={2}
-                    >
-                        {item?.title ||
-                            item?.product_title ||
-                            'Unnamed'}
-                    </Text>
-                    <Text
-                        className="mt-0.5 text-[11px]"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                        }}
-                        numberOfLines={1}
-                    >
-                        {item?.manufacturer_title ||
-                            'Unknown manufacturer'}
-                    </Text>
+
+                <View className="mt-3">
+                    <StockBar item={item} />
+                </View>
+
+                {/* Meta row */}
+                <View className="flex-row items-center mt-3 pt-3 gap-3" style={{ borderTopWidth: 1, borderTopColor: divider }}>
+                    <StatusPill label={showLow ? 'LOW STOCK' : expiryLabel(item)} tone={showLow ? 'warning' : statusToneOf(item)} size="sm" />
+                    <Meta icon="calendar-outline" text={rel && expiryWarn ? rel : formatDate(item?.expiry_date)} color={expiryWarn ? health : undefined} />
+                    <View className="flex-1" />
+                    <View className="items-end">
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }} numberOfLines={1}>
+                            KES {formatKES(stockValue(item))}
+                        </Text>
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 10 }} numberOfLines={1}>
+                            @ {formatKES(unitPrice(item))}
+                        </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={health} />
                 </View>
             </View>
-
-            {/* Chip row */}
-            <View className="flex-row items-center flex-wrap gap-1.5 mt-1">
-                <Chip theme={theme} borderColor={borderColor}>
-                    Qty {qty}
-                </Chip>
-                <Chip theme={theme} borderColor={borderColor}>
-                    {item?.unit_of_receipt || 'Unit'}
-                </Chip>
-                <Chip theme={theme} borderColor={borderColor}>
-                    {formatDate(item?.created)}
-                </Chip>
-                {item?.batch ? (
-                    <Chip
-                        theme={theme}
-                        borderColor={borderColor}
-                    >
-                        {item.batch}
-                    </Chip>
-                ) : null}
-            </View>
-
-            {/* Totals block */}
-            <View
-                className="rounded-xl px-3 py-2 mt-2.5 flex-row items-center justify-between"
-                style={{ backgroundColor: subBg }}
-            >
-                <View>
-                    <Text
-                        className="uppercase tracking-widest text-[9px]"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Unit Price
-                    </Text>
-                    <Text
-                        className="mt-0.5 text-[14px]"
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        KES {formatKES(fp)}
-                    </Text>
-                </View>
-                <View className="items-end">
-                    <Text
-                        className="uppercase tracking-widest text-[9px]"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Stock Value
-                    </Text>
-                    <Text
-                        className="mt-0.5 text-[14px]"
-                        style={{
-                            color: theme.primary,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        KES {formatKES(stockValue)}
-                    </Text>
-                </View>
-            </View>
-
-            {/* Meta row */}
-            <View className="flex-row items-center gap-2 mt-2.5">
-                <Text
-                    className="uppercase tracking-widest text-[9px]"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.bold,
-                    }}
-                    numberOfLines={1}
-                >
-                    {item?.received_from_title ||
-                        'Unknown supplier'}
-                </Text>
-            </View>
-
-            {/* Bottom action — View details + Edit */}
-            <View
-                className="flex-row justify-end gap-4 mt-3 pt-2.5 border-t"
-                style={{ borderTopColor: `${theme.textDark}20` }}
-            >
-                <Pressable
-                    onPress={onView}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="View inventory item"
-                >
-                    <Text
-                        className="uppercase tracking-wide text-[11px]"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        View details
-                    </Text>
-                </Pressable>
-                <Pressable
-                    onPress={onEdit}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit inventory item"
-                >
-                    <Text
-                        className="uppercase tracking-wide text-[11px]"
-                        style={{
-                            color: theme.primary,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Edit
-                    </Text>
-                </Pressable>
-            </View>
-        </View>
+        </Pressable>
     );
-}
+});
 
-/* =========================================================
- * Chip
- * ======================================================= */
-
-function Chip({
-    children,
-    theme,
-    borderColor,
-}: {
-    children: React.ReactNode;
-    theme: ThemeShape;
-    borderColor: string;
-}) {
+function Meta({ icon, text, color }: { icon: keyof typeof Ionicons.glyphMap; text: string; color?: string }) {
+    const { theme } = useAuth();
+    const c = color ?? theme.textDark;
     return (
-        <View
-            className="px-2 py-0.5 rounded-md border"
-            style={{
-                backgroundColor: theme.isDarkMode
-                    ? '#0f172a'
-                    : '#f1f5f9',
-                borderColor,
-            }}
-        >
-            <Text
-                className="uppercase tracking-wide text-[10px]"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.bold,
-                }}
-                numberOfLines={1}
-            >
-                {children}
+        <View className="flex-row items-center gap-1 shrink">
+            <Ionicons name={icon} size={13} color={c} />
+            <Text style={{ color: c, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
+                {text}
             </Text>
         </View>
     );
@@ -602,57 +458,22 @@ function Chip({
  * Empty state
  * ======================================================= */
 
-function EmptyState({
-    theme,
-    hasActiveFilter,
-    hasItems,
-    onClearFilters,
-}: {
-    theme: ThemeShape;
-    hasActiveFilter: boolean;
-    hasItems: boolean;
-    onClearFilters: () => void;
-}) {
+function EmptyState({ hasActiveFilter, onClearFilters, onAdd }: { hasActiveFilter: boolean; onClearFilters: () => void; onAdd: () => void }) {
+    const { theme } = useAuth();
     return (
-        <View className="p-8 items-center">
-            <Text
-                style={{
-                    color: theme.text,
-                    fontFamily: theme.font.bold,
-                    fontSize: theme.fontSize.base,
-                }}
-            >
-                {hasActiveFilter
-                    ? 'No matches'
-                    : hasItems
-                        ? 'Nothing to show'
-                        : 'No inventory yet'}
+        <View className="py-14 items-center px-6">
+            <View className="w-14 h-14 rounded-full items-center justify-center mb-3" style={{ backgroundColor: `${theme.primary}14` }}>
+                <Ionicons name={hasActiveFilter ? 'search' : 'cube-outline'} size={24} color={theme.primary} />
+            </View>
+            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 16 }}>{hasActiveFilter ? 'No matching items' : 'No inventory yet'}</Text>
+            <Text className="mt-1 text-center" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>
+                {hasActiveFilter ? 'Try a different search or filter.' : 'Add stock to start selling.'}
             </Text>
-            <Text
-                className="mt-1 text-center text-sm"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.regular,
-                }}
-            >
-                {hasActiveFilter
-                    ? 'Try adjusting your filters.'
-                    : 'Add inventory items to see them here.'}
-            </Text>
-            {hasActiveFilter && (
-                <Pressable
-                    onPress={onClearFilters}
-                    className="mt-4 px-5 min-h-[44px] rounded-full items-center justify-center"
-                    style={{ backgroundColor: theme.primary }}
-                >
-                    <Text
-                        className="uppercase tracking-widest text-white text-sm"
-                        style={{ fontFamily: theme.font.bold }}
-                    >
-                        Clear filters
-                    </Text>
-                </Pressable>
-            )}
+            <Pressable onPress={hasActiveFilter ? onClearFilters : onAdd} className="mt-4 px-5 h-10 rounded-full items-center justify-center" style={{ backgroundColor: theme.primary }}>
+                <Text className="text-white" style={{ fontFamily: theme.font.bold, fontSize: 13 }}>
+                    {hasActiveFilter ? 'Clear filters' : 'Add stock'}
+                </Text>
+            </Pressable>
         </View>
     );
 }

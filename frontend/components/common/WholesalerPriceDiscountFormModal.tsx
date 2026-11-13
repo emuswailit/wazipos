@@ -36,7 +36,7 @@ import * as Yup from "yup";
  * Public types
  * ======================================================= */
 
-export interface PriceDiscountPayload {
+interface PriceDiscountPayload {
     wholesaler_receipt: UUID;
     title: string;
     percent: string;
@@ -48,7 +48,7 @@ export interface PriceDiscountPayload {
     banner: ImageFieldValue;
 }
 
-export type PriceDiscountRecord = PriceDiscountPayload & {
+type PriceDiscountRecord = Omit<PriceDiscountPayload, "banner"> & {
     id: UUID;
     wholesaler_receipt_title?: string;
     product_title?: string;
@@ -66,12 +66,12 @@ export interface AttachedPriceDiscount {
     is_currently_active?: boolean;
 }
 
-export interface PriceDiscountSubmitResult {
+interface PriceDiscountSubmitResult {
     errors: Record<string, string | string[]> | null;
     result: PriceDiscountRecord | null;
 }
 
-export interface WholesalerPriceDiscountFormModalProps {
+interface WholesalerPriceDiscountFormModalProps {
     visible: boolean;
     existing?: PriceDiscountRecord | null;
     onClose: () => void;
@@ -86,7 +86,7 @@ export interface WholesalerPriceDiscountFormModalProps {
  * Helpers
  * ======================================================= */
 
-export function priceDiscountLabel(
+function priceDiscountLabel(
     d: Pick<PriceDiscountPayload, "title" | "percent">
 ): string {
     const t = (d.title ?? "").trim();
@@ -105,7 +105,7 @@ function plusDaysIso(days: number): string {
     return d.toISOString().slice(0, 10);
 }
 
-export function bannerUrlFromPriceRecord(
+function bannerUrlFromPriceRecord(
     record: PriceDiscountRecord | null | undefined
 ): string | null {
     if (!record) return null;
@@ -141,7 +141,7 @@ function receiptStubFromExisting(
     } as any;
 }
 
-export function initialPriceDiscountValues(
+function initialPriceDiscountValues(
     existing?: PriceDiscountRecord | null
 ): PriceDiscountPayload {
     if (existing) {
@@ -182,7 +182,7 @@ const decimals = (v: number | undefined, places: number) => {
     return Math.round(v * f) === v * f;
 };
 
-export const priceDiscountSchema = Yup.object({
+const priceDiscountSchema = Yup.object({
     wholesaler_receipt: Yup.string()
         .uuid("Pick a receipt.")
         .required("Pick a receipt."),
@@ -567,8 +567,8 @@ export function WholesalerPriceDiscountFormModal({
             : undefined;
 
     const generalError =
-        formik.submitCount > 0 && formik.errors.detail
-            ? String(formik.errors.detail)
+        formik.submitCount > 0 && (formik.errors as Record<string, unknown>).detail
+            ? String((formik.errors as Record<string, unknown>).detail)
             : undefined;
 
     if (!visible) return null;
@@ -608,7 +608,8 @@ export function WholesalerPriceDiscountFormModal({
                         borderRadius: 16,
                         padding: 20,
                         gap: 14,
-                        width: "min(560px, 100%)",
+                        width: "100%",
+                        maxWidth: 560,
                         maxHeight: "90%",
                     }}
                 >

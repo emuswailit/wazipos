@@ -14,8 +14,6 @@ import { WholesalerReceiptDetailsModal } from './WholesalerReceiptDetailsModal';
 import { WholesalerReceiptsMobileView } from './WholesalerReceiptsMobileView';
 import { WholesalerReceiptsWebView } from './WholesalerReceiptsWebView';
 
-export type { WholesalerReceipt };
-
 /* =========================================================
  * Constants
  * ======================================================= */
@@ -37,7 +35,7 @@ const EXPIRY_FILTERS = [
 
 interface Props {
     onReceiptPress?: (receipt: WholesalerReceipt) => void;
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
 }
 
 /* =========================================================
@@ -230,4 +228,3 @@ export default function WholesalerReceiptsList({
     );
 }
 
-export { EXPIRY_FILTERS };

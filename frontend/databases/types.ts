@@ -4,62 +4,6 @@
 // Existing app types
 // ===========================================================================
 
-export interface OutOfStockRecord {
-    id: string;
-    entity: string;
-    product: string;
-    product_title: string;
-    units_per_pack: number;
-    customer: string | null;
-    customer_name: string | null;
-    customer_phone: string | null;
-    required_quantity: number;
-    is_special_order: string;
-    is_ordered: string;
-    retailer_indent: string | null;
-    created: string;
-    updated: string;
-    owner: string;
-    images: any[];
-    cached_at?: string;
-}
-
-export interface LocalIndentItemLine {
-    product_id: string;
-    wholesaler_receipt_id: string;
-    title: string;
-    quantity: number;
-    price: number;
-    total: number;
-}
-
-export interface CachedIndentSelection {
-    id: string;
-    retailer_indent_id: string | null;
-    retailer_id: string | null;
-    items: LocalIndentItemLine[];
-    updated_at: string;
-}
-
-export interface ProcurementIntentRecord {
-    product_id: string;
-    title: string;
-    bar_code: string;
-    predicted_purchase_units: number;
-    metrics_in_units: {
-        total_physical_stock: number;
-        average_daily_sales: number;
-    };
-    wholesaler_procurement_offers?: {
-        wholesaler_receipt_id: string;
-        supplier_name: string;
-        unit_pricing: {
-            final_unit_selling_price: number;
-        };
-    };
-    cached_at: string;
-}
-
 export interface DBLineItemSchema {
     id: number;
     selectedProduct: string;
@@ -146,6 +90,27 @@ export interface ProductItem {
 }
 
 // ===========================================================================
+// Preparations 🌟 ADDED
+// ===========================================================================
+
+export interface PreparationItem {
+    id?: number;
+    remote_id: string;
+    title: string;
+    long_title: string;
+    formulation_id: string;
+    formulation_title: string;
+    description: string;
+    generics: string[];
+    generics_string: string;
+    gen_array: any[];
+    active: boolean;
+    created: string;
+    updated: string;
+    cached_at?: string;
+}
+
+// ===========================================================================
 // Retailer receipts
 // ===========================================================================
 
@@ -163,6 +128,7 @@ export interface RetailerReceiptImage {
 export interface RetailerReceipt {
     id?: number;
     cached_at?: string;
+    local_created_at?: string;
 
     remote_id: string;
     remote_key?: string;
@@ -215,6 +181,8 @@ export interface RetailerReceipt {
     units_per_pack: number;
     manufacturer: string;
     manufacturer_title: string;
+    category: string;             // ← add
+    category_title: string;       // ← add
 }
 
 // ===========================================================================
@@ -233,27 +201,8 @@ export interface RetailerIndentItemImage {
 }
 
 export interface RetailerIndentItem {
-    /**
-     * Local Dexie-style `++id` PK. Items are nested inside an indent
-     * blob, so Dexie can't auto-increment them directly — the db layer
-     * (`saveRetailerIndents`) assigns this. Undefined until first save.
-     * Never sent to the server.
-     */
     id?: number;
-
-    /**
-     * Server-assigned UUID for this item. On the wire this is the JSON
-     * `id` field; the normalizer maps it into `remote_id` before
-     * persisting. Null while the item is still local-only.
-     */
     remote_id: string | null;
-
-    /**
-     * Client-generated UUID identifying this item across the draft
-     * → remote transition. Present while the item is local-only and
-     * echoed by the server on every WS frame once it exists remotely.
-     * Null for items that arrived from the server on first sight.
-     */
     draft_id: string | null;
 
     entity: string;
@@ -331,13 +280,6 @@ export interface RetailerIndent {
     cached_at?: string;
 
     remote_id: string;
-
-    /**
-     * Client-generated UUID identifying this indent across the draft
-     * → remote transition. Present while the indent is local-only and
-     * echoed by the server on every WS frame once it exists remotely.
-     * Null for indents that arrived from the server on first sight.
-     */
     draft_id: string | null;
 
     is_open: string;
@@ -564,6 +506,9 @@ export interface CustomerOrder {
 // ===========================================================================
 // Entity
 // ===========================================================================
+// ===========================================================================
+// Entity
+// ===========================================================================
 
 export interface EntityCategory {
     id: string;
@@ -577,65 +522,112 @@ export interface EntityCategory {
     subcategories: any[];
 }
 
+// Single declaration (a second, conflicting copy used to be merged in below).
 export interface EntityItem {
-    id?: number;
+    /** Server UUID, or the local cache row id (number) for cached rows. */
+    id?: string | number;
     cached_at?: string;
 
+    /** Server UUID when `id` is the local cache row id. */
     remote_id: string;
 
     entity_code: string | null;
     bank_code: string | null;
+    bank_title?: string | null;
+    /** Not sent by the backend yet (its bank account model is disabled). */
+    account_name?: string | null;
+    account_number?: string | null;
+
     title: string;
+    entity_title: string;
     rating: number;
+    /** Only present on nearby-entity search results. */
+    distance_km?: number;
     administrator: string | null;
+
     owner: string | null;
-    registration: string;
-    phone: string;
+    owner_details: string;
+
+    registration: string | null;
+    phone: string | null;
     phone1: string | null;
     phone2: string | null;
     phone3: string | null;
     email: string | null;
+
     entity_type: string;
     entity_ownership: string;
-    categories: string[];
+
+    categories: string[]; // Array of UUIDs
+    categories_array: EntityCategory[];
+
     town: string;
-    country: string;
-    county: string | null;
-    constituency: string | null;
-    road: string;
-    building: string;
+    country: string; // UUID
+    county: string | null; // UUID
+    sub_county: string | null; // UUID
+    constituency: string | null; // UUID
+
+    road: string | null;
+    building: string | null;
+    sub_county_title?: string;
+
     images: any[];
     logos: any[];
     licences: any[];
+
     is_subscribed: boolean;
-    is_verified: string;
+    is_verified: string; // "true" | "false"
+
     trial_from: string | null;
     trial_to: string | null;
+
     registration_fee: string;
     commission_percentage: string;
     registration_fee_paid: string;
+    monthly_subscription: string;
     offer_trial: string;
+
     created: string;
     updated: string;
-    departments: any | null;
     description: string | null;
-    categories_array: EntityCategory[];
-    owner_details: string;
+
+    // Serialized Titles
     country_title: string;
     county_title: string;
     constituency_title: string;
+
     plan: any | null;
-    plan_title: string;
+    plan_title?: string; // Marked optional in case it's missing from payload
+    departments?: any | null; // Marked optional in case it's missing from payload
+
     postal_address: string | null;
     postal_code: string | null;
     postal_town: string | null;
+
+    // 🌟 Newly added Location & Pharmacy fields
+    point: [number, number] | number[] | null; // [longitude, latitude]
+    farness: string;
+    is_pharmacy: boolean;
 }
+
+export interface EntityCategory {
+    id: string;
+    icon: string | null;
+    icon_category: string | null;
+    category_class: string;
+    title: string;
+    description: string;
+    created: string;
+    updated: string;
+    subcategories: any[];
+}
+
 
 // ===========================================================================
 // Retailer Out of Stocks
 // ===========================================================================
 
-export interface OutOfStockCategory {
+interface OutOfStockCategory {
     id: string;
     icon: null;
     icon_category: null;
@@ -708,13 +700,13 @@ export interface RetailerOutOfStockImage {
     updated: string;
 }
 
-export interface OutOfStockBonusRatio {
+interface OutOfStockBonusRatio {
     buy: number;
     free: number;
     display: string;
 }
 
-export interface OutOfStockQuantityDiscountBanner {
+interface OutOfStockQuantityDiscountBanner {
     id: string;
     quantity_discount_banner: string;
     thumbnail: string | null;
@@ -747,7 +739,7 @@ export interface OutOfStockQuantityDiscount {
     owner: string;
 }
 
-export interface OutOfStockPriceDiscountBanner {
+interface OutOfStockPriceDiscountBanner {
     id: string;
     price_discount_banner: string;
     thumbnail: string | null;
@@ -848,10 +840,6 @@ export interface RetailerOutOfStock {
     wholesaler_offers: RetailerOutOfStockWholesalerOffer[];
 }
 
-export interface RetailerOutOfStocksResponse {
-    out_of_stocks: RetailerOutOfStock[];
-}
-
 export interface RetailerOutOfStockNormalized {
     cached_at: string;
     remote_id: string;
@@ -902,12 +890,6 @@ export interface PendingOutOfStockEdit {
     remote_id: string;
     params: Partial<RetailerOutOfStockNormalized>;
     created_at: string;
-}
-
-export interface OutOfStockItemParamsResponse {
-    status?: string;
-    item_id?: string;
-    params?: Partial<RetailerOutOfStock>;
 }
 
 // ===========================================================================
@@ -1001,6 +983,14 @@ export interface RetailerForecastNormalized {
     best_offer_score: number;
 
     created: string;
+
+    /* Demand analytics (mapped by ForecastContext's normalizer). */
+    demand_pattern?: string | null;
+    demand_cv?: number | null;
+    zero_demand_pct?: number | null;
+    history_days?: number | null;
+    trend_direction?: string | null;
+    trend_pct?: number | null;
 }
 
 // ===========================================================================
@@ -1089,24 +1079,6 @@ export interface ProductRequest {
     updated: string;
 }
 
-export interface CreateProductRequestPayload {
-    items: Array<{
-        product_id: string;
-        requested_quantity: number;
-        urgency?: "low" | "medium" | "high";
-        note?: string;
-    }>;
-    urgency?: "low" | "medium" | "high";
-    note?: string;
-}
-
-export interface ConfirmProductRequestOffersPayload {
-    request_id: string;
-    confirmations: Array<{ offer_id: string; response_note?: string }>;
-    declinations: Array<{ offer_id: string; reason?: string }>;
-    note?: string;
-}
-
 export interface WholesalerProductRequestTargetWholesaler {
     id: string;
     title: string;
@@ -1145,6 +1117,8 @@ export interface ProductRequestSummaryLineItem {
 }
 
 export interface ProductRequestSummary {
+    /** Line items embedded in list payloads; the sync context exposes them as `items`. */
+    items_preview?: ProductRequestSummaryLineItem[];
     remote_id: string | null;
 
     request_number: string;
@@ -1249,7 +1223,7 @@ export interface WholesalerReceiptImage {
     updated: string;
 }
 
-export interface WholesalerReceiptDiscountBanner {
+interface WholesalerReceiptDiscountBanner {
     id: string;
     price_discount_banner?: string;
     quantity_discount_banner?: string;
@@ -1310,24 +1284,6 @@ export interface WholesalerReceiptPriceDiscount {
     owner: string;
 }
 
-export interface WholesalerReceiptsSyncContextType {
-    isSyncing: boolean;
-    isManualRefreshing: boolean;
-    isLiveConnected: boolean;
-    isPushSyncing: boolean;
-    pendingCount: number;
-    syncStatus:
-    | 'idle'
-    | 'pushing'
-    | 'live'
-    | 'offline'
-    | 'error';
-    forceManualRefresh: () => Promise<void>;
-    pushPending: () => Promise<void>;
-    lastSyncedTime: string;
-    wholesalerReceipts: WholesalerReceipt[];
-}
-
 export interface WholesalerReceipt {
     id?: number;
     cached_at: string;
@@ -1350,9 +1306,7 @@ export interface WholesalerReceipt {
     preparation_title: string;
     formulation_title: string;
 
-    /** UUID of the product category. */
     category: string;
-    /** Human-readable category name, e.g. "PERSONAL CARE AND HYGIENE PRODUCTS". */
     category_title: string;
 
     received_from: string | null;
@@ -1402,68 +1356,27 @@ export interface WholesalerReceipt {
     updated: string;
     employee: string;
     owner: string;
+
+    /** Alias of product_id (several screens and the order payload read `product`). */
+    product?: string;
+
+    /* Optional extras: passed through by the sync normalizer when the API sends them. */
+    packaging?: string;
+    units_per_pack?: number;
+    notes?: string | null;
+    is_expired?: boolean;
+    is_near_expiry?: boolean;
+    batches?: any[];
+    placements?: any[];
+    price_tiers?: any[];
 }
 
 // ===========================================================================
 // Wholesaler offers / tagged requests
 // ===========================================================================
 
-export interface WholesalerOffer {
-    id: string;
-    request_item: string;
-    offered_quantity: number;
-    offered_unit_price: string | null;
-    batch: string | null;
-    expiry_date: string | null;
-    manufacture_date: string | null;
-    is_placement: boolean;
-    status: string;
-    status_display: string;
-    response_note: string;
-    retailer_response_note: string;
-    created: string;
-    updated: string;
-}
-
-export interface WholesalerTaggedRequestItem {
-    id: string;
-    product: string;
-    product_title: string;
-    requested_quantity: number;
-    urgency: 'low' | 'medium' | 'high';
-    urgency_display: string;
-    note: string;
-    status: string;
-    my_offers: WholesalerOffer[];
-    created: string;
-}
-
-export interface WholesalerTaggedRequest {
-    id: string;
-    request_number: string;
-    entity: string;
-    entity_title: string;
-    urgency: 'low' | 'medium' | 'high';
-    urgency_display: string;
-    note: string;
-    status: string;
-    status_display: string;
-    line_count: number;
-    expires_at: string | null;
-    created: string;
-    items: WholesalerTaggedRequestItem[];
-}
-
 // ===========================================================================
 // Retailer Orders
-//
-// Wire shape from the RetailerOrders websocket frame. Orders are
-// created on the backend; the client is read-only and mirrors the
-// server's state locally.
-//
-// Persistence contract:
-//   - `id`        → local Dexie `++id` PK. Never sent to server.
-//   - `remote_id` → server UUID. On the wire this is the JSON `id`.
 // ===========================================================================
 
 export interface RetailerOrderItemImage {
@@ -1478,9 +1391,10 @@ export interface RetailerOrderItemImage {
 }
 
 export interface RetailerOrderItem {
-    /** Server UUID for this line item. Maps the JSON `id` field. */
+    /** Server id as sent by the API. */
+    id?: string;
+    /** Same server id, set by the normalizer (RetailerOrdersSyncContext). */
     remote_id: string;
-
     entity: string;
     title: string;
     units_per_pack: number;
@@ -1489,10 +1403,7 @@ export interface RetailerOrderItem {
     product_title: string;
     preparation_title: string;
 
-    /** FK to WholesalerReceipt.remote_id */
     wholesaler_receipt: string;
-
-    /** FK to Product.remote_id */
     product: string;
 
     purchased_quantity: number;
@@ -1550,16 +1461,8 @@ export interface RetailerOrderPaymentSummary {
 }
 
 export interface RetailerOrder {
-    /** Local Dexie PK. Assigned by `++id`. Never sent to server. */
     id?: number;
-
-    /**
-     * Server-assigned UUID. On the wire this is the JSON `id` field;
-     * the db layer maps it into `remote_id` before persisting.
-     */
     remote_id: string;
-
-    /** Server-issued draft id (informational). Null when absent. */
     draft_id: string | null;
 
     wholesaler: string | null;
@@ -1582,6 +1485,10 @@ export interface RetailerOrder {
     document_number: string | null;
     document_number_display: string;
     reference_number: string | null;
+    /** Retailer indent this requisition was raised from (id), if any. */
+    retailer_indent?: string | null;
+    /** That indent's display number. */
+    retailer_indent_number?: string | null;
     provider_reference_number: string | null;
     psp_reference_number: string;
     telco: string;
@@ -1651,33 +1558,11 @@ export interface RetailerOrder {
     created: string;
     updated: string;
 
-    /** When this row was cached locally. */
     cached_at?: string;
-}
-
-/* ---------------------------------------------------------
- * Wire envelope for the RetailerOrders websocket/REST frame.
- * ------------------------------------------------------- */
-export interface RetailerRequisitionsResponse {
-    "retailer-requisitions": RetailerOrder[];
 }
 
 // ===========================================================================
 // Pending indent operations queue
-//
-// Offline-first retry queue for indent mutations. Every write the user
-// makes — add an item, change its quantity, remove it, close the indent —
-// is either applied on the server immediately (happy path) or enqueued
-// here for retry by the sync engine.
-//
-// Each op carries `client_op_id`, a client-generated UUID sent to the
-// backend so a timed-out retry cannot double-apply the same mutation.
-// If the backend doesn't dedupe yet, the worst case is a rare duplicate
-// item that the user can remove manually — worth adding server-side.
-//
-// The queue is serialized per-indent: ops for indent A don't block ops
-// for indent B, but within a single indent strict FIFO applies so that
-// SET_QTY and REMOVE cannot overtake the ADD they depend on.
 // ===========================================================================
 
 export type PendingIndentOpKind =
@@ -1687,48 +1572,292 @@ export type PendingIndentOpKind =
     | 'INDENT_CLOSE';
 
 export interface PendingIndentOp {
-    /** Dexie autoincrement PK. Not sent to the server. */
     id?: number;
-
-    /**
-     * Idempotency key sent with every POST. Same UUID is reused on
-     * retries so the server can detect a duplicate submission.
-     */
     client_op_id: string;
-
     kind: PendingIndentOpKind;
-
-    /** Local indent id. `local-*` until the indent is created remotely. */
     indent_local_id: string;
-
-    /** Real server UUID once the indent has been created (null otherwise). */
     indent_remote_id: string | null;
-
-    /**
-     * Target item for SET_QTY / REMOVE ops. Either a server UUID
-     * (once promoted) or a client draft UUID.
-     */
     item_id?: string | null;
-
-    /** Receipt FK for ITEM_ADD ops. */
     wholesale_receipt?: string | null;
-
-    /** Absolute quantity for ITEM_ADD / ITEM_SET_QTY. */
     quantity?: number;
-
-    /**
-     * Snapshot of the item at enqueue time. Lets the sync engine rebuild
-     * the correct payload even if the local item was mutated or removed
-     * by the time the op actually drains.
-     */
     item_snapshot?: Partial<RetailerIndentItem> | null;
-
-    /** Free-text note attached to close ops (reserved for future use). */
     close_note?: string | null;
-
     attempts: number;
     last_error: string | null;
-
     created_at: string;
     updated_at: string;
 }
+
+// ===========================================================================
+// Locations — Countries, Counties, SubCounties
+// ===========================================================================
+
+export interface SubCounty {
+    id: string;
+    sub_county_code: string;
+    title: string;
+    description: string;
+    created: string;
+    updated: string;
+    county: string;
+}
+
+export interface County {
+    id: string;
+    county_code: string;
+    country: string;
+    title: string;
+    description: string;
+    sub_counties: SubCounty[];
+}
+
+export interface Country {
+    id: string;
+    country_code: string;
+    iso_code_two: string;
+    iso_code_three: string;
+    title: string;
+    currency_name: string;
+    currency_symbol: string;
+    flag_png: string;
+    flag_svg: string;
+    flag_alt: string;
+    description: string;
+    created: string;
+    updated: string;
+    counties?: County[];
+}
+
+export interface LocationOption {
+    value: string;
+    label: string;
+    count: number;
+}
+
+// ===========================================================================
+// Other Models
+// ===========================================================================
+
+export interface EmployeeNormalized {
+    id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    phone: string;
+    is_active: boolean;
+    can_deliver: boolean;
+    entity: string;
+    images?: any[];
+}
+
+export type SubscriptionType = "TRIAL" | "PAID";
+
+export interface SubscriptionNormalized {
+    id: string;
+    owner: string;
+    entity: string;
+    entity_title: string;
+    months: number;
+    startDate: string;
+    endDate: string;
+    type: SubscriptionType;
+    isActive: boolean;
+    created: string;
+    updated: string;
+}
+
+export interface SubscriptionPaymentNormalized {
+    id: string;
+    entity: string;
+    entity_title: string;
+    reference_number: string;
+    psp_reference_number: string | null;
+    provider_reference_number: string | null;
+    description: string | null;
+    amount: number;
+    status: "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED";
+    created: string;
+    updated: string;
+}
+
+// @/databases/types.ts
+
+// ... existing types ...
+
+export interface RouteItem {
+    id?: number;
+    remote_id: string;
+    title: string;
+    description: string;
+    active: boolean;
+    created: string;
+    updated: string;
+    cached_at?: string;
+}
+
+export interface FrequencyItem {
+    id?: number;
+    remote_id: string;
+    title: string;
+    numerical: number; // e.g., 2 for twice daily
+    description: string;
+    active: boolean;
+    created: string;
+    updated: string;
+    cached_at?: string;
+}
+
+
+export interface EmployeeRoleRef {
+    id: string;
+    entity: string;
+    entity_title: string;
+    cluster: string;
+    cluster_title: string;
+    title: string;
+    description?: string;
+    level?: string | null;
+    value: string;
+    owner: string;
+}
+
+export interface EmployeeItem {
+    id: string;
+    entity: string;
+    entity_title: string;
+    attached_entity?: string;
+    attached_entity_title?: string;
+
+    user_id: string;
+    user_title: string;
+    title: string; // Display name
+
+    email?: string | null;
+    phone?: string;
+
+    designation?: string;
+    designation_title?: string;
+    department?: string;
+    department_title?: string;
+
+    advert?: string | null;
+    advert_title?: string | null;
+
+    hire_date?: string;
+    terminal_date?: string | null;
+
+    roles: EmployeeRoleRef[]; // 🟢 Now an array of objects
+
+    images?: string | null;
+    is_active: string;
+    is_authorized: string;
+    can_deliver: boolean;
+
+    counter_discount_limit?: string;
+    current_branch?: string | null;
+    current_branch_title?: string | null;
+
+    basic_salary?: number;
+    house_allowance?: number;
+    other_allowance?: number;
+
+    owner: string;
+    created?: string;
+    updated?: string;
+}
+
+
+
+// databases/types.ts
+
+export interface RoleItem {
+    id: string;
+    entity?: string;
+    entity_title?: string;
+    cluster?: string;
+    cluster_title?: string;
+    title: string;
+    description?: string;
+    level?: string | null;
+    value: string;
+    owner?: string;
+}
+
+
+// databases/types.ts
+
+export interface DesignationItem {
+    id: string;
+    entity?: string;
+    entity_title?: string;
+    title: string;
+    code?: string;
+    description?: string;
+    level?: string | null;
+    cadre?: string | null;
+    cadre_title?: string | null;
+    tenure?: string;
+    total_slots?: number;
+    duration_in_months?: number;
+    created?: string;
+}
+
+
+// databases/types.ts
+
+
+
+
+// databases/types.ts
+
+export interface CadreItem {
+    id: string;
+    cluster: string;
+    cluster_title: string;
+    title: string;
+    description: string | null;
+    cadre_title?: string;
+    cluster_details?: {
+        id: string;
+        entity: string;
+        title: string;
+        value: string;
+    };
+    created?: string;
+}
+
+// databases/types.ts
+
+export interface DepartmentItem {
+    id: string;
+    entity: string;
+    title: string;
+    department_type: string;
+    description: string;
+    owner: string;
+    created: string;
+    updated: string;
+}
+
+
+// databases/types.ts
+
+export interface ClusterItem {
+    id: string;
+    entity?: string;
+    entity_title?: string;
+    title: string;
+    value: string;
+    created?: string;
+}
+/** A customer order normalized for picker/select UIs (see CustomerOrderSelect.normalizeOrder). */
+export interface CustomerOrderOption {
+    id: string;
+    label: string;
+    description: string;
+    /** The original record (WS-context row or serializer payload). */
+    raw: any;
+}
+
+/** Catalog product as consumed by ProductPickerAutocomplete and its callers. */
+export type Product = ProductItem;

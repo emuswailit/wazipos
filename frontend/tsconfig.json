@@ -4,9 +4,9 @@
     "strict": true,
     "jsx": "react-native",
     "paths": {
-      "@/*": ["*"],
-      "@/hooks/*": ["hooks/*"],
-      "@/components/*": ["components/*"]
+      "@/*": ["./*"],
+      "@/hooks/*": ["./hooks/*"],
+      "@/components/*": ["./components/*"]
     }
   },
   "include": [
@@ -17,5 +17,12 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "android",
+    "ios",
+    ".kilo"
   ]
 }

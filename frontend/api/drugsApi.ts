@@ -16,20 +16,6 @@
 import clientWithCache from "./clientWithCache";
 
 /* =========================================================
- * Response body
- *
- * Shape of `data` for mutation actions. Not the full envelope —
- * the envelope comes from `clientWithCache`.
- * ======================================================= */
-
-export interface ResponseBody {
-    response_code?: string;
-    response_message?: string;
-    errors?: string[];
-    [key: string]: any;
-}
-
-/* =========================================================
  * Detail shapes — one per domain
  * ======================================================= */
 

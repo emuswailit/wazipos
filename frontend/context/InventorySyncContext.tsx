@@ -41,6 +41,14 @@ interface InventorySyncContextType {
         serverRecord: any,
         draftId?: string
     ) => Promise<void>;
+    /**
+     * Optimistically reduce local stock after a sale, so the product search shows the new
+     * quantity before the next server sync. `retailer_receipt` is the receipt's remote_id
+     * (or remote_key). Never goes below zero; the next sync replaces it with server values.
+     */
+    deductLocalInventory: (
+        items: { retailer_receipt: string; purchased_quantity: number }[]
+    ) => Promise<void>;
     lastSyncedTime: string;
     retailerReceipts: RetailerReceipt[];
 }
@@ -115,7 +123,7 @@ function notify(title: string, message: string) {
  * Expiry helpers
  * ======================================================= */
 
-export function computeDaysToExpiry(
+function computeDaysToExpiry(
     expiryDate?: string | null
 ): number | null {
     if (!expiryDate) return null;
@@ -145,7 +153,7 @@ export function computeDaysToExpiry(
     );
 }
 
-export function computeExpiryStatus(
+function computeExpiryStatus(
     days: number | null
 ): string {
     if (days === null) return 'UNKNOWN';
@@ -304,6 +312,8 @@ function normalizeItem(
             firstDefined(item.product_title, item.title, '')
         ),
         product: String(item.product ?? ''),
+        category: String(item.category ?? ''),
+        category_title: String(item.category_title ?? ''),
         entity: String(item.entity ?? ''),
         entity_title: String(item.entity_title ?? ''),
         draft_id: item.draft_id ?? null,
@@ -457,10 +467,10 @@ export const InventorySyncProvider: React.FC<{
 
     const wsRef = useRef<WebSocket | null>(null);
     const receiptsStateRef = useRef<RetailerReceipt[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
     );
-    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pushGuardRef = useRef(false);
     const reconnectAttemptRef = useRef(0);
 
@@ -605,16 +615,67 @@ export const InventorySyncProvider: React.FC<{
     }, [currentUserId]);
 
     /* ---------------------------------------------------------
+     * Deduct sold quantities locally (optimistic stock update)
+     * ------------------------------------------------------- */
+    const deductLocalInventory = useCallback(
+        async (
+            items: { retailer_receipt: string; purchased_quantity: number }[]
+        ) => {
+            if (!items?.length) return;
+
+            // Total sold per receipt (the same receipt can appear on several lines)
+            const soldByReceipt = new Map<string, number>();
+            for (const item of items) {
+                const key = String(item?.retailer_receipt ?? '');
+                const qty = Number(item?.purchased_quantity) || 0;
+                if (!key || qty <= 0) continue;
+                soldByReceipt.set(key, (soldByReceipt.get(key) ?? 0) + qty);
+            }
+            if (soldByReceipt.size === 0) return;
+
+            const existing = receiptsStateRef.current;
+            let changed = false;
+            const updated = existing.map((r) => {
+                const key =
+                    (r.remote_id && soldByReceipt.has(String(r.remote_id)) && String(r.remote_id)) ||
+                    ((r as any).remote_key && soldByReceipt.has(String((r as any).remote_key)) && String((r as any).remote_key)) ||
+                    null;
+                if (!key) return r;
+
+                const sold = soldByReceipt.get(key)!;
+                changed = true;
+                const next: any = {
+                    ...r,
+                    current_unit_quantity: Math.max(0, (Number(r.current_unit_quantity) || 0) - sold),
+                };
+                if ((r as any).available !== undefined && (r as any).available !== null) {
+                    next.available = Math.max(0, (Number((r as any).available) || 0) - sold);
+                }
+                return next as RetailerReceipt;
+            });
+
+            if (!changed) {
+                warn('deductLocalInventory: no matching local receipts for', [...soldByReceipt.keys()]);
+                return;
+            }
+
+            try {
+                await commitToStorage(updated);
+            } catch (err) {
+                // Stock display is best-effort; the server already recorded the sale.
+                warn('deductLocalInventory: failed to persist local stock', err);
+            }
+            setRetailerReceipts((prev) =>
+                areReceiptsEqual(prev, updated) ? prev : updated
+            );
+        },
+        [commitToStorage]
+    );
+
+    /* ---------------------------------------------------------
      * Apply server response
      *
      * Called by the modal after a successful Create/Update.
-     * Matches an existing local row by draft_id (preferred) or
-     * remote_id, merges the server values in, and commits to
-     * storage. Keeps the local numeric Dexie PK so the row
-     * updates in place instead of inserting a duplicate.
-     *
-     * The WS broadcast that arrives later is idempotent — it
-     * replaces the row with identical values.
      * ------------------------------------------------------- */
     const applyServerReceipt = useCallback(
         async (serverRecord: any, draftId?: string) => {
@@ -652,7 +713,6 @@ export const InventorySyncProvider: React.FC<{
                 merged[idx] = {
                     ...current,
                     ...normalized,
-                    // Preserve local numeric Dexie PK.
                     id: (current as any).id,
                     draft_id:
                         effectiveDraftId ??
@@ -1317,6 +1377,7 @@ export const InventorySyncProvider: React.FC<{
             pushPending,
             refreshLocal,
             applyServerReceipt,
+            deductLocalInventory,
             lastSyncedTime,
             retailerReceipts,
         }),
@@ -1332,6 +1393,7 @@ export const InventorySyncProvider: React.FC<{
             pushPending,
             refreshLocal,
             applyServerReceipt,
+            deductLocalInventory,
             lastSyncedTime,
             retailerReceipts,
         ]

@@ -1,7 +1,7 @@
 // services/inventoryLocalStore.ts
 
 import { dbInstance } from '@/databases/db';
-import { CachedReceipt } from '@/databases/types';
+import { RetailerReceipt } from '@/databases/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -16,7 +16,7 @@ function hasDexie(): boolean {
     return IS_WEB && !!dbInstance?.retailerReceipts;
 }
 
-async function readAsync(): Promise<CachedReceipt[]> {
+async function readAsync(): Promise<RetailerReceipt[]> {
     try {
         const raw = await AsyncStorage.getItem(NATIVE_KEY);
         return raw ? JSON.parse(raw) : [];
@@ -29,7 +29,7 @@ async function readAsync(): Promise<CachedReceipt[]> {
     }
 }
 
-async function readDexie(): Promise<CachedReceipt[]> {
+async function readDexie(): Promise<RetailerReceipt[]> {
     if (!hasDexie()) return [];
     try {
         return await dbInstance.retailerReceipts.toArray();
@@ -52,8 +52,8 @@ async function readDexie(): Promise<CachedReceipt[]> {
  * will assign a numeric one on insert.
  * ------------------------------------------------------- */
 function normalizeIdForDexie(
-    record: CachedReceipt
-): CachedReceipt {
+    record: RetailerReceipt
+): RetailerReceipt {
     const raw = (record as any)?.id;
 
     const isValidNumber =
@@ -65,14 +65,14 @@ function normalizeIdForDexie(
 
     // Drop `id` so Dexie assigns a fresh numeric key.
     const { id: _drop, ...rest } = record as any;
-    return rest as CachedReceipt;
+    return rest as RetailerReceipt;
 }
 
 /* ---------------------------------------------------------
  * Read — one canonical source per platform
  * ------------------------------------------------------- */
 export async function readAllLocal(): Promise<
-    CachedReceipt[]
+    RetailerReceipt[]
 > {
     if (IS_WEB) return readDexie();
     return readAsync();
@@ -82,7 +82,7 @@ export async function readAllLocal(): Promise<
  * Write — canonical source first, errors propagate
  * ------------------------------------------------------- */
 export async function writeAllLocal(
-    records: CachedReceipt[]
+    records: RetailerReceipt[]
 ): Promise<void> {
     const safe = records.map(normalizeIdForDexie);
 
@@ -135,97 +135,15 @@ export async function writeAllLocal(
  *   2. id           — Dexie numeric PK (already-stored rows)
  *   3. remote_id    — server UUID (legacy rows without draft_id)
  * ------------------------------------------------------- */
-function findExistingIndex(
-    all: CachedReceipt[],
-    incoming: CachedReceipt
-): number {
-    const draftId = (incoming as any)?.draft_id;
-    if (draftId) {
-        const i = all.findIndex(
-            (r) => (r as any)?.draft_id === draftId
-        );
-        if (i >= 0) return i;
-    }
-
-    const numericId = (incoming as any)?.id;
-    if (typeof numericId === 'number') {
-        const i = all.findIndex(
-            (r) => (r as any)?.id === numericId
-        );
-        if (i >= 0) return i;
-    }
-
-    const remoteId = (incoming as any)?.remote_id;
-    if (remoteId) {
-        const i = all.findIndex(
-            (r) => (r as any)?.remote_id === remoteId
-        );
-        if (i >= 0) return i;
-    }
-
-    return -1;
-}
 
 /* ---------------------------------------------------------
  * Upsert — draft_id is immutable once assigned
  * ------------------------------------------------------- */
-export async function upsertLocal(
-    record: CachedReceipt
-): Promise<void> {
-    const all = await readAllLocal();
-    const idx = findExistingIndex(all, record);
-
-    if (idx >= 0) {
-        const existing = all[idx];
-
-        // Preserve identity fields from the existing row so a
-        // caller can never accidentally change id / draft_id.
-        const nextRecord: CachedReceipt = {
-            ...record,
-            id: (existing as any)?.id,           // numeric PK
-            draft_id:
-                (existing as any)?.draft_id ??
-                (record as any)?.draft_id,
-        };
-
-        all[idx] = nextRecord;
-    } else {
-        // Fresh insert — make sure Dexie assigns the numeric id.
-        const inserted = { ...(record as any) };
-        delete inserted.id;
-        all.push(inserted);
-    }
-
-    await writeAllLocal(all);
-}
 
 /* ---------------------------------------------------------
  * Remove
  * ------------------------------------------------------- */
-export async function removeLocal(
-    draftIdOrId: string
-): Promise<void> {
-    const all = await readAllLocal();
-    const target = String(draftIdOrId);
-    const filtered = all.filter((r) => {
-        const did = String((r as any)?.draft_id ?? '');
-        const rid = String((r as any)?.id ?? '');
-        const rem = String((r as any)?.remote_id ?? '');
-        return (
-            did !== target &&
-            rid !== target &&
-            rem !== target
-        );
-    });
-    await writeAllLocal(filtered);
-}
 
 /* ---------------------------------------------------------
  * Pending records
  * ------------------------------------------------------- */
-export async function readPendingLocal(): Promise<
-    CachedReceipt[]
-> {
-    const all = await readAllLocal();
-    return all.filter((r) => r.synced === false);
-}

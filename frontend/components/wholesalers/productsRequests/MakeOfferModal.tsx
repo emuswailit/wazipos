@@ -21,6 +21,27 @@
 // prefilled with the outstanding demand (full requested when no
 // stock exists, the deficit when partially covered), and the
 // newly-created receipt is auto-selected on save.
+//
+// -------------------------------------------------------------------
+// SUBMIT FAILURE SURFACING
+//
+// `handleSubmit` used to bail silently when the request had no
+// server identifier, and silently re-throw when the API call
+// rejected. Both made failed submissions look like no-ops.
+// Now:
+//   - Missing identifier → user-visible alert + console warning.
+//   - API rejection    → user-visible alert with the server's
+//                        message (falls back through the common
+//                        DRF error envelope shapes).
+// Every failure path is also logged in dev so the console tells
+// the same story as the alert.
+//
+// The submit response (or the thrown error) is logged raw and
+// unstringified so devtools renders it as an expandable object.
+// If the caller's `onSubmit` returns nothing, the log will show
+// `undefined` — update the caller to `return res;` so the raw
+// response is visible here.
+// -------------------------------------------------------------------
 
 import React, {
     useCallback,
@@ -30,7 +51,9 @@ import React, {
 } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     Text,
@@ -86,11 +109,16 @@ interface InventoryEditorTarget {
     suggestedQty: number;
 }
 
-export interface MakeOfferModalProps {
+interface MakeOfferModalProps {
     visible: boolean;
     request: ProductRequestSummary | null;
     isSubmitting?: boolean;
-    onSubmit: (payload: RespondPayload) => Promise<void> | void;
+    /**
+     * Return the API response (or any value) so this modal can log
+     * it. If the caller returns nothing, the raw-response log will
+     * show `undefined`.
+     */
+    onSubmit: (payload: RespondPayload) => Promise<any> | any;
     onClose: () => void;
 }
 
@@ -144,6 +172,66 @@ function formatMoney(n: number): string {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
+}
+
+/**
+ * Cross-platform alert. Native uses `Alert.alert`; web uses
+ * `window.alert` because RN-web's Alert is a no-op in some
+ * embedded webviews.
+ */
+function notify(title: string, message: string) {
+    if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+            // eslint-disable-next-line no-alert
+            window.alert(`${title}\n\n${message}`);
+        }
+    } else {
+        Alert.alert(title, message);
+    }
+}
+
+/**
+ * Pull a human-readable error string out of whatever shape the
+ * failure took. Handles the DRF envelopes this backend produces:
+ *
+ *   { errors: ["..."] }
+ *   { errors: { field: ["msg"] } }
+ *   { detail: "..." }
+ *   { response_message: "..." }
+ */
+function extractErrorMessage(err: any): string {
+    if (!err) return 'Unexpected error. Please try again.';
+
+    const body = err?.response?.data ?? err?.data ?? null;
+
+    if (body) {
+        if (Array.isArray(body.errors) && body.errors.length > 0) {
+            const first = body.errors[0];
+            return typeof first === 'string'
+                ? first
+                : JSON.stringify(first);
+        }
+        if (body.errors && typeof body.errors === 'object') {
+            const firstKey = Object.keys(body.errors)[0];
+            if (firstKey) {
+                const firstVal = body.errors[firstKey];
+                const firstMsg = Array.isArray(firstVal)
+                    ? firstVal[0]
+                    : firstVal;
+                if (typeof firstMsg === 'string') return firstMsg;
+            }
+        }
+        const flat =
+            body.detail ??
+            body.response_message ??
+            body.message;
+        if (typeof flat === 'string') return flat;
+    }
+
+    if (typeof err === 'string') return err;
+    if (err?.message) return String(err.message);
+
+    return 'Unexpected error. Please try again.';
 }
 
 /* =========================================================
@@ -412,11 +500,40 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
     /* ---- Submit ---- */
     const handleSubmit = async () => {
         if (!request || !isValid) return;
-        const requestId =
-            request.remote_id ?? request.draft_id ?? null;
-        if (!requestId) return;
 
-        await onSubmit({
+        // Resolve the request identifier. The backend keys the
+        // Respond action on `RetailerProductRequest.id`, which the
+        // client exposes as `remote_id` (with `draft_id` as a
+        // local-creation fallback).
+        const requestId =
+            request.remote_id ??
+            (request as any).id ??
+            request.draft_id ??
+            null;
+
+        if (!requestId) {
+            // Previously returned silently, so the button looked
+            // dead. Log + surface it.
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[MakeOfferModal] missing request identifier',
+                {
+                    remote_id: request.remote_id,
+                    draft_id: request.draft_id,
+                    request_number: request.request_number,
+                }
+            );
+            notify(
+                'Cannot submit',
+                'This request is missing a server identifier. ' +
+                'Please pull to refresh and try again.'
+            );
+            return;
+        }
+
+        // Build the payload once so it can be logged alongside the
+        // response without duplicating the mapping logic.
+        const payload: RespondPayload = {
             action: 'Respond',
             request_id: requestId,
             note: note.trim(),
@@ -439,7 +556,47 @@ const MakeOfferModal: React.FC<MakeOfferModalProps> = ({
             rejected_lines: drafts
                 .filter((d) => d.decision === 'rejected')
                 .map((d) => ({ item_id: d.item_id })),
-        });
+        };
+
+        // eslint-disable-next-line no-console
+        console.log(
+            '[MakeOfferModal] submit payload (raw):',
+            payload
+        );
+
+        try {
+            const response = await onSubmit(payload);
+
+            // Raw, unstringified. Expandable in devtools.
+            // eslint-disable-next-line no-console
+            console.log(
+                '[MakeOfferModal] submit response (raw):',
+                response
+            );
+        } catch (e: any) {
+            // Raw, unstringified error object so the Axios
+            // envelope (response, request, config) stays
+            // inspectable.
+            // eslint-disable-next-line no-console
+            console.log(
+                '[MakeOfferModal] submit error (raw):',
+                e
+            );
+
+            const msg = extractErrorMessage(e);
+
+            // eslint-disable-next-line no-console
+            console.error(
+                '[MakeOfferModal] submit failed',
+                {
+                    message: e?.message,
+                    status: e?.response?.status,
+                    data: e?.response?.data,
+                }
+            );
+
+            notify('Could not submit response', msg);
+        }
     };
 
     if (!request) return null;

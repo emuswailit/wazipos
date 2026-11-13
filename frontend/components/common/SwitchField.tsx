@@ -16,7 +16,7 @@ import {
     type ViewStyle,
 } from 'react-native';
 
-export interface SwitchFieldProps {
+interface SwitchFieldProps {
     /* -------- Formik integration -------- */
     /** Formik field name. When provided, the switch reads its
      *  value from context and writes back via setFieldValue. */

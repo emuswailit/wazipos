@@ -12,7 +12,9 @@ import React, {
 } from 'react';
 
 import analyticsApi from '@/api/analyticsApi';
+import { useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
+import { describeFailure, isAuthFailure } from '@/utils/authGuard';
 import { db } from '@/databases/db';
 import {
     RequestDraftItem,
@@ -41,16 +43,14 @@ const MIN_POLL_GAP_MS = 60 * 1000;
  * Public types
  * ======================================================= */
 
-export interface ForecastFilters {
+interface ForecastFilters {
     leadTimeDays: number;
     orderDays: number;
     minAvgDailyDemand?: number;
     onlyWithOffers?: boolean;
 }
 
-export type ForecastDataSource = 'server' | 'cache' | 'none';
-
-export type { RequestDraftItem };
+type ForecastDataSource = 'server' | 'cache' | 'none';
 
 interface ForecastContextValue {
     /* Forecasts */
@@ -364,6 +364,10 @@ export function ForecastProvider({
     children: React.ReactNode;
 }) {
     const { isOnline } = useNetworkStatus();
+    const { token } = useAuth();
+    // Fail safe: no forecast requests without a login (see fetchForecasts).
+    const tokenRef = useRef(token);
+    tokenRef.current = token;
 
     /* ---------------- Forecast state ---------------- */
 
@@ -454,6 +458,10 @@ export function ForecastProvider({
         async (opts?: { silent?: boolean }) => {
             const silent = opts?.silent ?? false;
 
+            // Not logged in (welcome / login screens, after logout): keep the
+            // cached snapshot and don't call the server.
+            if (!tokenRef.current) return;
+
             if (isFetchingRef.current) {
                 // Queue a follow-up. Non-silent callers win: if a
                 // silent poll is inflight and the user triggers a
@@ -487,16 +495,19 @@ export function ForecastProvider({
                             f.minAvgDailyDemand ?? 0,
                     });
 
-                log(
-                    `forecasts response (${silent ? 'silent' : 'active'})`,
-                    res
-                );
-
                 if (!res?.ok) {
-                    throw new Error(
-                        res?.problem || 'Request failed'
-                    );
+                    if (isAuthFailure(res)) {
+                        // Session missing / expired: not an error worth surfacing,
+                        // and the cached forecasts stay as they are.
+                        log('forecasts skipped — not logged in');
+                        return;
+                    }
+                    throw new Error(describeFailure(res));
                 }
+
+                log(
+                    `forecasts response (${silent ? 'silent' : 'active'}) — ${res.data?.bulk_forecast?.products?.length ?? 0} products`
+                );
 
                 const body = res.data?.bulk_forecast ?? {};
                 const items: RetailerForecastNormalized[] = (
@@ -579,7 +590,7 @@ export function ForecastProvider({
                     })`
                 );
             } catch (e: any) {
-                warn('fetchForecasts failed', e);
+                warn('fetchForecasts failed:', e?.message ?? e);
                 setErrorMessage(
                     e?.message ?? 'Could not load forecasts.'
                 );
@@ -725,6 +736,16 @@ export function ForecastProvider({
         filters.orderDays,
         filters.minAvgDailyDemand,
     ]);
+
+    /* ---------------- Login ----------------
+     * Fetches skipped while logged out; load as soon as a token appears
+     * (or changes, e.g. switching account).
+     */
+
+    useEffect(() => {
+        if (!token || !hasBootstrappedRef.current) return;
+        void fetchRef.current({ silent: forecastsRef.current.length > 0 });
+    }, [token]);
 
     /* ---------------- Network recovery ----------------
      * Only fire on a real offline→online transition. Firing on mount

@@ -155,12 +155,3 @@ export async function triggerLocalPushNotification(
  * Optional helper so callers can decide whether to even
  * bother prompting.
  * ------------------------------------------------------- */
-
-export function isNotificationsAvailable(): boolean {
-    return isWeb || !!Notifications;
-}
-
-export default {
-    triggerLocalPushNotification,
-    isNotificationsAvailable,
-};

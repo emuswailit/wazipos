@@ -13,34 +13,16 @@ import React, {
 } from 'react';
 import { useWindowDimensions } from 'react-native';
 
+import { indentKey as indentRef, isDraftIndent, isOverBudget, toBool, type IndentFilter } from './indentsConfig';
 import { RetailerIndentDetailsModal } from './RetailerIndentDetailsModal';
 import { RetailerIndentsMobileView } from './RetailerIndentsMobileView';
 import { RetailerIndentsWebView } from './RetailerIndentsWebView';
-
-export {
-    PAGE_SIZE_OPTIONS,
-    type PageSize
-} from '@/components/common/PaginationBar';
 
 import type { PageSize } from '@/components/common/PaginationBar';
 import RetailerIndentEditModal from './RetailerIndentEditModal';
 import { RetailerIndentItemEditModal } from './RetailerIndentItemEditModal';
 
 const LARGE_SCREEN_MIN_WIDTH = 900;
-
-const toBool = (v: any): boolean =>
-    v === true || v === 'true' || v === 1 || v === '1';
-
-const indentRef = (i: RetailerIndent): string =>
-    i.remote_id || String(i.id ?? '');
-
-const isDraftIndent = (i: RetailerIndent): boolean => {
-    // Draft indents use `<userId>:<entityId>:<ts>` (see context).
-    return (
-        typeof i.remote_id === 'string' &&
-        i.remote_id.includes(':')
-    );
-};
 
 function matchesQuery(i: RetailerIndent, q: string): boolean {
     if (!q) return true;
@@ -91,7 +73,7 @@ const RetailerIndentsList: React.FC = () => {
 
     /* ---------------- Local UI state ---------------- */
     const [query, setQuery] = useState('');
-    const [onlyOpen, setOnlyOpen] = useState(false);
+    const [filter, setFilter] = useState<IndentFilter>('ALL');
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<PageSize>(10);
 
@@ -120,19 +102,27 @@ const RetailerIndentsList: React.FC = () => {
 
     /* ---------------- Filtering ---------------- */
     const filtered = useMemo(() => {
-        const base = onlyOpen ? openIndents : retailerIndents;
+        const base =
+            filter === 'OPEN'
+                ? retailerIndents.filter((i) => toBool(i.is_open))
+                : filter === 'OVER_BUDGET'
+                    ? retailerIndents.filter(isOverBudget)
+                    : filter === 'DRAFTS'
+                        ? retailerIndents.filter(isDraftIndent)
+                        : retailerIndents;
         return base.filter((i) => matchesQuery(i, query));
-    }, [retailerIndents, openIndents, onlyOpen, query]);
+    }, [retailerIndents, filter, query]);
 
     const counts = useMemo(
         () => ({
             total: retailerIndents.length,
             visible: filtered.length,
             open: openIndents.length,
-            overBudget: retailerIndents.filter((i) =>
-                toBool(i.over_budget),
-            ).length,
+            overBudget: retailerIndents.filter(isOverBudget).length,
             drafts: retailerIndents.filter(isDraftIndent).length,
+            openValue: retailerIndents
+                .filter((i) => toBool(i.is_open))
+                .reduce((sum, i) => sum + (Number(i.total_cost) || 0), 0),
         }),
         [
             retailerIndents,
@@ -150,7 +140,7 @@ const RetailerIndentsList: React.FC = () => {
 
     useEffect(() => {
         setPage(1);
-    }, [query, onlyOpen, pageSize]);
+    }, [query, filter, pageSize]);
 
     useEffect(() => {
         if (page > totalPages) setPage(totalPages);
@@ -227,24 +217,22 @@ const RetailerIndentsList: React.FC = () => {
         setQuery(q);
     }, []);
 
-    const onToggleOnlyOpen = useCallback(() => {
-        setOnlyOpen((v) => !v);
-    }, []);
-
     /* ---------------- Shared props for views ------------------ */
     const sharedProps = {
         indents: paginated,
+        allIndents: filtered,
         counts,
         query,
         onQueryChange,
-        onlyOpen,
-        onToggleOnlyOpen,
+        filter,
+        onFilterChange: setFilter,
         refreshing,
         onRefresh,
         isLiveConnected,
         pendingIndentOpCount,
         lastSyncedTime,
         onView,
+        onEdit,
         page,
         pageSize,
         totalItems,

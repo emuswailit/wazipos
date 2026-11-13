@@ -19,22 +19,19 @@ import {
 import { RetailerOrderDetailsModal } from './RetailerOrderDetailsModal';
 import RetailerOrdersMobileView from './RetailerOrdersMobileView';
 import RetailerOrdersWebView from './RetailerOrdersWebView';
+import type { PageSize } from '@/components/common/PaginationBar';
 
 /* =========================================================
  * Page size type — mirrors the inventory list
  * ======================================================= */
-export type PageSize = 10 | 20 | 50 | 100;
+export type { PageSize } from '@/components/common/PaginationBar';
 
-export const PAGE_SIZE_OPTIONS: PageSize[] = [
-    10, 20, 50, 100,
-];
-
-export interface OrderStatusFilter {
+interface OrderStatusFilter {
     value: string;
     label: string;
 }
 
-export const STATUS_FILTERS: OrderStatusFilter[] = [
+const STATUS_FILTERS: OrderStatusFilter[] = [
     { value: 'DRAFT', label: 'Draft' },
     { value: 'SUBMITTED', label: 'Submitted' },
     { value: 'APPROVED', label: 'Approved' },
@@ -55,9 +52,6 @@ export default function RetailerOrdersList() {
         isSyncing,
         isManualRefreshing,
         isLiveConnected,
-        isPushSyncing,
-        pendingCount,
-        syncStatus,
         forceManualRefresh,
         syncUiState,
     } = useRetailerOrdersSync();
@@ -70,7 +64,7 @@ export default function RetailerOrdersList() {
 
     /* -------- Pagination -------- */
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState<PageSize>(20);
+    const [pageSize, setPageSize] = useState<PageSize>(25);
 
     /* -------- Source label -------- */
     const sourceLabel = isLiveConnected
@@ -155,7 +149,7 @@ export default function RetailerOrdersList() {
         setStatusFilter,
         statusFilters: STATUS_FILTERS,
         onRefresh: forceManualRefresh,
-        refreshing: isManualRefreshing || isPushSyncing,
+        refreshing: isManualRefreshing,
         sourceLabel,
         sourceTone,
         lastSyncedTime: syncUiState.lastSyncedTime,

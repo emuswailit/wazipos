@@ -18,24 +18,16 @@
 //   - Tap the selected offer   →  deselect it and remove from the indent
 //   - Blur the quantity field  →  update the quantity on the saved row
 
-import { useAuth } from '@/context/AuthContext';
+import { AdminAvatarTile, AdminBadgePill, AdminSheet, SheetButton, useListTokens, webNoOutline, webPointer } from '@/components/common/listScreen';
 import type {
     RetailerOutOfStockNormalized,
     RetailerOutOfStockWholesalerOffer,
 } from '@/databases/types';
 import { useIndentBridge } from '@/hooks/useIndentBridge';
+import { resolveImageUrl } from '@/lib/images';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 /* ------------------------------------------------------------------ */
 /* Feedback shape                                                      */
@@ -64,20 +56,6 @@ interface OutOfStockOffersModalProps {
 /* Small helpers                                                       */
 /* ------------------------------------------------------------------ */
 
-const API_BASE_URL = 'https://api.wazipos.co.ke';
-
-const resolveImage = (raw: any): string | null => {
-    if (!raw) return null;
-    const p =
-        typeof raw === 'string'
-            ? raw
-            : raw.thumbnail || raw.image || raw.url || null;
-    if (!p) return null;
-    if (p.startsWith('http')) return p;
-    const clean = p.replace(/^\/+/, '');
-    return `${API_BASE_URL}/${clean}`;
-};
-
 const formatMoney = (
     v: string | number | null | undefined,
 ): string => {
@@ -98,7 +76,7 @@ export function OutOfStockOffersModal({
     onClose,
     onFeedback,
 }: OutOfStockOffersModalProps) {
-    const { theme } = useAuth();
+    const { theme, chipBg } = useListTokens();
     const {
         currentOpenIndent,
         findItemByReceipt,
@@ -185,7 +163,6 @@ export function OutOfStockOffersModal({
         selectedOfferId && savedItemsByOfferId[selectedOfferId]
     );
 
-    const borderColor = theme.isDarkMode ? '#334155' : '#e2e8f0';
 
     /* ── Mutations ─────────────────────────────────────────── */
 
@@ -312,330 +289,130 @@ export function OutOfStockOffersModal({
 
     if (!item) return null;
 
-    /* ── Render ────────────────────────────────────────────── */
+    const qtyLabel = `Qty ${parsedQuantity.toLocaleString()}`;
+    const footerStatus = selectionIsSaved ? `Saved on indent · ${qtyLabel}` : selectedOffer ? `Selected · ${qtyLabel}` : `No offer selected · ${qtyLabel}`;
+    const indentLabel = currentOpenIndent
+        ? `${currentOpenIndent.indent_number || currentOpenIndent.remote_id}${currentOpenIndent.entity_title ? ` · ${currentOpenIndent.entity_title}` : ''}`
+        : null;
 
     return (
-        <Modal
+        <AdminSheet
             visible={!!item}
-            transparent
-            animationType="fade"
-            onRequestClose={busy ? undefined : onClose}
-        >
-            <View
-                className="flex-1 items-center justify-center p-4"
-                style={{
-                    backgroundColor: theme.isDarkMode
-                        ? 'rgba(3,6,14,0.72)'
-                        : 'rgba(15,20,32,0.55)',
-                }}
-            >
-                <Pressable
-                    className="absolute inset-0"
-                    onPress={busy ? undefined : onClose}
-                />
-
-                <View
-                    className="w-full rounded-2xl border p-5"
-                    style={{
-                        maxWidth: 720,
-                        backgroundColor: theme.panel,
-                        borderColor,
-                    }}
-                >
-                    {/* ── Header ───────────────────────────── */}
-                    <View className="flex-row items-start mb-4">
-                        <View className="flex-1">
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color: theme.primary,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 11,
-                                    marginBottom: 4,
-                                }}
-                            >
-                                {selectionIsSaved
-                                    ? 'Saved to Indent'
-                                    : 'Add to Indent'}
-                            </Text>
-                            <Text
-                                numberOfLines={2}
-                                style={{
-                                    color: theme.text,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 18,
-                                }}
-                            >
-                                {item.product_title}
-                            </Text>
-
-                            {currentOpenIndent ? (
-                                <Text
-                                    className="mt-1"
-                                    numberOfLines={1}
-                                    style={{
-                                        color:
-                                            theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    →{' '}
-                                    {currentOpenIndent.indent_number ||
-                                        currentOpenIndent.remote_id}
-                                    {currentOpenIndent.entity_title
-                                        ? ` · ${currentOpenIndent.entity_title}`
-                                        : ''}
-                                </Text>
-                            ) : (
-                                <Text
-                                    className="mt-1"
-                                    style={{
-                                        color: '#f43f5e',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    A new indent will be created
-                                    when you save.
-                                </Text>
-                            )}
-                        </View>
-
-                        {busy && (
-                            <ActivityIndicator
-                                size="small"
-                                color={theme.primary}
-                                style={{ marginRight: 8 }}
-                            />
-                        )}
-
-                        <Pressable
-                            onPress={busy ? undefined : onClose}
-                            className="p-1.5"
-                            hitSlop={10}
-                            disabled={busy}
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontSize: 16,
-                                    opacity: busy ? 0.4 : 1,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {/* ── Error banner ─────────────────────── */}
-                    {errorText ? (
-                        <View
-                            style={{
-                                backgroundColor:
-                                    'rgba(220,38,38,0.1)',
-                                borderColor:
-                                    'rgba(220,38,38,0.35)',
-                                borderWidth: 1,
-                                borderRadius: 8,
-                                paddingHorizontal: 10,
-                                paddingVertical: 8,
-                                marginBottom: 12,
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    color: '#dc2626',
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.xs,
-                                }}
-                            >
-                                {errorText}
-                            </Text>
-                        </View>
-                    ) : null}
-
-                    <ScrollView
-                        style={{ maxHeight: 460 }}
-                        contentContainerStyle={{
-                            paddingBottom: 8,
-                        }}
-                    >
-                        {/* ── Quantity ─────────────────────── */}
-                        <View className="mb-1">
-                            <Text
-                                className="uppercase tracking-widest mb-2"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 11,
-                                }}
-                            >
-                                Required quantity
-                            </Text>
-                            <TextInput
-                                value={quantityText}
-                                onChangeText={(t) =>
-                                    setQuantityText(
-                                        t.replace(
-                                            /[^0-9]/g,
-                                            '',
-                                        ),
-                                    )
-                                }
-                                onBlur={handleQuantityBlur}
-                                keyboardType="number-pad"
-                                inputMode="numeric"
-                                placeholder="0"
-                                placeholderTextColor="#94a3b8"
-                                editable={!busy}
-                                className="h-11 rounded-xl border px-3.5"
-                                style={{
-                                    borderColor,
-                                    backgroundColor:
-                                        theme.isDarkMode
-                                            ? '#0f172a'
-                                            : '#f1f5f9',
-                                    color: theme.text,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.sm,
-                                }}
-                            />
-                            <Text
-                                className="mt-1.5"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.xs,
-                                }}
-                            >
-                                Pre-filled from the request —
-                                edit to change.
-                            </Text>
-                        </View>
-
-                        {/* ── Offers ───────────────────────── */}
-                        <View className="mt-5">
-                            <Text
-                                className="uppercase tracking-widest mb-2"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 11,
-                                }}
-                            >
-                                Choose one wholesaler offer (
-                                {offers.length})
-                            </Text>
-
-                            {offers.length === 0 ? (
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                        opacity: 0.7,
-                                    }}
-                                >
-                                    No offers available.
-                                </Text>
-                            ) : (
-                                offers.map((o) => (
-                                    <OfferRow
-                                        key={o.id}
-                                        offer={o}
-                                        selected={
-                                            selectedOfferId ===
-                                            o.id
-                                        }
-                                        saved={
-                                            !!savedItemsByOfferId[
-                                            o.id
-                                            ]
-                                        }
-                                        busy={busy}
-                                        onSelect={() =>
-                                            handleToggle(o)
-                                        }
-                                    />
-                                ))
-                            )}
-                        </View>
-                    </ScrollView>
-
-                    {/* ── Footer ───────────────────────────── */}
-                    <View
-                        className="flex-row items-center justify-between mt-4 pt-4 border-t gap-3"
-                        style={{ borderColor }}
-                    >
-                        <Text
-                            className="flex-shrink"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.xs,
-                            }}
-                        >
-                            {selectionIsSaved
-                                ? `Saved • Qty ${parsedQuantity || 0
-                                }`
-                                : selectedOffer
-                                    ? `Selected • Qty ${parsedQuantity || 0
-                                    }`
-                                    : `No offer selected • Qty ${parsedQuantity || 0
-                                    }`}
+            onClose={onClose}
+            dismissible={!busy}
+            title={item.product_title || 'Out of stock item'}
+            subtitle={selectionIsSaved ? 'Saved to indent' : 'Add to indent'}
+            icon="cart-outline"
+            width={720}
+            footer={
+                <>
+                    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {busy ? <ActivityIndicator size="small" color={theme.primary} /> : null}
+                        <Text numberOfLines={2} style={{ flexShrink: 1, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                            {busy ? 'Saving…' : footerStatus}
                         </Text>
-                        <View className="flex-row gap-2">
-                            <Pressable
-                                onPress={onClose}
-                                disabled={busy}
-                                className="px-3.5 py-2.5 rounded-xl border"
-                                style={{
-                                    borderColor,
-                                    backgroundColor:
-                                        'transparent',
-                                    opacity: busy ? 0.5 : 1,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    Close
-                                </Text>
-                            </Pressable>
-                        </View>
                     </View>
-                </View>
+                    <SheetButton label="Done" variant="secondary" onPress={onClose} disabled={busy} />
+                </>
+            }
+        >
+            {/* Target indent */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, padding: 12, backgroundColor: indentLabel ? chipBg : 'rgba(245,158,11,0.10)' }}>
+                <Ionicons name={indentLabel ? 'document-text-outline' : 'sparkles-outline'} size={18} color={indentLabel ? theme.primary : '#d97706'} />
+                <Text style={{ flex: 1, color: indentLabel ? theme.text : '#b45309', fontFamily: theme.font.medium, fontSize: 13 }} numberOfLines={2}>
+                    {indentLabel ? `Saving to indent ${indentLabel}` : 'A new indent will be created when you pick an offer.'}
+                </Text>
             </View>
-        </Modal>
+
+            {errorText ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, padding: 12, backgroundColor: 'rgba(244,63,94,0.08)' }}>
+                    <Ionicons name="alert-circle" size={17} color="#e11d48" />
+                    <Text style={{ flex: 1, color: '#e11d48', fontFamily: theme.font.medium, fontSize: 13 }}>{errorText}</Text>
+                </View>
+            ) : null}
+
+            {/* Quantity */}
+            <View style={{ gap: 8 }}>
+                <SectionLabel text="Required quantity" />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <StepButton icon="remove" disabled={busy || parsedQuantity <= 1} onPress={() => setQuantityText(String(Math.max(1, parsedQuantity - 1)))} />
+                    <TextInput
+                        value={quantityText}
+                        onChangeText={(t) => setQuantityText(t.replace(/[^0-9]/g, ''))}
+                        onBlur={handleQuantityBlur}
+                        keyboardType="number-pad"
+                        inputMode="numeric"
+                        placeholder="0"
+                        placeholderTextColor={theme.textDark}
+                        editable={!busy}
+                        accessibilityLabel="Required quantity"
+                        style={{
+                            flex: 1,
+                            height: 48,
+                            borderRadius: 16,
+                            paddingHorizontal: 14,
+                            textAlign: 'center',
+                            backgroundColor: chipBg,
+                            color: theme.text,
+                            fontFamily: theme.font.bold,
+                            fontSize: 18,
+                            ...webNoOutline,
+                        }}
+                    />
+                    <StepButton icon="add" disabled={busy} onPress={() => setQuantityText(String(parsedQuantity + 1))} />
+                </View>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginLeft: 4 }}>
+                    {selectionIsSaved ? 'Change the quantity, then tap Update quantity.' : 'Pre-filled from the request. Pick an offer to save it.'}
+                </Text>
+                {selectionIsSaved && selectedOffer && parsedQuantity > 0 && savedItemsByOfferId[selectedOffer.id]?.required_quantity !== parsedQuantity ? (
+                    <SheetButton label="Update quantity" icon="checkmark" onPress={handleQuantityBlur} loading={busy} />
+                ) : null}
+            </View>
+
+            {/* Offers */}
+            <View style={{ gap: 8 }}>
+                <SectionLabel text={`Wholesaler offers (${offers.length})`} />
+                {offers.length === 0 ? (
+                    <View style={{ alignItems: 'center', gap: 6, borderRadius: 16, paddingVertical: 24, backgroundColor: chipBg }}>
+                        <Ionicons name="storefront-outline" size={22} color={theme.textDark} />
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>No wholesaler has this in stock yet.</Text>
+                    </View>
+                ) : (
+                    offers.map((o) => (
+                        <OfferRow key={o.id} offer={o} selected={selectedOfferId === o.id} saved={!!savedItemsByOfferId[o.id]} busy={busy} onSelect={() => handleToggle(o)} />
+                    ))
+                )}
+                {offers.length > 0 ? (
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginLeft: 4 }}>Tap an offer to add it to the indent; tap it again to remove it.</Text>
+                ) : null}
+            </View>
+        </AdminSheet>
     );
 }
 
 /* ------------------------------------------------------------------ */
-/* Offer row                                                           */
+/* Pieces                                                              */
 /* ------------------------------------------------------------------ */
+
+function SectionLabel({ text }: { text: string }) {
+    const { theme } = useListTokens();
+    return <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: 4 }}>{text}</Text>;
+}
+
+function StepButton({ icon, onPress, disabled }: { icon: 'add' | 'remove'; onPress: () => void; disabled?: boolean }) {
+    const { theme, chipBg } = useListTokens();
+    return (
+        <Pressable
+            onPress={onPress}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={icon === 'add' ? 'Increase quantity' : 'Decrease quantity'}
+            style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: chipBg, opacity: disabled ? 0.4 : pressed ? 0.7 : 1, ...webPointer })}
+        >
+            <Ionicons name={icon} size={20} color={theme.text} />
+        </Pressable>
+    );
+}
 
 function OfferRow({
     offer,
@@ -650,216 +427,53 @@ function OfferRow({
     busy: boolean;
     onSelect: () => void;
 }) {
-    const { theme } = useAuth();
-
-    const borderColor = theme.isDarkMode
-        ? '#334155'
-        : '#e2e8f0';
-
-    const thumbnail =
-        resolveImage(offer.images?.[0]) ?? null;
-
-    const hasDiscount =
-        !!offer.discount_unit_selling_price &&
-        offer.discount_unit_selling_price !== '0.00';
+    const { theme, chipBg } = useListTokens();
+    const title = offer.title || offer.product_title || 'Untitled offer';
+    const hasDiscount = !!offer.discount_unit_selling_price && offer.discount_unit_selling_price !== '0.00';
+    const supplier = offer.received_from_details?.title || offer.manufacturer_title || 'Unknown supplier';
 
     return (
         <Pressable
             onPress={onSelect}
             disabled={busy}
-            className="flex-row items-center gap-3 p-3 rounded-xl border mb-2"
-            style={{
-                backgroundColor: selected
-                    ? theme.isDarkMode
-                        ? 'rgba(79,140,255,0.14)'
-                        : 'rgba(47,107,255,0.12)'
-                    : theme.isDarkMode
-                        ? '#0f172a'
-                        : '#f1f5f9',
-                borderColor: selected
-                    ? theme.primary
-                    : borderColor,
-                opacity: busy ? 0.7 : 1,
-            }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected, disabled: busy }}
+            accessibilityLabel={`${title} from ${supplier}`}
+            style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                padding: 12,
+                borderRadius: 18,
+                borderWidth: 1.5,
+                borderColor: selected ? theme.primary : 'transparent',
+                backgroundColor: selected ? `${theme.primary}12` : chipBg,
+                opacity: busy ? 0.7 : pressed ? 0.85 : 1,
+                ...webPointer,
+            })}
         >
-            {/* Radio */}
-            <View
-                className="items-center justify-center rounded-full border"
-                style={{
-                    width: 22,
-                    height: 22,
-                    borderWidth: 1.5,
-                    borderColor: selected
-                        ? theme.primary
-                        : theme.isDarkMode
-                            ? '#475569'
-                            : '#cbd5e1',
-                }}
-            >
-                {selected ? (
-                    <View
-                        style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: 5,
-                            backgroundColor: theme.primary,
-                        }}
-                    />
-                ) : null}
-            </View>
-
-            {/* Thumb */}
-            <View
-                className="items-center justify-center rounded-lg"
-                style={{
-                    width: 40,
-                    height: 40,
-                    backgroundColor: theme.isDarkMode
-                        ? '#0f172a'
-                        : '#f1f5f9',
-                    overflow: 'hidden',
-                }}
-            >
-                <ImageWithFallback
-                    uri={thumbnail}
-                    width={40}
-                    height={40}
-                    fallback="📦"
-                />
-            </View>
-
-            {/* Details */}
-            <View className="flex-1">
-                <View className="flex-row items-center">
-                    <Text
-                        numberOfLines={1}
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                            fontSize: 14,
-                            flexShrink: 1,
-                        }}
-                    >
-                        {offer.title ||
-                            offer.product_title ||
-                            'Untitled offer'}
+            <AdminAvatarTile avatar={{ uri: resolveImageUrl(offer.images?.[0]), icon: 'cube-outline' }} title={title} size={44} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text numberOfLines={1} style={{ flexShrink: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>
+                        {title}
                     </Text>
-                    {saved ? (
-                        <View
-                            className="ml-2 px-2 py-0.5 rounded-md"
-                            style={{
-                                backgroundColor:
-                                    'rgba(16,185,129,0.15)',
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color: '#10b981',
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 9,
-                                }}
-                            >
-                                Saved
-                            </Text>
-                        </View>
-                    ) : null}
+                    {saved ? <AdminBadgePill badge={{ label: 'Saved', tone: 'success', icon: 'checkmark' }} /> : null}
                 </View>
-                <Text
-                    numberOfLines={1}
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.medium,
-                        fontSize: 12,
-                        marginTop: 2,
-                    }}
-                >
-                    {offer.manufacturer_title ||
-                        'Unknown supplier'}
+                <Text numberOfLines={1} style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 2 }}>
+                    {supplier}
                 </Text>
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.medium,
-                        fontSize: 11,
-                        marginTop: 2,
-                        opacity: 0.7,
-                    }}
-                >
-                    {offer.current_unit_quantity} in stock •{' '}
-                    {offer.unit_of_receipt}
+                <Text numberOfLines={1} style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5, marginTop: 1 }}>
+                    {Number(offer.current_unit_quantity ?? 0).toLocaleString()} in stock{offer.unit_of_receipt ? ` · ${offer.unit_of_receipt}` : ''}
                 </Text>
             </View>
-
-            {/* Price */}
-            <View className="items-end">
-                <Text
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.bold,
-                        fontSize: 14,
-                    }}
-                >
-                    KES{' '}
-                    {formatMoney(
-                        offer.final_unit_selling_price ??
-                        offer.unit_selling_price,
-                    )}
-                </Text>
+            <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>KES {formatMoney(offer.final_unit_selling_price ?? offer.unit_selling_price)}</Text>
                 {hasDiscount ? (
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontSize: 11,
-                            marginTop: 2,
-                            textDecorationLine:
-                                'line-through',
-                            opacity: 0.7,
-                        }}
-                    >
-                        KES{' '}
-                        {formatMoney(
-                            offer.unit_selling_price,
-                        )}
-                    </Text>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 2, textDecorationLine: 'line-through' }}>KES {formatMoney(offer.unit_selling_price)}</Text>
                 ) : null}
             </View>
+            <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? theme.primary : theme.textDark} />
         </Pressable>
-    );
-}
-
-/* ------------------------------------------------------------------ */
-/* Image with fallback                                                 */
-/* ------------------------------------------------------------------ */
-
-function ImageWithFallback({
-    uri,
-    width,
-    height,
-    fallback,
-}: {
-    uri: string | null;
-    width: number;
-    height: number;
-    fallback: string;
-}) {
-    const [errored, setErrored] = useState(false);
-
-    if (!uri || errored) {
-        return (
-            <Text style={{ fontSize: 16, opacity: 0.4 }}>
-                {fallback}
-            </Text>
-        );
-    }
-
-    return (
-        <Image
-            source={{ uri }}
-            style={{ width, height }}
-            resizeMode="cover"
-            onError={() => setErrored(true)}
-        />
     );
 }

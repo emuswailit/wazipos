@@ -50,6 +50,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
+import { isServerOk } from '@/utils/serverResponse';
 
 /* =========================================================
  * Types
@@ -763,12 +764,12 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
 
     const wsRef = useRef<WebSocket | null>(null);
     const requestsStateRef = useRef<ProductRequestSummary[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
     );
     const wsGenerationRef = useRef(0);
     const wsReconnectAttemptRef = useRef(0);
-    const pendingFlushIntervalRef = useRef<NodeJS.Timeout | null>(
+    const pendingFlushIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
     );
     const offersFlushLockRef = useRef(false);
@@ -979,9 +980,7 @@ export const RetailerProductRequestsSyncProvider: React.FC<{
                         });
 
                     const data = res?.data ?? res;
-                    const isOk =
-                        res?.ok === true ||
-                        data?.response_code === 0;
+                    const isOk = isServerOk(res, data);
 
                     if (isOk) {
                         succeeded.add(entry.id);

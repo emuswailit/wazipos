@@ -15,21 +15,12 @@
 
 import type { UUID } from "@/campaigns/types";
 import { useAlert } from "@/components/common/AlertProvider";
-import { Badge } from "@/components/common/Badge";
-import { Button } from "@/components/common/Button";
-import { Modal } from "@/components/common/Modal";
+import { AdminBadgePill, AdminSheet, SheetButton, formatDate, useListTokens, useSheetIsWide } from "@/components/common/listScreen";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { useCampaignMutations } from "@/hooks/useCampaigns";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-    ActivityIndicator,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
 import RetailerCampaignItemEditModal from "./RetailerCampaignItemEditModal";
 import type { RetailerCampaignItem } from "./types";
 import { useRetailerCampaignDetail } from "./useRetailerCampaigns";
@@ -100,7 +91,9 @@ export default function RetailerCampaignDetailsModal({
     onClose,
     onChanged,
 }: Props) {
-    const { theme, isDarkMode } = useAuth();
+    const { theme } = useAuth();
+    const { chipBg } = useListTokens();
+    const sheetWide = useSheetIsWide();
     const alert = useAlert();
 
     const { detail, isLoading, error, refresh } = useRetailerCampaignDetail(
@@ -215,297 +208,118 @@ export default function RetailerCampaignDetailsModal({
     };
 
     const isPublished = campaign?.status === "PUBLISHED";
-    const surfaceMuted = isDarkMode ? "#0f172a" : "#f8fafc";
+    const canOptIn = isPublished && invoice.units > 0 && !submitting;
 
     return (
         <>
-            <Modal
-                visible={visible}
-                onClose={onClose}
+            <AdminSheet
+                visible={visible && editingItem === null}
+                onClose={submitting ? () => { } : onClose}
+                dismissible={!submitting}
                 title={campaign?.title ?? "Offer"}
-                maxHeightRatio={0.94}
+                subtitle={campaign ? `${formatDate(campaign.start)} → ${formatDate(campaign.end)}` : null}
+                icon="megaphone-outline"
+                width={720}
+                footer={
+                    campaign ? (
+                        <View style={{ flex: 1, gap: 10 }}>
+                            <View style={{ gap: 4 }}>
+                                {invoice.savings > 0 ? (
+                                    <>
+                                        <TotalRow label={`Subtotal (${invoice.units} units)`} value={currency(invoice.subtotal)} muted />
+                                        <TotalRow label="Campaign savings" value={`− ${currency(invoice.savings)}`} accent="#059669" />
+                                    </>
+                                ) : null}
+                                <TotalRow label={`Total (${invoice.units} units)`} value={currency(invoice.total)} emphasised />
+                            </View>
+                            <View style={{ flexDirection: "row", gap: 8 }}>
+                                <SheetButton label={alreadyOptedIn ? "Close" : "Cancel"} variant={alreadyOptedIn ? "primary" : "secondary"} onPress={onClose} disabled={submitting} grow={!sheetWide || alreadyOptedIn} />
+                                {alreadyOptedIn ? null : (
+                                    <SheetButton
+                                        label={!isPublished ? "Offer not open" : invoice.units === 0 ? "Select quantities" : `Opt in · ${currency(invoice.total)}`}
+                                        icon="checkmark-circle-outline"
+                                        onPress={handleOptIn}
+                                        disabled={!canOptIn}
+                                        loading={submitting}
+                                        loadingLabel="Opting in…"
+                                        grow
+                                    />
+                                )}
+                            </View>
+                        </View>
+                    ) : null
+                }
             >
                 {isLoading || !campaign ? (
-                    <View
-                        style={{
-                            flex: 1,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            paddingVertical: 80,
-                        }}
-                    >
+                    <View style={{ paddingVertical: 32, alignItems: "center", gap: 10 }}>
                         {error ? (
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontSize: 14,
-                                    paddingHorizontal: 24,
-                                    textAlign: "center",
-                                }}
-                            >
-                                {error}
-                            </Text>
+                            <Text style={{ color: "#e11d48", fontFamily: theme.font.medium, fontSize: 13, textAlign: "center" }}>{error}</Text>
                         ) : (
-                            <ActivityIndicator />
+                            <ActivityIndicator color={theme.primary} />
                         )}
                     </View>
                 ) : (
                     <>
-                        <ScrollView
-                            style={{ flex: 1 }}
-                            contentContainerStyle={{ paddingBottom: 8 }}
-                            showsVerticalScrollIndicator
-                        >
-                            {/* ── Invoice header ──────────────────── */}
-                            <View
-                                style={{
-                                    paddingHorizontal: 24,
-                                    paddingTop: 20,
-                                    paddingBottom: 16,
-                                    borderBottomColor: theme.border,
-                                    borderBottomWidth: 1,
-                                    gap: 12,
-                                }}
-                            >
-                                <View
-                                    style={{
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        justifyContent: "space-between",
-                                    }}
-                                >
-                                    <View style={{ gap: 4 }}>
-                                        <Text
-                                            style={{
-                                                color: theme.textDark,
-                                                fontSize: 11,
-                                                fontWeight: "600",
-                                                letterSpacing: 0.8,
-                                                textTransform: "uppercase",
-                                            }}
-                                        >
-                                            Offer window
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                color: theme.text,
-                                                fontSize: 15,
-                                                fontWeight: "600",
-                                            }}
-                                        >
-                                            {campaign.start} → {campaign.end}
-                                        </Text>
-                                    </View>
-                                    <Badge
-                                        tone={
-                                            alreadyOptedIn
-                                                ? "success"
-                                                : "neutral"
-                                        }
-                                    >
-                                        {alreadyOptedIn
-                                            ? "ACCEPTED"
-                                            : campaign.status}
-                                    </Badge>
-                                </View>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                            <AdminBadgePill
+                                badge={alreadyOptedIn ? { label: "Opted in", tone: "success", icon: "checkmark-circle" } : { label: titleCase(campaign.status), tone: isPublished ? "info" : "neutral" }}
+                                size="md"
+                            />
+                            {campaign.entity_title ? <AdminBadgePill badge={{ label: campaign.entity_title, tone: "neutral", icon: "storefront-outline" }} size="md" /> : null}
+                        </View>
 
-                                {campaign.description ? (
-                                    <Text
-                                        style={{
-                                            color: theme.textDark,
-                                            fontSize: 13,
-                                            lineHeight: 19,
-                                        }}
-                                    >
-                                        {campaign.description}
+                        {campaign.description ? (
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13.5, lineHeight: 19 }}>{campaign.description}</Text>
+                        ) : null}
+
+                        {alreadyOptedIn ? (
+                            <View style={{ flexDirection: "row", gap: 10, borderRadius: 16, padding: 12, backgroundColor: "rgba(16,185,129,0.10)" }}>
+                                <Ionicons name="checkmark-circle" size={18} color="#059669" style={{ marginTop: 1 }} />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: "#059669", fontFamily: theme.font.bold, fontSize: 13.5 }}>
+                                        You've opted in{myAudience?.retailer_indent_number ? `: indent ${myAudience.retailer_indent_number}` : ""}
                                     </Text>
-                                ) : null}
+                                    <Text style={{ color: "#059669", fontFamily: theme.font.medium, fontSize: 12.5, marginTop: 2 }}>Your wholesaler will confirm the indent shortly.</Text>
+                                </View>
                             </View>
+                        ) : !isPublished ? (
+                            <View style={{ borderRadius: 16, padding: 12, backgroundColor: chipBg }}>
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>This offer isn't open for opt-in right now.</Text>
+                            </View>
+                        ) : null}
 
-                            {/* ── Already opted in banner ─────────── */}
-                            {alreadyOptedIn ? (
-                                <View
-                                    style={{
-                                        marginHorizontal: 24,
-                                        marginTop: 16,
-                                        backgroundColor: surfaceMuted,
-                                        borderColor: theme.border,
-                                        borderWidth: 1,
-                                        borderRadius: 10,
-                                        padding: 14,
-                                        gap: 4,
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            color: theme.text,
-                                            fontSize: 14,
-                                            fontWeight: "600",
-                                        }}
-                                    >
-                                        You've opted in
-                                        {myAudience?.retailer_indent_number
-                                            ? ` — indent ${myAudience.retailer_indent_number}`
-                                            : ""}
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            color: theme.textDark,
-                                            fontSize: 12,
-                                        }}
-                                    >
-                                        Your wholesaler will confirm the
-                                        indent shortly.
-                                    </Text>
+                        <View style={{ gap: 8 }}>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", marginLeft: 4 }}>
+                                Products ({items.length})
+                            </Text>
+                            {items.length === 0 ? (
+                                <View style={{ borderRadius: 16, padding: 16, alignItems: "center", backgroundColor: chipBg }}>
+                                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>No items on this offer.</Text>
                                 </View>
-                            ) : null}
-
-                            {/* ── Line items ──────────────────────── */}
-                            <View
-                                style={{
-                                    paddingHorizontal: 24,
-                                    paddingTop: 20,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontSize: 11,
-                                        fontWeight: "600",
-                                        letterSpacing: 0.8,
-                                        textTransform: "uppercase",
-                                        marginBottom: 8,
-                                    }}
-                                >
-                                    Line items ({items.length})
-                                </Text>
-
-                                {items.length === 0 ? (
-                                    <View
-                                        style={{
-                                            paddingVertical: 24,
-                                            alignItems: "center",
-                                        }}
-                                    >
-                                        <Text
-                                            style={{
-                                                color: theme.textDark,
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            No items on this offer.
-                                        </Text>
-                                    </View>
-                                ) : (
-                                    items.map((it, idx) => (
+                            ) : (
+                                <View style={{ borderRadius: 18, paddingHorizontal: 14, backgroundColor: chipBg }}>
+                                    {items.map((it, idx) => (
                                         <InvoiceLine
                                             key={it.id}
                                             item={it}
-                                            quantity={
-                                                quantities[it.id] ?? 0
-                                            }
-                                            onChange={(v) =>
-                                                setQuantity(it.id, v)
-                                            }
-                                            onOpenEditor={() =>
-                                                setEditingItem(it)
-                                            }
+                                            quantity={quantities[it.id] ?? 0}
+                                            onChange={(v) => setQuantity(it.id, v)}
+                                            onOpenEditor={() => setEditingItem(it)}
                                             disabled={alreadyOptedIn}
                                             isLast={idx === items.length - 1}
                                         />
-                                    ))
-                                )}
-                            </View>
-                        </ScrollView>
-
-                        {/* ── Invoice footer — totals + action ─── */}
-                        <View
-                            style={{
-                                borderTopColor: theme.border,
-                                borderTopWidth: 2,
-                                backgroundColor: surfaceMuted,
-                            }}
-                        >
-                            <View
-                                style={{
-                                    paddingHorizontal: 24,
-                                    paddingVertical: 16,
-                                    gap: 8,
-                                }}
-                            >
-                                {invoice.savings > 0 ? (
-                                    <>
-                                        <TotalRow
-                                            label={`Subtotal (${invoice.units} units)`}
-                                            value={currency(invoice.subtotal)}
-                                            muted
-                                        />
-                                        <TotalRow
-                                            label="Campaign savings"
-                                            value={`− ${currency(
-                                                invoice.savings
-                                            )}`}
-                                            accent="#059669"
-                                        />
-                                    </>
-                                ) : null}
-                                <View
-                                    style={{
-                                        height: 1,
-                                        backgroundColor: theme.border,
-                                        marginVertical: 4,
-                                    }}
-                                />
-                                <TotalRow
-                                    label={`Total (${invoice.units} units)`}
-                                    value={currency(invoice.total)}
-                                    emphasised
-                                />
-                            </View>
-
-                            <View
-                                style={{
-                                    paddingHorizontal: 24,
-                                    paddingBottom: 20,
-                                }}
-                            >
-                                {alreadyOptedIn ? (
-                                    <Button
-                                        variant="ghost"
-                                        onPress={onClose}
-                                    >
-                                        Close
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        onPress={handleOptIn}
-                                        disabled={
-                                            !isPublished ||
-                                            invoice.units === 0 ||
-                                            submitting
-                                        }
-                                        loading={submitting}
-                                        size="lg"
-                                    >
-                                        {invoice.units === 0
-                                            ? "Select quantities"
-                                            : `Opt in — ${currency(
-                                                invoice.total
-                                            )}`}
-                                    </Button>
-                                )}
-                            </View>
+                                    ))}
+                                </View>
+                            )}
                         </View>
                     </>
                 )}
-            </Modal>
+            </AdminSheet>
 
             <RetailerCampaignItemEditModal
                 visible={editingItem !== null}
                 item={editingItem}
-                quantity={
-                    editingItem ? quantities[editingItem.id] ?? 0 : 0
-                }
+                quantity={editingItem ? quantities[editingItem.id] ?? 0 : 0}
                 onSave={(qty) => {
                     if (editingItem) setQuantity(editingItem.id, qty);
                 }}
@@ -514,6 +328,8 @@ export default function RetailerCampaignDetailsModal({
         </>
     );
 }
+
+const titleCase = (s?: string | null) => (s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ") : "");
 
 /* ============================ local atoms ============================ */
 

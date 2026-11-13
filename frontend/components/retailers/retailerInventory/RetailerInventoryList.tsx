@@ -1,6 +1,4 @@
 // components/retailers/retailerInventory/RetailerInventoryList.tsx
-//
-// Retailer inventory view — shell.
 
 import type { PageSize } from '@/components/common/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
@@ -13,12 +11,15 @@ import React, {
 } from 'react';
 import { useWindowDimensions } from 'react-native';
 
-
 import { InventoryDetailsModal } from './InventoryDetailsModal';
 import RetailerInventoryAddModal from './RetailerInventoryAddModal';
 import { RetailerInventoryMobileView } from './RetailerInventoryMobileView';
 import {
+    INVENTORY_FILTERS,
     isExpired,
+    isExpiringSoon,
+    isLowStock,
+    matchesInventoryFilter,
     RetailerInventoryWebView,
     type InventoryCounts,
     type InventoryFilter,
@@ -64,9 +65,7 @@ export default function RetailerInventoryList() {
         return retailerReceipts.filter((receipt: any) => {
             if (!receipt) return false;
 
-            const exp = isExpired(receipt);
-            if (activeFilter === 'ACTIVE' && exp) return false;
-            if (activeFilter === 'EXPIRED' && !exp) return false;
+            if (!matchesInventoryFilter(receipt, activeFilter)) return false;
 
             if (q) {
                 const product = String(
@@ -105,19 +104,24 @@ export default function RetailerInventoryList() {
     /* -------- Counts -------- */
     const counts: InventoryCounts = useMemo(() => {
         const list = Array.isArray(retailerReceipts)
-            ? retailerReceipts
+            ? retailerReceipts.filter(Boolean)
             : [];
+        const byFilter = Object.fromEntries(
+            INVENTORY_FILTERS.map((f) => [
+                f,
+                list.filter((i: any) => matchesInventoryFilter(i, f)).length,
+            ])
+        ) as Record<InventoryFilter, number>;
         return {
             total: list.length,
             active: list.filter((i: any) => !isExpired(i)).length,
-            expired: list.filter((i: any) => isExpired(i)).length,
-            lowStock: list.filter(
-                (i: any) =>
-                    Number(i?.current_unit_quantity ?? 0) <= 5 &&
-                    Number(i?.current_unit_quantity ?? 0) > 0
-            ).length,
+            expired: byFilter.EXPIRED,
+            lowStock: list.filter((i: any) => isLowStock(i)).length,
+            expiring: list.filter((i: any) => isExpiringSoon(i)).length,
+            visible: filteredReceipts.length,
+            byFilter,
         };
-    }, [retailerReceipts]);
+    }, [retailerReceipts, filteredReceipts.length]);
 
     /* -------- Total value -------- */
     const totalValue = useMemo(() => {
@@ -226,8 +230,8 @@ export default function RetailerInventoryList() {
         void forceManualRefresh();
     }, [forceManualRefresh]);
 
-    /* -------- Shared props -------- */
-    const sharedProps = {
+    /* -------- Shared props (No Pagination) -------- */
+    const baseProps = {
         query: searchQuery,
         setQuery: setSearchQuery,
         activeFilter,
@@ -239,8 +243,14 @@ export default function RetailerInventoryList() {
         lastSyncedTime,
         counts,
         totalValue,
-        items: pagedReceipts,
+        onView: handleView,
+        onEdit: handleEditRow,
+    };
 
+    /* -------- Web Props (With Pagination) -------- */
+    const webProps = {
+        ...baseProps,
+        items: pagedReceipts,
         page,
         pageSize,
         totalItems,
@@ -250,17 +260,20 @@ export default function RetailerInventoryList() {
         onPrev: goPrev,
         onNext: goNext,
         onPageSizeChange: changePageSize,
+    };
 
-        onView: handleView,
-        onEdit: handleEditRow,
+    /* -------- Mobile Props (All Items) -------- */
+    const mobileProps = {
+        ...baseProps,
+        items: filteredReceipts, // 🌟 Pass the FULL array to mobile
     };
 
     return (
         <>
             {isLarge ? (
-                <RetailerInventoryWebView {...sharedProps} />
+                <RetailerInventoryWebView {...webProps} />
             ) : (
-                <RetailerInventoryMobileView {...sharedProps} />
+                <RetailerInventoryMobileView {...mobileProps} />
             )}
 
             <InventoryDetailsModal

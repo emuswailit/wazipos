@@ -34,8 +34,6 @@ import {
     type PageSize,
 } from "./types";
 
-export type { DrugSubClassItem } from "./types";
-
 /* =========================================================
  * Alert helper
  *
@@ -268,7 +266,7 @@ export default function AdminDrugSubClassesList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -362,9 +360,7 @@ export default function AdminDrugSubClassesList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminDrugSubClassesSharedProps = {
         query,
@@ -375,6 +371,7 @@ export default function AdminDrugSubClassesList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredSubClasses,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,
@@ -409,19 +406,12 @@ export default function AdminDrugSubClassesList() {
                     headerShown: true,
                     headerTintColor: theme.primary,
                     headerShadowVisible: false,
-                    headerStatusBarHeight: 0,
                     headerTitleStyle: {
                         fontWeight: "900",
                         fontSize: 18,
                     },
-                    headerTitleContainerStyle: {
-                        margin: 0,
-                        padding: 0,
-                    },
                     headerStyle: {
                         backgroundColor: theme.surface,
-                        height:
-                            Platform.OS === "android" ? 44 : 40,
                     },
                 }}
             />

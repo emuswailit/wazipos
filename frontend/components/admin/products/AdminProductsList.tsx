@@ -1,11 +1,4 @@
 // components/admin/products/AdminProductsList.tsx
-//
-// Admin products list shell.
-//
-// Reads come exclusively from ProductsSyncContext — this screen
-// no longer calls GetAllProducts itself. Mutations (Create /
-// Update) still go through useApi locally, then trigger a context
-// refresh so the shared cache picks up the change.
 
 import { useAuth } from "@/context/AuthContext";
 import { useProductsSync } from "@/context/ProductsSyncContext";
@@ -14,8 +7,6 @@ import { Stack } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
-    Platform,
     StatusBar,
     Text,
     useWindowDimensions,
@@ -24,7 +15,16 @@ import {
 
 import drugsApi from "@/api/drugs/productsApi";
 import { ProductDetails } from "@/api/productsApi";
-import AdminProductDetailsModal from "./AdminProductDetailsModal";
+import { useAlert } from "@/components/common/AlertProvider";
+import ApiErrorModal, {
+    FlatFieldError,
+    OriginFrame,
+} from "@/components/common/ApiErrorModal";
+import ApiResponseModal, {
+    ApiResponseEnvelope,
+    extractEnvelope,
+} from "@/components/common/ApiResponseModal";
+import AdminProductDetailsModal from "./AdminProductDetailsModal"; // 🌟 Ensure this is imported
 import AdminProductEditModal from "./AdminProductEditModal";
 import AdminProductsMobileView from "./AdminProductsMobileView";
 import AdminProductsWebView from "./AdminProductsWebView";
@@ -34,24 +34,6 @@ import {
     type PageSize,
     type ProductItem,
 } from "./types";
-
-export type { ProductItem } from "./types";
-
-function showResultAlert(
-    title: string,
-    responseMessage: string,
-    errorsText: string
-) {
-    const body = `response_message:\n${responseMessage}\n\nerrors:\n${errorsText}`;
-
-    if (Platform.OS === "web") {
-        if (typeof window !== "undefined") {
-            window.alert(`${title}\n\n${body}`);
-        }
-        return;
-    }
-    Alert.alert(title, body);
-}
 
 function formatHumanDate(dateString: string): string {
     if (!dateString) return "—";
@@ -85,7 +67,6 @@ export default function AdminProductsList() {
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768;
 
-    // ---- Read side: ProductsSyncContext is the single source ----
     const {
         productsList,
         isProductsSyncing,
@@ -93,19 +74,28 @@ export default function AdminProductsList() {
         forceProductsRefresh,
     } = useProductsSync();
 
-    const [selectedItem, setSelectedItem] =
-        useState<ProductItem | null>(null);
+    const alert = useAlert();
+
+    const [responseModalOpen, setResponseModalOpen] = useState(false);
+    const [responseEnvelope, setResponseEnvelope] = useState<ApiResponseEnvelope | null>(null);
+    const [responseTitle, setResponseTitle] = useState<string>();
+    const [responseSubtitle, setResponseSubtitle] = useState<string>();
+    const [responseRetry, setResponseRetry] = useState<(() => void) | undefined>(undefined);
+
+    const [errorModalOpen, setErrorModalOpen] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [errorFields, setErrorFields] = useState<FlatFieldError[]>([]);
+    const [errorOrigin, setErrorOrigin] = useState<OriginFrame[]>([]);
+
+    // 🌟 State to handle the details modal
+    const [selectedItem, setSelectedItem] = useState<ProductItem | null>(null);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-    const [editingItem, setEditingItem] =
-        useState<ProductItem | null>(null);
+    const [editingItem, setEditingItem] = useState<ProductItem | null>(null);
 
     const [query, setQuery] = useState("");
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState<PageSize>(
-        PAGE_SIZE_OPTIONS[0]
-    );
+    const [pageSize, setPageSize] = useState<PageSize>(PAGE_SIZE_OPTIONS[0]);
 
-    // ---- Write side: mutations only ----
     const addProductApi = useApi<any>(async (payload: any) =>
         drugsApi.productsAction(payload)
     );
@@ -113,51 +103,41 @@ export default function AdminProductsList() {
         drugsApi.productsAction(payload)
     );
 
-    // Map the context's normalized ProductItem into the admin
-    // list's local shape. The context already resolved image URLs
-    // and nested objects; we just present them here.
     const products: ProductItem[] = useMemo(() => {
         if (!Array.isArray(productsList) || productsList.length === 0) {
             return [];
         }
 
-        return productsList.map((item: any) => ({
-            id: String(item.remote_id ?? item.id ?? ""),
-            title: item.title || "UNSPECIFIED",
-            description: item.description || "",
-            long_title: item.long_title || "",
-            product_name: item.product_name || "",
-            preparation: item.preparation || "",
-            preparation_title: item.preparation_title || "—",
-            long_preparation_title:
-                item.long_preparation_title || "—",
-            formulation_title: item.formulation_title || "—",
-            manufacturer: item.manufacturer || "",
-            manufacturer_title: item.manufacturer_title || "—",
-            country_of_origin: item.country_of_origin || "—",
-            category: item.category || "",
-            category_title: item.category_title || "—",
-            units_per_pack: Number(item.units_per_pack) || 0,
-            pack_tag: item.pack_tag || "",
-            bar_code: item.bar_code || "",
-            is_vatable: item.is_vatable
-                ? String(item.is_vatable)
-                : "false",
-            allowed_entities: Array.isArray(
-                item.allowed_entities
-            )
-                ? item.allowed_entities
-                : [],
-            allowed_entities_titles: Array.isArray(
-                item.allowed_entities_titles
-            )
-                ? item.allowed_entities_titles
-                : [],
-            active: !!item.active,
-            images: parseImages(item.images),
-            created: item.created || "",
-            updated: item.updated || "",
-        }));
+        return productsList.map((item: any, index: number) => {
+            const stableId = item.remote_id || item.id || `prod-${index}`;
+
+            return {
+                id: String(stableId),
+                title: item.title || "UNSPECIFIED",
+                description: item.description || "",
+                long_title: item.long_title || "",
+                product_name: item.product_name || "",
+                preparation: item.preparation || "",
+                preparation_title: item.preparation_title || "—",
+                long_preparation_title: item.long_preparation_title || "—",
+                formulation_title: item.formulation_title || "—",
+                manufacturer: item.manufacturer || "",
+                manufacturer_title: item.manufacturer_title || "—",
+                country_of_origin: item.country_of_origin || "—",
+                category: item.category || "",
+                category_title: item.category_title || "—",
+                units_per_pack: Number(item.units_per_pack) || 0,
+                pack_tag: item.pack_tag || "",
+                bar_code: item.bar_code || "",
+                is_vatable: item.is_vatable ? String(item.is_vatable) : "false",
+                allowed_entities: Array.isArray(item.allowed_entities) ? item.allowed_entities : [],
+                allowed_entities_titles: Array.isArray(item.allowed_entities_titles) ? item.allowed_entities_titles : [],
+                active: !!item.active,
+                images: parseImages(item.images),
+                created: item.created || "",
+                updated: item.updated || "",
+            };
+        });
     }, [productsList]);
 
     const filteredProducts = useMemo(() => {
@@ -168,21 +148,14 @@ export default function AdminProductsList() {
                 item.title.toLowerCase().includes(q) ||
                 item.product_name.toLowerCase().includes(q) ||
                 item.bar_code.toLowerCase().includes(q) ||
-                item.preparation_title
-                    .toLowerCase()
-                    .includes(q) ||
-                item.manufacturer_title
-                    .toLowerCase()
-                    .includes(q) ||
+                item.preparation_title.toLowerCase().includes(q) ||
+                item.manufacturer_title.toLowerCase().includes(q) ||
                 item.category_title.toLowerCase().includes(q)
         );
     }, [products, query]);
 
     const totalItems = filteredProducts.length;
-    const totalPages = Math.max(
-        1,
-        Math.ceil(totalItems / pageSize)
-    );
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
     useEffect(() => {
         setPage(1);
@@ -200,11 +173,51 @@ export default function AdminProductsList() {
         [filteredProducts, pageStart, pageEnd]
     );
 
-    // After a successful mutation, ask the context to refetch.
-    // The context updates productsList, and `products` above
-    // recomputes automatically.
     const refreshFromContext = () => {
         void forceProductsRefresh();
+    };
+
+    const routeResponse = (
+        raw: any,
+        opts: {
+            title: string;
+            subtitle?: string;
+            successTitle: string;
+            onRetry?: () => void;
+        }
+    ): boolean => {
+        const env = extractEnvelope(raw);
+        const ok = env.response_code === "0";
+
+        if (ok) {
+            alert(
+                opts.successTitle,
+                env.response_message ?? "Operation completed.",
+                undefined,
+                "success"
+            );
+            return true;
+        }
+
+        setResponseEnvelope(env);
+        setResponseTitle(opts.title);
+        setResponseSubtitle(opts.subtitle);
+        setResponseRetry(() => opts.onRetry);
+        setResponseModalOpen(true);
+        return false;
+    };
+
+    const routeException = (err: any) => {
+        setErrorMessage(
+            err?.message ?? "Unexpected error. Check the console."
+        );
+        setErrorFields(
+            Array.isArray(err?.fieldErrors) ? err.fieldErrors : []
+        );
+        setErrorOrigin(
+            Array.isArray(err?.origin) ? err.origin : []
+        );
+        setErrorModalOpen(true);
     };
 
     const handleFormSubmit = async (
@@ -214,89 +227,42 @@ export default function AdminProductsList() {
         try {
             const details: ProductDetails = {
                 title: String(values.title ?? "").trim(),
-                description: String(
-                    values.description ?? ""
-                ).trim(),
-                preparation: String(
-                    values.preparation ?? ""
-                ).trim(),
-                units_per_pack:
-                    Number(values.units_per_pack) || 0,
+                description: String(values.description ?? "").trim(),
+                preparation: String(values.preparation ?? "").trim(),
+                units_per_pack: Number(values.units_per_pack) || 0,
                 pack_tag: String(values.pack_tag ?? "").trim(),
-                manufacturer: String(
-                    values.manufacturer ?? ""
-                ).trim(),
-                category: String(
-                    values.category ?? ""
-                ).trim(),
-                is_vatable: String(
-                    values.is_vatable ?? "false"
-                ),
-                allowed_entities: Array.isArray(
-                    values.allowed_entities
-                )
+                manufacturer: String(values.manufacturer ?? "").trim(),
+                category: String(values.category ?? "").trim(),
+                is_vatable: String(values.is_vatable ?? "false"),
+                allowed_entities: Array.isArray(values.allowed_entities)
                     ? values.allowed_entities.filter(Boolean)
                     : [],
                 bar_code: String(values.bar_code ?? "").trim(),
-                images: Array.isArray(values.images)
-                    ? values.images
-                    : [],
+                images: Array.isArray(values.images) ? values.images : [],
             };
 
-            let response: any;
-
-            if (editingItem) {
-                response = await updateProductApi.request({
+            const response: any = editingItem
+                ? await updateProductApi.request({
                     action: "UpdateProduct",
                     id: editingItem.id,
                     product_details: details,
-                });
-            } else {
-                response = await addProductApi.request({
+                })
+                : await addProductApi.request({
                     action: "CreateProduct",
                     product_details: details,
                 });
-            }
 
-            console.log("ProductsAction", response);
-
-            console.log(
-                `📡 [Admin Inbound API Resolution] ${editingItem ? "Update" : "Create"
-                } Request Status: ${response?.status ?? "N/A"
-                } | Body:`,
-                JSON.stringify(response?.data)
-            );
-
-            const data = response?.data ?? {};
-
-            const responseMessage: string =
-                typeof data?.response_message === "string" &&
-                    data.response_message.trim()
-                    ? data.response_message
-                    : "—";
-
-            const errorsList: string[] =
-                Array.isArray(data?.errors) &&
-                    data.errors.length > 0
-                    ? data.errors.filter(
-                        (e: any) => typeof e === "string"
-                    )
-                    : [];
-
-            const errorsText =
-                errorsList.length > 0
-                    ? errorsList.join("\n")
-                    : "—";
-
-            const ok =
-                response?.ok === true ||
-                String(data?.response_code ?? "") === "0";
-
-            showResultAlert(
-                ok ? "✅ Success" : "❌ Failed",
-                responseMessage,
-                errorsText
-            );
+            const ok = routeResponse(response, {
+                title: editingItem
+                    ? "Could not update product"
+                    : "Could not create product",
+                subtitle: editingItem?.id,
+                successTitle: editingItem
+                    ? "Product updated"
+                    : "Product created",
+                onRetry: () =>
+                    handleFormSubmit(values, { resetForm }),
+            });
 
             if (!ok) return;
 
@@ -305,28 +271,12 @@ export default function AdminProductsList() {
             setEditingItem(null);
             refreshFromContext();
         } catch (err) {
-            console.error(
-                "Admin form workflow operation error:",
-                err
-            );
-
-            const fallbackMsg =
-                (err as any)?.message ??
-                "Unexpected error. Check the console.";
-
-            if (Platform.OS === "web") {
-                if (typeof window !== "undefined") {
-                    window.alert(
-                        `❌ Exception\n\n${fallbackMsg}`
-                    );
-                }
-            } else {
-                Alert.alert("❌ Exception", fallbackMsg);
-            }
+            routeException(err);
         }
     };
 
     const handleOpenEditFlow = (item: ProductItem) => {
+        setSelectedItem(null); // Close details modal if open
         setEditingItem(item);
         setIsFormModalOpen(true);
     };
@@ -337,7 +287,7 @@ export default function AdminProductsList() {
     };
 
     const handleOpenDetails = (item: ProductItem) => {
-        setSelectedItem(item);
+        setSelectedItem(item); // 🌟 Opens the details modal
     };
 
     const goPrev = () => setPage((p) => Math.max(1, p - 1));
@@ -348,7 +298,6 @@ export default function AdminProductsList() {
         setPage(1);
     };
 
-    // Loading state derives from the context, not a local API.
     if (isProductsSyncing && products.length === 0) {
         return (
             <View
@@ -378,9 +327,7 @@ export default function AdminProductsList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminProductsSharedProps = {
         query,
@@ -391,8 +338,9 @@ export default function AdminProductsList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredProducts,
         onOpenCreate: handleOpenCreateFlow,
-        onPressItem: handleOpenDetails,
+        onPressItem: handleOpenDetails, // 🌟 Passes the click handler
         onEditItem: handleOpenEditFlow,
         formatDateHandler: formatHumanDate,
         page,
@@ -420,15 +368,7 @@ export default function AdminProductsList() {
 
             <Stack.Screen options={{ headerShown: false }} />
 
-            {selectedItem ? (
-                <AdminProductDetailsModal
-                    routeItem={selectedItem}
-                    onClose={() => setSelectedItem(null)}
-                    theme={theme}
-                    formatDateHandler={formatHumanDate}
-                    onOpenEditTrigger={handleOpenEditFlow}
-                />
-            ) : isLargeScreen ? (
+            {isLargeScreen ? (
                 <AdminProductsWebView {...sharedProps} />
             ) : (
                 <AdminProductsMobileView {...sharedProps} />
@@ -443,8 +383,7 @@ export default function AdminProductsList() {
                 isDarkMode={isDarkMode}
                 theme={theme}
                 isSubmittingRemote={
-                    addProductApi.loading ||
-                    updateProductApi.loading
+                    addProductApi.loading || updateProductApi.loading
                 }
                 onSubmitTrigger={handleFormSubmit}
                 initialData={editingItem}
@@ -452,6 +391,46 @@ export default function AdminProductsList() {
                     addProductApi.data?.errors ||
                     updateProductApi.data?.errors
                 }
+            />
+
+            {/* 🌟 Render Details Modal Over the Table */}
+            {selectedItem && (
+                <AdminProductDetailsModal
+                    routeItem={selectedItem}
+                    onClose={() => setSelectedItem(null)}
+                    theme={theme}
+                    formatDateHandler={formatHumanDate}
+                    onOpenEditTrigger={handleOpenEditFlow}
+                />
+            )}
+
+            <ApiResponseModal
+                isOpen={responseModalOpen}
+                variant="error"
+                title={responseTitle ?? "Request failed"}
+                subtitle={responseSubtitle}
+                envelope={responseEnvelope}
+                fallbackMessage={null}
+                onClose={() => {
+                    setResponseModalOpen(false);
+                    setResponseRetry(undefined);
+                }}
+                onRetry={responseRetry}
+                retryLabel="Try again"
+                closeLabel="Close"
+            />
+
+            <ApiErrorModal
+                visible={errorModalOpen}
+                message={errorMessage}
+                errors={errorFields}
+                origin={errorOrigin}
+                onClose={() => {
+                    setErrorModalOpen(false);
+                    setErrorMessage(null);
+                    setErrorFields([]);
+                    setErrorOrigin([]);
+                }}
             />
         </View>
     );

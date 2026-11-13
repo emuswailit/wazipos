@@ -1,37 +1,36 @@
 // components/retailers/stockOuts/OutOfStockFormModal.tsx
+//
+// Create / edit an out-of-stock request.
+//
+// Built from the shared form kit in @/components/common:
+//   Modal (centred card on web, bottom sheet on native), ProductPickerAutocomplete,
+//   CustomTextField, SelectDropdown, SwitchField, Button — wired through Formik + Yup.
+//
+// Saving is offline-first: create/edit are queued in RetailerOutOfStocksSyncContext.
 
+import { Button } from '@/components/common/Button';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import ImageWithFallback from '@/components/common/ImageWithFallback';
+import { Modal } from '@/components/common/Modal';
 import { ProductPickerAutocomplete } from '@/components/common/ProductPickerAutocomplete';
+import { SelectDropdown, type SelectOption } from '@/components/common/SelectDropdown';
+import { SwitchField } from '@/components/common/SwitchField';
 import { useAuth } from '@/context/AuthContext';
 import { useProductsSync } from '@/context/ProductsSyncContext';
-import {
-    rememberProductTitle,
-    useRetailerOutOfStocksSync,
-} from '@/context/RetailerOutOfStocksSyncContext';
+import { rememberProductTitle, useRetailerOutOfStocksSync } from '@/context/RetailerOutOfStocksSyncContext';
 import { RetailerOutOfStockNormalized } from '@/databases/types';
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
-import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { resolveImageUrl } from '@/lib/images';
+import { Ionicons } from '@expo/vector-icons';
+import { Formik, type FormikHelpers } from 'formik';
+import React, { useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import * as Yup from 'yup';
 
 /* ------------------------------------------------------------------ */
-/* Option types                                                        */
+/* Options                                                             */
 /* ------------------------------------------------------------------ */
-export interface UnitOption {
+
+interface UnitOption {
     value: string;
     label: string;
 }
@@ -50,9 +49,10 @@ const DEFAULT_UNITS: UnitOption[] = [
 /* ------------------------------------------------------------------ */
 /* Props                                                               */
 /* ------------------------------------------------------------------ */
-export type OutOfStockFormMode = 'create' | 'edit';
 
-export interface OutOfStockFormModalProps {
+type OutOfStockFormMode = 'create' | 'edit';
+
+interface OutOfStockFormModalProps {
     visible: boolean;
     mode: OutOfStockFormMode;
     item?: RetailerOutOfStockNormalized | null;
@@ -62,10 +62,11 @@ export interface OutOfStockFormModalProps {
 }
 
 /* ------------------------------------------------------------------ */
-/* Form state                                                          */
+/* Form values + validation                                            */
 /* ------------------------------------------------------------------ */
-interface FormState {
-    productId: string | null;
+
+interface FormValues {
+    productId: string;
     productTitle: string;
     unitOfReceipt: string;
     requiredQuantity: string;
@@ -74,734 +75,335 @@ interface FormState {
     isSpecialOrder: boolean;
 }
 
-const EMPTY_FORM: FormState = {
-    productId: null,
-    productTitle: '',
-    unitOfReceipt: DEFAULT_UNITS[0].value,
-    requiredQuantity: '',
-    customerName: '',
-    customerPhone: '',
-    isSpecialOrder: false,
-};
-
-function formFromItem(
-    item: RetailerOutOfStockNormalized
-): FormState {
+function initialValuesFor(item: RetailerOutOfStockNormalized | null | undefined, units: UnitOption[]): FormValues {
+    if (item) {
+        return {
+            productId: item.product ?? '',
+            productTitle: item.product_title ?? '',
+            unitOfReceipt: item.unit_of_receipt || units[0]?.value || '',
+            requiredQuantity: String(item.required_quantity ?? 1),
+            customerName: item.customer_name ?? '',
+            customerPhone: item.customer_phone ?? '',
+            isSpecialOrder: !!item.is_special_order,
+        };
+    }
     return {
-        productId: item.product ?? null,
-        productTitle: item.product_title ?? '',
-        unitOfReceipt:
-            item.unit_of_receipt || DEFAULT_UNITS[0].value,
-        requiredQuantity: String(
-            item.required_quantity ?? 0
-        ),
-        customerName: item.customer_name ?? '',
-        customerPhone: item.customer_phone ?? '',
-        isSpecialOrder: !!item.is_special_order,
+        productId: '',
+        productTitle: '',
+        unitOfReceipt: units[0]?.value ?? '',
+        requiredQuantity: '1',
+        customerName: '',
+        customerPhone: '',
+        isSpecialOrder: false,
     };
+}
+
+const PHONE_RE = /^\+?[0-9][0-9\s-]{7,14}$/;
+
+function buildSchema(isEdit: boolean) {
+    return Yup.object({
+        productId: isEdit ? Yup.string() : Yup.string().required('Pick the product that is out of stock'),
+        requiredQuantity: Yup.string()
+            .required('Enter how many are needed')
+            .test('positive-int', 'Enter a whole number of at least 1', (v) => {
+                const n = Number(v);
+                return Number.isInteger(n) && n >= 1;
+            }),
+        customerName: Yup.string().max(120, 'Name is too long'),
+        customerPhone: Yup.string().test('phone', 'Enter a valid phone number', (v) => !v || PHONE_RE.test(v.trim())),
+    });
 }
 
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
-export function OutOfStockFormModal({
-    visible,
-    mode,
-    item,
-    onClose,
-    onSaved,
-    units = DEFAULT_UNITS,
-}: OutOfStockFormModalProps) {
+
+export function OutOfStockFormModal({ visible, mode, item, onClose, onSaved, units = DEFAULT_UNITS }: OutOfStockFormModalProps) {
     const { theme, isDarkMode } = useAuth();
+    const { width } = useWindowDimensions();
+    const isWide = width >= 640;
 
-    /* Products come from the shared products sync context. */
-    const { productsList, isProductsSyncing } =
-        useProductsSync();
+    const { productsList, isProductsSyncing } = useProductsSync();
+    const { createOutOfStock, queueOutOfStockEdit } = useRetailerOutOfStocksSync();
 
-    const {
-        createOutOfStock,
-        queueOutOfStockEdit,
-    } = useRetailerOutOfStocksSync();
+    const isEdit = mode === 'edit' && !!item;
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
-    const isEdit = mode === 'edit';
+    const unitOptions: SelectOption[] = useMemo(() => units.map((u) => ({ value: u.value, label: u.label })), [units]);
+    const schema = useMemo(() => buildSchema(isEdit), [isEdit]);
+    const initialValues = useMemo(() => initialValuesFor(isEdit ? item : null, units), [isEdit, item, units]);
 
-    const [form, setForm] = useState<FormState>(EMPTY_FORM);
-    const [saving, setSaving] = useState(false);
-    const [errorMsg, setErrorMsg] = useState<string | null>(
-        null
-    );
-
-    useEffect(() => {
-        if (!visible) return;
-        if (isEdit && item) {
-            setForm(formFromItem(item));
-        } else {
-            setForm(EMPTY_FORM);
-        }
-        setErrorMsg(null);
-        setSaving(false);
-    }, [visible, isEdit, item]);
-
-    const qtyNumber = useMemo(() => {
-        const n = Number(form.requiredQuantity);
-        return Number.isFinite(n) && n > 0
-            ? Math.floor(n)
-            : 0;
-    }, [form.requiredQuantity]);
-
-    const canSubmit = useMemo(() => {
-        if (saving) return false;
-        if (qtyNumber <= 0) return false;
-        if (!isEdit && !form.productId) return false;
-        return true;
-    }, [saving, qtyNumber, isEdit, form.productId]);
-
-    const setField = useCallback(
-        <K extends keyof FormState>(
-            key: K,
-            value: FormState[K]
-        ) => {
-            setForm((prev) => ({ ...prev, [key]: value }));
-        },
-        []
-    );
-
-    /* -------- Selected product for the picker --------
-     * The picker's controlled mode expects a full Product object
-     * (for the title + thumbnail). Form state only holds id/title,
-     * so look the product up in the synced list. Fall back to a
-     * minimal shape if the product isn't in the current page.
-     */
-    const selectedProduct = useMemo(() => {
-        if (!form.productId) return null;
-
-        const found = (productsList ?? []).find(
-            (p: any) =>
-                p?.remote_id === form.productId ||
-                p?.id === form.productId
-        );
-        if (found) return found;
-
-        // Minimal fallback — keeps the input text populated
-        // even if the product isn't in the current sync page.
-        return {
-            remote_id: form.productId,
-            id: form.productId,
-            title: form.productTitle,
-        } as any;
-    }, [form.productId, form.productTitle, productsList]);
-
-    const handleSelectProduct = useCallback(
-        (product: any) => {
-            const remoteId = String(
-                product?.remote_id ?? product?.id ?? ''
-            );
-            const title = String(
-                product?.title ??
-                product?.product_title ??
-                ''
-            );
-            setForm((prev) => ({
-                ...prev,
-                productId: remoteId || null,
-                productTitle: title,
-            }));
-            if (remoteId) {
-                rememberProductTitle(remoteId, title);
-            }
-        },
-        []
-    );
-
-    const handleClearProduct = useCallback(() => {
-        setForm((prev) => ({
-            ...prev,
-            productId: null,
-            productTitle: '',
-        }));
-    }, []);
-
-    const handleSubmit = useCallback(async () => {
-        if (!canSubmit) return;
-        setSaving(true);
-        setErrorMsg(null);
-
+    const handleSubmit = async (values: FormValues, helpers: FormikHelpers<FormValues>) => {
+        setSubmitError(null);
+        const qty = Math.floor(Number(values.requiredQuantity));
+        const customer_name = values.customerName.trim() || null;
+        const customer_phone = values.customerPhone.trim() || null;
         try {
             if (isEdit && item) {
                 await queueOutOfStockEdit(item.remote_id, {
                     product: item.product,
-                    required_quantity: qtyNumber,
-                    is_special_order: form.isSpecialOrder,
-                    customer_name:
-                        form.customerName || null,
-                    customer_phone:
-                        form.customerPhone || null,
+                    required_quantity: qty,
+                    is_special_order: values.isSpecialOrder,
+                    customer_name,
+                    customer_phone,
                 });
                 onSaved?.(item.remote_id);
             } else {
                 const draftId = await createOutOfStock({
-                    product: form.productId!,
-                    required_quantity: qtyNumber,
-                    is_special_order:
-                        form.isSpecialOrder,
-                    customer_name:
-                        form.customerName || null,
-                    customer_phone:
-                        form.customerPhone || null,
-                    unit_of_receipt: form.unitOfReceipt,
+                    product: values.productId,
+                    required_quantity: qty,
+                    is_special_order: values.isSpecialOrder,
+                    customer_name,
+                    customer_phone,
+                    unit_of_receipt: values.unitOfReceipt,
                 });
                 onSaved?.(draftId);
             }
-            setSaving(false);
             onClose();
         } catch (e: any) {
-            setErrorMsg(
-                e?.message ||
-                (isEdit
-                    ? 'Could not queue the edit.'
-                    : 'Could not queue the out-of-stock item.')
-            );
-            setSaving(false);
+            setSubmitError(e?.message || (isEdit ? 'Could not save the changes.' : 'Could not save the out-of-stock request.'));
+        } finally {
+            helpers.setSubmitting(false);
         }
-    }, [
-        canSubmit,
-        isEdit,
-        item,
-        queueOutOfStockEdit,
-        onSaved,
-        createOutOfStock,
-        form,
-        qtyNumber,
-        onClose,
-    ]);
-
-    if (!visible) return null;
-
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const dividerColor = isDarkMode ? '#334155' : '#f1f5f9';
-    const inputBg = isDarkMode ? '#0f172a' : '#f8fafc';
-
-    const inputStyle = {
-        borderColor,
-        backgroundColor: inputBg,
-        color: theme.text,
-        fontFamily: theme.font.medium,
-        fontSize: theme.fontSize.sm,
     };
 
-    const title = isEdit
-        ? 'Edit Out-of-Stock'
-        : 'New Out of Stock';
-    const subtitle = isEdit
-        ? item?.product_title ?? ''
-        : 'Record a product that is out of stock';
-    const submitLabel = isEdit ? 'Save' : 'Create';
-
     return (
-        <Modal
-            visible={visible}
-            animationType="fade"
-            transparent
-            onRequestClose={saving ? () => { } : onClose}
-        >
-            <KeyboardAvoidingView
-                style={styles.backdrop}
-                behavior={
-                    Platform.OS === 'ios'
-                        ? 'padding'
-                        : undefined
-                }
-                keyboardVerticalOffset={
-                    Platform.OS === 'ios' ? 40 : 0
-                }
+        <Modal visible={visible} onClose={onClose} title={isEdit ? 'Edit out-of-stock' : 'New out-of-stock'} maxHeightRatio={0.9}>
+            <Formik
+                // Fresh form every time it opens (and per item when editing)
+                key={`${visible}-${mode}-${item?.remote_id ?? 'new'}`}
+                initialValues={initialValues}
+                validationSchema={schema}
+                onSubmit={handleSubmit}
             >
-                {/* Backdrop dismiss target — sits behind the card */}
-                <Pressable
-                    style={StyleSheet.absoluteFill}
-                    onPress={saving ? undefined : onClose}
-                />
+                {(formik) => {
+                    const { values, errors, touched, submitCount, isSubmitting, setFieldValue, setFieldTouched } = formik;
+                    const showError = (k: keyof FormValues) => ((touched[k] || submitCount > 0) && errors[k] ? String(errors[k]) : undefined);
+                    const qty = Math.max(0, Math.floor(Number(values.requiredQuantity) || 0));
+                    const bump = (delta: number) => setFieldValue('requiredQuantity', String(Math.max(1, qty + delta)));
 
-                <View
-                    className="w-full max-w-[560px] rounded-2xl border overflow-hidden"
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderColor,
-                    }}
-                >
-                    {/* Header */}
-                    <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{ borderBottomColor: dividerColor }}
-                    >
-                        <View className="flex-1">
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.lg,
-                                }}
-                            >
-                                {title}
-                            </Text>
-                            <Text
-                                className="mt-0.5"
-                                numberOfLines={1}
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                            >
-                                {subtitle}
-                            </Text>
-                        </View>
-                        <Pressable
-                            onPress={onClose}
-                            disabled={saving}
-                            hitSlop={10}
-                            className="p-1.5"
-                            style={{ opacity: saving ? 0.4 : 1 }}
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
+                    // Picker (controlled): find the full product for its title + thumbnail
+                    const selectedProduct = values.productId
+                        ? (productsList ?? []).find((p: any) => p?.remote_id === values.productId || p?.id === values.productId) ??
+                          ({ remote_id: values.productId, id: values.productId, title: values.productTitle } as any)
+                        : null;
 
-                    {/* Body */}
-                    <ScrollView
-                        contentContainerStyle={{ padding: 16 }}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {errorMsg ? (
-                            <View
-                                className="rounded-xl px-3 py-2 mb-3"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(244,63,94,0.12)',
-                                }}
+                    return (
+                        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+                            <ScrollView
+                                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20, gap: 18 }}
+                                keyboardShouldPersistTaps="handled"
+                                showsVerticalScrollIndicator={false}
                             >
-                                <Text
-                                    style={{
-                                        color: '#f43f5e',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {errorMsg}
-                                </Text>
-                            </View>
-                        ) : null}
-
-                        {/* Product — create only, using shared picker */}
-                        {!isEdit ? (
-                            <View style={{ zIndex: 1000 }}>
-                                <ProductPickerAutocomplete
-                                    products={productsList}
-                                    value={selectedProduct}
-                                    onSelect={handleSelectProduct}
-                                    onClear={handleClearProduct}
-                                    imageKey="images"
-                                    label="Product"
-                                    required
-                                    placeholder="Search products…"
-                                    debounceMs={250}
-                                    maxDropdownHeight={320}
-                                    disabled={saving}
-                                    testID="out-of-stock.product"
-                                />
-
-                                {isProductsSyncing &&
-                                    productsList.length === 0 ? (
-                                    <Text
-                                        className="mt-2"
-                                        style={{
-                                            color: theme.textDark,
-                                            fontFamily:
-                                                theme.font.medium,
-                                            fontSize:
-                                                theme.fontSize.xs,
-                                            opacity: 0.7,
-                                        }}
-                                    >
-                                        Loading catalog…
-                                    </Text>
+                                {submitError ? (
+                                    <View className="flex-row items-start gap-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: 'rgba(244,63,94,0.10)' }}>
+                                        <Ionicons name="alert-circle" size={16} color="#f43f5e" style={{ marginTop: 1 }} />
+                                        <Text style={{ flex: 1, color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12 }}>{submitError}</Text>
+                                    </View>
                                 ) : null}
-                            </View>
-                        ) : null}
 
-                        {/* Unit — create only */}
-                        {!isEdit ? (
-                            <View className="mt-4">
-                                <FieldLabel
-                                    label="Unit of Receipt"
-                                    theme={theme}
-                                />
-                                <UnitPicker
-                                    units={units}
-                                    value={form.unitOfReceipt}
-                                    onChange={(v) =>
-                                        setField(
-                                            'unitOfReceipt',
-                                            v
-                                        )
-                                    }
-                                    theme={theme}
-                                    inputStyle={inputStyle}
-                                    borderColor={borderColor}
-                                    inputBg={inputBg}
-                                    disabled={saving}
-                                />
-                            </View>
-                        ) : null}
+                                {/* ---------- Product ---------- */}
+                                <Section title="Product" theme={theme}>
+                                    {isEdit && item ? (
+                                        <ProductCard item={item} />
+                                    ) : (
+                                        <View style={{ zIndex: 1000 }}>
+                                            <ProductPickerAutocomplete
+                                                products={productsList}
+                                                value={selectedProduct}
+                                                onSelect={(p: any) => {
+                                                    const id = String(p?.remote_id ?? p?.id ?? '');
+                                                    const title = String(p?.title ?? p?.product_title ?? '');
+                                                    setFieldValue('productId', id);
+                                                    setFieldValue('productTitle', title);
+                                                    setFieldTouched('productId', true, false);
+                                                    if (id) rememberProductTitle(id, title);
+                                                }}
+                                                onClear={() => {
+                                                    setFieldValue('productId', '');
+                                                    setFieldValue('productTitle', '');
+                                                }}
+                                                error={showError('productId')}
+                                                imageKey="images"
+                                                label="Product"
+                                                required
+                                                placeholder="Search products…"
+                                                debounceMs={250}
+                                                maxDropdownHeight={300}
+                                                disabled={isSubmitting}
+                                                testID="out-of-stock.product"
+                                            />
+                                            {isProductsSyncing && (productsList?.length ?? 0) === 0 ? (
+                                                <Text style={{ marginTop: 6, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>Loading catalogue…</Text>
+                                            ) : null}
+                                        </View>
+                                    )}
+                                </Section>
 
-                        {/* Quantity — both */}
-                        <View className="mt-4">
-                            <FieldLabel
-                                label="Required Quantity"
-                                theme={theme}
-                            />
-                            <TextInput
-                                keyboardType="number-pad"
-                                value={form.requiredQuantity}
-                                onChangeText={(t) =>
-                                    setField(
-                                        'requiredQuantity',
-                                        t.replace(
-                                            /[^0-9]/g,
-                                            ''
-                                        )
-                                    )
-                                }
-                                editable={!saving}
-                                placeholder="0"
-                                placeholderTextColor="#94a3b8"
-                                className="h-11 rounded-xl border px-3.5"
-                                style={{
-                                    ...inputStyle,
-                                    opacity: saving ? 0.6 : 1,
-                                }}
-                            />
-                        </View>
+                                {/* ---------- Quantity ---------- */}
+                                <Section title="Quantity needed" theme={theme}>
+                                    <View style={{ flexDirection: isWide && !isEdit ? 'row' : 'column', gap: 12 }}>
+                                        <View style={{ flex: isWide && !isEdit ? 1 : undefined }}>
+                                            <View className="flex-row items-end gap-2">
+                                                <View style={{ flex: 1 }}>
+                                                    {/* Controlled (not `name`-bound): with `name`, the field's own
+                                                        onChangeText replaces ours and the digits-only filter is lost. */}
+                                                    <CustomTextField
+                                                        value={values.requiredQuantity}
+                                                        onBlur={() => setFieldTouched('requiredQuantity', true)}
+                                                        label="Quantity"
+                                                        keyboardType="number-pad"
+                                                        placeholder="1"
+                                                        editable={!isSubmitting}
+                                                        onChangeText={(t) => setFieldValue('requiredQuantity', t.replace(/[^0-9]/g, ''))}
+                                                        error={showError('requiredQuantity')}
+                                                    />
+                                                </View>
+                                                <StepButton icon="remove" onPress={() => bump(-1)} disabled={isSubmitting || qty <= 1} label="Decrease quantity" />
+                                                <StepButton icon="add" onPress={() => bump(1)} disabled={isSubmitting} label="Increase quantity" />
+                                            </View>
+                                        </View>
 
-                        {/* Customer fields — both */}
-                        <View className="flex-row gap-3 mt-4">
-                            <View className="flex-1">
-                                <FieldLabel
-                                    label="Customer Name (optional)"
-                                    theme={theme}
-                                />
-                                <TextInput
-                                    value={form.customerName}
-                                    onChangeText={(v) =>
-                                        setField(
-                                            'customerName',
-                                            v
-                                        )
-                                    }
-                                    editable={!saving}
-                                    placeholder="—"
-                                    placeholderTextColor="#94a3b8"
-                                    autoCapitalize="words"
-                                    className="h-11 rounded-xl border px-3.5"
-                                    style={{
-                                        ...inputStyle,
-                                        opacity: saving
-                                            ? 0.6
-                                            : 1,
-                                    }}
-                                />
-                            </View>
-                            <View className="flex-1">
-                                <FieldLabel
-                                    label="Customer Phone (optional)"
-                                    theme={theme}
-                                />
-                                <TextInput
-                                    keyboardType="phone-pad"
-                                    value={form.customerPhone}
-                                    onChangeText={(v) =>
-                                        setField(
-                                            'customerPhone',
-                                            v
-                                        )
-                                    }
-                                    editable={!saving}
-                                    placeholder="—"
-                                    placeholderTextColor="#94a3b8"
-                                    className="h-11 rounded-xl border px-3.5"
-                                    style={{
-                                        ...inputStyle,
-                                        opacity: saving
-                                            ? 0.6
-                                            : 1,
-                                    }}
-                                />
-                            </View>
-                        </View>
+                                        {!isEdit ? (
+                                            <View style={{ flex: isWide ? 1 : undefined }}>
+                                                <SelectDropdown
+                                                    name="unitOfReceipt"
+                                                    label="Unit"
+                                                    options={unitOptions}
+                                                    placeholder="Select unit…"
+                                                    disabled={isSubmitting}
+                                                    maxHeight={220}
+                                                />
+                                            </View>
+                                        ) : null}
+                                    </View>
+                                </Section>
 
-                        {/* Special order — both */}
-                        <View
-                            className="flex-row items-center justify-between rounded-xl border px-3.5 py-3 mt-4"
-                            style={{
-                                borderColor,
-                                backgroundColor: inputBg,
-                            }}
-                        >
-                            <View className="flex-1 pr-3">
-                                <Text
-                                    className="uppercase tracking-widest"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
+                                {/* ---------- Customer ---------- */}
+                                <Section title="Customer" hint="Optional — who asked for it, so you can let them know when it arrives." theme={theme}>
+                                    <View style={{ flexDirection: isWide ? 'row' : 'column', gap: 12 }}>
+                                        <View style={{ flex: isWide ? 1 : undefined }}>
+                                            <CustomTextField
+                                                name="customerName"
+                                                label="Name"
+                                                placeholder="e.g. Jane Wanjiku"
+                                                autoCapitalize="words"
+                                                editable={!isSubmitting}
+                                                error={showError('customerName')}
+                                            />
+                                        </View>
+                                        <View style={{ flex: isWide ? 1 : undefined }}>
+                                            <CustomTextField
+                                                name="customerPhone"
+                                                label="Phone"
+                                                placeholder="e.g. 0712 345 678"
+                                                keyboardType="phone-pad"
+                                                editable={!isSubmitting}
+                                                error={showError('customerPhone')}
+                                            />
+                                        </View>
+                                    </View>
+                                </Section>
+
+                                {/* ---------- Special order ---------- */}
+                                <View
+                                    className="rounded-2xl px-3.5 py-3"
+                                    style={{ backgroundColor: values.isSpecialOrder ? 'rgba(139,92,246,0.08)' : isDarkMode ? '#0f172a' : '#f8fafc' }}
                                 >
-                                    Special Order
-                                </Text>
-                                <Text
-                                    className="mt-1"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        opacity: 0.85,
-                                    }}
-                                >
-                                    Mark this item as a
-                                    special order for the
-                                    customer.
-                                </Text>
-                            </View>
-                            <Switch
-                                value={form.isSpecialOrder}
-                                onValueChange={(v) =>
-                                    setField(
-                                        'isSpecialOrder',
-                                        v
-                                    )
-                                }
-                                disabled={saving}
-                                trackColor={{
-                                    false: isDarkMode
-                                        ? '#334155'
-                                        : '#cbd5e1',
-                                    true: theme.primary,
-                                }}
-                                thumbColor={
-                                    isDarkMode
-                                        ? '#e2e8f0'
-                                        : '#ffffff'
-                                }
-                            />
-                        </View>
-                    </ScrollView>
+                                    <SwitchField
+                                        name="isSpecialOrder"
+                                        label="Special order"
+                                        hint="Ordered specifically for this customer — not regular stock."
+                                        row
+                                        disabled={isSubmitting}
+                                    />
+                                </View>
+                            </ScrollView>
 
-                    {/* Footer */}
-                    <View
-                        className="flex-row justify-end gap-2 p-4 border-t"
-                        style={{ borderTopColor: dividerColor }}
-                    >
-                        <Pressable
-                            onPress={onClose}
-                            disabled={saving}
-                            className="px-4 py-2.5 rounded-xl border"
-                            style={{
-                                borderColor,
-                                opacity: saving ? 0.4 : 1,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
+                            {/* ---------- Footer ---------- */}
+                            <View
                                 style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
+                                    flexDirection: 'row',
+                                    justifyContent: 'flex-end',
+                                    gap: 8,
+                                    paddingHorizontal: 16,
+                                    paddingVertical: 12,
+                                    borderTopWidth: 1,
+                                    borderTopColor: theme.border,
                                 }}
                             >
-                                Cancel
-                            </Text>
-                        </Pressable>
-                        <Pressable
-                            onPress={handleSubmit}
-                            disabled={!canSubmit}
-                            className="px-4 py-2.5 rounded-xl flex-row items-center gap-2"
-                            style={{
-                                backgroundColor: theme.primary,
-                                opacity: !canSubmit ? 0.5 : 1,
-                            }}
-                        >
-                            {saving ? (
-                                <ActivityIndicator
-                                    size="small"
-                                    color="#ffffff"
-                                />
-                            ) : null}
-                            <Text
-                                className="uppercase tracking-wide text-white"
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                {saving
-                                    ? 'Saving…'
-                                    : submitLabel}
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-            </KeyboardAvoidingView>
+                                <Button variant="ghost" onPress={onClose} disabled={isSubmitting}>
+                                    Cancel
+                                </Button>
+                                <Button onPress={() => formik.handleSubmit()} loading={isSubmitting} disabled={isSubmitting}>
+                                    {isEdit ? 'Save changes' : 'Add to out-of-stock'}
+                                </Button>
+                            </View>
+                        </KeyboardAvoidingView>
+                    );
+                }}
+            </Formik>
         </Modal>
     );
 }
 
 /* ------------------------------------------------------------------ */
-/* FieldLabel                                                          */
+/* Pieces                                                              */
 /* ------------------------------------------------------------------ */
-function FieldLabel({
-    label,
-    theme,
-}: {
-    label: string;
-    theme: ReturnType<typeof useAuth>['theme'];
-}) {
+
+function Section({ title, hint, theme, children }: { title: string; hint?: string; theme: any; children: React.ReactNode }) {
     return (
-        <Text
-            className="uppercase tracking-widest mb-1.5"
-            style={{
-                color: theme.textDark,
-                fontFamily: theme.font.bold,
-                fontSize: 10,
-            }}
-        >
-            {label}
-        </Text>
-    );
-}
-
-/* ------------------------------------------------------------------ */
-/* UnitPicker                                                          */
-/* ------------------------------------------------------------------ */
-function UnitPicker({
-    units,
-    value,
-    onChange,
-    theme,
-    inputStyle,
-    borderColor,
-    inputBg,
-    disabled,
-}: {
-    units: UnitOption[];
-    value: string;
-    onChange: (v: string) => void;
-    theme: ReturnType<typeof useAuth>['theme'];
-    inputStyle: any;
-    borderColor: string;
-    inputBg: string;
-    disabled?: boolean;
-}) {
-    const [open, setOpen] = useState(false);
-    const selected = units.find((u) => u.value === value);
-
-    return (
-        <View>
-            <Pressable
-                onPress={() => setOpen((v) => !v)}
-                disabled={disabled}
-                className="h-11 rounded-xl border px-3.5 flex-row items-center justify-between"
-                style={{
-                    ...inputStyle,
-                    opacity: disabled ? 0.6 : 1,
-                }}
-            >
-                <Text
-                    numberOfLines={1}
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.medium,
-                        fontSize: theme.fontSize.sm,
-                        flex: 1,
-                    }}
-                >
-                    {selected?.label ?? 'Select unit…'}
-                </Text>
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        marginLeft: 8,
-                    }}
-                >
-                    {open ? '▲' : '▼'}
-                </Text>
-            </Pressable>
-
-            {open ? (
-                <View
-                    className="mt-2 rounded-xl border overflow-hidden"
-                    style={{
-                        borderColor,
-                        backgroundColor: inputBg,
-                        maxHeight: 220,
-                    }}
-                >
-                    <ScrollView keyboardShouldPersistTaps="handled">
-                        {units.map((u) => {
-                            const isSel = u.value === value;
-                            return (
-                                <Pressable
-                                    key={u.value}
-                                    onPress={() => {
-                                        onChange(u.value);
-                                        setOpen(false);
-                                    }}
-                                    className="px-3 py-2.5"
-                                    style={{
-                                        backgroundColor: isSel
-                                            ? `${theme.primary}15`
-                                            : 'transparent',
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            color: theme.text,
-                                            fontFamily: isSel
-                                                ? theme.font.bold
-                                                : theme.font.medium,
-                                            fontSize:
-                                                theme.fontSize.sm,
-                                        }}
-                                    >
-                                        {u.label}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })}
-                    </ScrollView>
-                </View>
-            ) : null}
+        <View style={{ gap: 8 }}>
+            <View>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{title}</Text>
+                {hint ? <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 2 }}>{hint}</Text> : null}
+            </View>
+            {children}
         </View>
     );
 }
 
-const styles = StyleSheet.create({
-    backdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(15,23,42,0.55)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-    },
-});
+/** Read-only product card shown when editing (the product can't be changed). */
+function ProductCard({ item }: { item: RetailerOutOfStockNormalized }) {
+    const { theme, isDarkMode } = useAuth();
+    const img: any = item.images?.[0];
+    const uri = resolveImageUrl(img?.thumbnail || img?.image || img) as any;
+    return (
+        <View className="flex-row items-start gap-3 rounded-2xl p-3" style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc' }}>
+            <View className="w-12 h-12 rounded-xl overflow-hidden items-center justify-center" style={{ backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }}>
+                <ImageWithFallback uri={uri} width={48} height={48} fallback="📦" fallbackSize={20} borderRadius={12} />
+            </View>
+            <View className="flex-1 min-w-0">
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14, lineHeight: 19 }}>{item.product_title || 'Unnamed product'}</Text>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 2 }}>
+                    {item.unit_of_receipt ? `Unit: ${item.unit_of_receipt} · ` : ''}The product can't be changed once recorded.
+                </Text>
+            </View>
+        </View>
+    );
+}
+
+function StepButton({ icon, onPress, disabled, label }: { icon: 'add' | 'remove'; onPress: () => void; disabled?: boolean; label: string }) {
+    const { theme, isDarkMode } = useAuth();
+    return (
+        <Pressable
+            onPress={onPress}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            hitSlop={4}
+            style={({ pressed }) => ({
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: pressed ? `${theme.primary}22` : isDarkMode ? '#0f172a' : '#f1f5f9',
+                opacity: disabled ? 0.4 : 1,
+                ...(Platform.OS === 'web' ? ({ cursor: disabled ? 'default' : 'pointer' } as any) : {}),
+            })}
+        >
+            <Ionicons name={icon} size={18} color={theme.primary} />
+        </Pressable>
+    );
+}

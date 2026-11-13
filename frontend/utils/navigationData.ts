@@ -1,331 +1,769 @@
-export interface SidebarRoute {
+// utils/navigationData.ts
+
+interface SidebarRoute {
     id: number;
     title: string;
     route: string;
-    allowedRoles: string[]; // e.g. ["Client"], ["Admin"], ["GeneralWholesalerSuperAdmin"]
+    allowedRoles: string[];
     showInSidebar: boolean;
+
+    /**
+     * Lucide icon name. Resolved at render time against
+     * LUCIDE_ICONS in SidebarNavigationList. Ignored if the
+     * icon isn't in the map — falls back to initials.
+     */
+    icon?: string;
+
+    /**
+     * Hex accent used for the icon's tinted square. If omitted,
+     * the sidebar derives a stable hue from the item id.
+     */
+    tint?: string;
+
     subRoutes?: SidebarRoute[];
 }
+
+/* Section tints — one hue per top-level entry, sub-routes inherit. */
+const TINTS = {
+    blue: '#3b82f6',
+    violet: '#8b5cf6',
+    sky: '#0ea5e9',
+    amber: '#f59e0b',
+    teal: '#14b8a6',
+    pink: '#ec4899',
+    emerald: '#10b981',
+    indigo: '#6366f1',
+    orange: '#f97316',
+    red: '#ef4444',
+    slate: '#64748b',
+} as const;
 
 export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
     {
         id: 1,
-        title: "Dashboard",
-        route: "/(tabs)",
-        allowedRoles: ["Client", "Admin",],
+        title: 'Dashboard',
+        route: '/(tabs)',
+        allowedRoles: ['Client', 'Admin'],
         showInSidebar: true,
+        icon: 'LayoutDashboard',
+        tint: TINTS.blue,
+    },
+    {
+        id: 15,
+        title: 'Shopping',
+        route: '/shopping?tab=shopping',
+        // ADDED PharmaceuticalRetailerSuperAdmin
+        allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'ShoppingCart',
+        tint: TINTS.violet,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'Orders',
+                route: '/shopping/customerOrders',
+                allowedRoles: ['Client', 'Admin'],
+                showInSidebar: true,
+                icon: 'ShoppingBag',
+                tint: TINTS.violet,
+            },
+            {
+                id: 2,
+                title: 'Prescriptions',
+                route: '/userPrescriptions',
+                // ADDED PharmaceuticalRetailerSuperAdmin and GeneralRetailerSuperAdmin
+                allowedRoles: ['Client', 'Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ClipboardPlus',
+                tint: TINTS.violet,
+            },
+            {
+                // Dosing schedule of medicines bought on prescriptions: confirm
+                // each dose, see when a partly-bought medicine runs out.
+                id: 5,
+                title: 'My Medicines',
+                route: '/medications',
+                allowedRoles: ['Client', 'Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Pill',
+                tint: TINTS.violet,
+            },
+            {
+                id: 3,
+                title: 'My Wallet',
+                route: '/shopping/wallet',
+                allowedRoles: ['Client', 'Admin'],
+                showInSidebar: true,
+                icon: 'Wallet',
+                tint: TINTS.violet,
+            },
+            {
+                id: 4,
+                title: 'Planner',
+                route: '/shopping/plans',
+                allowedRoles: ['Client', 'Admin'],
+                showInSidebar: true,
+                icon: 'CalendarDays',
+                tint: TINTS.violet,
+            },
+        ],
     },
     {
         id: 2,
-        title: "Admin Panel",
-        route: "/routes", // 🌟 FIXED: Pluralized to match your routes folder exactly
-        allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
+        title: 'Admin Panel',
+        route: '/routes',
+        allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
         showInSidebar: true,
+        icon: 'ShieldCheck',
+        tint: TINTS.violet,
         subRoutes: [
             {
                 id: 1,
-                title: "Drug Categories",
-                route: "/drugCategories?tab=drugCategories", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
-                showInSidebar: true
+                title: 'Cadres',
+                route: '/cadres?tab=cadres',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
             },
             {
                 id: 2,
-                title: "Drug Classes",
-                route: "/drugClasses?tab=drugClasses", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
-                showInSidebar: true
+                title: 'Clusters',
+                route: '/clusters?tab=clusters',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
             },
             {
                 id: 3,
-                title: "Drug Sub Classes",
-                route: "/drugSubClasses?tab=drugSubClasses", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
-                showInSidebar: true
+                title: 'Departments',
+                route: '/departments?tab=departments',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
             },
-
             {
                 id: 4,
-                title: "Formulations",
-                route: "/formulations?tab=formulations", // Points directly to app/(admin)/formulations/index.tsx
-                allowedRoles: ["Admin"],
-                showInSidebar: true
+                title: 'Designations',
+                route: '/designations?tab=designations',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
             },
             {
                 id: 5,
-                title: "Frequencies",
-                route: "/frequencies?tab=frequencies", // Points directly to app/(admin)/frequencies/index.tsx
-                allowedRoles: ["Admin"],
-                showInSidebar: true
+                title: 'Drug Categories',
+                route: '/drugCategories?tab=drugCategories',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'FolderTree',
+                tint: TINTS.violet,
             },
-
             {
                 id: 6,
-                title: "Generic Drugs",
-                route: "/generics?tab=generics", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
-                showInSidebar: true
+                title: 'Drug Classes',
+                route: '/drugClasses?tab=drugClasses',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Layers',
+                tint: TINTS.violet,
             },
             {
                 id: 7,
-                title: "Preparations",
-                route: "/preparations?tab=preparations", // Points directly to app/(admin)/
-                allowedRoles: ["Admin"],
-                showInSidebar: true
-            }, {
+                title: 'Drug Sub Classes',
+                route: '/drugSubClasses?tab=drugSubClasses',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Layers2',
+                tint: TINTS.violet,
+            },
+            {
                 id: 8,
-                title: "Routes",
-                route: "/routes?tab=index", // 🌟 FIXED: Pluralized string to resolve straight to app/(admin)/routes/index.tsx
-                allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
-                showInSidebar: true
+                title: 'Employees',
+                route: '/employees?tab=employees',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
             },
             {
                 id: 9,
-                title: "Products",
-                route: "/products?tab=products", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            }
-        ]
-    },
-    {
-        id: 3,
-        title: "Wholesalers",
-        route: "/routes", // 🌟 FIXED: Pluralized to match your routes folder exactly
-        allowedRoles: ["GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-        subRoutes: [
-            {
-                id: 1,
-                title: "New Order",
-                route: "/newWholesaleOrder?tab=newWholesaleOrder", // Points directly to app/(admin)/
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 2,
-                title: "Retailer Orders",
-                route: "/retailerOrders?tab=retailerOrders", // Points directly to app/(admin)/
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 3,
-                title: "Inventory",
-                route: "/inventory?tab=inventory", // Points directly to app/(admin)/
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 4,
-                title: "Payments",
-                route: "/wholesalePayments?tab=wholesalePayments", // Points directly to app/(admin)/
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 5,
-                title: "Products Requests",
-                route: "/productsRequests?tab=productsRequests",
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
+                title: 'Entities',
+                route: '/entities?tab=entities',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
                 showInSidebar: true,
-            },
-            {
-                id: 6,
-                title: "Campaigns",
-                route: "/wholesalerCampaigns?tab=wholesalerCampaigns",
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true,
-            },
-            {
-                id: 7,
-                title: "Price Discounts",
-                route: "/priceDiscounts?tab=priceDiscounts",
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true,
-            },
-            {
-                id: 8,
-                title: "Quantity Discounts",
-                route: "/quantityDiscounts?tab=quantityDiscounts",
-                allowedRoles: ["GeneralWholesalerSuperAdmin"],
-                showInSidebar: true,
-            },
-
-        ]
-    }
-
-    ,
-    {
-        id: 4,
-        title: "Orders",
-        route: "/(tabs)/business",
-        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-        subRoutes: [
-            { id: 1, title: "Orders Monitor", route: "/(tabs)/business?tab=stock", allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"], showInSidebar: true },
-            { id: 2, title: "Restock Orders", route: "/(tabs)/business?tab=orders", allowedRoles: ["Admin"], showInSidebar: true },
-        ]
-    },
-    {
-        id: 5,
-        title: "Accounts Ledger",
-        route: "/(tabs)/business",
-        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-    },
-    {
-        id: 6,
-        title: "Adjacent Stores",
-        route: "/(tabs)",
-        allowedRoles: ["Client", "Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-    },
-    {
-        id: 7,
-        title: "Client Orders Ledger",
-        route: "/(home)/orders", // Points correctly to the standalone stacks route
-        allowedRoles: ["Client", "Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-    },
-    {
-        id: 8,
-        title: "Inventory Control",
-        route: "/(tabs)/business",
-        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-        subRoutes: [
-            { title: "Stock Monitor", route: "/(tabs)/business?tab=stock", allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"], showInSidebar: true },
-            { title: "Restock Orders", route: "/(tabs)/business?tab=orders", allowedRoles: ["Admin"], showInSidebar: true },
-        ]
-    },
-    {
-        id: 9,
-        title: "Account",
-        route: "/(tabs)/account",
-        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-        subRoutes: [
-            { title: "Account", route: "/(tabs)/account?tab=account", allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"], showInSidebar: true },
-            { title: "Subscriptions", route: "/(tabs)/account?tab=subscriptions", allowedRoles: ["Admin"], showInSidebar: true },
-        ]
-    },
-    {
-        id: 10,
-        title: "Accounts Ledger",
-        route: "/(tabs)/business",
-        allowedRoles: ["Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-    },
-    {
-        id: 11,
-        title: "My Profile",
-        route: "/(tabs)/profile",
-        allowedRoles: ["Client", "Admin", "GeneralWholesalerSuperAdmin"],
-        showInSidebar: true,
-    },
-
-    {
-        id: 12,
-        title: "Retailers",
-        route: "/routes", // 🌟 FIXED: Pluralized to match your routes folder exactly
-        allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-        showInSidebar: true,
-        subRoutes: [
-            {
-                id: 1,
-                title: "New Customer Order",
-                route: "/newCustomerOrder?tab=newCustomerOrder", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 2,
-                title: "Customer Orders",
-                route: "/customerOrders?tab=customerOrders",
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 3,
-                title: "Retailer Inventory",
-                route: "/retailerInventory?tab=retailerInventory",
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 4,
-                title: "Payments",
-                route: "/customerOrderPayments?tab=customerOrderPayments", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 5,
-                title: "Requisitions",
-                route: "/retailerRequisitions?tab=retailerRequisitions", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            }, {
-                id: 6,
-                title: "Forecasting",
-                route: "/forecasting?tab=forecasting", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 7,
-                title: "Request Drafts",
-                route: "/requestDrafts?tab=requestDrafts",
-                allowedRoles: ["GeneralRetailerSuperAdmin"],
-                showInSidebar: true,
-            },
-            // {
-            //     id: 8,
-            //     title: "Product Requests",
-            //     route: "/productsRequests?tab=productsRequests",
-            //     allowedRoles: ["GeneralRetailerSuperAdmin"],
-            //     showInSidebar: true,
-            // },
-            {
-                id: 8,
-                title: "Retailer Indents",
-                route: "/retailerIndents?tab=retailerIndents", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
-            },
-            {
-                id: 9,
-                title: "Stock Outs",
-                route: "/stockOuts?tab=stockOuts", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
             },
             {
                 id: 10,
-                title: "Wholesale Marketplace",
-                route: "/wholesaleMarketplace?tab=wholesaleMarketplace", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
+                title: 'Formulations',
+                route: '/formulations?tab=formulations',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'FlaskConical',
+                tint: TINTS.violet,
             },
             {
                 id: 11,
-                title: "Products Requests",
-                route: "/productRequests?tab=productRequests", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
+                title: 'Frequencies',
+                route: '/frequencies?tab=frequencies',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Clock',
+                tint: TINTS.violet,
             },
             {
                 id: 12,
-                title: "Opted In Campaigns",
-                route: "/retailerCampaigns?tab=retailerCampaigns", // Points directly to app/(admin)/
-                allowedRoles: ["Admin", "GeneralRetailerSuperAdmin"],
-                showInSidebar: true
+                title: 'Generic Drugs',
+                route: '/generics?tab=generics',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Pill',
+                tint: TINTS.violet,
             },
-        ]
-    }
+            {
+                id: 13,
+                title: 'Preparations',
+                route: '/preparations?tab=preparations',
+                allowedRoles: ['Admin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'TestTube',
+                tint: TINTS.violet,
+            },
+            {
+                // All users' prescriptions (platform admins only — the
+                // backend endpoint is IsAdminUser). Lives at /adminPrescriptions
+                // so it doesn't collide with the shopper's /userPrescriptions.
+                id: 19,
+                title: 'Prescriptions',
+                route: '/adminPrescriptions?tab=adminPrescriptions',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'ClipboardList',
+                tint: TINTS.violet,
+            },
+            {
+                id: 14,
+                title: 'Products',
+                route: '/products?tab=products',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Package',
+                tint: TINTS.violet,
+            },
+            {
+                id: 15,
+                title: 'Roles',
+                route: '/roles?tab=roles',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
+            },
+            {
+                id: 16,
+                title: 'Routes',
+                route: '/routes?tab=index',
+                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Route',
+                tint: TINTS.violet,
+            },
+            {
+                id: 17,
+                title: 'Subscription payments',
+                route: '/subscriptionPayments?tab=subscriptionPayments',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.violet,
+            },
+            {
+                id: 18,
+                title: 'Subscriptions',
+                route: '/subscriptions?tab=subscriptions',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'CalendarCheck',
+                tint: TINTS.violet,
+            },
+        ],
+    },
+    {
+        id: 3,
+        title: 'Wholesalers',
+        route: '/routes',
+        allowedRoles: ['GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Warehouse',
+        tint: TINTS.sky,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'New Order',
+                route: '/newWholesaleOrder?tab=newWholesaleOrder',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PlusCircle',
+                tint: TINTS.sky,
+            },
+            {
+                id: 2,
+                title: 'Retailer Orders',
+                route: '/retailerOrders?tab=retailerOrders',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Truck',
+                tint: TINTS.sky,
+            },
+            {
+                id: 3,
+                title: 'Inventory',
+                route: '/inventory?tab=inventory',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Boxes',
+                tint: TINTS.sky,
+            },
+            {
+                id: 4,
+                title: 'Payments',
+                route: '/wholesalePayments?tab=wholesalePayments',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Banknote',
+                tint: TINTS.sky,
+            },
+            {
+                id: 5,
+                title: 'Products Requests',
+                route: '/productsRequests?tab=productsRequests',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ClipboardList',
+                tint: TINTS.sky,
+            },
+            {
+                id: 6,
+                title: 'Campaigns',
+                route: '/wholesalerCampaigns?tab=wholesalerCampaigns',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Megaphone',
+                tint: TINTS.sky,
+            },
+            {
+                id: 7,
+                title: 'Price Discounts',
+                route: '/priceDiscounts?tab=priceDiscounts',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'BadgePercent',
+                tint: TINTS.sky,
+            },
+            {
+                id: 8,
+                title: 'Quantity Discounts',
+                route: '/quantityDiscounts?tab=quantityDiscounts',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Gift',
+                tint: TINTS.sky,
+            },
+            {
+                id: 9,
+                title: 'Receipts & Returns',
+                route: '/wholesalerReceiptsReturns?tab=wholesalerReceiptsReturns',
+                allowedRoles: ['GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Undo2',
+                tint: TINTS.sky,
+            },
+        ],
+    },
+    {
+        id: 4,
+        title: 'Orders',
+        route: '/(tabs)/business',
+        allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'ShoppingBasket',
+        tint: TINTS.amber,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'Orders Monitor',
+                route: '/(tabs)/business?tab=stock',
+                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Activity',
+                tint: TINTS.amber,
+            },
+            {
+                id: 2,
+                title: 'Restock Orders',
+                route: '/(tabs)/business?tab=orders',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'RotateCw',
+                tint: TINTS.amber,
+            },
+        ],
+    },
+    {
+        id: 5,
+        title: 'Accounts Ledger',
+        route: '/(tabs)/business',
+        allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'BookOpen',
+        tint: TINTS.teal,
+    },
+    {
+        id: 6,
+        title: 'Adjacent Stores',
+        route: '/shopFront?tab=shopFront',
+        allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Store',
+        tint: TINTS.pink,
+    },
+    {
+        id: 7,
+        title: 'Inventory Control',
+        route: '/(tabs)/business',
+        allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'PackageCheck',
+        tint: TINTS.emerald,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'Stock Monitor',
+                route: '/(tabs)/business?tab=stock',
+                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Gauge',
+                tint: TINTS.emerald,
+            },
+            {
+                id: 2,
+                title: 'Restock Orders',
+                route: '/(tabs)/business?tab=orders',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Repeat2',
+                tint: TINTS.emerald,
+            },
+        ],
+    },
+    {
+        id: 8,
+        title: 'Account',
+        route: '/(tabs)/account',
+        allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'UserCircle',
+        tint: TINTS.indigo,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'Account',
+                route: '/(tabs)/account?tab=account',
+                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'User',
+                tint: TINTS.indigo,
+            },
+            {
+                id: 2,
+                title: 'Subscriptions',
+                route: '/(tabs)/account?tab=subscriptions',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'CreditCard',
+                tint: TINTS.indigo,
+            },
+        ],
+    },
+    {
+        id: 9,
+        title: 'Expense Categories',
+        route: '/(entities)/expenseCategories',
+        allowedRoles: [
+            'Admin',
+            'GeneralWholesalerSuperAdmin',
+            'GeneralRetailerSuperAdmin',
+        ],
+        showInSidebar: true,
+        icon: 'Tag',
+        tint: TINTS.orange,
+    },
+    {
+        id: 10,
+        title: 'Expenses',
+        route: '/(entities)/expenses',
+        allowedRoles: [
+            'Admin',
+            'GeneralWholesalerSuperAdmin',
+            'GeneralRetailerSuperAdmin',
+        ],
+        showInSidebar: true,
+        icon: 'Receipt',
+        tint: TINTS.red,
+    },
+    {
+        id: 11,
+        title: 'Accounts Ledger',
+        route: '/(tabs)/business',
+        allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'BookMarked',
+        tint: TINTS.teal,
+    },
+    {
+        id: 12,
+        title: 'My Profile',
+        route: '/(tabs)/profile',
+        allowedRoles: [
+            'Client',
+            'Admin',
+            'GeneralWholesalerSuperAdmin',
+        ],
+        showInSidebar: true,
+        icon: 'Contact',
+        tint: TINTS.slate,
+    },
+    {
+        id: 13,
+        title: 'Retailers',
+        route: '/routes',
+        allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Users',
+        tint: TINTS.sky,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'New Customer Order',
+                route: '/newCustomerOrder?tab=newCustomerOrder',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PackagePlus',
+                tint: TINTS.sky,
+            },
+            {
+                id: 2,
+                title: 'Customer Orders',
+                route: '/customerOrders?tab=customerOrders',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ListOrdered',
+                tint: TINTS.sky,
+            },
+            {
+                id: 3,
+                title: 'Retailer Inventory',
+                route: '/retailerInventory?tab=retailerInventory',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PackageOpen',
+                tint: TINTS.sky,
+            },
+            {
+                id: 4,
+                title: 'Payments',
+                route: '/customerOrderPayments?tab=customerOrderPayments',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'HandCoins',
+                tint: TINTS.sky,
+            },
+            {
+                id: 5,
+                title: 'Requisitions',
+                route: '/retailerRequisitions?tab=retailerRequisitions',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ClipboardCheck',
+                tint: TINTS.sky,
+            },
+            {
+                id: 6,
+                title: 'Forecasting',
+                route: '/forecasting?tab=forecasting',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'TrendingUp',
+                tint: TINTS.sky,
+            },
+            {
+                id: 7,
+                title: 'Request Drafts',
+                route: '/requestDrafts?tab=requestDrafts',
+                allowedRoles: ['GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'FileEdit',
+                tint: TINTS.sky,
+            },
+            {
+                id: 8,
+                title: 'Retailer Indents',
+                route: '/retailerIndents?tab=retailerIndents',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'FileCheck',
+                tint: TINTS.sky,
+            },
+            {
+                id: 9,
+                title: 'Stock Outs',
+                route: '/stockOuts?tab=stockOuts',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'AlertTriangle',
+                tint: TINTS.sky,
+            },
+            {
+                id: 10,
+                title: 'Wholesale Marketplace',
+                route: '/wholesaleMarketplace?tab=wholesaleMarketplace',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Building2',
+                tint: TINTS.sky,
+            },
+            {
+                id: 11,
+                title: 'Products Requests',
+                route: '/productRequests?tab=productRequests',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'FileSearch',
+                tint: TINTS.sky,
+            },
+            {
+                id: 12,
+                title: 'Opted In Campaigns',
+                route: '/retailerCampaigns?tab=retailerCampaigns',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Radio',
+                tint: TINTS.sky,
+            },
+            {
+                id: 13,
+                title: 'Purchases Returns',
+                route: '/purchasesReturns?tab=purchasesReturns',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PackageX',
+                tint: TINTS.sky,
+            },
+            {
+                id: 14,
+                title: 'Sales Returns',
+                route: '/salesReturns?tab=salesReturns',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'RotateCcw',
+                tint: TINTS.sky,
+            },
+            {
+                id: 15,
+                title: 'Stock Adjustments',
+                route: '/stockAdjustments?tab=stockAdjustments',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Sliders',
+                tint: TINTS.sky,
+            },
+            {
+                id: 16,
+                // Prescriptions sent to this pharmacy by many users (uploaded
+                // to it, or forwarded for quotation). The user's own
+                // prescriptions stay at /userPrescriptions.
+                title: 'Pharmacy Prescriptions',
+                route: '/entityPrescriptions?tab=entityPrescriptions',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ClipboardPlus',
+                tint: TINTS.sky,
+            },
+        ],
+    },
+    {
+        id: 14,
+        title: 'Retailer Reports',
+        route: '/retailerReports?tab=retailerReports',
+        allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'BarChart3',
+        tint: TINTS.violet,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'Sales Reports',
+                route: '/reports/dailySales',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'LineChart',
+                tint: TINTS.violet,
+            },
+            {
+                id: 2,
+                title: 'Profit & Loss Reports',
+                route: '/reports/profitAndLoss',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'CircleDollarSign',
+                tint: TINTS.violet,
+            },
+            {
+                id: 3,
+                title: 'Expiries Reports',
+                route: '/reports/expiries',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'CalendarX',
+                tint: TINTS.violet,
+            },
+            {
+                id: 4,
+                title: 'Stock Reports',
+                route: '/reports/stock',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Package2',
+                tint: TINTS.violet,
+            },
+            {
+                id: 5,
+                title: 'Low Stock Reports',
+                route: '/reports/lowStock',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'AlertCircle',
+                tint: TINTS.violet,
+            },
+            {
+                id: 6,
+                title: 'Product Movement Reports',
+                route: '/reports/productMovement',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ArrowLeftRight',
+                tint: TINTS.violet,
+            },
+        ],
+    },
 ];
 
-export const checkAccessPermission = (currentUserRole: string, routeAllowedRoles: string[]): boolean => {
-    return routeAllowedRoles.includes(currentUserRole);
-};
+export const checkAccessPermission = (
+    currentUserRole: string,
+    routeAllowedRoles: string[],
+): boolean => routeAllowedRoles.includes(currentUserRole);

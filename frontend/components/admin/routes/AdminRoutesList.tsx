@@ -31,8 +31,6 @@ import {
     type PageSize,
 } from "./types";
 
-export type { DrugRouteItem } from "./types";
-
 function showResultAlert(
     title: string,
     responseMessage: string,
@@ -110,13 +108,11 @@ export default function AdminRoutesList() {
             getRoutesApi.data &&
             Array.isArray(getRoutesApi.data)
         ) {
-            return getRoutesApi.data.map((item: any) => {
+            // FIX: Replaced Math.random() with a stable index fallback
+            return getRoutesApi.data.map((item: any, index: number) => {
                 const f = item.fields ?? item;
                 return {
-                    id:
-                        item.pk ||
-                        item.id ||
-                        Math.random().toString(),
+                    id: item.pk || item.id || `route-${index}`,
                     title: f?.title || "UNSPECIFIED",
                     description: f?.description || "",
                     owner: f?.owner || "—",
@@ -221,7 +217,7 @@ export default function AdminRoutesList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -309,9 +305,7 @@ export default function AdminRoutesList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminRoutesSharedProps = {
         query,
@@ -322,6 +316,7 @@ export default function AdminRoutesList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredRoutes,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,

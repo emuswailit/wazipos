@@ -1,51 +1,18 @@
 // components/retailers/stockOuts/OutOfStockDetailsModal.tsx
+//
+// Out-of-stock request details (shared list-screen details sheet): what's needed,
+// for whom, and the wholesaler offers — marking ones already on the open indent.
 
-import { useAuth } from '@/context/AuthContext';
+import { AdminBadgePill, AdminDetailsSheet, SheetButton, formatDateTime, textOr, useListTokens, useSheetIsWide } from '@/components/common/listScreen';
+import ImageWithFallback from '@/components/common/ImageWithFallback';
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
-import {
-    RetailerIndentItem,
-    RetailerOutOfStockNormalized,
-    RetailerOutOfStockWholesalerOffer,
-} from '@/databases/types';
-import React, { useCallback, useMemo, useState } from 'react';
-import {
-    Image,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
-} from 'react-native';
+import { RetailerIndentItem, RetailerOutOfStockNormalized, RetailerOutOfStockWholesalerOffer } from '@/databases/types';
+import { resolveImageUrl } from '@/lib/images';
+import React, { useMemo } from 'react';
+import { Text, View } from 'react-native';
 
-const API_BASE_URL = 'https://api.wazipos.co.ke';
-const IMAGE_BASE_URL = API_BASE_URL;
+import { formatKES, stockOutImageUrl, stockOutState, stockOutTitle } from './RetailerOutOfStocksWebView';
 
-const formatKES = (
-    raw: string | number | null | undefined
-): string => {
-    if (raw === null || raw === undefined) return '—';
-    const n = Number(raw);
-    if (isNaN(n)) return '—';
-    return n.toLocaleString(undefined, {
-        maximumFractionDigits: 2,
-    });
-};
-
-const resolveImage = (raw: any): string | null => {
-    if (!raw) return null;
-    const p =
-        typeof raw === 'string'
-            ? raw
-            : raw.thumbnail || raw.image || raw.url || null;
-    if (!p) return null;
-    if (p.startsWith('http')) return p;
-    const clean = p.replace(/^\/+/, '');
-    return `${IMAGE_BASE_URL}/${clean}`;
-};
-
-/* ------------------------------------------------------------------ */
-/* Props                                                               */
-/* ------------------------------------------------------------------ */
 interface OutOfStockDetailsModalProps {
     item: RetailerOutOfStockNormalized | null;
     onClose: () => void;
@@ -53,610 +20,115 @@ interface OutOfStockDetailsModalProps {
     onEdit?: (item: RetailerOutOfStockNormalized) => void;
 }
 
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
-export function OutOfStockDetailsModal({
-    item,
-    onClose,
-    onViewOffers,
-    onEdit,
-}: OutOfStockDetailsModalProps) {
-    const { theme } = useAuth();
+const STATE_BADGE = {
+    pending: { label: 'Waiting', tone: 'warning' as const },
+    ordered: { label: 'Ordered', tone: 'neutral' as const },
+    draft: { label: 'Not uploaded', tone: 'info' as const, icon: 'cloud-upload-outline' as const },
+};
+
+export function OutOfStockDetailsModal({ item, onClose, onViewOffers, onEdit }: OutOfStockDetailsModalProps) {
+    const wide = useSheetIsWide();
     const { currentOpenIndent } = useRetailerIndentsSync();
 
-    const borderColor = theme.isDarkMode
-        ? '#334155'
-        : '#e2e8f0';
-    const dividerColor = theme.isDarkMode
-        ? '#334155'
-        : '#f1f5f9';
-    const subBg = theme.isDarkMode ? '#0f172a' : '#f8fafc';
-
-    /* Which offers are already on the open indent */
-    const savedByOfferId = useMemo(() => {
-        const map: Record<string, RetailerIndentItem> = {};
-        if (!item || !currentOpenIndent) return map;
-        const existing =
-            currentOpenIndent.retailer_indent_items ?? [];
-        for (const o of item.wholesaler_offers ?? []) {
-            const m = existing.find(
-                (it) => it.wholesale_receipt === o.id
-            );
-            if (m) map[o.id] = m;
-        }
-        return map;
+    // Offers already on the open indent (matched by wholesale receipt).
+    const savedOfferIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (!item || !currentOpenIndent) return ids;
+        const lines: RetailerIndentItem[] = currentOpenIndent.retailer_indent_items ?? [];
+        for (const o of item.wholesaler_offers ?? []) if (lines.some((l) => l.wholesale_receipt === o.id)) ids.add(o.id);
+        return ids;
     }, [item, currentOpenIndent]);
 
-    const handleClose = useCallback(() => {
-        onClose();
-    }, [onClose]);
-
-    if (!item) return null;
-
-    const offerCount = item.wholesaler_offers?.length ?? 0;
-    const heroThumb =
-        resolveImage(item.images?.[0]) ?? null;
-
-    /* Draft rows have no server id yet — hide View Offers */
-    const isDraft = !!item.is_pending;
+    const offers = item?.wholesaler_offers ?? [];
+    const state = item ? stockOutState(item) : 'pending';
+    const isDraft = state === 'draft';
+    const customer = [item?.customer_name, item?.customer_phone].filter(Boolean).join(' · ');
 
     return (
-        <Modal
+        <AdminDetailsSheet
             visible={!!item}
-            animationType="fade"
-            transparent
-            onRequestClose={handleClose}
-        >
-            <View className="flex-1 bg-black/55 items-center justify-center p-4">
-                <View
-                    className="w-full max-w-[900px] max-h-[92%] rounded-2xl border overflow-hidden"
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderColor,
-                    }}
-                >
-                    {/* Header */}
-                    <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{ borderBottomColor: dividerColor }}
-                    >
-                        <View className="flex-1">
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.lg,
-                                }}
-                                numberOfLines={1}
-                            >
-                                {item.product_title || '—'}
-                            </Text>
-                            <Text
-                                className="mt-0.5"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                            >
-                                {isDraft
-                                    ? 'Draft · not yet synced'
-                                    : item.is_ordered
-                                        ? 'Ordered'
-                                        : 'Pending'}{' '}
-                                · {offerCount} offer
-                                {offerCount === 1 ? '' : 's'}
-                            </Text>
-                        </View>
-                        <Pressable
-                            onPress={handleClose}
-                            hitSlop={10}
-                            className="p-1.5"
-                            accessibilityRole="button"
-                            accessibilityLabel="Close"
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {/* Body */}
-                    <ScrollView
-                        contentContainerStyle={{ padding: 16 }}
-                    >
-                        {/* Hero product card */}
-                        <View
-                            className="flex-row rounded-xl p-3 mb-4"
-                            style={{ backgroundColor: subBg }}
-                        >
-                            <View
-                                className="w-[72px] h-[72px] rounded-xl mr-3 items-center justify-center overflow-hidden"
-                                style={{
-                                    backgroundColor: theme.panel,
-                                    flexShrink: 0,
-                                }}
-                            >
-                                <ImageWithFallback
-                                    uri={heroThumb}
-                                    width={72}
-                                    height={72}
-                                    fallback="📦"
-                                />
-                            </View>
-                            <View className="flex-1 min-w-0">
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 15,
-                                    }}
-                                    numberOfLines={2}
-                                >
-                                    {item.product_title || '—'}
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize: 12,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    {item.unit_of_receipt} ·{' '}
-                                    {item.units_per_pack} pcs/pack
-                                </Text>
-                                <View className="flex-row flex-wrap gap-1.5 mt-2">
-                                    <MiniBadge
-                                        label={`Qty ${item.required_quantity}`}
-                                    />
-                                    {item.is_special_order ? (
-                                        <MiniBadge label="Special order" />
-                                    ) : null}
-                                    {isDraft ? (
-                                        <MiniBadge label="Draft" />
-                                    ) : (
-                                        <MiniBadge
-                                            label={
-                                                item.is_ordered
-                                                    ? 'Ordered'
-                                                    : 'Pending'
-                                            }
-                                        />
-                                    )}
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Summary grid */}
-                        <View
-                            className="rounded-xl p-3 flex-row flex-wrap gap-3 mb-4"
-                            style={{ backgroundColor: subBg }}
-                        >
-                            <SummaryCell
-                                label="Customer"
-                                value={item.customer_name || '—'}
-                                flexBasis="30%"
-                            />
-                            <SummaryCell
-                                label="Phone"
-                                value={item.customer_phone || '—'}
-                                flexBasis="30%"
-                            />
-                            <SummaryCell
-                                label="Unit"
-                                value={item.unit_of_receipt || '—'}
-                                flexBasis="30%"
-                            />
-                            <SummaryCell
-                                label="Units / Pack"
-                                value={String(item.units_per_pack)}
-                                flexBasis="30%"
-                            />
-                            <SummaryCell
-                                label="Offers"
-                                value={String(offerCount)}
-                                flexBasis="30%"
-                            />
-                            <SummaryCell
-                                label="Status"
-                                value={
-                                    isDraft
-                                        ? 'Draft'
-                                        : item.is_ordered
-                                            ? 'Ordered'
-                                            : 'Pending'
-                                }
-                                flexBasis="30%"
-                            />
-                        </View>
-
-                        {/* Offers */}
-                        <Text
-                            className="uppercase tracking-widest mb-2"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                                fontSize: 10,
-                            }}
-                        >
-                            Wholesaler Offers ({offerCount})
-                        </Text>
-
-                        {offerCount === 0 ? (
-                            <View className="p-6 items-center">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize: theme.fontSize.sm,
-                                    }}
-                                >
-                                    No offers available for this
-                                    item.
-                                </Text>
-                            </View>
-                        ) : (
-                            item.wholesaler_offers.map((o) => (
-                                <OfferRow
-                                    key={o.id}
-                                    offer={o}
-                                    saved={
-                                        !!savedByOfferId[o.id]
-                                    }
-                                />
-                            ))
-                        )}
-
-                        {Object.keys(savedByOfferId).length >
-                            0 ? (
-                            <View
-                                className="rounded-xl px-3 py-2 mt-4"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(16,185,129,0.10)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#10b981',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {
-                                        Object.keys(
-                                            savedByOfferId
-                                        ).length
-                                    }{' '}
-                                    offer
-                                    {Object.keys(savedByOfferId)
-                                        .length === 1
-                                        ? ''
-                                        : 's'}{' '}
-                                    already added to your open
-                                    indent.
-                                </Text>
-                            </View>
-                        ) : null}
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View
-                        className="flex-row justify-end gap-2 p-4 border-t flex-wrap"
-                        style={{ borderTopColor: dividerColor }}
-                    >
-                        <Pressable
-                            onPress={handleClose}
-                            className="px-4 py-2.5 rounded-xl border"
-                            style={{ borderColor }}
-                            accessibilityRole="button"
-                            accessibilityLabel="Close"
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                Close
-                            </Text>
-                        </Pressable>
-
-                        {onEdit ? (
-                            <Pressable
-                                onPress={() => {
-                                    onEdit(item);
-                                    handleClose();
-                                }}
-                                className="px-4 py-2.5 rounded-xl border"
-                                style={{
-                                    borderColor: theme.primary,
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel="Edit out of stock"
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: theme.primary,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    Edit Out of Stock
-                                </Text>
-                            </Pressable>
-                        ) : null}
-
-                        {offerCount > 0 &&
-                            onViewOffers &&
-                            !isDraft ? (
-                            <Pressable
-                                onPress={() => {
-                                    onViewOffers(item);
-                                    handleClose();
-                                }}
-                                className="px-4 py-2.5 rounded-xl"
-                                style={{
-                                    backgroundColor:
-                                        theme.primary,
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel="View wholesaler offers"
-                            >
-                                <Text
-                                    className="uppercase tracking-wide text-white"
-                                    style={{
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    View Offers
-                                </Text>
-                            </Pressable>
-                        ) : null}
-                    </View>
-                </View>
-            </View>
-        </Modal>
-    );
-}
-
-/* ------------------------------------------------------------------ */
-/* Offer row                                                           */
-/* ------------------------------------------------------------------ */
-function OfferRow({
-    offer,
-    saved,
-}: {
-    offer: RetailerOutOfStockWholesalerOffer;
-    saved: boolean;
-}) {
-    const { theme } = useAuth();
-    const borderColor = theme.isDarkMode
-        ? '#334155'
-        : '#e2e8f0';
-    const subBg = theme.isDarkMode ? '#0f172a' : '#f8fafc';
-
-    const thumb = resolveImage(offer.images?.[0]) ?? null;
-
-    const unitPrice =
-        offer.final_unit_selling_price ||
-        offer.unit_selling_price ||
-        '0.00';
-
-    const hasDiscount =
-        !!offer.discount_unit_selling_price &&
-        offer.discount_unit_selling_price !== '0.00';
-
-    return (
-        <View
-            className="flex-row items-center rounded-xl border p-2.5 mb-2"
-            style={{
-                backgroundColor: theme.panel,
-                borderColor,
-            }}
-        >
-            <View
-                className="w-[52px] h-[52px] rounded-[10px] mr-3 items-center justify-center overflow-hidden"
-                style={{
-                    backgroundColor: subBg,
-                    flexShrink: 0,
-                }}
-            >
-                <ImageWithFallback
-                    uri={thumb}
-                    width={52}
-                    height={52}
-                    fallback="🏭"
-                />
-            </View>
-
-            <View className="flex-1 min-w-0">
-                <Text
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.bold,
-                        fontSize: 14,
-                    }}
-                    numberOfLines={1}
-                >
-                    {offer.title ||
-                        offer.product_title ||
-                        'Untitled offer'}
-                </Text>
-                <Text
-                    className="mt-0.5"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.medium,
-                        fontSize: 11,
-                    }}
-                    numberOfLines={1}
-                >
-                    {offer.manufacturer_title ||
-                        'Unknown supplier'}
-                </Text>
-
-                <View className="flex-row flex-wrap gap-1.5 mt-1.5">
-                    <MiniBadge
-                        label={`${offer.current_unit_quantity} in stock`}
-                    />
-                    <MiniBadge label={offer.unit_of_receipt} />
-                    {saved ? (
-                        <MiniBadge label="On indent" />
-                    ) : null}
-                </View>
-            </View>
-
-            <View style={{ alignItems: 'flex-end' }}>
-                <Text
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.bold,
-                        fontSize: 13,
-                    }}
-                >
-                    KES {formatKES(unitPrice)}
-                </Text>
-                {hasDiscount ? (
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontSize: 10,
-                            marginTop: 2,
-                            textDecorationLine:
-                                'line-through',
-                            opacity: 0.7,
-                        }}
-                    >
-                        KES{' '}
-                        {formatKES(
-                            offer.unit_selling_price
-                        )}
-                    </Text>
-                ) : null}
-            </View>
-        </View>
-    );
-}
-
-/* ------------------------------------------------------------------ */
-/* Image with fallback                                                 */
-/* ------------------------------------------------------------------ */
-function ImageWithFallback({
-    uri,
-    width,
-    height,
-    fallback,
-}: {
-    uri: string | null;
-    width: number;
-    height: number;
-    fallback: string;
-}) {
-    const [errored, setErrored] = useState(false);
-
-    if (!uri || errored) {
-        return (
-            <Text style={{ fontSize: 20, opacity: 0.4 }}>
-                {fallback}
-            </Text>
-        );
-    }
-
-    return (
-        <Image
-            source={{ uri }}
-            style={{ width, height }}
-            resizeMode="cover"
-            onError={() => setErrored(true)}
+            onClose={onClose}
+            heading="Out of stock"
+            icon="alert-circle-outline"
+            title={item ? stockOutTitle(item) : ''}
+            subtitle={[item?.unit_of_receipt, item?.units_per_pack ? `${item.units_per_pack} per pack` : ''].filter(Boolean).join(' · ') || null}
+            avatar={{ uri: item ? stockOutImageUrl(item) : null, icon: 'cube-outline', label: item?.product_title }}
+            badges={[STATE_BADGE[state], ...(item?.is_special_order ? [{ label: 'Special order', tone: 'violet' as const, icon: 'star' as const }] : [])]}
+            stats={[
+                { label: 'Needed', value: Number(item?.required_quantity ?? 0).toLocaleString() },
+                { label: 'Offers', value: String(offers.length), color: offers.length ? '#10b981' : undefined },
+                { label: 'On indent', value: String(savedOfferIds.size) },
+            ]}
+            sections={[
+                {
+                    title: 'Customer',
+                    icon: 'person-outline',
+                    fields: [
+                        { label: 'Who asked', value: customer || 'Walk-in customer', full: true },
+                        { label: 'Recorded', value: formatDateTime(item?.created) },
+                    ],
+                },
+                {
+                    title: `Wholesaler offers (${offers.length})`,
+                    icon: 'pricetags-outline',
+                    children: <OfferList offers={offers} saved={savedOfferIds} />,
+                },
+            ]}
+            actions={
+                item && offers.length > 0 && onViewOffers && !isDraft ? (
+                    <SheetButton label="View offers" icon="pricetags-outline" variant={onEdit ? 'secondary' : 'primary'} onPress={() => (onClose(), onViewOffers(item))} grow={!wide} />
+                ) : null
+            }
+            onEdit={item && onEdit ? () => (onClose(), onEdit(item)) : undefined}
+            editLabel="Edit"
         />
     );
 }
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
-function SummaryCell({
-    label,
-    value,
-    flexBasis = '30%',
-}: {
-    label: string;
-    value: string;
-    flexBasis?: string;
-}) {
-    const { theme } = useAuth();
+function OfferList({ offers, saved }: { offers: RetailerOutOfStockWholesalerOffer[]; saved: Set<string> }) {
+    const { theme, chipBg, border } = useListTokens();
+    if (offers.length === 0) {
+        return (
+            <View className="rounded-2xl items-center px-4 py-6 border" style={{ borderColor: border, borderStyle: 'dashed' }}>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center' }}>No wholesaler offers yet.</Text>
+            </View>
+        );
+    }
     return (
-        <View style={{ flexGrow: 1, flexBasis }}>
-            <Text
-                className="uppercase tracking-wide"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.bold,
-                    fontSize: 10,
-                }}
-            >
-                {label}
-            </Text>
-            <Text
-                className="mt-0.5"
-                numberOfLines={1}
-                style={{
-                    color: theme.text,
-                    fontFamily: theme.font.bold,
-                    fontSize: theme.fontSize.sm,
-                }}
-            >
-                {value}
-            </Text>
-        </View>
-    );
-}
-
-function MiniBadge({ label }: { label: string }) {
-    const { theme } = useAuth();
-    return (
-        <View
-            className="px-2 py-0.5 rounded-md border"
-            style={{
-                backgroundColor: theme.isDarkMode
-                    ? '#0f172a'
-                    : '#f1f5f9',
-                borderColor: theme.isDarkMode
-                    ? '#334155'
-                    : '#e2e8f0',
-            }}
-        >
-            <Text
-                className="uppercase tracking-wide"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.bold,
-                    fontSize: 10,
-                }}
-            >
-                {label}
-            </Text>
+        <View style={{ gap: 8 }}>
+            {offers.map((o) => {
+                const price = o.final_unit_selling_price || o.unit_selling_price || '0';
+                const discounted = !!o.discount_unit_selling_price && o.discount_unit_selling_price !== '0.00';
+                const img: any = o.images?.[0];
+                return (
+                    <View key={o.id} className="flex-row items-center gap-3 rounded-2xl p-3" style={{ backgroundColor: chipBg }}>
+                        <View style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden' }}>
+                            <ImageWithFallback uri={resolveImageUrl(img?.thumbnail || img?.image || img)} width={44} height={44} borderRadius={12} fallback="🏭" fallbackSize={18} />
+                        </View>
+                        <View className="flex-1 min-w-0">
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }} numberOfLines={2}>
+                                {o.title || o.product_title || 'Untitled offer'}
+                            </Text>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
+                                {textOr(o.manufacturer_title, 'Unknown supplier')} · {Number(o.current_unit_quantity ?? 0).toLocaleString()} in stock
+                            </Text>
+                            {saved.has(o.id) ? (
+                                <View style={{ marginTop: 4 }}>
+                                    <AdminBadgePill badge={{ label: 'On your indent', tone: 'success', icon: 'checkmark-circle' }} />
+                                </View>
+                            ) : null}
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>KES {formatKES(price)}</Text>
+                            {discounted ? (
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, textDecorationLine: 'line-through' }}>
+                                    KES {formatKES(o.unit_selling_price)}
+                                </Text>
+                            ) : null}
+                        </View>
+                    </View>
+                );
+            })}
         </View>
     );
 }

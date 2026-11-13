@@ -1,4 +1,5 @@
-import { ApiResponse, ApisauceInstance, AxiosRequestConfig, create } from "apisauce";
+import { ApiResponse, ApisauceInstance, create } from "apisauce";
+import type { AxiosRequestConfig } from "axios";
 // 🌟 Link directly to your updated storageService location hook mapping
 import { storageService } from "@/hooks/storage";
 // Assuming cache utility path mapping

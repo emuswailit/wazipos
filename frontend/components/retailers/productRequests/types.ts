@@ -3,13 +3,11 @@
 // Shared types for the retailer product requests module.
 // Imports nothing — no cycles.
 
-export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+export { type PageSize } from '@/components/common/PaginationBar';
+import type { PageSize } from '@/components/common/PaginationBar';
+import type { ProductRequestSummary } from '@/databases/types';
 
-export type {
-    ProductRequest, ProductRequestItem,
-    ProductRequestOffer, ProductRequestSummary
-} from '@/databases/types';
+export type { ProductRequestSummary } from '@/databases/types';
 
 /* ---------- Shared view props ---------- */
 export interface RetailerProductRequestsSharedProps {
@@ -27,10 +25,12 @@ export interface RetailerProductRequestsSharedProps {
     lastSyncedTime: string;
     pendingRequestCount: number;
     pendingOfferCount: number;
-    items: any[];
-    emptyComponent?: React.ReactNode;
+    items: ProductRequestSummary[];
+    /** Whole filtered list (phones show everything, no pagination). */
+    allItems?: ProductRequestSummary[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
-    onPressRequest: (item: any) => void;
+    onPressRequest: (item: ProductRequestSummary) => void;
     page: number;
     pageSize: PageSize;
     totalItems: number;

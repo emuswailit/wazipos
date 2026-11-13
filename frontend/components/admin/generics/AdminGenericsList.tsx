@@ -37,8 +37,6 @@ import {
     type PageSize,
 } from "./types";
 
-export type { GenericItem } from "./types";
-
 /* =========================================================
  * Helpers
  * ======================================================= */
@@ -133,45 +131,36 @@ export default function AdminGenericsList() {
 
     /* ---------------- Derived data ---------------- */
     const generics: GenericItem[] = useMemo(() => {
-        if (
-            getGenericsApi.data &&
-            Array.isArray(getGenericsApi.data)
-        ) {
+        if (getGenericsApi.data && Array.isArray(getGenericsApi.data)) {
             return getGenericsApi.data.map((item: any) => {
                 const f = item.fields ?? item;
 
-                const classIds = toArray(
-                    f?.drug_classes ??
-                    f?.drug_class_ids ??
-                    f?.drug_class
-                );
-                const classTitles = toArray(
-                    f?.drug_classes_titles ??
-                    f?.drug_class_titles ??
-                    f?.drug_class_title
-                );
-                const subClassIds = toArray(
-                    f?.drug_sub_classes ??
-                    f?.drug_sub_class_ids ??
-                    f?.drug_sub_class
-                );
-                const subClassTitles = toArray(
-                    f?.drug_sub_classes_titles ??
-                    f?.drug_sub_class_titles ??
-                    f?.drug_sub_class_title
-                );
+                // 1. IDs (Arrays of strings)
+                const classIds = toArray(f?.drug_class ?? f?.drug_classes ?? f?.drug_class_ids);
+                const subClassIds = toArray(f?.drug_sub_class ?? f?.drug_sub_classes ?? f?.drug_sub_class_ids);
+
+                // 2. Titles (Strictly Strings)
+                // The backend sends a string now, but we handle arrays just in case
+                const rawClassTitles = f?.drug_class_titles ?? f?.drug_classes_titles ?? f?.drug_class_title ?? "";
+                const classTitlesString = Array.isArray(rawClassTitles)
+                    ? rawClassTitles.join(', ')
+                    : String(rawClassTitles).trim();
+
+                const rawSubClassTitles = f?.drug_sub_class_titles ?? f?.drug_sub_classes_titles ?? f?.drug_sub_class_title ?? "";
+                const subClassTitlesString = Array.isArray(rawSubClassTitles)
+                    ? rawSubClassTitles.join(', ')
+                    : String(rawSubClassTitles).trim();
 
                 return {
-                    id:
-                        item.pk ||
-                        item.id ||
-                        Math.random().toString(),
+                    id: item.pk || item.id || Math.random().toString(),
                     title: f?.title || "UNSPECIFIED",
                     description: f?.description || "",
-                    drug_classes: classIds,
-                    drug_classes_titles: classTitles,
-                    drug_sub_classes: subClassIds,
-                    drug_sub_classes_titles: subClassTitles,
+                    synonym: f?.synonym || null,
+                    drug_class: classIds,
+                    drug_sub_class: subClassIds,
+                    drug_class_titles: classTitlesString,
+                    drug_sub_class_titles: subClassTitlesString,
+                    owner: f?.owner || "",
                     created: f?.created || "",
                     updated: f?.updated || "",
                 };
@@ -183,16 +172,13 @@ export default function AdminGenericsList() {
     const filteredGenerics = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q) return generics;
+
         return generics.filter(
             (item) =>
                 item.title.toLowerCase().includes(q) ||
                 item.description.toLowerCase().includes(q) ||
-                item.drug_classes_titles.some((t) =>
-                    t.toLowerCase().includes(q)
-                ) ||
-                item.drug_sub_classes_titles.some((t) =>
-                    t.toLowerCase().includes(q)
-                )
+                item.drug_class_titles.toLowerCase().includes(q) ||
+                item.drug_sub_class_titles.toLowerCase().includes(q)
         );
     }, [generics, query]);
 
@@ -221,19 +207,6 @@ export default function AdminGenericsList() {
 
     /* ---------------------------------------------------------
      * Form submit
-     *
-     * Payload:
-     *   {
-     *       action: "CreateGeneric" | "UpdateGeneric",
-     *       generic_details: {
-     *           title, description,
-     *           drug_classes: string[],
-     *           drug_sub_classes: string[],
-     *           id?  // only on update
-     *       }
-     *   }
-     *
-     * Title is sent verbatim — backend uppercases on save.
      * ------------------------------------------------------- */
     const handleFormSubmit = async (
         values: any,
@@ -305,7 +278,7 @@ export default function AdminGenericsList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -396,9 +369,7 @@ export default function AdminGenericsList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminGenericsSharedProps = {
         query,
@@ -409,6 +380,7 @@ export default function AdminGenericsList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredGenerics,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,
@@ -443,19 +415,12 @@ export default function AdminGenericsList() {
                     headerShown: true,
                     headerTintColor: theme.primary,
                     headerShadowVisible: false,
-                    headerStatusBarHeight: 0,
                     headerTitleStyle: {
                         fontWeight: "900",
                         fontSize: 14,
                     },
-                    headerTitleContainerStyle: {
-                        margin: 0,
-                        padding: 0,
-                    },
                     headerStyle: {
                         backgroundColor: theme.surface,
-                        height:
-                            Platform.OS === "ios" ? 44 : 40,
                     },
                 }}
             />

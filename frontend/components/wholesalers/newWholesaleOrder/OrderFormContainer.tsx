@@ -10,14 +10,11 @@ import OrderFormBusinessLogic from './OrderFormBusinessLogic';
 import OrderManifestFooter from './OrderManifestFooter';
 import OrderManifestHeader from './OrderManifestHeader';
 import ProductManifestTable from './ProductManifestTable';
+import UnifiedBarcodeScanner from './UnifiedBarcodeScanner';
 
 interface OrderFormContainerProps {
     theme: any;
     user: any;
-    setIsScanningOpen: (open: boolean) => void;
-    processBarcodeScanResult: (barcode: string) => void;
-    productsCatalog: any[];
-    isScannerOpen: boolean;
     onSubmitFinished?: (
         retailerId: string,
         notes: string,
@@ -33,7 +30,6 @@ export default function OrderFormContainer(
     return (
         <OrderFormBusinessLogic
             user={props.user}
-            productsCatalog={props.productsCatalog}
             onSubmitFinished={props.onSubmitFinished}
             onRowsCountChange={props.onRowsCountChange}
         >
@@ -46,6 +42,13 @@ export default function OrderFormContainer(
 
                 return (
                     <View className="w-full flex-col items-center">
+                        <UnifiedBarcodeScanner
+                            theme={props.theme}
+                            isOpen={state.isScannerOpen}
+                            productsCatalog={state.wholesalerReceipts ?? []}
+                            onScanSuccess={state.processBarcodeScanResult}
+                            onCloseScanner={() => state.setIsScanningOpen(false)}
+                        />
                         <View
                             className="rounded-xl p-6 w-full max-w-5xl shadow-md relative"
                             style={{
@@ -110,7 +113,7 @@ export default function OrderFormContainer(
                                 <OrderActionBar
                                     theme={props.theme}
                                     onScanTrigger={() =>
-                                        props.setIsScanningOpen(
+                                        state.setIsScanningOpen(
                                             true
                                         )
                                     }
@@ -143,7 +146,7 @@ export default function OrderFormContainer(
                                         state.updateRowState
                                     }
                                     onTriggerScanner={() =>
-                                        props.setIsScanningOpen(
+                                        state.setIsScanningOpen(
                                             true
                                         )
                                     }
@@ -155,7 +158,7 @@ export default function OrderFormContainer(
                                 <OrderActionBar
                                     theme={props.theme}
                                     onScanTrigger={() =>
-                                        props.setIsScanningOpen(
+                                        state.setIsScanningOpen(
                                             true
                                         )
                                     }
@@ -193,9 +196,6 @@ export default function OrderFormContainer(
                                 }
                                 isButtonLoading={
                                     state.isSubmitting
-                                }
-                                onSaveDraft={
-                                    state.handleSaveDraftManual
                                 }
                                 onSubmit={state.handleSubmit}
                             />

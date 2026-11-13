@@ -1,6 +1,7 @@
 // components/wholesalers/orders/RetailerOrdersWebView.tsx
 
-import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
+import type { DimensionValue } from 'react-native';
+import { PaginationBar } from '@/components/common/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
 import type { RetailerOrder } from '@/databases/types';
 import React, { useMemo } from 'react';
@@ -43,7 +44,7 @@ interface Props {
 }
 
 function rowKey(o: RetailerOrder): string {
-    return o.remote_id || o.draft_id;
+    return o.remote_id || o.draft_id || "";
 }
 
 /* Status → color */
@@ -108,7 +109,7 @@ export default function RetailerOrdersWebView({
             status: '12%',
             total: '14%',
             actions: '14%',
-        }),
+        }) as const,
         []
     );
 
@@ -418,15 +419,7 @@ function Row({
     onPress,
 }: {
     order: RetailerOrder;
-    cols: {
-        reference: string;
-        retailer: string;
-        items: string;
-        payment: string;
-        status: string;
-        total: string;
-        actions: string;
-    };
+    cols: Record<'reference' | 'retailer' | 'items' | 'payment' | 'status' | 'total' | 'actions', DimensionValue>;
     rowHover: string;
     onPress: () => void;
 }) {
@@ -597,7 +590,7 @@ function Row({
  * ======================================================= */
 function headerStyle(
     theme: any,
-    width: string,
+    width: DimensionValue,
     align: 'left' | 'center' | 'right' = 'left'
 ) {
     return {
@@ -613,7 +606,7 @@ function headerStyle(
 
 function cellStyle(
     theme: any,
-    width: string,
+    width: DimensionValue,
     align: 'left' | 'center' | 'right' = 'left'
 ) {
     return {

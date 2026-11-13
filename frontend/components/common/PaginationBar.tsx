@@ -28,7 +28,7 @@ export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
  * Props
  * ======================================================= */
 
-export interface PaginationBarProps {
+interface PaginationBarProps {
     /** Current page, 1-indexed. */
     page: number;
     pageSize: PageSize;
@@ -41,6 +41,8 @@ export interface PaginationBarProps {
     onPrev: () => void;
     onNext: () => void;
     onPageSizeChange: (size: PageSize) => void;
+    /** Page sizes offered in the picker. Defaults to PAGE_SIZE_OPTIONS (10, 25, 50, 100). */
+    pageSizeOptions?: readonly PageSize[];
 }
 
 /* =========================================================
@@ -57,6 +59,7 @@ export function PaginationBar({
     onPrev = () => { },
     onNext = () => { },
     onPageSizeChange = () => { },
+    pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: PaginationBarProps) {
     const { theme, isDarkMode } = useAuth();
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
@@ -85,6 +88,7 @@ export function PaginationBar({
 
                 <PageSizeSelect
                     value={pageSize}
+                    options={pageSizeOptions}
                     onPageSizeChange={onPageSizeChange}
                     theme={theme}
                     isDarkMode={isDarkMode}
@@ -174,11 +178,13 @@ export function PaginationBar({
 
 function PageSizeSelect({
     value,
+    options: pageSizeOptions,
     onPageSizeChange = () => { },
     theme,
     isDarkMode,
 }: {
     value: PageSize;
+    options: readonly PageSize[];
     onPageSizeChange?: (size: PageSize) => void;
     theme: any;
     isDarkMode: boolean;
@@ -222,7 +228,7 @@ function PageSizeSelect({
                         outline: 'none',
                     }}
                 >
-                    {PAGE_SIZE_OPTIONS.map((n) => (
+                    {pageSizeOptions.map((n) => (
                         <option key={n} value={n}>
                             {n}
                         </option>
@@ -278,7 +284,7 @@ function PageSizeSelect({
                             elevation: 500,
                         }}
                     >
-                        {PAGE_SIZE_OPTIONS.map((n) => {
+                        {pageSizeOptions.map((n) => {
                             const sel = n === value;
                             return (
                                 <Pressable

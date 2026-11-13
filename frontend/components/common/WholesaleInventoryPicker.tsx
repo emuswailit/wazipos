@@ -54,7 +54,7 @@ const log = (...args: any[]) => {
  * Types
  * ======================================================= */
 
-export interface WholesaleInventoryFieldMap {
+interface WholesaleInventoryFieldMap {
     id?: string;
     title?: string;
     bar_code?: string;
@@ -70,7 +70,7 @@ export interface WholesaleInventoryFieldMap {
     product?: string;
 }
 
-export interface WholesaleInventoryPickerProps {
+interface WholesaleInventoryPickerProps {
     /* -------- Formik integration -------- */
     name?: string;
     fieldMap?: WholesaleInventoryFieldMap;

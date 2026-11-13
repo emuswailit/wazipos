@@ -16,7 +16,7 @@ const NATIVE_KEY = 'wazipos_async_wholesaler_receipts_registry';
  * The same user + product + creation instant produces the same id.
  * Used as the idempotency key for CreateWholesalerReceipt.
  */
-export function buildWholesalerDraftId(
+function buildWholesalerDraftId(
     userId: string,
     productId: string,
     createdMs: number | null

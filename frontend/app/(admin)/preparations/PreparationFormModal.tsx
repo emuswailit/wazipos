@@ -53,7 +53,7 @@ export default function PreparationFormModal({ visible, onClose, isDarkMode, the
                 {/* 🌟 CRITICAL: Set keyboardShouldPersistTaps to "handled" to allow tapping dropdown options properly */}
                 <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={true} contentContainerStyle={{ paddingBottom: 40 }} className="flex-1 w-full px-6 py-6">
                     <View className="w-full max-w-2xl mx-auto">
-                        <Formik
+                        <Formik<{ title: string; description: string; formulation_id: string; generics: string[] }>
                             enableReinitialize={true}
                             initialValues={{
                                 title: initialData?.title || "",

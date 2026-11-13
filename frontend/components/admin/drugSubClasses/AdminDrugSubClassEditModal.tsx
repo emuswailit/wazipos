@@ -1,430 +1,80 @@
 // components/admin/drugSubClasses/AdminDrugSubClassEditModal.tsx
 //
-// Admin create/edit form modal for drug sub classes.
-//
-// The `drug_class` field is captured via the shared
-// CustomAutocompletePicker — a Formik-native component that
-// reads/writes `useField('drug_class')` directly.
+// Create / edit a drug sub-class, linked to a drug class.
 
 import drugsApi from '@/api/drugsApi';
+import { AdminFormSheet, FormSection, useLookupOptions } from '@/components/admin/kit';
 import CustomAutocompletePicker from '@/components/common/CustomAutocompletePicker';
-import useApi from '@/hooks/useApi';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { useAuth } from '@/context/AuthContext';
 import { Formik } from 'formik';
-import { useEffect, useMemo } from 'react';
-import {
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
-} from 'react-native';
 import * as Yup from 'yup';
 
 interface Props {
     visible: boolean;
     onClose: () => void;
-    isDarkMode: boolean;
-    theme: any;
+    isDarkMode?: boolean;
+    theme?: any;
     isSubmittingRemote: boolean;
-    onSubmitTrigger: (
-        values: any,
-        formikHelpers: any
-    ) => Promise<void>;
+    onSubmitTrigger: (values: any, formikHelpers: any) => Promise<void>;
     initialData?: any;
     remoteErrors?: any;
 }
 
-const AdminDrugSubClassFormSchema = Yup.object().shape({
-    title: Yup.string()
-        .min(3, 'Title must be at least 3 characters')
-        .required('Drug subclass title is required'),
-    drug_class: Yup.string().required(
-        'Drug class selection linkage is required'
-    ),
+interface FormValues {
+    title: string;
+    description: string;
+    drug_class: string;
+}
+
+const schema = Yup.object({
+    title: Yup.string().trim().min(3, 'At least 3 characters').required('Enter the sub-class name'),
+    drug_class: Yup.string().required('Pick a drug class'),
 });
 
-export default function AdminDrugSubClassEditModal({
-    visible,
-    onClose,
-    isDarkMode,
-    theme,
-    isSubmittingRemote,
-    onSubmitTrigger,
-    initialData,
-    remoteErrors,
-}: Props) {
-    const { height: screenHeight } = useWindowDimensions();
-
-    /* ---------------- Drug classes fetch ---------------- */
-    const getDrugClassesApi = useApi<any>(async (payload: any) =>
-        drugsApi.drugClassesAction(payload)
-    );
-
-    useEffect(() => {
-        if (visible) {
-            getDrugClassesApi.request({
-                action: 'GetDrugClasses',
-            });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [visible]);
-
-    const drugClassOptions = useMemo(() => {
-        if (
-            !getDrugClassesApi.data ||
-            !Array.isArray(getDrugClassesApi.data)
-        ) {
-            return [];
-        }
-        return getDrugClassesApi.data.map((item: any) => {
-            const f = item.fields ?? item;
-            return {
-                id: item.pk || item.id,
-                title: f?.title || 'UNSPECIFIED',
-            };
-        });
-    }, [getDrugClassesApi.data]);
-
-    useEffect(() => {
-        if (remoteErrors) {
-            console.log(
-                `❌ [Admin API Error Matrix] Drug Subclass Mutation Failed:`,
-                JSON.stringify(remoteErrors)
-            );
-        }
-    }, [remoteErrors]);
+export default function AdminDrugSubClassEditModal({ visible, onClose, isSubmittingRemote, onSubmitTrigger, initialData }: Props) {
+    const { theme, isDarkMode } = useAuth();
+    const isEdit = !!initialData;
+    const classes = useLookupOptions(drugsApi.drugClassesAction, 'GetDrugClasses', visible);
 
     return (
-        <Modal
-            visible={visible}
-            transparent={false}
-            animationType="slide"
-            onRequestClose={onClose}
+        <Formik<FormValues>
+            key={`${visible}-${initialData?.id ?? 'new'}`}
+            enableReinitialize
+            initialValues={{ title: initialData?.title || '', description: initialData?.description || '', drug_class: initialData?.drug_class || '' }}
+            validationSchema={schema}
+            onSubmit={onSubmitTrigger}
         >
-            <View
-                style={{
-                    backgroundColor: theme.background,
-                    height: screenHeight,
-                }}
-                className="flex-1 flex-col w-full"
-            >
-                {/* ───── Header ───── */}
-                <View
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderBottomColor: theme.border,
-                    }}
-                    className="h-16 w-full border-b px-6 flex-row justify-between items-center"
+            {(f) => (
+                <AdminFormSheet
+                    visible={visible}
+                    onClose={onClose}
+                    title={isEdit ? 'Edit sub-class' : 'New sub-class'}
+                    subtitle={isEdit ? initialData?.title : 'Drug sub-class'}
+                    icon="git-network-outline"
+                    submitLabel={isEdit ? 'Save changes' : 'Create sub-class'}
+                    submitting={f.isSubmitting || isSubmittingRemote}
+                    onSubmit={() => f.handleSubmit()}
                 >
-                    <View className="flex-row items-center gap-x-3">
-                        <View
-                            style={{
-                                backgroundColor:
-                                    theme.primary + '15',
-                            }}
-                            className="px-2.5 py-1 rounded-md"
-                        >
-                            <Text
-                                style={{ color: theme.primary }}
-                                className="text-[10px] font-black tracking-widest uppercase"
-                            >
-                                System Ledger
-                            </Text>
-                        </View>
-                        <Text
-                            style={{
-                                color: theme.text,
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.base,
-                            }}
-                        >
-                            {initialData
-                                ? 'Modify Drug Subclass'
-                                : 'Create Drug Subclass'}
-                        </Text>
-                    </View>
-                    <TouchableOpacity
-                        onPress={onClose}
-                        className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20"
-                    >
-                        <Text
-                            className="text-red-500 font-bold text-xs px-2"
-                            style={{ fontFamily: theme.font.bold }}
-                        >
-                            ✕ Cancel
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* ───── Form ───── */}
-                <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={true}
-                    contentContainerStyle={{ paddingBottom: 40 }}
-                    className="flex-1 w-full px-6 py-6"
-                >
-                    <View className="w-full max-w-2xl mx-auto">
-                        <Formik
-                            enableReinitialize={true}
-                            initialValues={{
-                                title:
-                                    initialData?.title || '',
-                                description:
-                                    initialData?.description || '',
-                                drug_class:
-                                    initialData?.drug_class || '',
-                            }}
-                            validationSchema={
-                                AdminDrugSubClassFormSchema
-                            }
-                            onSubmit={onSubmitTrigger}
-                        >
-                            {({
-                                handleChange,
-                                handleBlur,
-                                handleSubmit,
-                                values,
-                                errors,
-                                touched,
-                            }) => (
-                                <View
-                                    style={{
-                                        backgroundColor:
-                                            theme.panel,
-                                        borderColor: theme.border,
-                                    }}
-                                    className="p-6 rounded-2xl border flex-col w-full gap-y-4"
-                                >
-                                    {/* Form header */}
-                                    <View
-                                        className="border-b pb-2 mb-2 w-full"
-                                        style={{
-                                            borderBottomColor:
-                                                theme.border,
-                                        }}
-                                    >
-                                        <Text
-                                            style={{
-                                                color: theme.text,
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize:
-                                                    theme.fontSize.base,
-                                            }}
-                                            className="text-left"
-                                        >
-                                            Drug Subclass Parameters
-                                            Form
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                color: theme.textDark,
-                                                fontFamily:
-                                                    theme.font.medium,
-                                                fontSize:
-                                                    theme.fontSize.xs,
-                                                marginTop: 2,
-                                            }}
-                                            className="text-left"
-                                        >
-                                            Parameters map cleanly
-                                            to secure clinical
-                                            database registries.
-                                        </Text>
-                                    </View>
-
-                                    {/* Title */}
-                                    <View className="items-start w-full">
-                                        <Text
-                                            style={{
-                                                color: theme.textDark,
-                                                fontFamily:
-                                                    theme.font.bold,
-                                            }}
-                                            className="text-[10px] uppercase tracking-wider mb-1"
-                                        >
-                                            Drug Subclass Title
-                                        </Text>
-                                        <TextInput
-                                            onChangeText={handleChange(
-                                                'title'
-                                            )}
-                                            onBlur={handleBlur(
-                                                'title'
-                                            )}
-                                            value={values.title}
-                                            placeholder="e.g. Aminoglycosides"
-                                            placeholderTextColor={
-                                                theme.textDark
-                                            }
-                                            style={{
-                                                backgroundColor:
-                                                    theme.background,
-                                                borderColor:
-                                                    touched.title &&
-                                                        errors.title
-                                                        ? '#ef4444'
-                                                        : theme.border,
-                                                color: theme.text,
-                                                fontFamily:
-                                                    theme.font.medium,
-                                                fontSize:
-                                                    theme.fontSize.sm,
-                                            }}
-                                            className="w-full rounded-xl px-4 h-[42px] border outline-none"
-                                        />
-                                        {touched.title &&
-                                            errors.title && (
-                                                <Text className="text-red-500 text-[11px] font-semibold mt-1">
-                                                    {errors.title}
-                                                </Text>
-                                            )}
-                                    </View>
-
-                                    {/* Drug class autocomplete — Formik-native */}
-                                    <CustomAutocompletePicker
-                                        name="drug_class"
-                                        label="Linked Drug Class"
-                                        options={drugClassOptions}
-                                        theme={theme}
-                                        isDarkMode={isDarkMode}
-                                        initialTitle={
-                                            initialData?.drug_class_title
-                                        }
-                                        loading={
-                                            getDrugClassesApi.loading
-                                        }
-                                        placeholder="Type to filter and select a drug class..."
-                                        loadingPlaceholder="Loading drug classes list..."
-                                    />
-
-                                    {/* Description */}
-                                    <View className="items-start w-full">
-                                        <Text
-                                            style={{
-                                                color: theme.textDark,
-                                                fontFamily:
-                                                    theme.font.bold,
-                                            }}
-                                            className="text-[10px] uppercase tracking-wider mb-1"
-                                        >
-                                            Clinical Description
-                                            Brief
-                                        </Text>
-                                        <TextInput
-                                            onChangeText={handleChange(
-                                                'description'
-                                            )}
-                                            onBlur={handleBlur(
-                                                'description'
-                                            )}
-                                            value={
-                                                values.description
-                                            }
-                                            placeholder="Specify actions boundaries, clinical scopes and parameters..."
-                                            placeholderTextColor={
-                                                theme.textDark
-                                            }
-                                            multiline
-                                            numberOfLines={4}
-                                            style={{
-                                                backgroundColor:
-                                                    theme.background,
-                                                borderColor:
-                                                    touched.description &&
-                                                        errors.description
-                                                        ? '#ef4444'
-                                                        : theme.border,
-                                                color: theme.text,
-                                                fontFamily:
-                                                    theme.font.medium,
-                                                fontSize:
-                                                    theme.fontSize.sm,
-                                                textAlignVertical:
-                                                    'top',
-                                            }}
-                                            className="w-full rounded-xl px-4 py-3 min-h-[100px] border outline-none"
-                                        />
-                                        {touched.description &&
-                                            errors.description && (
-                                                <Text className="text-red-500 text-[11px] font-semibold mt-1">
-                                                    {
-                                                        errors.description
-                                                    }
-                                                </Text>
-                                            )}
-                                    </View>
-
-                                    {/* Actions */}
-                                    <View className="flex-row items-center gap-x-3 mt-4 w-full">
-                                        <TouchableOpacity
-                                            onPress={onClose}
-                                            disabled={
-                                                isSubmittingRemote
-                                            }
-                                            className="flex-1 h-12 rounded-xl items-center justify-center border active:opacity-70"
-                                            style={{
-                                                borderColor:
-                                                    theme.border,
-                                            }}
-                                        >
-                                            <Text
-                                                className="font-bold uppercase tracking-wider"
-                                                style={{
-                                                    color: theme.textDark,
-                                                    fontFamily:
-                                                        theme.font.bold,
-                                                    fontSize:
-                                                        theme.fontSize.sm,
-                                                }}
-                                            >
-                                                Cancel
-                                            </Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            onPress={() =>
-                                                handleSubmit()
-                                            }
-                                            disabled={
-                                                isSubmittingRemote
-                                            }
-                                            style={{
-                                                backgroundColor:
-                                                    theme.primary,
-                                            }}
-                                            className="flex-1 h-12 rounded-xl items-center justify-center active:opacity-90"
-                                        >
-                                            {isSubmittingRemote ? (
-                                                <ActivityIndicator
-                                                    color="#ffffff"
-                                                    size="small"
-                                                />
-                                            ) : (
-                                                <Text
-                                                    className="text-white uppercase tracking-wider"
-                                                    style={{
-                                                        fontFamily:
-                                                            theme.font.bold,
-                                                        fontSize:
-                                                            theme.fontSize.sm,
-                                                    }}
-                                                >
-                                                    {initialData
-                                                        ? 'Update Details'
-                                                        : 'Commit Entry'}
-                                                </Text>
-                                            )}
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
-                        </Formik>
-                    </View>
-                </ScrollView>
-            </View>
-        </Modal>
+                    <FormSection title="Sub-class" zIndex={20}>
+                        <CustomTextField name="title" label="Name" required placeholder="e.g. Cardioselective beta blockers" />
+                        <CustomAutocompletePicker
+                            name="drug_class"
+                            label="Drug class"
+                            options={classes.options}
+                            theme={theme}
+                            isDarkMode={isDarkMode}
+                            initialTitle={initialData?.drug_class_title}
+                            loading={classes.loading}
+                            placeholder="Search drug classes…"
+                            loadingPlaceholder="Loading drug classes…"
+                        />
+                    </FormSection>
+                    <FormSection title="Description" hint="Optional.">
+                        <CustomTextField name="description" label="Description" placeholder="What sets this sub-class apart…" multiline numberOfLines={4} />
+                    </FormSection>
+                </AdminFormSheet>
+            )}
+        </Formik>
     );
 }

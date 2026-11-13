@@ -44,7 +44,6 @@ export default function WholesaleItemRowItem({
     /* -------- Derived -------- */
     const qty = Number(row.purchased_quantity) || 0;
     const price = Number(row.item_price) || 0;
-    const disc = Number(row.item_price_discount) || 0;
     const total = Number(row.item_price_total) || 0;
     const stock = Number(row.available);
 

@@ -18,19 +18,17 @@ import {
 } from './ForecastOffersModal';
 import { RetailerForecastsMobileView } from './RetailerForecastsMobileView';
 import { RetailerForecastsWebView } from './RetailerForecastsWebView';
+import type { ForecastFilter } from './forecastsConfig';
 
-export type { AcceptedForecastOfferPayload };
-
-export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+import type { PageSize } from '@/components/common/PaginationBar';
 
 /* =========================================================
  * Props
  * ======================================================= */
-export interface RetailerForecastsListProps {
+interface RetailerForecastsListProps {
     onAcceptOffer?: (payload: AcceptedForecastOfferPayload) => void;
     onItemPress?: (item: RetailerForecastNormalized) => void;
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
 }
 
 /* =========================================================
@@ -71,7 +69,7 @@ export default function RetailerForecastsList({
     /* ---------------- Local UI state ---------------- */
     const [query, setQuery] = useState('');
     const [minAvgDaily, setMinAvgDaily] = useState(0);
-    const [onlyWithOffers, setOnlyWithOffers] = useState(false);
+    const [filter, setFilter] = useState<ForecastFilter>('ALL');
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<PageSize>(10);
 
@@ -83,10 +81,19 @@ export default function RetailerForecastsList({
     const [requestTarget, setRequestTarget] =
         useState<RetailerForecastNormalized | null>(null);
 
+    const isInBasket = useCallback(
+        (fc: RetailerForecastNormalized) => (typeof hasDraftItem === 'function' ? hasDraftItem(fc.remote_id) : false),
+        // drafts: hasDraftItem reads them, so re-create when the basket changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [hasDraftItem, drafts]
+    );
+
     /* ---------------- Filtering ---------------- */
     const filtered = useMemo(() => {
         let base = forecasts;
-        if (onlyWithOffers) base = base.filter((f) => f.has_offers);
+        if (filter === 'OFFERS') base = base.filter((f) => f.has_offers || f.has_campaigns);
+        else if (filter === 'NO_OFFERS') base = base.filter((f) => !f.has_offers && !f.has_campaigns);
+        else if (filter === 'IN_BASKET') base = base.filter(isInBasket);
         if (minAvgDaily > 0) {
             base = base.filter(
                 (f) => f.avg_daily_forecast >= minAvgDaily
@@ -105,7 +112,12 @@ export default function RetailerForecastsList({
                     .includes(q)
             );
         });
-    }, [forecasts, onlyWithOffers, minAvgDaily, query]);
+    }, [forecasts, filter, isInBasket, minAvgDaily, query]);
+
+    const counts = useMemo(() => {
+        const withOffers = forecasts.filter((f) => f.has_offers || f.has_campaigns).length;
+        return { total: forecasts.length, withOffers, noOffers: forecasts.length - withOffers, inBasket: forecasts.filter(isInBasket).length };
+    }, [forecasts, isInBasket]);
 
     /* ---------------- Pagination ---------------- */
     const totalItems = filtered.length;
@@ -116,7 +128,7 @@ export default function RetailerForecastsList({
 
     useEffect(() => {
         setPage(1);
-    }, [query, onlyWithOffers, minAvgDaily, pageSize]);
+    }, [query, filter, minAvgDaily, pageSize]);
 
     useEffect(() => {
         if (page > totalPages) setPage(totalPages);
@@ -266,7 +278,7 @@ export default function RetailerForecastsList({
 
             void removeOfferFromIndent({
                 indentId,
-                itemId: target.id,
+                itemId: target.remote_id ?? target.draft_id ?? "",
             });
         },
         [currentOpenIndent, removeOfferFromIndent]
@@ -360,9 +372,9 @@ export default function RetailerForecastsList({
         setQuery,
         minAvgDaily,
         setMinAvgDaily,
-        onlyWithOffers,
-        setOnlyWithOffers: (fn: (v: boolean) => boolean) =>
-            setOnlyWithOffers((prev) => fn(prev)),
+        filter,
+        onFilterChange: setFilter,
+        counts,
         onRefresh: refresh,
         refreshing,
         sourceLabel:
@@ -381,15 +393,12 @@ export default function RetailerForecastsList({
             })
             : '',
         items: paginated,
+        allItems: filtered,
         emptyComponent,
         onViewOffers: openOffers,
-        onViewDetails: openDetails,
+        onViewDetails: onItemPress ?? openDetails,
         onRequestSupply: openRequest,
-        onPressItem: onItemPress ?? (() => { }),
-        hasDraftItem: (fc: RetailerForecastNormalized) =>
-            typeof hasDraftItem === 'function'
-                ? hasDraftItem(fc.remote_id)
-                : false,
+        hasDraftItem: isInBasket,
         draftCount: typeof draftCount === 'number' ? draftCount : 0,
         page,
         pageSize,
@@ -422,6 +431,8 @@ export default function RetailerForecastsList({
             <ForecastDetailsModal
                 forecast={detailsTarget}
                 onClose={closeDetails}
+                onViewOffers={openOffers}
+                onRequestSupply={openRequest}
             />
 
             <RequestWholesalerPickerModal

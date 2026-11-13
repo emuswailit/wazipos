@@ -1,5 +1,6 @@
 // context/RetailerOrdersSyncContext.tsx
 
+import { toFlagString } from '@/utils/flags';
 import { useAuth, UserProfile } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { dbInstance } from '@/databases/db';
@@ -20,7 +21,7 @@ import { Platform } from 'react-native';
  * Types
  * ======================================================= */
 
-export interface SyncUiState {
+interface SyncUiState {
     syncing: boolean;
     offline: boolean;
     lastSyncedTime: string;
@@ -109,25 +110,9 @@ function endpointTag(url: string | null): string {
 }
 
 /* =========================================================
- * Logging
+ * Logging — WS data only, raw unstringified
  * ======================================================= */
 
-const log = (...args: any[]) => {
-    if (__DEV__)
-        console.log('[RetailerOrdersSync]', ...args);
-};
-const warn = (...args: any[]) => {
-    if (__DEV__)
-        console.warn('[RetailerOrdersSync]', ...args);
-};
-
-const wsLog = (tag: string, ...args: any[]) => {
-    if (__DEV__)
-        console.log(
-            `[RetailerOrdersSync][WS:${tag}]`,
-            ...args
-        );
-};
 const wsWarn = (tag: string, ...args: any[]) => {
     if (__DEV__)
         console.warn(
@@ -378,6 +363,8 @@ function normalizeOrder(
             raw.document_number_display ?? 'N/A'
         ),
         reference_number: raw.reference_number ?? null,
+        retailer_indent: raw.retailer_indent ?? null,
+        retailer_indent_number: raw.retailer_indent_number ?? null,
         provider_reference_number:
             raw.provider_reference_number ?? null,
         psp_reference_number: String(
@@ -404,7 +391,7 @@ function normalizeOrder(
             raw.final_price_total ?? '0.00'
         ),
 
-        is_paid: String(raw.is_paid ?? 'false'),
+        is_paid: toFlagString(raw.is_paid),
         is_delivered: String(
             raw.is_delivered ?? 'false'
         ),
@@ -466,8 +453,14 @@ function normalizeOrder(
 
         description: raw.description ?? null,
 
+        // The API sends each item's id as `id`; the app keys items by `remote_id`.
         order_items: Array.isArray(raw.order_items)
-            ? raw.order_items
+            ? raw.order_items.map((item: any) => ({
+                ...item,
+                remote_id: String(
+                    firstDefined(item?.remote_id, item?.id, '')
+                ),
+            }))
             : [],
 
         retailer_postal_town:
@@ -571,39 +564,11 @@ export const RetailerOrdersSyncProvider: React.FC<{
 
     const wsRef = useRef<WebSocket | null>(null);
     const ordersStateRef = useRef<RetailerOrder[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
     );
     const reconnectAttemptRef = useRef(0);
     const wsGenerationRef = useRef(0);
-
-    /* ---------------------------------------------------------
-     * Diagnostics
-     * ------------------------------------------------------- */
-    useEffect(() => {
-        console.log(
-            '[RetailerOrdersSync] currentUser (raw) →',
-            user
-        );
-
-        console.log(
-            '[RetailerOrdersSync] currentUser.roles →',
-            user?.roles ?? '(none)'
-        );
-
-        console.log(
-            '[RetailerOrdersSync] resolved identifiers →',
-            {
-                matchedRoleValue,
-                wsTag,
-                wsUrl,
-                storage:
-                    Platform.OS === 'web'
-                        ? 'Dexie (IndexedDB)'
-                        : 'AsyncStorage',
-            }
-        );
-    }, [user, matchedRoleValue, wsTag, wsUrl]);
 
     const isOnlineRef = useRef(isOnline);
     useEffect(() => {
@@ -624,28 +589,9 @@ export const RetailerOrdersSyncProvider: React.FC<{
         async (data: RetailerOrder[]) => {
             const nowIso = new Date().toISOString();
 
-            console.log(
-                '[RetailerOrdersSync][STORAGE:WRITE] →',
-                {
-                    platform: Platform.OS,
-                    target:
-                        Platform.OS === 'web'
-                            ? 'Dexie'
-                            : 'AsyncStorage',
-                    count: data.length,
-                    sampleRemoteIds: data
-                        .slice(0, 3)
-                        .map((o) => o.remote_id),
-                    timestamp: nowIso,
-                }
-            );
-
             /* ==================== WEB ==================== */
             if (Platform.OS === 'web') {
                 if (!dbInstance?.retailerOrders) {
-                    console.warn(
-                        '[RetailerOrdersSync][STORAGE:WRITE] Dexie table missing'
-                    );
                     return;
                 }
 
@@ -688,21 +634,10 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             );
                         }
                     );
-
-                    // Read back to confirm
-                    const verify =
-                        await dbInstance.retailerOrders.count();
-
-                    console.log(
-                        '[RetailerOrdersSync][STORAGE:WRITE] ✓ Dexie committed',
-                        {
-                            written: data.length,
-                            rowsInTable: verify,
-                        }
-                    );
                 } catch (err) {
-                    console.warn(
-                        '[RetailerOrdersSync][STORAGE:WRITE] ✗ Dexie failed:',
+                    wsWarn(
+                        wsTag,
+                        'Dexie write failed',
                         err
                     );
                 }
@@ -719,22 +654,15 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     RETAILER_ORDERS_SYNCED_AT,
                     nowIso
                 );
-
-                console.log(
-                    '[RetailerOrdersSync][STORAGE:WRITE] ✓ AsyncStorage committed',
-                    {
-                        key: NATIVE_RETAILER_ORDERS_KEY,
-                        written: data.length,
-                    }
-                );
             } catch (err) {
-                console.warn(
-                    '[RetailerOrdersSync][STORAGE:WRITE] ✗ AsyncStorage failed:',
+                wsWarn(
+                    wsTag,
+                    'AsyncStorage write failed',
                     err
                 );
             }
         },
-        []
+        [wsTag]
     );
 
     /* ---------------------------------------------------------
@@ -751,25 +679,12 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     if (dbInstance?.retailerOrders) {
                         const rows =
                             await dbInstance.retailerOrders.toArray();
-
-                        console.log(
-                            '[RetailerOrdersSync][STORAGE:READ] ← Dexie',
-                            {
-                                count: rows.length,
-                                sampleRemoteIds: rows
-                                    .slice(0, 3)
-                                    .map(
-                                        (o: any) =>
-                                            o.remote_id
-                                    ),
-                            }
-                        );
-
                         return rows;
                     }
                 } catch (err) {
-                    console.warn(
-                        '[RetailerOrdersSync][STORAGE:READ] ✗ Dexie failed:',
+                    wsWarn(
+                        wsTag,
+                        'Dexie read failed',
                         err
                     );
                 }
@@ -782,50 +697,22 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     NATIVE_RETAILER_ORDERS_KEY
                 );
                 const parsed = raw ? JSON.parse(raw) : [];
-
-                console.log(
-                    '[RetailerOrdersSync][STORAGE:READ] ← AsyncStorage',
-                    {
-                        key: NATIVE_RETAILER_ORDERS_KEY,
-                        count: Array.isArray(parsed)
-                            ? parsed.length
-                            : 0,
-                        sampleRemoteIds: Array.isArray(parsed)
-                            ? parsed
-                                .slice(0, 3)
-                                .map(
-                                    (o: any) =>
-                                        o.remote_id
-                                )
-                            : [],
-                    }
-                );
-
                 return Array.isArray(parsed) ? parsed : [];
             } catch (err) {
-                console.warn(
-                    '[RetailerOrdersSync][STORAGE:READ] ✗ AsyncStorage failed:',
+                wsWarn(
+                    wsTag,
+                    'AsyncStorage read failed',
                     err
                 );
                 return [];
             }
         },
-        []
+        [wsTag]
     );
 
     const hydrateFromLocalDB = useCallback(async () => {
-        console.log(
-            '[RetailerOrdersSync][HYDRATE] start'
-        );
         try {
             const cached = await readLocalRecords();
-
-            console.log(
-                '[RetailerOrdersSync][HYDRATE] result',
-                {
-                    count: cached?.length ?? 0,
-                }
-            );
 
             if (cached?.length > 0) {
                 ordersStateRef.current = cached;
@@ -838,10 +725,10 @@ export const RetailerOrdersSyncProvider: React.FC<{
             }
             return cached;
         } catch (e) {
-            warn('hydrateFromLocalDB threw:', e);
+            wsWarn(wsTag, 'hydrate failed', e);
             return [];
         }
-    }, [readLocalRecords]);
+    }, [readLocalRecords, wsTag]);
 
     const hydrateSyncedAt = useCallback(async () => {
         try {
@@ -860,11 +747,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     RETAILER_ORDERS_SYNCED_AT
                 );
             }
-
-            console.log(
-                '[RetailerOrdersSync][HYDRATE] synced-at',
-                { iso }
-            );
 
             if (iso) {
                 setLastSyncedTime(
@@ -907,27 +789,10 @@ export const RetailerOrdersSyncProvider: React.FC<{
                         ? 'idle'
                         : 'offline'
                 );
-                wsLog(
-                    tag,
-                    'skip connect — token or online missing',
-                    {
-                        hasToken: !!currentToken,
-                        isOnline: isOnlineRef.current,
-                    }
-                );
                 return;
             }
 
             if (!wsUrl) {
-                wsWarn(
-                    tag,
-                    'no role-matched endpoint; skipping connect',
-                    {
-                        roles: user?.roles?.map(
-                            (r) => r?.value
-                        ),
-                    }
-                );
                 setIsLiveConnected(false);
                 setSyncStatus('idle');
                 return;
@@ -939,10 +804,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                 const url = `${wsUrl}?token=${encodeURIComponent(
                     currentToken
                 )}`;
-                wsLog(tag, 'connecting', {
-                    url: wsUrl,
-                    matchedRoleValue,
-                });
 
                 const ws = new WebSocket(url);
                 wsRef.current = ws;
@@ -956,7 +817,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                     setIsLiveConnected(true);
                     setSyncStatus('live');
                     reconnectAttemptRef.current = 0;
-                    wsLog(tag, 'connected', wsUrl);
                 };
 
                 ws.onmessage = async (event) => {
@@ -971,19 +831,11 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             event.data
                         );
 
-                        wsLog(tag, 'RAW →', parsed);
-
-                        wsLog(tag, 'envelope keys →', {
-                            keys: parsed &&
-                                typeof parsed === 'object'
-                                ? Object.keys(parsed)
-                                : typeof parsed,
-                            frame_size:
-                                typeof event.data ===
-                                    'string'
-                                    ? event.data.length
-                                    : '(non-string)',
-                        });
+                        // Raw WS payload — expandable in devtools.
+                        console.log(
+                            `[RetailerOrdersSync][WS:${tag}] frame`,
+                            parsed
+                        );
 
                         const incoming =
                             extractOrdersFromFrame(parsed);
@@ -992,26 +844,8 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             !incoming ||
                             incoming.length === 0
                         ) {
-                            wsLog(
-                                tag,
-                                'frame has no orders — ignoring',
-                                {
-                                    keys:
-                                        parsed &&
-                                            typeof parsed ===
-                                            'object'
-                                            ? Object.keys(parsed)
-                                            : typeof parsed,
-                                    isArray:
-                                        Array.isArray(parsed),
-                                }
-                            );
                             return;
                         }
-
-                        wsLog(tag, 'frame resolved', {
-                            count: incoming.length,
-                        });
 
                         setIsSyncing(true);
 
@@ -1087,14 +921,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             currentMap.values()
                         );
 
-                        wsLog(tag, 'frame reconciled', {
-                            incoming: incoming.length,
-                            inserted,
-                            updated,
-                            kept,
-                            total: nextList.length,
-                        });
-
                         if (inserted === 0 && updated === 0) {
                             setLastSyncedTime(
                                 formatSyncTime()
@@ -1111,18 +937,11 @@ export const RetailerOrdersSyncProvider: React.FC<{
                                 : nextList
                         );
 
-                        console.log(
-                            '[RetailerOrdersSync][STATE] setRetailerOrders →',
-                            {
-                                count: nextList.length,
-                            }
-                        );
-
                         setLastSyncedTime(formatSyncTime());
                     } catch (e) {
                         wsWarn(
                             tag,
-                            'message parse failed:',
+                            'message parse failed',
                             e
                         );
                     } finally {
@@ -1144,12 +963,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             : 'offline'
                     );
 
-                    wsWarn(tag, 'closed', {
-                        code: (ev as any)?.code,
-                        reason: (ev as any)?.reason,
-                        wasClean: (ev as any)?.wasClean,
-                    });
-
                     if (
                         currentToken &&
                         isOnlineRef.current
@@ -1160,11 +973,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             WS_RECONNECT_BASE_MS *
                             2 ** attempt,
                             WS_RECONNECT_MAX_MS
-                        );
-                        wsLog(
-                            tag,
-                            `reconnect scheduled in ${delay}ms (attempt ${attempt + 1
-                            })`
                         );
                         reconnectTimeoutRef.current =
                             setTimeout(
@@ -1178,12 +986,12 @@ export const RetailerOrdersSyncProvider: React.FC<{
                 };
 
                 ws.onerror = (ev) => {
-                    wsWarn(tag, 'error', ev);
+                    wsWarn(tag, 'socket error', ev);
                 };
             } catch (err) {
                 wsWarn(
                     tag,
-                    'establishment threw:',
+                    'establishment threw',
                     err
                 );
             }
@@ -1209,7 +1017,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
                 establishLiveWebSocketSync(token);
             }
         } catch (e) {
-            warn('Manual refresh threw:', e);
+            wsWarn(wsTag, 'manual refresh threw', e);
         } finally {
             setIsManualRefreshing(false);
         }
@@ -1217,6 +1025,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
         token,
         hydrateFromLocalDB,
         establishLiveWebSocketSync,
+        wsTag,
     ]);
 
     /* ---------------------------------------------------------

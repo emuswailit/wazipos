@@ -35,7 +35,7 @@ import * as Yup from "yup";
  * Public types
  * ======================================================= */
 
-export interface QuantityDiscountPayload {
+interface QuantityDiscountPayload {
     wholesaler_receipt: UUID;
     title: string;
     limit_quantity: number;
@@ -46,7 +46,7 @@ export interface QuantityDiscountPayload {
     banner: ImageFieldValue;
 }
 
-export type QuantityDiscountRecord = QuantityDiscountPayload & {
+type QuantityDiscountRecord = Omit<QuantityDiscountPayload, "banner"> & {
     id: UUID;
     wholesaler_receipt_title?: string;
     product_title?: string;
@@ -63,12 +63,12 @@ export interface AttachedQuantityDiscount {
     is_currently_active?: boolean;
 }
 
-export interface QuantityDiscountSubmitResult {
+interface QuantityDiscountSubmitResult {
     errors: Record<string, string | string[]> | null;
     result: QuantityDiscountRecord | null;
 }
 
-export interface WholesalerQuantityDiscountFormModalProps {
+interface WholesalerQuantityDiscountFormModalProps {
     visible: boolean;
     existing?: QuantityDiscountRecord | null;
     onClose: () => void;
@@ -83,7 +83,7 @@ export interface WholesalerQuantityDiscountFormModalProps {
  * Helpers
  * ======================================================= */
 
-export function quantityDiscountLabel(
+function quantityDiscountLabel(
     d: Pick<
         QuantityDiscountPayload,
         "title" | "limit_quantity" | "awarded_quantity"
@@ -94,7 +94,7 @@ export function quantityDiscountLabel(
     return `Buy ${d.limit_quantity} get ${d.awarded_quantity}`;
 }
 
-export function quantityBonusPercent(
+function quantityBonusPercent(
     limit: number,
     awarded: number
 ): number {
@@ -113,7 +113,7 @@ function plusDaysIso(days: number): string {
     return d.toISOString().slice(0, 10);
 }
 
-export function bannerUrlFromQuantityRecord(
+function bannerUrlFromQuantityRecord(
     record: QuantityDiscountRecord | null | undefined
 ): string | null {
     if (!record) return null;
@@ -146,7 +146,7 @@ function receiptStubFromExisting(
     } as any;
 }
 
-export function initialQuantityDiscountValues(
+function initialQuantityDiscountValues(
     existing?: QuantityDiscountRecord | null
 ): QuantityDiscountPayload {
     if (existing) {
@@ -179,7 +179,7 @@ export function initialQuantityDiscountValues(
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const quantityDiscountSchema = Yup.object({
+const quantityDiscountSchema = Yup.object({
     wholesaler_receipt: Yup.string()
         .uuid("Pick a receipt.")
         .required("Pick a receipt."),
@@ -504,8 +504,8 @@ export function WholesalerQuantityDiscountFormModal({
             : undefined;
 
     const generalError =
-        formik.submitCount > 0 && formik.errors.detail
-            ? String(formik.errors.detail)
+        formik.submitCount > 0 && (formik.errors as Record<string, unknown>).detail
+            ? String((formik.errors as Record<string, unknown>).detail)
             : undefined;
 
     if (!visible) return null;
@@ -545,7 +545,8 @@ export function WholesalerQuantityDiscountFormModal({
                         borderRadius: 16,
                         padding: 20,
                         gap: 14,
-                        width: "min(560px, 100%)",
+                        width: "100%",
+                        maxWidth: 560,
                         maxHeight: "90%",
                     }}
                 >

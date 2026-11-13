@@ -112,7 +112,7 @@ const schema = Yup.object({
             return Number.isFinite(n) && n >= 0;
         }
     ),
-    banner: Yup.mixed<ImageFieldValue>()
+    banner: Yup.mixed<Exclude<ImageFieldValue, null>>()
         .nullable()
         .test("banner-shape", "Invalid image value.", (v) => {
             if (v === null || v === undefined) return true;

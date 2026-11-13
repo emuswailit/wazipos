@@ -1,12 +1,6 @@
 // components/common/ProductImagesPicker.tsx
 //
 // Universal image picker for product visuals.
-//
-// - Native + web (expo-image-picker)
-// - Max 3 images
-// - Large screens (>= 768px): horizontal thumbnail strip
-// - Small screens (< 768px): 2-column grid of thumbnails
-// - Each thumbnail has a delete button
 
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -30,6 +24,9 @@ interface Props {
 const MAX_IMAGES = 3;
 const LARGE_SCREEN_MIN_WIDTH = 768;
 
+const GRID_TILE_MAX = 120;
+const GRID_TILE_GAP = 10;
+
 export default function ProductImagesPicker({
     theme,
     isDarkMode,
@@ -37,7 +34,9 @@ export default function ProductImagesPicker({
     onImagesChange,
 }: Props) {
     const { width } = useWindowDimensions();
-    const isLargeScreen = width >= LARGE_SCREEN_MIN_WIDTH;
+
+    const useStrip =
+        Platform.OS === 'web' && width >= LARGE_SCREEN_MIN_WIDTH;
 
     /* ---------------- Permissions ---------------- */
 
@@ -201,34 +200,101 @@ export default function ProductImagesPicker({
         </View>
     );
 
+    /* ---------------- Thumbnail (grid mode) ---------------- */
+
+    const GridThumbnail = ({
+        uri,
+        index,
+    }: {
+        uri: string;
+        index: number;
+    }) => (
+        <View
+            style={{
+                width: '47%',
+                maxWidth: GRID_TILE_MAX,
+                aspectRatio: 1,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: isDarkMode
+                    ? 'rgba(148,163,184,0.15)'
+                    : 'rgba(15,23,42,0.06)',
+                backgroundColor: isDarkMode
+                    ? '#0f172a'
+                    : '#f1f5f9',
+                overflow: 'hidden',
+                position: 'relative',
+            }}
+        >
+            <Image
+                source={{ uri }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+            />
+
+            <TouchableOpacity
+                onPress={() => handleRemoveImage(index)}
+                activeOpacity={0.7}
+                hitSlop={8}
+                style={{
+                    position: 'absolute',
+                    top: 4,
+                    right: 4,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: '#ef4444',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: '#000',
+                    shadowOpacity: 0.15,
+                    shadowRadius: 3,
+                    shadowOffset: { width: 0, height: 1 },
+                    elevation: 2,
+                }}
+            >
+                <Text
+                    style={{
+                        color: '#ffffff',
+                        fontSize: 10,
+                        fontWeight: '900',
+                        lineHeight: 12,
+                    }}
+                >
+                    ✕
+                </Text>
+            </TouchableOpacity>
+        </View>
+    );
+
     /* ---------------- Render ---------------- */
 
     return (
         <View className="items-start w-full gap-y-2 mt-1">
             {/* Header */}
             <Text
-                style={{ color: theme.textDark }}
-                className="text-[10px] uppercase font-black tracking-wider"
+                style={{ color: theme.textDark, fontFamily: theme.font.bold }}
+                className="text-[10px] uppercase tracking-wider mb-1"
             >
                 Product Visual Attachments ({images.length}/
                 {MAX_IMAGES})
             </Text>
 
-            {/* Action buttons */}
+            {/* Action buttons - Compact 38px height */}
             <View className="flex-row items-center gap-x-3 w-full">
                 <TouchableOpacity
                     onPress={handlePickFromGallery}
                     disabled={images.length >= MAX_IMAGES}
                     style={{
                         borderColor: theme.primary,
-                        opacity:
-                            images.length >= MAX_IMAGES ? 0.5 : 1,
+                        opacity: images.length >= MAX_IMAGES ? 0.5 : 1,
+                        height: 38, // 🌟 Compact height
                     }}
-                    className="flex-1 h-11 border rounded-xl justify-center items-center flex-row bg-slate-500/5 active:opacity-70"
+                    className="flex-1 border rounded-lg justify-center items-center flex-row bg-slate-500/5 active:opacity-70"
                 >
                     <Text
-                        style={{ color: theme.primary }}
-                        className="text-xs font-black uppercase tracking-wider"
+                        style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 11 }}
+                        className="uppercase tracking-wider"
                     >
                         📁 Open Gallery
                     </Text>
@@ -239,19 +305,22 @@ export default function ProductImagesPicker({
                     disabled={images.length >= MAX_IMAGES}
                     style={{
                         backgroundColor: theme.primary,
-                        opacity:
-                            images.length >= MAX_IMAGES ? 0.5 : 1,
+                        opacity: images.length >= MAX_IMAGES ? 0.5 : 1,
+                        height: 38, // 🌟 Compact height
                     }}
-                    className="flex-1 h-11 rounded-xl justify-center items-center flex-row shadow-sm active:opacity-90"
+                    className="flex-1 rounded-lg justify-center items-center flex-row shadow-sm active:opacity-90"
                 >
-                    <Text className="text-white font-black text-xs uppercase tracking-wider">
+                    <Text
+                        className="text-white uppercase tracking-wider"
+                        style={{ fontFamily: theme.font.bold, fontSize: 11 }}
+                    >
                         📸 Launch Camera
                     </Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Large screen — horizontal strip */}
-            {images.length > 0 && isLargeScreen ? (
+            {/* ─── Large web — horizontal strip ─── */}
+            {images.length > 0 && useStrip ? (
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -271,83 +340,23 @@ export default function ProductImagesPicker({
                 </ScrollView>
             ) : null}
 
-            {/* Small screen — 2-column grid */}
-            {images.length > 0 && !isLargeScreen ? (
+            {/* ─── Native + small web — 2-column grid ─── */}
+            {images.length > 0 && !useStrip ? (
                 <View
-                    className="w-full"
                     style={{
+                        width: '100%',
                         flexDirection: 'row',
                         flexWrap: 'wrap',
-                        gap: 12,
+                        gap: GRID_TILE_GAP,
                         paddingVertical: 4,
                     }}
                 >
                     {images.map((uri, index) => (
-                        <View
+                        <GridThumbnail
                             key={`${uri}-${index}`}
-                            style={{
-                                width: '48%',
-                                aspectRatio: 1,
-                            }}
-                        >
-                            <View
-                                style={{
-                                    flex: 1,
-                                    borderColor: theme.primary,
-                                    backgroundColor: isDarkMode
-                                        ? '#0f172a'
-                                        : '#f1f5f9',
-                                }}
-                                className="rounded-xl border overflow-hidden relative"
-                            >
-                                <Image
-                                    source={{ uri }}
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                    }}
-                                    resizeMode="cover"
-                                />
-
-                                <TouchableOpacity
-                                    onPress={() =>
-                                        handleRemoveImage(index)
-                                    }
-                                    activeOpacity={0.7}
-                                    hitSlop={8}
-                                    style={{
-                                        position: 'absolute',
-                                        top: 6,
-                                        right: 6,
-                                        width: 26,
-                                        height: 26,
-                                        borderRadius: 13,
-                                        backgroundColor: '#ef4444',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        shadowColor: '#000',
-                                        shadowOpacity: 0.15,
-                                        shadowRadius: 3,
-                                        shadowOffset: {
-                                            width: 0,
-                                            height: 1,
-                                        },
-                                        elevation: 2,
-                                    }}
-                                >
-                                    <Text
-                                        style={{
-                                            color: '#ffffff',
-                                            fontSize: 12,
-                                            fontWeight: '900',
-                                            lineHeight: 14,
-                                        }}
-                                    >
-                                        ✕
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
+                            uri={uri}
+                            index={index}
+                        />
                     ))}
                 </View>
             ) : null}

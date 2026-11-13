@@ -1,6 +1,7 @@
 // components/wholesalers/inventory/WholesalerReceiptsWebView.tsx
 
-import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
+import type { DimensionValue } from 'react-native';
+import { PaginationBar } from '@/components/common/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
 import { WholesalerReceipt } from '@/databases/types';
 import React, { useMemo, useState } from 'react';
@@ -39,9 +40,9 @@ interface Props {
     sourceTone: 'server' | 'cache' | 'none';
     lastSyncedTime: string;
     items: WholesalerReceipt[];
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
     onPressReceipt: (r: WholesalerReceipt) => void;
-    onSave: (
+    onSave?: (
         draft: WholesalerReceiptDraft,
         mode: 'create' | 'edit'
     ) => Promise<void> | void;
@@ -119,7 +120,7 @@ export function WholesalerReceiptsWebView({
             expiry: '14%',
             flags: '10%',
             actions: '6%',
-        }),
+        }) as const,
         []
     );
 
@@ -453,7 +454,7 @@ export function WholesalerReceiptsWebView({
                 receipt={editing}
                 onClose={() => setEditOpen(false)}
                 onSave={async (draft, mode) => {
-                    await onSave(draft, mode);
+                    await onSave?.(draft, mode);
                     setEditOpen(false);
                 }}
             />
@@ -801,15 +802,16 @@ function MiniBadge({
 /* =========================================================
  * Helpers
  * ======================================================= */
-function formatKES(value: number | null | undefined): string {
-    if (value == null || Number.isNaN(value)) return '0';
-    return Number(value).toLocaleString('en-KE', {
+function formatKES(value: number | string | null | undefined): string {
+    const n = value == null || value === '' ? NaN : Number(value);
+    if (Number.isNaN(n)) return '0';
+    return n.toLocaleString('en-KE', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
     });
 }
 
-function headerStyle(theme: any, width: string) {
+function headerStyle(theme: any, width: DimensionValue) {
     return {
         width,
         color: theme.textDark,
@@ -820,7 +822,7 @@ function headerStyle(theme: any, width: string) {
     };
 }
 
-function cellStyle(theme: any, width: string) {
+function cellStyle(theme: any, width: DimensionValue) {
     return {
         width,
         color: theme.textDark,

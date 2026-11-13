@@ -23,7 +23,7 @@ export function Screen({
         return (
             <SafeAreaView
                 style={{ flex: 1, backgroundColor: theme.background }}
-                edges={["top"]}
+                edges={[]} // insets are applied by the app layout (app/_layout.tsx)
             >
                 <ScrollView
                     className="flex-1"
@@ -41,7 +41,7 @@ export function Screen({
     return (
         <SafeAreaView
             style={{ flex: 1, backgroundColor: theme.background }}
-            edges={["top"]}
+            edges={[]} // insets are applied by the app layout (app/_layout.tsx)
         >
             <View className={`flex-1 ${inner}`}>{children}</View>
         </SafeAreaView>

@@ -11,14 +11,14 @@
 
 import { useCallback, useRef, useState } from 'react';
 
-export interface UseFocusClearParams {
+interface UseFocusClearParams {
     /** The current "real" value (Formik value, controlled value, etc.) */
     value: string;
     /** Called whenever the input should write a new value. */
     setValue: (v: string) => void;
 }
 
-export interface UseFocusClearReturn {
+interface UseFocusClearReturn {
     /** Value the input should display right now. */
     displayValue: string;
     /** Attach to the input's `onFocus`. */

@@ -6,11 +6,10 @@
 
 import type {
     Campaign,
-    CampaignStatus,
     UUID,
 } from "@/components/wholesalers/wholesalerCampaigns/types";
 
-export type { Campaign, CampaignStatus, UUID };
+export type { Campaign, UUID };
 
 // ============================================================================
 // Retailer-safe item — supporting shapes
@@ -114,21 +113,6 @@ export interface RetailerCampaignDetail {
 // One line in the opt-in cart
 // ============================================================================
 
-export interface OptInLine {
-    item_id: UUID;
-    quantity: number;
-}
-
 // ============================================================================
 // Projection returned by ProjectCampaign
 // ============================================================================
-
-export interface CampaignProjection {
-    item_id: string;
-    receipt_id: string;
-    product_title: string;
-    quantity: number;
-    published_unit_price: string;
-    published_bonus_quantity: number;
-    profit_estimate: string;
-}

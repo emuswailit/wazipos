@@ -45,7 +45,7 @@ export interface EntityPickerOption {
     meta?: EntityItem;
 }
 
-export interface EntitiesMultiselectPickerProps {
+interface EntitiesMultiselectPickerProps {
     value: string[];
     onChange: (ids: string[]) => void;
 
@@ -68,6 +68,8 @@ export interface EntitiesMultiselectPickerProps {
 
     emptyText?: string;
     loadingText?: string;
+    /** Caller-controlled loading state, for when `options` is supplied. */
+    loading?: boolean;
     errorText?: string;
     noMatchesText?: string;
 
@@ -110,6 +112,7 @@ export function EntitiesMultiselectPicker({
     onChange,
 
     options: providedOptions,
+    loading: loadingProp = false,
     toOption = DEFAULT_TO_OPTION,
 
     targetIds,
@@ -140,7 +143,7 @@ export function EntitiesMultiselectPicker({
     testID,
 }: EntitiesMultiselectPickerProps) {
     const { theme, isDarkMode } = useAuth();
-    const { allWholesalers, isSyncing } = useEntitiesSync();
+    const { allWholesalers, isEntitiesSyncing: isSyncing } = useEntitiesSync();
 
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
     const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
@@ -332,7 +335,7 @@ export function EntitiesMultiselectPicker({
      * ======================================================= */
     const listBody = (
         <>
-            {isSyncing && baseOptions.length === 0 && !providedOptions ? (
+            {(loadingProp || (isSyncing && !providedOptions)) && baseOptions.length === 0 ? (
                 <View className="p-8 items-center">
                     <ActivityIndicator size="small" color={theme.primary} />
                     <Text
@@ -749,4 +752,3 @@ export function EntitiesMultiselectPicker({
     );
 }
 
-export default EntitiesMultiselectPicker;

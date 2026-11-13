@@ -8,7 +8,6 @@
 //              owns the receipt picker, so no separate pick step.
 // Edit flow:   row's Edit → opens the form modal with existing record.
 
-import { useAlert } from "@/components/common/AlertProvider";
 import { useQuantityDiscountList } from "@/hooks/useDiscounts";
 import { useMemo, useState } from "react";
 import { Platform, useWindowDimensions } from "react-native";
@@ -26,7 +25,6 @@ import type { QuantityDiscount, QuantityDiscountFilter } from "./types";
 const WIDE_BREAKPOINT = 900;
 
 export default function QuantityDiscountsList() {
-    const alert = useAlert();
     const { width } = useWindowDimensions();
 
     const [filter, setFilter] = useState<QuantityDiscountFilter>("ALL");

@@ -1,4 +1,4 @@
-// app/(retailers)/retailerInventory/RetailerInventoryAddModal.tsx
+// end/components/retailers/retailerInventory/RetailerInventoryAddModal.tsx
 
 import retailersApi from '@/api/retailersApi';
 import { DateField } from '@/components/common/DateField';
@@ -23,12 +23,8 @@ import React, {
     useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Keyboard,
-    Modal,
+    Alert, // 🟢 Restored native Alert
     Platform,
-    Pressable,
     ScrollView,
     Text,
     TextInput,
@@ -39,6 +35,7 @@ import {
 } from 'react-native';
 import * as Yup from 'yup';
 
+import { AdminSheet, SheetButton, useSheetIsWide } from '@/components/common/listScreen';
 import ScannerViewfinder from './ScannerViewfinder';
 
 /* =========================================================
@@ -70,9 +67,6 @@ function keyboardProps(
     mode: InputMode
 ): Partial<TextInputProps> {
     if (Platform.OS === 'web') {
-        // inputMode only — no <input type="number">, so the
-        // browser never runs its own numeric parser against
-        // React's controlled value.
         if (mode === 'int') return { inputMode: 'numeric' };
         if (mode === 'decimal') return { inputMode: 'decimal' };
         return {};
@@ -120,8 +114,6 @@ function UniversalInput({
             ? ''
             : String(formikValue);
 
-    /* Local mirror — the input renders from this while focused,
-     * so RN Web never reconciles a stale value mid-edit. */
     const [localValue, setLocalValue] = useState<string>(
         externalValue
     );
@@ -254,12 +246,7 @@ function UniversalInput({
 }
 
 /* =========================================================
- * Locked — module scope only
- *
- * Defining this inside ModalBody creates a new component
- * reference on every render, causing React to unmount and
- * remount the wrapped subtree. That destroys focus and
- * resets TextInput state on every keystroke.
+ * Locked
  * ======================================================= */
 
 function Locked({
@@ -299,6 +286,7 @@ function hasPricingRole(user: any): boolean {
     );
 }
 
+// 🟢 Restored simple notify function
 function notify(title: string, message: string) {
     if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') {
@@ -435,20 +423,10 @@ export default function RetailerInventoryAddModal({
     isOpen,
     onClose,
     onSuccess,
-    isDarkMode,
-    theme,
     inventoryToEdit = null,
 }: RetailerInventoryAddModalProps) {
     const { productsList } = useProductsSync();
     const { entitiesList } = useEntitiesSync();
-
-    const cardStyle = {
-        backgroundColor: theme?.panel ?? '#ffffff',
-        borderColor: isDarkMode ? '#334155' : '#e2e8f0',
-    };
-
-    const cardClassName =
-        'w-full max-w-4xl max-h-[90%] rounded-2xl border overflow-hidden';
 
     const body = isOpen ? (
         <ModalBody
@@ -460,29 +438,7 @@ export default function RetailerInventoryAddModal({
         />
     ) : null;
 
-    return (
-        <Modal
-            visible={isOpen}
-            animationType="slide"
-            transparent
-            statusBarTranslucent
-            onRequestClose={onClose}
-        >
-            <Pressable
-                className="flex-1 items-center justify-center bg-black/60 px-4 md:px-0"
-                onPress={Keyboard.dismiss}
-                style={{ width: '100%' }}
-            >
-                <Pressable
-                    onPress={() => { }}
-                    style={cardStyle}
-                    className={cardClassName}
-                >
-                    {body}
-                </Pressable>
-            </Pressable>
-        </Modal>
-    );
+    return body;
 }
 
 /* =========================================================
@@ -512,7 +468,7 @@ function ModalBody({
     const { isOnline, applyServerReceipt } = useInventorySync();
 
     const writeApi = useApi(
-        retailersApi.retailerReceiptsAdminAction
+        retailersApi.retailerReceiptsAction
     );
 
     const currentUserId = String(user?.id ?? '');
@@ -522,6 +478,7 @@ function ModalBody({
 
     const [isSaving, setIsSaving] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
+    const sheetWide = useSheetIsWide();
     const [hasPermission, setHasPermission] = useState<
         boolean | null
     >(null);
@@ -569,7 +526,8 @@ function ModalBody({
                         inventoryToEdit.manufacture_date ??
                         '',
                     expiry_date:
-                        inventoryToEdit.expiry_date ?? '',
+                        inventoryToEdit.expiry_date ??
+                        '',
                 }
                 : INITIAL_VALUES,
         [inventoryToEdit]
@@ -703,49 +661,77 @@ function ModalBody({
 
                 const res = await writeApi.request(body);
 
+                if (!res?.ok) {
+                    // Log the raw JSON so you can inspect it in the console
+                    console.log('--- RAW SERVER ERROR RESPONSE ---');
+                    if (typeof res?.data === 'object' && res?.data !== null) {
+                        console.dir(res.data, { depth: null });
+                    } else {
+                        console.log(res?.data);
+                    }
+
+                    let errorText = '';
+                    const rawData = res?.data;
+
+                    if (typeof rawData === 'string') {
+                        // Handle raw string errors (like Django 500 errors)
+                        errorText = rawData.split('\n').slice(0, 3).join('\n');
+                        if (errorText.length > 300) {
+                            errorText = errorText.substring(0, 300) + '...';
+                        }
+                    } else if (rawData && typeof rawData === 'object') {
+                        const excludedKeys = ['message', 'response_message', 'errors', 'problem', 'status'];
+                        const errorEntries = Object.entries(rawData).filter(
+                            ([key]) => !excludedKeys.includes(key)
+                        );
+
+                        if (errorEntries.length > 0) {
+                            errorText = errorEntries
+                                .map(([key, val]) => {
+                                    const message = Array.isArray(val) ? val.join(', ') : String(val);
+                                    return `${key}: ${message}`;
+                                })
+                                .join('\n');
+                        }
+                    }
+
+                    if (!errorText) {
+                        const responseErrors = res?.data?.errors ?? null;
+                        const responseMessage = res?.data?.response_message ?? res?.data?.message ?? null;
+
+                        if (responseErrors) {
+                            if (Array.isArray(responseErrors)) {
+                                errorText = responseErrors
+                                    .map((e: any) =>
+                                        typeof e === 'string'
+                                            ? e
+                                            : e?.message ??
+                                            e?.detail ??
+                                            JSON.stringify(e)
+                                    )
+                                    .join('\n');
+                            } else if (typeof responseErrors === 'object') {
+                                errorText = Object.entries(responseErrors)
+                                    .map(([k, v]) => `${k}: ${String(v)}`)
+                                    .join('\n');
+                            } else {
+                                errorText = String(responseErrors);
+                            }
+                        }
+
+                        if (!errorText) {
+                            errorText = responseMessage || res?.problem || 'Server rejected the request.';
+                        }
+                    }
+
+                    notify('Save Failed', errorText);
+                    return;
+                }
+
                 const responseMessage =
                     res?.data?.response_message ??
                     res?.data?.message ??
                     null;
-                const responseErrors = res?.data?.errors ?? null;
-
-                if (!res?.ok) {
-                    let errorText = '';
-                    if (responseErrors) {
-                        if (Array.isArray(responseErrors)) {
-                            errorText = responseErrors
-                                .map((e: any) =>
-                                    typeof e === 'string'
-                                        ? e
-                                        : e?.message ??
-                                        e?.detail ??
-                                        JSON.stringify(e)
-                                )
-                                .join('\n');
-                        } else if (
-                            typeof responseErrors === 'object'
-                        ) {
-                            errorText = Object.entries(
-                                responseErrors
-                            )
-                                .map(
-                                    ([k, v]) =>
-                                        `${k}: ${String(v)}`
-                                )
-                                .join('\n');
-                        } else {
-                            errorText = String(responseErrors);
-                        }
-                    }
-                    if (!errorText) {
-                        errorText =
-                            responseMessage ||
-                            res?.problem ||
-                            'Server rejected the request.';
-                    }
-                    notify('Save Failed', errorText);
-                    return;
-                }
 
                 if (responseMessage) {
                     notify('Saved', String(responseMessage));
@@ -780,8 +766,7 @@ function ModalBody({
                 );
                 notify(
                     'Save Failed',
-                    err?.message ||
-                    'Unexpected error. Please try again.'
+                    err?.message || 'Unexpected error. Please try again.'
                 );
             } finally {
                 setIsSaving(false);
@@ -803,18 +788,8 @@ function ModalBody({
     const formik = useFormik({
         initialValues: formInitialValues,
         validationSchema,
-        enableReinitialize: true,
         onSubmit: handleSubmit,
     });
-
-    useEffect(() => {
-        if (inventoryToEdit) {
-            formik.setValues(formInitialValues);
-        } else {
-            formik.resetForm();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventoryToEdit]);
 
     const openScanner = async () => {
         if (Platform.OS !== 'web') {
@@ -872,7 +847,6 @@ function ModalBody({
         }, 400);
     };
 
-    const subB = isDarkMode ? '#334155' : '#f1f5f9';
     const saveButtonBg =
         theme?.primary ?? FALLBACK_THEME.primary;
 
@@ -891,480 +865,335 @@ function ModalBody({
 
     return (
         <FormikProvider value={formik}>
-            <View className="w-full max-h-full flex-col">
-                {/* Header */}
-                <View
-                    style={{ borderColor: subB }}
-                    className="w-full flex-row items-center justify-between border-b px-5 py-4"
-                >
-                    <View className="flex-1 min-w-0">
-                        <Text
-                            style={{ color: theme.text }}
-                            className="text-base font-black tracking-tight"
-                        >
-                            {isEdit
-                                ? 'Edit Inventory Item'
-                                : 'Add New Inventory Item'}
-                        </Text>
-                        <Text
-                            style={{ color: theme.textDark }}
-                            className="text-[11px] mt-0.5"
-                        >
-                            {isEdit
-                                ? bannerText
-                                : 'Saved online · Synced automatically'}
-                        </Text>
-                    </View>
-
-                    <TouchableOpacity
-                        onPress={onClose}
-                        disabled={isSaving}
-                        className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 items-center justify-center active:opacity-70"
-                    >
-                        <Text
-                            style={{ color: theme.textDark }}
-                            className="text-xs font-bold"
-                        >
-                            ✕
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Form body */}
-                <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{
-                        paddingHorizontal: 20,
-                        paddingTop: 16,
-                        paddingBottom: 24,
-                    }}
-                    style={{ flexGrow: 0, flexShrink: 1 }}
-                    className="w-full"
-                >
-                    <View className="w-full gap-y-4">
-                        {errorEntries.length > 0 ? (
-                            <View
-                                className="rounded-xl px-3 py-2"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(239,68,68,0.10)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        'rgba(239,68,68,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#ef4444',
-                                        fontFamily: theme.font.bold,
-                                        fontSize: 11,
-                                        marginBottom: 4,
-                                    }}
-                                >
-                                    Please fix the following:
-                                </Text>
-                                {errorEntries.map(([k, v]) => (
-                                    <Text
-                                        key={k}
-                                        style={{
-                                            color: '#ef4444',
-                                            fontFamily:
-                                                theme.font.medium,
-                                            fontSize: 11,
-                                        }}
-                                    >
-                                        • {k}: {String(v)}
-                                    </Text>
-                                ))}
-                            </View>
-                        ) : null}
-
-                        {isEdit && bannerText ? (
-                            <View
-                                className="rounded-xl px-3 py-2"
-                                style={{
-                                    backgroundColor: `${theme.primary}15`,
-                                    borderWidth: 1,
-                                    borderColor: `${theme.primary}33`,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.primary,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    {bannerText}
-                                </Text>
-                            </View>
-                        ) : null}
-
-                        {/* PRODUCT */}
+            <AdminSheet
+                visible
+                onClose={isSaving ? () => {} : onClose}
+                title={isEdit ? 'Edit inventory item' : 'Add inventory item'}
+                subtitle={isEdit ? bannerText || 'Update batch, stock and pricing' : 'Saved online · Synced automatically'}
+                icon={isEdit ? 'create-outline' : 'add-circle-outline'}
+                width={880}
+                scroll={false}
+                dismissible={!isSaving}
+                footer={
+                    <>
+                        <SheetButton label="Cancel" variant="secondary" onPress={onClose} disabled={isSaving} grow={!sheetWide} />
+                        <SheetButton
+                            label={isEdit ? 'Update item' : 'Save item'}
+                            icon="checkmark"
+                            onPress={() => formik.handleSubmit()}
+                            loading={isSaving}
+                            grow={!sheetWide}
+                        />
+                    </>
+                }
+            >
+            {/* Form body */}
+            <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{
+                    paddingHorizontal: 20,
+                    paddingTop: 16,
+                    paddingBottom: 24,
+                }}
+                style={{ flexGrow: 0, flexShrink: 1 }}
+                className="w-full"
+            >
+                <View className="w-full gap-y-4">
+                    {errorEntries.length > 0 ? (
                         <View
-                            className="w-full"
-                            style={{ zIndex: 100 }}
-                        >
-                            <Locked isEdit={isEdit}>
-                                <ProductPickerAutocomplete
-                                    name="product"
-                                    fieldMap={{
-                                        id: 'product',
-                                        title: 'product_title',
-                                        bar_code: 'bar_code',
-                                        thumbnail_url:
-                                            'thumbnail_url',
-                                    }}
-                                    products={products}
-                                    label="Product"
-                                    required
-                                    disabled={isEdit}
-                                    placeholder="Search products…"
-                                    debounceMs={250}
-                                    maxDropdownHeight={320}
-                                    testID="inventory.product"
-                                />
-                            </Locked>
-                        </View>
-
-                        {/* RECEIVED FROM */}
-                        <View
-                            className="w-full"
-                            style={{ zIndex: 90 }}
-                        >
-                            <Locked isEdit={isEdit}>
-                                <EntityAutocomplete
-                                    name="received_from"
-                                    fieldMap={{
-                                        id: 'received_from',
-                                        title: 'received_from_title',
-                                    }}
-                                    entities={entities}
-                                    entityTypes={[
-                                        'GeneralWholesaler',
-                                    ]}
-                                    disabled={isEdit}
-                                    label="Received From (optional)"
-                                    placeholder="Search wholesalers…"
-                                    testID="inventory.received_from"
-                                />
-                            </Locked>
-                        </View>
-
-                        {/* UNIT / QTY / BUY PRICE */}
-                        <View className="w-full flex-col md:flex-row gap-3 items-start">
-                            <View className="w-full md:flex-1">
-                                <Locked isEdit={isEdit}>
-                                    <SelectDropdown
-                                        name="unit_of_receipt"
-                                        label="Unit of Receipt"
-                                        required
-                                        options={
-                                            UNIT_OF_RECEIPT_OPTIONS
-                                        }
-                                        placeholder="Select unit..."
-                                        disabled={isEdit}
-                                    />
-                                </Locked>
-                            </View>
-
-                            <View className="w-full md:flex-1">
-                                <Locked isEdit={isEdit}>
-                                    <UniversalInput
-                                        name="unit_quantity"
-                                        formik={formik}
-                                        theme={theme}
-                                        isDarkMode={isDarkMode}
-                                        label="Qty"
-                                        required
-                                        mode="int"
-                                        editable={!isEdit}
-                                        placeholder="Enter quantity"
-                                    />
-                                </Locked>
-                            </View>
-
-                            <View className="w-full md:flex-1">
-                                <Locked
-                                    isEdit={isEdit}
-                                    allow={canEditPricing}
-                                >
-                                    <UniversalInput
-                                        name="unit_buying_price"
-                                        formik={formik}
-                                        theme={theme}
-                                        isDarkMode={isDarkMode}
-                                        label="Unit Buying Price"
-                                        required
-                                        mode="decimal"
-                                        editable={canEditPricing}
-                                        placeholder="0.00"
-                                    />
-                                </Locked>
-                            </View>
-                        </View>
-
-                        {/* SELL PRICE / DISCOUNT / BARCODE / BATCH */}
-                        <View className="w-full flex-col md:flex-row gap-3 items-start">
-                            <View className="w-full md:flex-1">
-                                <Locked
-                                    isEdit={isEdit}
-                                    allow={canEditPricing}
-                                >
-                                    <UniversalInput
-                                        name="unit_selling_price"
-                                        formik={formik}
-                                        theme={theme}
-                                        isDarkMode={isDarkMode}
-                                        label="Unit Selling Price"
-                                        required
-                                        mode="decimal"
-                                        editable={canEditPricing}
-                                        placeholder="0.00"
-                                    />
-                                </Locked>
-                            </View>
-
-                            <View className="w-full md:flex-1">
-                                <Locked
-                                    isEdit={isEdit}
-                                    allow={canEditPricing}
-                                >
-                                    <UniversalInput
-                                        name="unit_price_discount"
-                                        formik={formik}
-                                        theme={theme}
-                                        isDarkMode={isDarkMode}
-                                        label="Unit Discount"
-                                        mode="decimal"
-                                        editable={canEditPricing}
-                                        placeholder="0.00"
-                                    />
-                                </Locked>
-                            </View>
-
-                            <View className="w-full md:flex-1">
-                                <UniversalInput
-                                    name="bar_code"
-                                    formik={formik}
-                                    theme={theme}
-                                    isDarkMode={isDarkMode}
-                                    label="Barcode"
-                                    mode="text"
-                                    autoCapitalize="none"
-                                    placeholder="Optional barcode..."
-                                    rightAdornment={
-                                        <TouchableOpacity
-                                            onPress={openScanner}
-                                            activeOpacity={0.7}
-                                            style={{
-                                                backgroundColor:
-                                                    saveButtonBg,
-                                                width: 36,
-                                                height: 36,
-                                                borderRadius: 10,
-                                                alignItems:
-                                                    'center',
-                                                justifyContent:
-                                                    'center',
-                                            }}
-                                            accessibilityRole="button"
-                                            accessibilityLabel="Scan barcode"
-                                        >
-                                            <Text
-                                                style={{
-                                                    color: '#ffffff',
-                                                    fontSize: 16,
-                                                }}
-                                            >
-                                                📷
-                                            </Text>
-                                        </TouchableOpacity>
-                                    }
-                                />
-
-                                {isScanning && (
-                                    <View className="mt-3">
-                                        <ScannerViewfinder
-                                            isScanning={isScanning}
-                                            hasPermission={
-                                                hasPermission
-                                            }
-                                            scanned={scanned}
-                                            onBarcodeScanned={
-                                                handleBarcodeScanned
-                                            }
-                                            onCancel={closeScanner}
-                                        />
-                                    </View>
-                                )}
-                            </View>
-
-                            <View className="w-full md:flex-1">
-                                <UniversalInput
-                                    name="batch"
-                                    formik={formik}
-                                    theme={theme}
-                                    isDarkMode={isDarkMode}
-                                    label="Batch Ref No."
-                                    mode="text"
-                                    autoCapitalize="characters"
-                                    placeholder="Optional batch code..."
-                                />
-                            </View>
-                        </View>
-
-                        {/* DATES */}
-                        <View className="w-full flex-col md:flex-row gap-3 items-start">
-                            <View className="w-full md:flex-1">
-                                <DateField
-                                    name="manufacture_date"
-                                    label="Manufacture Date"
-                                    placeholder="YYYY-MM-DD"
-                                />
-                            </View>
-
-                            <View className="w-full md:flex-1">
-                                <DateField
-                                    name="expiry_date"
-                                    label="Expiry Date"
-                                    placeholder="YYYY-MM-DD"
-                                />
-                            </View>
-                        </View>
-                    </View>
-                </ScrollView>
-
-                {/* Footer */}
-                <View
-                    style={{
-                        borderColor: isDarkMode
-                            ? '#334155'
-                            : '#f1f5f9',
-                        backgroundColor: isDarkMode
-                            ? '#1e293b'
-                            : '#f8fafc',
-                    }}
-                    className="w-full border-t flex-row items-center justify-end px-5 py-3.5"
-                >
-                    {Platform.OS === 'web' ? (
-                        <div
-                            role="button"
-                            aria-disabled={isSaving}
-                            onClick={(e: any) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (isSaving) return;
-                                onClose();
-                            }}
+                            className="rounded-xl px-3 py-2"
                             style={{
-                                cursor: isSaving
-                                    ? 'not-allowed'
-                                    : 'pointer',
-                                userSelect: 'none',
-                                WebkitUserSelect: 'none',
-                                opacity: isSaving ? 0.5 : 1,
+                                backgroundColor:
+                                    'rgba(239,68,68,0.10)',
+                                borderWidth: 1,
+                                borderColor:
+                                    'rgba(239,68,68,0.35)',
                             }}
-                        >
-                            <View className="px-4 h-10 rounded-xl items-center justify-center border border-gray-200 dark:border-slate-700">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                    }}
-                                    className="text-xs font-bold uppercase tracking-wider"
-                                >
-                                    Cancel
-                                </Text>
-                            </View>
-                        </div>
-                    ) : (
-                        <TouchableOpacity
-                            disabled={isSaving}
-                            onPress={onClose}
-                            activeOpacity={0.7}
-                            className="px-4 h-10 rounded-xl items-center justify-center border border-gray-200 dark:border-slate-700"
                         >
                             <Text
                                 style={{
-                                    color: theme.textDark,
+                                    color: '#ef4444',
+                                    fontFamily: theme.font.bold,
+                                    fontSize: 11,
+                                    marginBottom: 4,
                                 }}
-                                className="text-xs font-bold uppercase tracking-wider"
                             >
-                                Cancel
+                                Please fix the following:
                             </Text>
-                        </TouchableOpacity>
-                    )}
-
-                    {Platform.OS === 'web' ? (
-                        <div
-                            role="button"
-                            aria-disabled={isSaving}
-                            onClick={(e: any) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (isSaving) return;
-                                formik.handleSubmit();
-                            }}
-                            style={{
-                                marginLeft: 12,
-                                cursor: isSaving
-                                    ? 'not-allowed'
-                                    : 'pointer',
-                                userSelect: 'none',
-                                WebkitUserSelect: 'none',
-                            }}
-                        >
-                            <View
-                                style={{
-                                    backgroundColor: saveButtonBg,
-                                    opacity: isSaving ? 0.7 : 1,
-                                }}
-                                className="px-5 h-10 rounded-xl flex-row items-center justify-center"
-                            >
-                                {isSaving ? (
-                                    <ActivityIndicator
-                                        size="small"
-                                        color="#ffffff"
-                                    />
-                                ) : (
-                                    <Text className="text-xs font-black text-white uppercase tracking-wide">
-                                        {isEdit
-                                            ? 'Update Entry'
-                                            : 'Save Entry'}
-                                    </Text>
-                                )}
-                            </View>
-                        </div>
-                    ) : (
-                        <TouchableOpacity
-                            disabled={isSaving}
-                            onPress={() => formik.handleSubmit()}
-                            activeOpacity={0.7}
-                            style={{
-                                backgroundColor: saveButtonBg,
-                                marginLeft: 12,
-                                opacity: isSaving ? 0.7 : 1,
-                            }}
-                            className="px-5 h-10 rounded-xl flex-row items-center justify-center"
-                        >
-                            {isSaving ? (
-                                <ActivityIndicator
-                                    size="small"
-                                    color="#ffffff"
-                                />
-                            ) : (
-                                <Text className="text-xs font-black text-white uppercase tracking-wide">
-                                    {isEdit
-                                        ? 'Update Entry'
-                                        : 'Save Entry'}
+                            {errorEntries.map(([k, v]) => (
+                                <Text
+                                    key={k}
+                                    style={{
+                                        color: '#ef4444',
+                                        fontFamily:
+                                            theme.font.medium,
+                                        fontSize: 11,
+                                    }}
+                                >
+                                    • {k}: {String(v)}
                                 </Text>
+                            ))}
+                        </View>
+                    ) : null}
+
+                    {isEdit && bannerText ? (
+                        <View
+                            className="rounded-xl px-3 py-2"
+                            style={{
+                                backgroundColor: `${theme.primary}15`,
+                                borderWidth: 1,
+                                borderColor: `${theme.primary}33`,
+                            }}
+                        >
+                            <Text
+                                style={{
+                                    color: theme.primary,
+                                    fontFamily: theme.font.bold,
+                                    fontSize: 11,
+                                }}
+                            >
+                                {bannerText}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {/* PRODUCT */}
+                    <View
+                        className="w-full"
+                        style={{ zIndex: 100 }}
+                    >
+                        <Locked isEdit={isEdit}>
+                            <ProductPickerAutocomplete
+                                name="product"
+                                fieldMap={{
+                                    id: 'product',
+                                    title: 'product_title',
+                                    bar_code: 'bar_code',
+                                    thumbnail_url:
+                                        'thumbnail_url',
+                                }}
+                                products={products}
+                                label="Product"
+                                required
+                                disabled={isEdit}
+                                placeholder="Search products…"
+                                debounceMs={250}
+                                maxDropdownHeight={320}
+                                testID="inventory.product"
+                            />
+                        </Locked>
+                    </View>
+
+                    {/* RECEIVED FROM */}
+                    <View
+                        className="w-full"
+                        style={{ zIndex: 90 }}
+                    >
+                        <Locked isEdit={isEdit}>
+                            <EntityAutocomplete
+                                name="received_from"
+                                fieldMap={{
+                                    id: 'received_from',
+                                    title: 'received_from_title',
+                                }}
+                                entities={entities}
+                                entityTypes={[
+                                    'GeneralWholesaler',
+                                ]}
+                                disabled={isEdit}
+                                label="Received From (optional)"
+                                placeholder="Search wholesalers…"
+                                testID="inventory.received_from"
+                            />
+                        </Locked>
+                    </View>
+
+                    {/* UNIT / QTY / BUY PRICE */}
+                    <View className="w-full flex-col md:flex-row gap-3 items-start">
+                        <View className="w-full md:flex-1">
+                            <Locked isEdit={isEdit}>
+                                <SelectDropdown
+                                    name="unit_of_receipt"
+                                    label="Unit of Receipt"
+                                    required
+                                    options={
+                                        UNIT_OF_RECEIPT_OPTIONS
+                                    }
+                                    placeholder="Select unit..."
+                                    disabled={isEdit}
+                                />
+                            </Locked>
+                        </View>
+
+                        <View className="w-full md:flex-1">
+                            <Locked isEdit={isEdit}>
+                                <UniversalInput
+                                    name="unit_quantity"
+                                    formik={formik}
+                                    theme={theme}
+                                    isDarkMode={isDarkMode}
+                                    label="Qty"
+                                    required
+                                    mode="int"
+                                    editable={!isEdit}
+                                    placeholder="Enter quantity"
+                                />
+                            </Locked>
+                        </View>
+
+                        <View className="w-full md:flex-1">
+                            <Locked
+                                isEdit={isEdit}
+                                allow={canEditPricing}
+                            >
+                                <UniversalInput
+                                    name="unit_buying_price"
+                                    formik={formik}
+                                    theme={theme}
+                                    isDarkMode={isDarkMode}
+                                    label="Unit Buying Price"
+                                    required
+                                    mode="decimal"
+                                    editable={canEditPricing}
+                                    placeholder="0.00"
+                                />
+                            </Locked>
+                        </View>
+                    </View>
+
+                    {/* SELL PRICE / DISCOUNT / BARCODE / BATCH */}
+                    <View className="w-full flex-col md:flex-row gap-3 items-start">
+                        <View className="w-full md:flex-1">
+                            <Locked
+                                isEdit={isEdit}
+                                allow={canEditPricing}
+                            >
+                                <UniversalInput
+                                    name="unit_selling_price"
+                                    formik={formik}
+                                    theme={theme}
+                                    isDarkMode={isDarkMode}
+                                    label="Unit Selling Price"
+                                    required
+                                    mode="decimal"
+                                    editable={canEditPricing}
+                                    placeholder="0.00"
+                                />
+                            </Locked>
+                        </View>
+
+                        <View className="w-full md:flex-1">
+                            <Locked
+                                isEdit={isEdit}
+                                allow={canEditPricing}
+                            >
+                                <UniversalInput
+                                    name="unit_price_discount"
+                                    formik={formik}
+                                    theme={theme}
+                                    isDarkMode={isDarkMode}
+                                    label="Unit Discount"
+                                    mode="decimal"
+                                    editable={canEditPricing}
+                                    placeholder="0.00"
+                                />
+                            </Locked>
+                        </View>
+
+                        <View className="w-full md:flex-1">
+                            <UniversalInput
+                                name="bar_code"
+                                formik={formik}
+                                theme={theme}
+                                isDarkMode={isDarkMode}
+                                label="Barcode"
+                                mode="text"
+                                autoCapitalize="none"
+                                placeholder="Optional barcode..."
+                                rightAdornment={
+                                    <TouchableOpacity
+                                        onPress={openScanner}
+                                        activeOpacity={0.7}
+                                        style={{
+                                            backgroundColor:
+                                                saveButtonBg,
+                                            width: 36,
+                                            height: 36,
+                                            borderRadius: 10,
+                                            alignItems:
+                                                'center',
+                                            justifyContent:
+                                                'center',
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Scan barcode"
+                                    >
+                                        <Text
+                                            style={{
+                                                color: '#ffffff',
+                                                fontSize: 16,
+                                            }}
+                                        >
+                                            📷
+                                        </Text>
+                                    </TouchableOpacity>
+                                }
+                            />
+
+                            {isScanning && (
+                                <View className="mt-3">
+                                    <ScannerViewfinder
+                                        isScanning={isScanning}
+                                        hasPermission={
+                                            hasPermission
+                                        }
+                                        scanned={scanned}
+                                        onBarcodeScanned={
+                                            handleBarcodeScanned
+                                        }
+                                        onCancel={closeScanner}
+                                    />
+                                </View>
                             )}
-                        </TouchableOpacity>
-                    )}
+                        </View>
+
+                        <View className="w-full md:flex-1">
+                            <UniversalInput
+                                name="batch"
+                                formik={formik}
+                                theme={theme}
+                                isDarkMode={isDarkMode}
+                                label="Batch Ref No."
+                                mode="text"
+                                autoCapitalize="characters"
+                                placeholder="Optional batch code..."
+                            />
+                        </View>
+                    </View>
+
+                    {/* DATES */}
+                    <View className="w-full flex-col md:flex-row gap-3 items-start">
+                        <View className="w-full md:flex-1">
+                            <DateField
+                                name="manufacture_date"
+                                label="Manufacture Date"
+                                placeholder="YYYY-MM-DD"
+                            />
+                        </View>
+
+                        <View className="w-full md:flex-1">
+                            <DateField
+                                name="expiry_date"
+                                label="Expiry Date"
+                                placeholder="YYYY-MM-DD"
+                            />
+                        </View>
+                    </View>
                 </View>
-            </View>
+            </ScrollView>
+            </AdminSheet>
         </FormikProvider>
     );
 }

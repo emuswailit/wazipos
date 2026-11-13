@@ -1,21 +1,7 @@
 // components/common/SelectDropdown.tsx
-//
-// Universal single-select dropdown.
-// - Native: inline dropdown, elevation 24
-// - Web: portal into document.body so nothing can paint over it
-// - Formik-aware via `name`
-// - Opaque background
-// - NativeWind layout, useAuth() colors
-
 import { useAuth } from '@/context/AuthContext';
 import { useFormikContext } from 'formik';
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Platform,
     Pressable,
@@ -26,19 +12,11 @@ import {
     type ViewStyle,
 } from 'react-native';
 
-/* ---- Web-only portal (safe require) ---- */
 let ReactDOM: any = null;
 if (Platform.OS === 'web') {
-    try {
-        ReactDOM = require('react-dom');
-    } catch {
-        ReactDOM = null;
-    }
+    try { ReactDOM = require('react-dom'); } catch { ReactDOM = null; }
 }
 
-/* =========================================================
- * Types
- * ======================================================= */
 export interface SelectOption {
     value: string;
     label?: string;
@@ -46,7 +24,7 @@ export interface SelectOption {
     disabled?: boolean;
 }
 
-export interface SelectDropdownProps {
+interface SelectDropdownProps {
     options: SelectOption[];
     name?: string;
     transform?: (v: string) => any;
@@ -63,97 +41,47 @@ export interface SelectDropdownProps {
     testID?: string;
 }
 
-/* =========================================================
- * Component
- * ======================================================= */
 export function SelectDropdown({
-    options,
-    name,
-    transform,
-    value: controlledValue,
-    onChange: controlledOnChange,
-    error: controlledError,
-    label,
-    placeholder = 'Select…',
-    helperText,
-    required,
-    disabled,
-    maxHeight = 200,
-    style,
-    testID,
+    options, name, transform, value: controlledValue, onChange: controlledOnChange, error: controlledError,
+    label, placeholder = 'Select…', helperText, required, disabled, maxHeight = 200, style, testID,
 }: SelectDropdownProps) {
     const { theme, isDarkMode } = useAuth();
     const formik = useFormikContext<any>();
     const isFormik = !!name && !!formik;
 
-    const value: string = isFormik
-        ? ((formik.values?.[name!] as string) ?? '')
-        : controlledValue ?? '';
-
+    const value: string = isFormik ? ((formik.values?.[name!] as string) ?? '') : controlledValue ?? '';
     const fieldError: string | undefined = isFormik
-        ? formik.touched?.[name!] && formik.errors?.[name!]
-            ? String(formik.errors[name!])
-            : undefined
+        ? formik.touched?.[name!] && formik.errors?.[name!] ? String(formik.errors[name!]) : undefined
         : controlledError;
 
-    const selectedOption = useMemo(
-        () => options.find((o) => o.value === value) ?? null,
-        [options, value]
-    );
+    const selectedOption = useMemo(() => options.find((o) => o.value === value) ?? null, [options, value]);
+    const displayLabel = selectedOption?.label ?? selectedOption?.value ?? '';
 
-    const displayLabel =
-        selectedOption?.label ?? selectedOption?.value ?? '';
-
-    /* -------- Theme tokens -------- */
     const danger = '#ef4444';
-    const borderColor = fieldError
-        ? danger
-        : isDarkMode
-            ? '#475569'
-            : '#cbd5e1';
-    const inputBg = isDarkMode ? '#1e293b' : '#f8fafc';
+    const borderColor = fieldError ? danger : isDarkMode ? 'rgba(148,163,184,0.18)' : 'rgba(15,23,42,0.10)';
+    const inputBg = isDarkMode ? '#0f172a' : theme.surface;
     const dropdownBg = isDarkMode ? '#0f172a' : '#ffffff';
     const dropdownBorder = isDarkMode ? '#334155' : '#cbd5e1';
     const hoverBg = isDarkMode ? '#1e293b' : '#f1f5f9';
-    const dividerColor = isDarkMode
-        ? 'rgba(51,65,85,0.6)'
-        : '#e2e8f0';
+    const dividerColor = isDarkMode ? 'rgba(51,65,85,0.6)' : '#e2e8f0';
 
-    /* -------- State -------- */
     const [open, setOpen] = useState(false);
-    const [anchor, setAnchor] = useState({
-        x: 0,
-        y: 0,
-        width: 0,
-    });
+    const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0 });
 
     const triggerRef = useRef<any>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
 
-    /* -------- Measure trigger (web) -------- */
     const measure = useCallback(() => {
         if (Platform.OS !== 'web') return;
         const node: any = triggerRef.current;
         if (!node) return;
-
         const el: HTMLElement | null =
-            (typeof node.getScrollableNode === 'function'
-                ? node.getScrollableNode()
-                : null) ??
-            (typeof node.getNode === 'function'
-                ? node.getNode()
-                : null) ??
+            (typeof node.getScrollableNode === 'function' ? node.getScrollableNode() : null) ??
+            (typeof node.getNode === 'function' ? node.getNode() : null) ??
             (node instanceof HTMLElement ? node : null);
-
-        if (!el || typeof el.getBoundingClientRect !== 'function')
-            return;
-
+        if (!el || typeof el.getBoundingClientRect !== 'function') return;
         const r = el.getBoundingClientRect();
-        setAnchor({
-            x: r.left,
-            y: r.bottom,
-            width: r.width,
-        });
+        setAnchor({ x: r.left, y: r.bottom, width: r.width });
     }, []);
 
     const toggle = () => {
@@ -163,12 +91,10 @@ export function SelectDropdown({
         } else {
             measure();
             setOpen(true);
-            // re-measure after layout settles
             requestAnimationFrame(measure);
         }
     };
 
-    /* -------- Re-measure while open (web) -------- */
     useEffect(() => {
         if (Platform.OS !== 'web' || !open) return;
         const handler = () => measure();
@@ -180,7 +106,6 @@ export function SelectDropdown({
         };
     }, [open, measure]);
 
-    /* -------- Value writer -------- */
     const setValue = (next: string) => {
         const v = transform ? transform(next) : next;
         if (isFormik) {
@@ -197,67 +122,37 @@ export function SelectDropdown({
         setOpen(false);
     };
 
-    /* -------- Click outside closes (web) -------- */
     useEffect(() => {
         if (Platform.OS !== 'web' || !open) return;
         if (typeof document === 'undefined') return;
-
         const onDown = (ev: MouseEvent) => {
             const node: any = triggerRef.current;
             const triggerEl: HTMLElement | null =
-                (typeof node?.getScrollableNode === 'function'
-                    ? node.getScrollableNode()
-                    : null) ??
-                (typeof node?.getNode === 'function'
-                    ? node.getNode()
-                    : null);
+                (typeof node?.getScrollableNode === 'function' ? node.getScrollableNode() : null) ??
+                (typeof node?.getNode === 'function' ? node.getNode() : null);
             const target = ev.target as Node;
             const insideTrigger = triggerEl?.contains(target);
             const insideMenu = menuRef.current?.contains(target);
             if (!insideTrigger && !insideMenu) setOpen(false);
         };
         document.addEventListener('mousedown', onDown);
-        return () =>
-            document.removeEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
     }, [open]);
 
-    /* =========================================================
-     * Menu content — shared
-     * ======================================================= */
     const MenuContent = (
         <View
-            className="rounded-xl border overflow-hidden"
+            className="rounded-lg border overflow-hidden"
             style={{
-                maxHeight,
-                backgroundColor: dropdownBg,
-                borderColor: dropdownBorder,
+                maxHeight, backgroundColor: dropdownBg, borderColor: dropdownBorder,
                 ...(Platform.OS === 'web'
-                    ? ({
-                        boxShadow:
-                            '0 12px 32px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.1)',
-                    } as any)
-                    : {
-                        elevation: 24,
-                        shadowColor: '#000',
-                        shadowOpacity: 0.25,
-                        shadowRadius: 16,
-                        shadowOffset: { width: 0, height: 8 },
-                    }),
+                    ? ({ boxShadow: '0 12px 32px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.1)' } as any)
+                    : { elevation: 24, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }),
             }}
         >
-            <ScrollView
-                keyboardShouldPersistTaps="handled"
-                style={{ backgroundColor: dropdownBg }}
-            >
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ backgroundColor: dropdownBg }}>
                 {options.length === 0 ? (
-                    <View className="py-5 px-4 items-center">
-                        <Text
-                            className="text-xs"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                            }}
-                        >
+                    <View className="py-4 px-3 items-center">
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
                             No options available
                         </Text>
                     </View>
@@ -280,33 +175,12 @@ export function SelectDropdown({
         </View>
     );
 
-    /* =========================================================
-     * Portal (web only)
-     * ======================================================= */
     let portal: any = null;
-    if (
-        Platform.OS === 'web' &&
-        open &&
-        !disabled &&
-        ReactDOM &&
-        typeof document !== 'undefined' &&
-        anchor.width > 0
-    ) {
+    if (Platform.OS === 'web' && open && !disabled && ReactDOM && typeof document !== 'undefined' && anchor.width > 0) {
         portal = ReactDOM.createPortal(
             <div
-                ref={(el: HTMLDivElement | null) => {
-                    menuRef.current = el;
-                }}
-                style={{
-                    position: 'fixed',
-                    top: anchor.y + 4,
-                    left: anchor.x,
-                    width: anchor.width,
-                    // Max 32-bit signed int; nothing in the app can beat it
-                    zIndex: 2147483647,
-                    // Own stacking context so nothing paints over
-                    isolation: 'isolate',
-                }}
+                ref={(el: HTMLDivElement | null) => { menuRef.current = el; }}
+                style={{ position: 'fixed', top: anchor.y + 4, left: anchor.x, width: anchor.width, zIndex: 2147483647, isolation: 'isolate' }}
             >
                 {MenuContent}
             </div>,
@@ -314,189 +188,117 @@ export function SelectDropdown({
         );
     }
 
-    /* =========================================================
-     * Render
-     * ======================================================= */
     return (
         <>
-            <View
-                testID={testID}
-                className="w-full relative"
-                style={style}
-            >
-                {/* Label */}
+            <View testID={testID} className="w-full relative" style={style}>
                 {label ? (
-                    <View className="flex-row items-center mb-1.5">
+                    <View className="flex-row items-center mb-1">
                         <Text
-                            className="uppercase tracking-wider text-[10px] font-bold"
                             style={{
                                 color: theme.textDark,
                                 fontFamily: theme.font.bold,
+                                fontSize: 10,
+                                letterSpacing: 0.5,
+                                textTransform: 'uppercase',
+                                paddingHorizontal: 2
                             }}
                         >
                             {label}
                         </Text>
                         {required ? (
-                            <Text
-                                className="text-[10px] ml-1 font-bold"
-                                style={{
-                                    color: danger,
-                                    fontFamily: theme.font.bold,
-                                }}
-                            >
+                            <Text style={{ color: danger, fontFamily: theme.font.bold, fontSize: 10, marginLeft: 4 }}>
                                 *
                             </Text>
                         ) : null}
                     </View>
                 ) : null}
 
-                {/* Trigger */}
                 <Pressable
                     ref={triggerRef as any}
                     onPress={toggle}
-                    className="w-full px-3.5 h-11 rounded-xl border flex-row justify-between items-center"
+                    className="w-full px-[10px] rounded-lg border flex-row justify-between items-center"
                     style={{
                         backgroundColor: inputBg,
                         borderColor,
                         opacity: disabled ? 0.55 : 1,
+                        minHeight: 38,
+                        height: 38
                     }}
                 >
                     <Text
-                        className="text-sm flex-1"
+                        className="flex-1"
                         numberOfLines={1}
                         style={{
-                            color: displayLabel
-                                ? theme.text
-                                : '#94a3b8',
+                            color: displayLabel ? theme.text : '#94a3b8',
                             fontFamily: theme.font.medium,
+                            fontSize: 12
                         }}
                     >
                         {displayLabel || placeholder}
                     </Text>
-                    <Text
-                        className="text-[10px] ml-2"
-                        style={{ color: theme.textDark }}
-                    >
+                    <Text style={{ color: theme.textDark, fontSize: 10, marginLeft: 8 }}>
                         {open ? '▲' : '▼'}
                     </Text>
                 </Pressable>
 
-                {/* Native-only inline menu */}
                 {Platform.OS !== 'web' && open && !disabled ? (
-                    <View
-                        className="absolute left-0 right-0 top-[68px]"
-                        style={{ zIndex: 9999 }}
-                    >
+                    <View className="absolute left-0 right-0 top-[42px]" style={{ zIndex: 9999 }}>
                         {MenuContent}
                     </View>
                 ) : null}
 
-                {/* Error / helper */}
                 {fieldError ? (
-                    <Text
-                        className="text-[10px] pl-1 mt-1 font-bold"
-                        style={{
-                            color: danger,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
+                    <Text style={{ color: danger, fontFamily: theme.font.bold, fontSize: 10, paddingLeft: 2, marginTop: 4 }}>
                         {fieldError}
                     </Text>
                 ) : helperText ? (
-                    <Text
-                        className="text-[10px] pl-1 mt-1"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            opacity: 0.75,
-                        }}
-                    >
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 10, paddingLeft: 2, marginTop: 4, opacity: 0.75 }}>
                         {helperText}
                     </Text>
                 ) : null}
             </View>
-
             {portal}
         </>
     );
 }
 
-/* =========================================================
- * Option row
- * ======================================================= */
-function OptionRow({
-    option,
-    active,
-    disabledRow,
-    hoverBg,
-    dividerColor,
-    opaqueBg,
-    primary,
-    onPress,
-}: {
-    option: SelectOption;
-    active: boolean;
-    disabledRow: boolean;
-    hoverBg: string;
-    dividerColor: string;
-    opaqueBg: string;
-    primary: string;
-    onPress: () => void;
-}) {
+function OptionRow({ option, active, disabledRow, hoverBg, dividerColor, opaqueBg, primary, onPress }: any) {
     const { theme } = useAuth();
     const [hovered, setHovered] = useState(false);
     const [pressed, setPressed] = useState(false);
 
     const highlighted = (hovered || pressed) && !disabledRow;
-
-    const rowBg = active
-        ? primary
-        : highlighted
-            ? hoverBg
-            : opaqueBg;
+    const rowBg = active ? primary : highlighted ? hoverBg : opaqueBg;
 
     return (
         <Pressable
             onPress={onPress}
             onPressIn={() => setPressed(true)}
             onPressOut={() => setPressed(false)}
-            onHoverIn={
-                Platform.OS === 'web'
-                    ? () => setHovered(true)
-                    : undefined
-            }
-            onHoverOut={
-                Platform.OS === 'web'
-                    ? () => setHovered(false)
-                    : undefined
-            }
-            className="w-full px-3 py-2.5 border-b flex-row items-center justify-between"
-            style={{
-                borderBottomColor: dividerColor,
-                backgroundColor: rowBg,
-                opacity: disabledRow ? 0.5 : 1,
-            }}
+            onHoverIn={Platform.OS === 'web' ? () => setHovered(true) : undefined}
+            onHoverOut={Platform.OS === 'web' ? () => setHovered(false) : undefined}
+            className="w-full px-3 py-2 border-b flex-row items-center justify-between"
+            style={{ borderBottomColor: dividerColor, backgroundColor: rowBg, opacity: disabledRow ? 0.5 : 1 }}
         >
             <View className="flex-1 min-w-0">
                 <Text
-                    className="text-xs font-bold"
                     numberOfLines={1}
                     style={{
                         color: active ? '#ffffff' : theme.text,
-                        fontFamily: theme.font.bold,
+                        fontFamily: theme.font.medium, // 🌟 Removed bold
+                        fontSize: 12
                     }}
                 >
                     {option.label ?? option.value}
                 </Text>
                 {option.description ? (
                     <Text
-                        className="text-[10px] mt-[1px]"
                         numberOfLines={1}
                         style={{
-                            color: active
-                                ? 'rgba(255,255,255,0.85)'
-                                : theme.textDark,
+                            color: active ? 'rgba(255,255,255,0.85)' : theme.textDark,
                             fontFamily: theme.font.medium,
+                            fontSize: 10,
+                            marginTop: 1
                         }}
                     >
                         {option.description}
@@ -504,9 +306,7 @@ function OptionRow({
                 ) : null}
             </View>
             {active ? (
-                <Text className="ml-2 text-[11px] text-white">
-                    ✓
-                </Text>
+                <Text style={{ marginLeft: 8, fontSize: 10, color: '#ffffff' }}>✓</Text>
             ) : null}
         </Pressable>
     );

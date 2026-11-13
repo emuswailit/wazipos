@@ -1,523 +1,202 @@
 // hooks/useRecordPayment.ts
-//
-// Payment submission hook — generic across retailer and customer
-// order payment flows. Callers pass a `RecordPaymentConfig` that
-// names the initiate action, the status-check action, the order
-// parameter key, and which API client to invoke.
-//
-// Payment methods come from PaymentMethodsSyncContext — this hook
-// does not fetch them itself.
 
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
-
+import retailerPrescriptionsApi from '@/api/retailerPrescriptionsApi';
 import retailersApi from '@/api/retailersApi';
 import { usePaymentMethodsSync } from '@/context/PaymentMethodsSyncContext';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-/* =========================================================
- * Config
- * ======================================================= */
-
-export interface RecordPaymentConfig {
-    /** Initiate action name, e.g. 'MakeRetailerOrderPayment'. */
-    paymentAction: string;
-    /** Poll action name, e.g. 'CheckRetailerOrderPaymentStatus'. */
-    statusAction: string;
-    /** Order param key, e.g. 'retailer_order' | 'customer_order'. */
-    orderParamKey: string;
-    /** Which API client method to invoke. */
-    api: 'retailStaff' | 'retailerOrders';
+export interface BuildPaymentPayloadContext {
+    orderId: string;
+    selectedMethod: PaymentMethod;
+    mobileNumber: string;
+    isMobileMoney: boolean;
+    orderItems?: any[];
+    paymentDetails?: any;
 }
 
-export const RETAILER_PAYMENT_CONFIG: RecordPaymentConfig = {
-    paymentAction: 'MakeRetailerOrderPayment',
-    statusAction: 'CheckRetailerOrderPaymentStatus',
-    orderParamKey: 'retailer_order',
-    api: 'retailStaff',
-};
-
-export const CUSTOMER_PAYMENT_CONFIG: RecordPaymentConfig = {
-    paymentAction: 'MakeCustomerOrderPayment',
-    statusAction: 'CheckCustomerOrderPaymentStatus',
-    orderParamKey: 'customer_order',
-    api: 'retailerOrders',
-};
-
-/* =========================================================
- * Shapes
- * ======================================================= */
+export interface RecordPaymentConfig {
+    paymentAction: string;
+    statusAction: string;
+    orderParamKey: string;
+    api: 'retailStaff' | 'retailClient' | 'retailOrders' | 'retailPrescriptions';
+    buildPaymentPayload?: (ctx: BuildPaymentPayloadContext) => Record<string, any>;
+    buildPaymentStatusWsUrl?: (referenceNumber: string) => string;
+    /** Only offer these payment method titles (e.g. ['MOBILE MONEY']). Omit = all active methods. */
+    allowedMethodTitles?: string[];
+}
 
 export interface PaymentMethod {
     id: string;
     title: string;
-    psp?: string;
     [key: string]: any;
 }
 
-export interface RetailerPaymentPollingResponse {
-    response_code: string | null;
-    response_message: string | null;
-    errors: any;
-}
-
-export interface PaymentStatusCheckResult {
-    state: 'PENDING' | 'SUCCESS' | 'FAILED';
-    response_code: string | null;
-    response_message: string | null;
-    errors: any;
-    raw: any;
-}
-
-export interface UseRecordPaymentResult {
+interface UseRecordPaymentResult {
     paymentMethods: PaymentMethod[];
     selectedMethod: PaymentMethod | null;
     setSelectedMethod: (m: PaymentMethod | null) => void;
     mobileNumber: string;
     setMobileNumber: (v: string) => void;
-
     isLoadingMethods: boolean;
     isSubmitting: boolean;
     errorMessage: string | null;
     clearError: () => void;
-
-    isPollingOpen: boolean;
-    pollingResponse: RetailerPaymentPollingResponse | null;
-    pollingError: string | null;
-    checkPaymentStatus: () => Promise<PaymentStatusCheckResult>;
-    closePolling: () => void;
-
-    submit: () => Promise<void>;
+    submit: (overrideCtx?: { orderItems?: any[]; paymentDetails?: any }) => Promise<any>;
 }
 
-/* =========================================================
- * Constants
- * ======================================================= */
+export const CUSTOMER_ORDER_PAYMENT_CONFIG: RecordPaymentConfig = {
+    paymentAction: 'MakeCustomerOrderPayment',
+    statusAction: 'CheckCustomerOrderPaymentStatus',
+    orderParamKey: 'customer_order',
+    api: 'retailOrders',
+    buildPaymentPayload: (ctx) => {
+        return {
+            action: 'MakeCustomerOrderPayment',
+            customer_order: ctx.orderId,
+            payment_method: String(ctx.selectedMethod.id),
+            mobile_money_phone: ctx.mobileNumber || '',
+        };
+    },
+    buildPaymentStatusWsUrl: (ref) => `wss://api.wazipos.co.ke/ws/retailers/orders/payment/${ref}/`,
+};
 
-const MOBILE_MONEY_TITLE = 'MOBILE MONEY';
+export const CUSTOMER_PAYMENT_CONFIG: RecordPaymentConfig = {
+    paymentAction: 'CreateCustomerOrder',
+    statusAction: 'CheckCustomerOrderPaymentStatus',
+    orderParamKey: 'draft_id',
+    api: 'retailStaff',
+    buildPaymentPayload: (ctx) => {
+        const { orderId, selectedMethod, mobileNumber, orderItems, paymentDetails } = ctx;
+        const safeOrderItems = (orderItems || []).map((item: any) => ({
+            retailer_receipt: String(item.retailer_receipt || item.selectedProduct || ''),
+            purchased_quantity: Number(item.purchased_quantity || item.quantity || 1),
+            unit_selling_price: Number(item.unit_selling_price || item.price || 0),
+            final_unit_selling_price: Number(item.final_unit_selling_price || item.price || 0),
+            item_discount: Number(item.item_discount || item.discount || 0),
+        }));
+        return {
+            action: 'CreateCustomerOrder',
+            customer_order_details: {
+                draft_id: orderId,
+                payment_method: String(selectedMethod.id),
+                payment_account_number: mobileNumber || '',
+                customer_name: paymentDetails?.customerName || 'Walk-in Customer',
+                customer_phone: paymentDetails?.customerPhone || mobileNumber || '',
+                order_channel: 'WEB',
+                order_origin: 'WEB',
+                delivery_method: paymentDetails?.deliveryMethod || 'SELF',
+                shipping_amount: "0.00",
+                order_items: safeOrderItems,
+            }
+        };
+    },
+    buildPaymentStatusWsUrl: (ref) => `wss://api.wazipos.co.ke/ws/retailers/orders/payment/${ref}/`,
+};
 
-/* =========================================================
- * Helpers
- * ======================================================= */
-
-function extractResponseMessage(res: any): string | null {
-    const data = res?.data ?? res;
-    if (!data) return null;
-
-    if (Array.isArray(data.errors) && data.errors.length > 0) {
-        return data.errors
-            .map((e: any) =>
-                typeof e === 'string' ? e : JSON.stringify(e)
-            )
-            .join(' · ');
-    }
-    if (typeof data.response_message === 'string') {
-        return data.response_message;
-    }
-    if (typeof data.message === 'string') {
-        return data.message;
-    }
-    if (typeof data.detail === 'string') {
-        return data.detail;
-    }
-    return null;
-}
-
-function extractThrownMessage(e: any): string {
-    if (!e) return 'Unexpected error.';
-
-    if (e.code === 'ECONNABORTED') {
-        return 'Request timed out. Check your connection.';
-    }
-    if (e.name === 'AbortError' || e.name === 'CanceledError') {
-        return 'Request was cancelled.';
-    }
-
-    const fromBody = extractResponseMessage(e?.response);
-    if (fromBody) return fromBody;
-
-    if (e?.message === 'Network Error' || e?.code === 'ERR_NETWORK') {
-        return 'Could not reach the server.';
-    }
-    if (typeof e === 'string') return e;
-    if (e?.message) return String(e.message);
-
-    return 'Unexpected error.';
-}
-
-function isResponseOk(res: any): boolean {
-    if (!res) return false;
-
-    const code = res?.data?.response_code;
-    if (code !== undefined && code !== null) {
-        return String(code) === '0';
-    }
-    if (res.status === 201) return true;
-    if (res.data?.success === true) return true;
-    if (res.ok === true && res.status === 200) return true;
-    return false;
-}
-
-function extractPollingResponse(
-    res: any
-): RetailerPaymentPollingResponse {
-    const data = res?.data ?? res ?? {};
-
-    const response_code =
-        data?.response_code !== undefined &&
-            data?.response_code !== null
-            ? String(data.response_code)
-            : null;
-
-    const response_message =
-        typeof data?.response_message === 'string'
-            ? data.response_message
-            : null;
-
-    const errors =
-        data?.errors !== undefined && data?.errors !== null
-            ? data.errors
-            : null;
-
-    return {
-        response_code,
-        response_message,
-        errors,
-    };
-}
-
-function classifyStatusCheck(res: any): PaymentStatusCheckResult {
-    const data = res?.data ?? res ?? {};
-
-    const response_code =
-        data?.response_code !== undefined &&
-            data?.response_code !== null
-            ? String(data.response_code)
-            : null;
-
-    const response_message =
-        typeof data?.response_message === 'string'
-            ? data.response_message
-            : null;
-
-    const errors =
-        data?.errors !== undefined && data?.errors !== null
-            ? data.errors
-            : null;
-
-    const statusRaw = String(
-        data?.status ?? data?.payment_status ?? ''
-    )
-        .trim()
-        .toUpperCase();
-
-    const SUCCESS_TOKENS = new Set([
-        'SUCCESS',
-        'PAID',
-        'COMPLETED',
-        'COMPLETE',
-        'CONFIRMED',
-        'SETTLED',
-    ]);
-
-    const FAILED_TOKENS = new Set([
-        'FAILED',
-        'FAILURE',
-        'CANCELLED',
-        'CANCELED',
-        'REJECTED',
-        'DECLINED',
-        'TIMEOUT',
-        'EXPIRED',
-        'ABORTED',
-    ]);
-
-    let state: PaymentStatusCheckResult['state'] = 'PENDING';
-
-    if (SUCCESS_TOKENS.has(statusRaw)) {
-        state = 'SUCCESS';
-    } else if (FAILED_TOKENS.has(statusRaw)) {
-        state = 'FAILED';
-    } else if (data?.is_paid === true) {
-        state = 'SUCCESS';
-    } else if (response_code !== null && response_code !== '0') {
-        state = 'FAILED';
-    }
-
-    return {
-        state,
-        response_code,
-        response_message,
-        errors,
-        raw: res,
-    };
-}
-
-/* =========================================================
- * Hook
- * ======================================================= */
+/** Customer pays the priced items of a digitized prescription (its PROCESSING order). orderId = prescription id. */
+export const PRESCRIPTION_ORDER_PAYMENT_CONFIG: RecordPaymentConfig = {
+    paymentAction: 'MakePrescriptionOrderPayment',
+    statusAction: 'CheckCustomerOrderPaymentStatus',
+    orderParamKey: 'prescription',
+    api: 'retailPrescriptions',
+    // Remote prescription purchases: mobile money only (enforced by the backend too).
+    allowedMethodTitles: ['MOBILE MONEY'],
+    buildPaymentPayload: (ctx) => ({
+        action: 'MakePrescriptionOrderPayment',
+        prescription: ctx.orderId,
+        payment_method: String(ctx.selectedMethod.id),
+        mobile_money_phone: ctx.mobileNumber || '',
+    }),
+    buildPaymentStatusWsUrl: (ref) => `wss://api.wazipos.co.ke/ws/retailers/orders/payment/${ref}/`,
+};
 
 export function useRecordPayment(
     orderId: string,
-    config: RecordPaymentConfig = RETAILER_PAYMENT_CONFIG,
-    onSuccess: () => void
+    config: RecordPaymentConfig = CUSTOMER_ORDER_PAYMENT_CONFIG,
 ): UseRecordPaymentResult {
-    /* ---------------- Methods from context ---------------- */
+    const { paymentMethodsList, isPaymentSyncing } = usePaymentMethodsSync();
 
-    const {
-        paymentMethodsList,
-        isPaymentSyncing,
-        triggerPaymentMethodsFetch,
-    } = usePaymentMethodsSync();
+    const allowed = config.allowedMethodTitles;
+    const paymentMethods = useMemo(
+        () => paymentMethodsList
+            .filter((m) => m.active !== false)
+            .filter((m) => !allowed || allowed.includes(String(m.title)))
+            .map((m) => ({ id: String(m.id), title: String(m.title) })),
+        [paymentMethodsList, allowed]
+    );
 
-    /* Nudge the context if it's cold and empty. */
+    const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
+    // A single allowed method (e.g. mobile money for prescriptions) is pre-selected.
     useEffect(() => {
-        if (paymentMethodsList.length === 0) {
-            void triggerPaymentMethodsFetch();
-        }
-    }, [
-        paymentMethodsList.length,
-        triggerPaymentMethodsFetch,
-    ]);
-
-    /* Adapt context items to the shape this hook and its views use. */
-    const paymentMethods: PaymentMethod[] = useMemo(
-        () =>
-            paymentMethodsList
-                .filter((m) => m.active !== false)
-                .map((m) => ({
-                    id: String(m.id),
-                    title: String(m.title),
-                })),
-        [paymentMethodsList]
-    );
-
-    /* ---------------- Local state ---------------- */
-
-    const [selectedMethod, setSelectedMethod] =
-        useState<PaymentMethod | null>(null);
+        if (!selectedMethod && paymentMethods.length === 1) setSelectedMethod(paymentMethods[0]);
+    }, [paymentMethods, selectedMethod]);
     const [mobileNumber, setMobileNumber] = useState('');
-    const [errorMessage, setErrorMessage] = useState<string | null>(
-        null
-    );
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isPollingOpen, setIsPollingOpen] = useState(false);
-    const [pollingResponse, setPollingResponse] =
-        useState<RetailerPaymentPollingResponse | null>(null);
-    const [pollingError, setPollingError] = useState<string | null>(
-        null
-    );
 
-    const checkoutIdRef = useRef<string | null>(null);
+    const callApi = useCallback(async (payload: any) => {
+        if (config.api === 'retailOrders') return retailersApi.retailOrdersAction(payload);
+        if (config.api === 'retailStaff') return retailersApi.retailStaffAction(payload);
+        if (config.api === 'retailPrescriptions') return retailerPrescriptionsApi.makePrescriptionOrderPaymentAction(payload);
+        return retailersApi.clientOrdersAction(payload);
+    }, [config.api]);
 
-    /* ---------------- API ---------------- */
-
-    const callApi = useCallback(
-        async (payload: any) => {
-            if (config.api === 'retailStaff') {
-                return retailersApi.retailStaffAction(payload);
-            }
-            return retailersApi.retailerOrdersAction(payload);
-        },
-        [config.api]
-    );
-
-    /* ---------------- Transient helpers ---------------- */
-
-    const clearError = useCallback(() => {
+    const submit = useCallback(async (overrideCtx?: { orderItems?: any[]; paymentDetails?: any }) => {
         setErrorMessage(null);
-    }, []);
-
-    const closePolling = useCallback(() => {
-        setIsPollingOpen(false);
-        setPollingResponse(null);
-        setPollingError(null);
-        checkoutIdRef.current = null;
-    }, []);
-
-    /* ---------------- Status check ---------------- */
-
-    const checkPaymentStatus = useCallback(
-        async (): Promise<PaymentStatusCheckResult> => {
-            const requestPayload: Record<string, any> = {
-                action: config.statusAction,
-                [config.orderParamKey]: orderId,
-            };
-
-            if (checkoutIdRef.current) {
-                requestPayload.checkout_request_id =
-                    checkoutIdRef.current;
-            }
-
-            if (__DEV__) {
-                console.log(
-                    '[useRecordPayment] checkPaymentStatus →',
-                    requestPayload
-                );
-            }
-
-            try {
-                const res: any = await callApi(requestPayload);
-
-
-                if (__DEV__) {
-                    console.log(
-                        '[checkPaymentStatus] raw response',
-                        {
-                            data: res?.data,
-                            keys: res?.data ? Object.keys(res.data) : null,
-                            status: res?.data?.status,
-                            payment_status: res?.data?.payment_status,
-                            is_paid: res?.data?.is_paid,
-                            response_code: res?.data?.response_code,
-                        }
-                    );
-                }
-                if (__DEV__) {
-                    console.log(
-                        '[useRecordPayment] checkPaymentStatus ←',
-                        res
-                    );
-                }
-
-                return classifyStatusCheck(res);
-            } catch (e: any) {
-                const msg = extractThrownMessage(e);
-
-                if (__DEV__) {
-                    console.error(
-                        '[useRecordPayment] checkPaymentStatus threw',
-                        e,
-                        msg
-                    );
-                }
-
-                return {
-                    state: 'PENDING',
-                    response_code: null,
-                    response_message: msg,
-                    errors: null,
-                    raw: e,
-                };
-            }
-        },
-        [orderId, config.statusAction, config.orderParamKey, callApi]
-    );
-
-    /* ---------------- Submit ---------------- */
-
-    const submit = useCallback(async () => {
-        setErrorMessage(null);
-        setPollingResponse(null);
-        setPollingError(null);
-        checkoutIdRef.current = null;
-
         if (!selectedMethod) {
             setErrorMessage('Select a settlement method.');
-            return;
-        }
-
-        const isMobileMoney =
-            selectedMethod.title === MOBILE_MONEY_TITLE;
-
-        if (isMobileMoney && !mobileNumber.trim()) {
-            setIsPollingOpen(true);
-            setPollingResponse(null);
-            setPollingError('Enter the M-Pesa phone number.');
-            return;
-        }
-
-        const requestPayload: Record<string, any> = {
-            action: config.paymentAction,
-            payment_method: String(selectedMethod.id),
-            mobile_money_phone: isMobileMoney
-                ? mobileNumber.trim()
-                : '',
-            [config.orderParamKey]: orderId,
-        };
-
-        if (__DEV__) {
-            console.log(
-                '[useRecordPayment] submit →',
-                requestPayload
-            );
+            throw new Error('Select a settlement method.');
         }
 
         setIsSubmitting(true);
         try {
+            const requestPayload = config.buildPaymentPayload
+                ? config.buildPaymentPayload({
+                    orderId,
+                    selectedMethod,
+                    mobileNumber,
+                    isMobileMoney: selectedMethod.title === 'MOBILE MONEY',
+                    orderItems: overrideCtx?.orderItems || [],
+                    paymentDetails: overrideCtx?.paymentDetails || {},
+                })
+                : {
+                    action: config.paymentAction,
+                    payment_method: String(selectedMethod.id),
+                    mobile_money_phone: selectedMethod.title === 'MOBILE MONEY' ? mobileNumber.trim() : '',
+                    [config.orderParamKey]: orderId,
+                };
+
             const res: any = await callApi(requestPayload);
 
-            if (__DEV__) {
-                console.log(
-                    '[useRecordPayment] ← response',
-                    res
-                );
-            }
+            console.log("💰 [useRecordPayment] API RESPONSE:", res);
 
-            const success = isResponseOk(res);
-            const structured = extractPollingResponse(res);
+            if (String(res?.data?.response_code) === '0') {
+                const returnedOrder = res.data.customer_order || {};
+                const newReferenceNumber = returnedOrder.reference_number;
 
-            /* ---------------- Mobile money ---------------- */
-            if (isMobileMoney) {
-                const data = res?.data ?? res ?? {};
-                checkoutIdRef.current =
-                    data?.checkout_request_id ??
-                    data?.merchant_request_id ??
-                    data?.payment_id ??
-                    data?.retailer_order_payment?.id ??
-                    data?.retailer_order_payment?.remote_id ??
-                    data?.customer_order_payment?.id ??
-                    data?.customer_order_payment?.remote_id ??
-                    null;
+                if (!newReferenceNumber) {
+                    throw new Error("Backend failed to generate a payment reference number.");
+                }
 
-                setIsPollingOpen(true);
-                setPollingResponse(structured);
-                setPollingError(null);
-                return;
-            }
-
-            /* ---------------- Traditional ---------------- */
-            if (success) {
-                onSuccess();
+                return {
+                    ...res.data,
+                    extracted_reference_number: newReferenceNumber
+                };
             } else {
-                setErrorMessage(
-                    structured.response_message ??
-                    extractResponseMessage(res) ??
-                    'Payment was declined.'
-                );
+                const backendError =
+                    res?.data?.errors?.join(' · ') ||
+                    res?.data?.response_message ||
+                    'Payment initiation failed.';
+                throw new Error(backendError);
             }
         } catch (e: any) {
-            const msg = extractThrownMessage(e);
-
-            if (__DEV__) {
-                console.error('[useRecordPayment] threw', e, msg);
-            }
-
-            if (isMobileMoney) {
-                setIsPollingOpen(true);
-                setPollingResponse(null);
-                setPollingError(msg);
-            } else {
-                setErrorMessage(msg);
-            }
+            console.error("💥 [useRecordPayment] CATCH BLOCK ERROR:", e);
+            setErrorMessage(e?.message || 'Network error occurred.');
+            throw e;
         } finally {
             setIsSubmitting(false);
         }
-    }, [
-        selectedMethod,
-        mobileNumber,
-        orderId,
-        config.paymentAction,
-        config.orderParamKey,
-        callApi,
-        onSuccess,
-    ]);
-
-    /* ---------------- Return ---------------- */
+    }, [selectedMethod, mobileNumber, orderId, config, callApi]);
 
     return {
         paymentMethods,
@@ -528,12 +207,7 @@ export function useRecordPayment(
         isLoadingMethods: isPaymentSyncing,
         isSubmitting,
         errorMessage,
-        clearError,
-        isPollingOpen,
-        pollingResponse,
-        pollingError,
-        checkPaymentStatus,
-        closePolling,
+        clearError: () => setErrorMessage(null),
         submit,
     };
 }

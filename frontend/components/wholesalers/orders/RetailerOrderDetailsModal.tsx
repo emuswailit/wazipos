@@ -1,5 +1,6 @@
 // components/wholesalers/orders/RetailerOrderDetailsModal.tsx
 
+import { isTrueFlag } from '@/utils/flags';
 import { useAuth } from '@/context/AuthContext';
 import type {
     RetailerOrder,
@@ -275,7 +276,7 @@ export function RetailerOrderDetailsModal({
                                     tone="success"
                                 />
                             ) : null}
-                            {order.is_paid === 'true' ? (
+                            {isTrueFlag(order.is_paid) ? (
                                 <MiniBadge
                                     label="Paid"
                                     tone="success"
@@ -369,7 +370,7 @@ export function RetailerOrderDetailsModal({
                             />
                             <KeyValue
                                 label="Draft ID"
-                                value={order.draft_id}
+                                value={order.draft_id ?? "—"}
                                 mono
                             />
                             {order.reference_number ? (

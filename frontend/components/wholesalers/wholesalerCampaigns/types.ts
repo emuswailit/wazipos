@@ -146,14 +146,3 @@ export interface CampaignAudience {
 // ============================================================================
 // Pagination envelope
 // ============================================================================
-
-export interface PaginatedResponse<T> {
-    count: number;
-    next: string | null;
-    previous: string | null;
-    results: T[];
-}
-
-export type CampaignListResponse = PaginatedResponse<Campaign>;
-export type CampaignItemListResponse = PaginatedResponse<CampaignItem>;
-export type CampaignAudienceListResponse = PaginatedResponse<CampaignAudience>;

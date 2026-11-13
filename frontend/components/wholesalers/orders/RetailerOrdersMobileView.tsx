@@ -42,7 +42,7 @@ interface Props {
 }
 
 function rowKey(o: RetailerOrder): string {
-    return o.remote_id || o.draft_id;
+    return o.remote_id || o.draft_id || "";
 }
 
 export default function RetailerOrdersMobileView(
@@ -373,4 +373,4 @@ function OrderCard({
 /* ------------------------------------------------ */
 /* Imports that were truncated above                */
 /* ------------------------------------------------ */
-import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
+import { PaginationBar } from '@/components/common/PaginationBar';

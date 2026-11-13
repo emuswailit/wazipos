@@ -1,19 +1,10 @@
 // components/common/CustomAutocompletePicker.tsx
-//
-// Generic inline autocomplete picker for any list of { id, title }
-// options.
-//
-// Formik-native: consumes `useField(name)` so callers only need
-// to pass a `name` matching their Formik field.
-//
-// The open picker is elevated above all siblings via a dynamic
-// zIndex. Dropdown closes on input blur (with a delay so item
-// clicks register first).
 
 import { useField } from "formik";
 import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    Platform,
     Pressable,
     ScrollView,
     Text,
@@ -25,7 +16,7 @@ import {
  * Types
  * ======================================================= */
 
-export interface AutocompleteOption {
+interface AutocompleteOption {
     id: string;
     title: string;
 }
@@ -47,6 +38,14 @@ interface Props {
 }
 
 /* =========================================================
+ * Universal input metrics (Matched to CustomTextField)
+ * ======================================================= */
+const FONT_SIZE = 12;
+const LINE_HEIGHT = 16;
+const HORIZONTAL_PADDING = 10;
+const MIN_INPUT_HEIGHT = 38;
+
+/* =========================================================
  * Component
  * ======================================================= */
 
@@ -62,11 +61,12 @@ export default function CustomAutocompletePicker({
     loadingPlaceholder = "Loading options...",
     emptyText = "No options available.",
     noMatchText = "No matches.",
-    dropdownMaxHeight = 180,
+    dropdownMaxHeight = 200,
     onAfterSelect,
 }: Props) {
     const [field, meta, helpers] = useField<string>(name);
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [focused, setFocused] = useState(false);
     const [search, setSearch] = useState("");
 
     const value = field.value || "";
@@ -74,8 +74,10 @@ export default function CustomAutocompletePicker({
     const errorText =
         typeof meta.error === "string" ? meta.error : undefined;
 
+    /* ── Sync initialTitle → search (loop-safe) ───────────── */
     useEffect(() => {
-        setSearch(initialTitle || "");
+        const next = initialTitle || "";
+        setSearch((prev) => (prev === next ? prev : next));
     }, [initialTitle]);
 
     const filtered = useMemo(() => {
@@ -95,150 +97,218 @@ export default function CustomAutocompletePicker({
     };
 
     const handleBlur = () => {
-        // Delay so a click on a dropdown item registers before
-        // the blur-driven close fires.
+        setFocused(false);
         setTimeout(() => {
             setDropdownOpen(false);
         }, 200);
     };
+
+    const baseDelimiter = isDarkMode
+        ? "rgba(148,163,184,0.18)"
+        : "rgba(15,23,42,0.10)";
+    const focusDelimiter = isDarkMode
+        ? "rgba(148,163,184,0.28)"
+        : "rgba(15,23,42,0.20)";
+
+    const inputBorderColor = hasError
+        ? "#ef4444"
+        : focused || dropdownOpen
+            ? focusDelimiter
+            : baseDelimiter;
 
     return (
         <View
             className="items-start w-full"
             style={{
                 position: "relative",
-                zIndex: dropdownOpen ? 9999 : 0,
+                zIndex: dropdownOpen ? 9999 : 1,
+                ...(dropdownOpen
+                    ? ({ isolation: "isolate" } as any)
+                    : null),
             }}
         >
-            {/* Field label */}
-            <Text
-                style={{ color: theme.textDark }}
-                className="text-[10px] uppercase font-black tracking-wider mb-1"
-            >
-                {label}
-            </Text>
-
-            {/* Search input */}
-            <TextInput
-                onFocus={() => setDropdownOpen(true)}
-                onBlur={handleBlur}
-                onChangeText={(txt) => {
-                    setSearch(txt);
-                    setDropdownOpen(true);
-                }}
-                value={search}
-                placeholder={
-                    loading ? loadingPlaceholder : placeholder
-                }
-                placeholderTextColor="#64748b"
-                style={{
-                    backgroundColor: theme.background,
-                    borderColor: hasError
-                        ? "#ef4444"
-                        : theme.border,
-                    color: theme.text,
-                }}
-                className="w-full rounded-xl px-4 h-[42px] border text-sm font-medium outline-none"
-            />
-
-            {/* Error text */}
-            {hasError && errorText && (
-                <Text className="text-red-500 text-[11px] font-semibold mt-1">
-                    {errorText}
-                </Text>
-            )}
-
-            {/* Dropdown */}
-            {dropdownOpen && (
-                <View
+            {label ? (
+                <Text
                     style={{
-                        position: "absolute",
-                        top: 68,
-                        left: 0,
-                        right: 0,
-                        backgroundColor: theme.panel,
-                        borderColor: theme.border,
-                        borderWidth: 1,
-                        borderRadius: 12,
-                        maxHeight: dropdownMaxHeight,
-                        overflow: "hidden",
-                        zIndex: 9999,
-                        // @ts-ignore — web-only shadow
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                        color: theme.textDark,
+                        fontFamily: theme.font?.bold,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        paddingHorizontal: 2,
+                        marginBottom: 4,
                     }}
                 >
-                    <ScrollView
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled={true}
+                    {label}
+                </Text>
+            ) : null}
+
+            <View style={{ width: "100%", position: "relative" }}>
+                <TextInput
+                    onFocus={() => {
+                        setFocused(true);
+                        setDropdownOpen(true);
+                    }}
+                    onBlur={handleBlur}
+                    onChangeText={(txt) => {
+                        setSearch(txt);
+                        setDropdownOpen(true);
+                    }}
+                    value={search}
+                    placeholder={
+                        loading ? loadingPlaceholder : placeholder
+                    }
+                    placeholderTextColor={
+                        isDarkMode ? "#64748b" : "#94a3b8"
+                    }
+                    // ✅ Single line to match CustomTextField exactly
+                    multiline={false}
+                    style={{
+                        backgroundColor: isDarkMode
+                            ? "#0f172a"
+                            : theme.surface ?? theme.background,
+                        borderColor: inputBorderColor,
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        color: theme.text,
+                        minHeight: MIN_INPUT_HEIGHT,
+                        paddingHorizontal: HORIZONTAL_PADDING,
+                        paddingVertical: 0, // Let height dictate
+                        textAlign: "left",
+                        textAlignVertical: "center",
+                        fontSize: FONT_SIZE,
+                        lineHeight: LINE_HEIGHT,
+                        ...(Platform.OS === "web"
+                            ? ({
+                                outlineStyle: "none",
+                            } as any)
+                            : {}),
+                    }}
+                />
+
+                {dropdownOpen && (
+                    <View
+                        style={{
+                            position: "absolute",
+                            top: "100%",
+                            left: 0,
+                            right: 0,
+                            marginTop: 4,
+                            backgroundColor: theme.panel,
+                            borderColor: baseDelimiter,
+                            borderWidth: 1,
+                            borderRadius: 8,
+                            maxHeight: dropdownMaxHeight,
+                            overflow: "hidden",
+                            zIndex: 9999,
+                            elevation: 20,
+                            // @ts-ignore — web-only
+                            boxShadow: isDarkMode
+                                ? "0 8px 24px rgba(0,0,0,0.35)"
+                                : "0 8px 24px rgba(15,23,42,0.08)",
+                        }}
                     >
-                        {loading ? (
-                            <View className="p-4 items-center">
-                                <ActivityIndicator
-                                    size="small"
-                                    color={theme.primary}
-                                />
-                            </View>
-                        ) : filtered.length === 0 ? (
-                            <View className="p-4">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                    }}
-                                    className="text-xs font-medium text-center"
-                                >
-                                    {options.length === 0
-                                        ? emptyText
-                                        : noMatchText}
-                                </Text>
-                            </View>
-                        ) : (
-                            <View className="flex-col">
-                                {filtered.map((item) => {
-                                    const isSelected =
-                                        value === item.id;
-                                    return (
-                                        <Pressable
-                                            key={item.id}
-                                            onPress={() =>
-                                                handlePick(
-                                                    item.id,
-                                                    item.title
-                                                )
-                                            }
-                                            style={({
-                                                pressed,
-                                            }) => ({
-                                                backgroundColor:
-                                                    pressed
-                                                        ? isDarkMode
-                                                            ? "#1e293b"
-                                                            : "#f1f5f9"
-                                                        : "transparent",
-                                                borderBottomColor:
-                                                    theme.border,
-                                            })}
-                                            className="px-4 py-3 border-b"
-                                        >
-                                            <Text
-                                                style={{
-                                                    color: isSelected
-                                                        ? theme.primary
-                                                        : theme.text,
-                                                }}
-                                                className={`text-xs ${isSelected
-                                                        ? "font-black"
-                                                        : "font-medium"
-                                                    }`}
+                        <ScrollView
+                            style={{ flex: 1 }}
+                            contentContainerStyle={{
+                                paddingVertical: 2,
+                            }}
+                            keyboardShouldPersistTaps="handled"
+                            nestedScrollEnabled={true}
+                            showsVerticalScrollIndicator={true}
+                        >
+                            {loading ? (
+                                <View className="p-4 items-center">
+                                    <ActivityIndicator
+                                        size="small"
+                                        color={theme.primary}
+                                    />
+                                </View>
+                            ) : filtered.length === 0 ? (
+                                <View className="p-4">
+                                    <Text
+                                        style={{
+                                            color: theme.textDark,
+                                        }}
+                                        className="text-xs font-medium text-center"
+                                    >
+                                        {options.length === 0
+                                            ? emptyText
+                                            : noMatchText}
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View className="flex-col">
+                                    {filtered.map((item, idx) => {
+                                        const isSelected =
+                                            value === item.id;
+                                        const isLast =
+                                            idx ===
+                                            filtered.length - 1;
+                                        return (
+                                            <Pressable
+                                                key={item.id}
+                                                onPress={() =>
+                                                    handlePick(
+                                                        item.id,
+                                                        item.title
+                                                    )
+                                                }
+                                                style={({ pressed }) => ({
+                                                    backgroundColor:
+                                                        pressed
+                                                            ? isDarkMode
+                                                                ? "rgba(148,163,184,0.08)"
+                                                                : "rgba(15,23,42,0.04)"
+                                                            : "transparent",
+                                                    borderBottomColor:
+                                                        isLast
+                                                            ? "transparent"
+                                                            : baseDelimiter,
+                                                    borderBottomWidth:
+                                                        isLast ? 0 : 1,
+                                                })}
+                                                className="px-3 py-2.5"
                                             >
-                                                {item.title}
-                                            </Text>
-                                        </Pressable>
-                                    );
-                                })}
-                            </View>
-                        )}
-                    </ScrollView>
-                </View>
+                                                <Text
+                                                    style={{
+                                                        color:
+                                                            isSelected
+                                                                ? theme.primary
+                                                                : theme.text,
+                                                        fontFamily:
+                                                            isSelected
+                                                                ? theme.font
+                                                                    .bold
+                                                                : theme.font
+                                                                    .medium,
+                                                        fontSize: 12, // Matched to input font
+                                                    }}
+                                                    numberOfLines={1}
+                                                >
+                                                    {item.title}
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                )}
+            </View>
+
+            {hasError && errorText && (
+                <Text
+                    style={{
+                        color: "#ef4444",
+                        fontSize: 10, // Matched to CustomTextField error text
+                        paddingHorizontal: 2,
+                        marginTop: 4,
+                    }}
+                >
+                    {errorText}
+                </Text>
             )}
         </View>
     );

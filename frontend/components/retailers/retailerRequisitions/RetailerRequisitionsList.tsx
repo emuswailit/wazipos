@@ -19,18 +19,28 @@ import React, {
     useMemo,
     useState,
 } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 
 import { RetailerRequisitionsDetailsModal } from './RetailerRequisitionsDetailsModal';
 import { RetailerRequisitionsMobileView } from './RetailerRequisitionsMobileView';
 import { RetailerRequisitionsWebView } from './RetailerRequisitionsWebView';
 import {
+    balanceOf,
     orderRef,
     toBool,
+    totalOf,
     type RequisitionsCounts,
 } from './primitives';
 
-const LARGE_SCREEN_MIN_WIDTH = 900;
+// Same rule as the Customer Orders screen: paginated table only on wide web screens;
+// native apps and narrow web get the full card list (no pagination).
+const LARGE_SCREEN_MIN_WIDTH = 768;
+
+/** Newest first. */
+const createdMs = (o: RetailerOrder): number => {
+    const t = new Date(String(o.created ?? '').replace(' ', 'T')).getTime();
+    return Number.isNaN(t) ? 0 : t;
+};
 
 /* =========================================================
  * Search
@@ -71,7 +81,7 @@ function matchesQuery(o: RetailerOrder, q: string): boolean {
 
 const RetailerRequisitionsList: React.FC = () => {
     const { width } = useWindowDimensions();
-    const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
+    const isLarge = Platform.OS === 'web' && width >= LARGE_SCREEN_MIN_WIDTH;
 
     const {
         retailerOrders,
@@ -101,7 +111,9 @@ const RetailerRequisitionsList: React.FC = () => {
             ? retailerOrders.filter((o) => !toBool(o.is_paid))
             : retailerOrders;
 
-        return base.filter((o) => matchesQuery(o, query));
+        return base
+            .filter((o) => matchesQuery(o, query))
+            .sort((a, b) => createdMs(b) - createdMs(a));
     }, [retailerOrders, onlyUnpaid, query]);
 
     const counts: RequisitionsCounts = useMemo(
@@ -116,8 +128,10 @@ const RetailerRequisitionsList: React.FC = () => {
                     (o.status || '').toUpperCase() ===
                     'SUBMITTED'
             ).length,
+            visibleValue: visible.reduce((sum, o) => sum + totalOf(o), 0),
+            visibleBalance: visible.reduce((sum, o) => sum + balanceOf(o), 0),
         }),
-        [retailerOrders, visible.length]
+        [retailerOrders, visible]
     );
 
     /* ---------------- Pagination math ---------------- */
@@ -183,8 +197,8 @@ const RetailerRequisitionsList: React.FC = () => {
 
     /* ---------------- Shared props ---------------- */
     const common = {
-        // data — already sliced to the current page
-        orders: paginated,
+        // Web table gets the current page; the mobile list gets everything (no pagination).
+        orders: isLarge ? paginated : visible,
         counts,
         query,
         onQueryChange,

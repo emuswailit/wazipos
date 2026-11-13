@@ -19,7 +19,7 @@ const LOG = (...args: any[]) => {
  * Types
  * ======================================================= */
 
-export interface WholesalerReceiptItem {
+interface WholesalerReceiptItem {
     id: string;
     title: string;
     unit_selling_price: number;
@@ -27,12 +27,7 @@ export interface WholesalerReceiptItem {
     barcode?: string;
 }
 
-export interface RetailEntityItem {
-    id: string;
-    title: string;
-}
-
-export interface WholesaleOrderPayload {
+interface WholesaleOrderPayload {
     retailer_id: string;
     notes: string;
     items: Array<{
@@ -44,11 +39,45 @@ export interface WholesaleOrderPayload {
     }>;
 }
 
+/** Matches `create_retailer_order` in backend wholesalers/utils/retailer_orders_utils.py. */
+export interface CreateStaffRetailerOrderPayload {
+    action: "CreateStaffRetailerOrder";
+    retailer_order_details: {
+        retailer_id: string;
+        /** Idempotency key: the backend returns the existing order for a repeated draft_id. */
+        draft_id: string;
+        order_terms: string;
+        payment_method_id?: string;
+        mobile_money_phone?: string | null;
+        order_gross_price_total: number;
+        order_discount_total: number;
+        final_price_total: number;
+        order_items: Array<{
+            wholesaler_receipt: string;
+            purchased_quantity: number;
+            discount_quantity: number;
+            total_quantity: number;
+            item_price: number;
+            item_price_discount: number;
+            item_net_price: number;
+            item_price_total: number;
+        }>;
+    };
+}
+
+/** Errors also arrive as HTTP 200, with response_code 1 and `errors`. */
+export interface CreateStaffRetailerOrderResponse {
+    response_code: number | string;
+    response_message?: string;
+    errors?: string[] | Record<string, unknown>;
+    retailer_order?: { id: string; reference_number?: string } & Record<string, unknown>;
+}
+
 /* =========================================================
  * Wholesaler receipts dispatcher
  * ======================================================= */
 
-export type WholesalerReceiptsAction =
+type WholesalerReceiptsAction =
     | "GetRetailEntities"
     | "GetInventory"
     | "WholesalerPriceDiscounts"
@@ -57,18 +86,180 @@ export type WholesalerReceiptsAction =
     | "WholesalerQuantityDiscountDetails"
     | (string & {});
 
-export interface WholesalerReceiptsDispatch {
+interface WholesalerReceiptsDispatch {
     action: WholesalerReceiptsAction;
     [key: string]: any;
 }
 
 /* =========================================================
+ * Wholesaler receipt-returns dispatcher
+ *
+ * Backend: POST /wholesalers/receipt-returns
+ * View:    wholesalers.views.receiptReturnsAPIView
+ * Utils:   wholesalers.utils.return_utils
+ *
+ * Simplified lifecycle:
+ *     PENDING   -> ACCEPTED   (wholesaler takes goods back)
+ *     PENDING   -> REJECTED   (wholesaler declines; adjusts later)
+ *     PENDING   -> CANCELLED  (either party, pre-decision)
+ *
+ * NOTE: this is a DIFFERENT endpoint from
+ * `/wholesalers/receipts` (see `wholesaleReceiptsAction` above).
+ * ======================================================= */
+
+export type WholesalerReturnStatus =
+    | "PENDING"
+    | "ACCEPTED"
+    | "REJECTED"
+    | "CANCELLED";
+
+export type WholesalerReturnReason =
+    | "EXPIRED"
+    | "NEAR_EXPIRY"
+    | "DAMAGED"
+    | "WRONG_ITEM"
+    | "SHORT_DATED"
+    | "QUALITY"
+    | "OVER_ORDERED"
+    | "RECALL"
+    | "OTHER";
+
+export type WholesalerReturnType = "REFUND" | "EXCHANGE" | "REPLACEMENT";
+
+export interface WholesalerReturnRecord {
+    id: string;
+    product: string;
+    product_title?: string;
+    wholesaler_entity: string;
+    retailer_entity: string;
+    quantity: number;
+    reason: WholesalerReturnReason;
+    justification: string;
+    return_type: WholesalerReturnType;
+    status: WholesalerReturnStatus;
+    reference_number?: string | null;
+    unit_price_paid?: string | null;
+    unit_price_refunded?: string | null;
+    restocking_fee_percent?: string | null;
+    total_refund_amount?: string | null;
+    decision_notes?: string;
+    created: string;
+    updated: string;
+    accepted_at?: string | null;
+    rejected_at?: string | null;
+    cancelled_at?: string | null;
+}
+
+interface WholesalerReturnDispatch {
+    action: string;
+    [key: string]: any;
+}
+
+const RECEIPT_RETURNS_ENDPOINT = "/wholesalers/receipt-returns";
+
+/* ---- Base dispatcher ---- */
+
+const receiptReturnsAction = (
+    data: WholesalerReturnDispatch
+): Promise<ApiResponse<any>> => {
+    LOG("receiptReturnsAction →", { action: data.action, payload: data });
+
+    return client.post(RECEIPT_RETURNS_ENDPOINT, data).then((res) => {
+        LOG("receiptReturnsAction ←", {
+            action: data.action,
+            ok: res.ok,
+            status: res.status,
+            response_code: (res.data as any)?.response_code,
+            response_message: (res.data as any)?.response_message,
+            errors: (res.data as any)?.errors,
+            data: res.data,
+        });
+        return res;
+    });
+};
+
+/* ---- Typed wrappers, one per backend action ---- */
+
+interface InitiateReturnPayload {
+    retailer_receipt: string;
+    quantity: number;
+    reason: WholesalerReturnReason;
+    justification: string;
+    return_type?: WholesalerReturnType;
+    unit_price_refunded?: string;
+    restocking_fee_percent?: string;
+}
+
+const initiateReturnAction = (
+    data: InitiateReturnPayload
+): Promise<ApiResponse<any>> =>
+    receiptReturnsAction({ action: "InitiateReturn", ...data });
+
+interface ListReturnsPayload {
+    status?: WholesalerReturnStatus;
+    reason?: WholesalerReturnReason;
+    return_type?: WholesalerReturnType;
+    wholesaler_entity?: string;
+    retailer_entity?: string;
+    search?: string;
+}
+
+const listReturnsAction = (
+    data?: ListReturnsPayload
+): Promise<ApiResponse<any>> =>
+    receiptReturnsAction({ action: "ListReturns", ...(data ?? {}) });
+
+interface GetReturnDetailsPayload {
+    return_id: string;
+}
+
+const getReturnDetailsAction = (
+    data: GetReturnDetailsPayload
+): Promise<ApiResponse<any>> =>
+    receiptReturnsAction({ action: "GetReturnDetails", ...data });
+
+interface AcceptReturnPayload {
+    return_id: string;
+    /** Optional override applied at accept time. */
+    unit_price_refunded?: string;
+    /** Optional override applied at accept time, 0–100. */
+    restocking_fee_percent?: string;
+    /** Free-text note recorded on the return. */
+    notes?: string;
+}
+
+const acceptReturnAction = (
+    data: AcceptReturnPayload
+): Promise<ApiResponse<any>> =>
+    receiptReturnsAction({ action: "AcceptReturn", ...data });
+
+interface RejectReturnPayload {
+    return_id: string;
+    reason?: string;
+}
+
+const rejectReturnAction = (
+    data: RejectReturnPayload
+): Promise<ApiResponse<any>> =>
+    receiptReturnsAction({ action: "RejectReturn", ...data });
+
+interface CancelReturnPayload {
+    return_id: string;
+    reason?: string;
+}
+
+const cancelReturnAction = (
+    data: CancelReturnPayload
+): Promise<ApiResponse<any>> =>
+    receiptReturnsAction({ action: "CancelReturn", ...data });
+
+/* =========================================================
  * Discount payload / record shapes
  * ======================================================= */
 
-export type ImageFieldValue = string | PickedImageLike | null;
+type ImageFieldValue = string | PickedImageLike | null;
 
-export interface PickedImageLike {
+interface PickedImageLike {
     kind: "web" | "native";
     uri: string;
     file: File | { uri: string; name: string; type: string };
@@ -76,7 +267,7 @@ export interface PickedImageLike {
     type: string;
 }
 
-export interface PriceDiscountPayload {
+interface PriceDiscountPayload {
     wholesaler_receipt: string;
     title: string;
     percent: string;
@@ -88,7 +279,7 @@ export interface PriceDiscountPayload {
     banner: ImageFieldValue;
 }
 
-export interface PriceDiscountRecord
+interface PriceDiscountRecord
     extends Omit<PriceDiscountPayload, "banner"> {
     id: string;
     wholesaler_receipt_title?: string;
@@ -99,7 +290,7 @@ export interface PriceDiscountRecord
     price_discount_banners?: any[];
 }
 
-export interface QuantityDiscountPayload {
+interface QuantityDiscountPayload {
     wholesaler_receipt: string;
     title: string;
     limit_quantity: number;
@@ -110,7 +301,7 @@ export interface QuantityDiscountPayload {
     banner: ImageFieldValue;
 }
 
-export interface QuantityDiscountRecord
+interface QuantityDiscountRecord
     extends Omit<QuantityDiscountPayload, "banner"> {
     id: string;
     wholesaler_receipt_title?: string;
@@ -120,7 +311,7 @@ export interface QuantityDiscountRecord
     quantity_discount_banners?: any[];
 }
 
-export interface DiscountSubmitResult<T> {
+interface DiscountSubmitResult<T> {
     errors: Record<string, string | string[]> | null;
     result: T | null;
 }
@@ -129,13 +320,13 @@ export interface DiscountSubmitResult<T> {
  * Campaign types
  * ======================================================= */
 
-export type CampaignStatus =
+type CampaignStatus =
     | "DRAFT"
     | "PUBLISHED"
     | "CLOSED"
     | "CANCELLED";
 
-export interface WholesalerCampaignItem {
+interface WholesalerCampaignItem {
     id: string;
     campaign: string;
     wholesaler_receipt: string;
@@ -152,7 +343,7 @@ export interface WholesalerCampaignItem {
     updated: string;
 }
 
-export interface WholesalerCampaignAudience {
+interface WholesalerCampaignAudience {
     id: string;
     campaign: string;
     retailer: string;
@@ -164,7 +355,7 @@ export interface WholesalerCampaignAudience {
     updated: string;
 }
 
-export interface WholesalerCampaign {
+interface WholesalerCampaign {
     id: string;
     entity: string;
     wholesaler: string;
@@ -191,7 +382,7 @@ export interface WholesalerCampaign {
  * `services.campaigns.add_campaign_item` on the backend.
  * ======================================================= */
 
-export interface CreateCampaignPayload {
+interface CreateCampaignPayload {
     title: string;
     description?: string;
     start: string;
@@ -199,7 +390,7 @@ export interface CreateCampaignPayload {
     budget_cap?: string | null;
 }
 
-export interface UpdateCampaignPayload {
+interface UpdateCampaignPayload {
     campaign_id: string;
     title?: string;
     description?: string;
@@ -208,7 +399,7 @@ export interface UpdateCampaignPayload {
     budget_cap?: string | null;
 }
 
-export interface AddCampaignItemPayload {
+interface AddCampaignItemPayload {
     campaign_id: string;
     wholesaler_receipt_id: string;
     wholesaler_price_discount_id?: string | null;
@@ -218,7 +409,7 @@ export interface AddCampaignItemPayload {
     retail_price_hint?: string | null;
 }
 
-export interface UpdateCampaignItemPayload {
+interface UpdateCampaignItemPayload {
     item_id: string;
     wholesaler_price_discount_id?: string | null;
     wholesaler_quantity_discount_id?: string | null;
@@ -227,26 +418,26 @@ export interface UpdateCampaignItemPayload {
     retail_price_hint?: string | null;
 }
 
-export interface AddCampaignAudiencePayload {
+interface AddCampaignAudiencePayload {
     campaign_id: string;
     retailer_id: string;
 }
 
-export interface RemoveCampaignAudiencePayload {
+interface RemoveCampaignAudiencePayload {
     audience_id: string;
 }
 
-export interface CampaignActionPayload {
+interface CampaignActionPayload {
     campaign_id: string;
 }
 
-export interface ProjectCampaignPayload {
+interface ProjectCampaignPayload {
     campaign_id: string;
     markup_pct?: string;
     items: Array<{ item_id: string; quantity: number }>;
 }
 
-export interface OptInCampaignPayload {
+interface OptInCampaignPayload {
     campaign_id: string;
     markup_pct?: string;
     items: Array<{ item_id: string; quantity: number }>;
@@ -256,7 +447,7 @@ export interface OptInCampaignPayload {
  * Campaign response types
  * ======================================================= */
 
-export interface CampaignProjectionRow {
+interface CampaignProjectionRow {
     item_id: string;
     receipt_id: string;
     product_title: string;
@@ -266,7 +457,7 @@ export interface CampaignProjectionRow {
     profit_estimate: string;
 }
 
-export interface OptInResult {
+interface OptInResult {
     indent_id: string;
     indent_number: string;
     items_created: number;
@@ -276,9 +467,9 @@ export interface OptInResult {
  * Product request types — wholesaler side
  * ======================================================= */
 
-export type ProductRequestUrgency = "low" | "medium" | "high";
+type ProductRequestUrgency = "low" | "medium" | "high";
 
-export type ProductRequestStatus =
+type ProductRequestStatus =
     | "DRAFT"
     | "PUBLISHED"
     | "PARTIALLY_FULFILLED"
@@ -286,13 +477,13 @@ export type ProductRequestStatus =
     | "CANCELLED"
     | "EXPIRED";
 
-export interface RespondAcceptedLine {
+interface RespondAcceptedLine {
     item_id: string;
     receipt_id?: string;
     receipt?: Record<string, any>;
 }
 
-export interface RespondRejectedLine {
+interface RespondRejectedLine {
     item_id: string;
 }
 
@@ -300,12 +491,21 @@ export interface RespondRejectedLine {
  * API contract
  * ======================================================= */
 
-export interface WholesalersApiContract {
+interface WholesalersApiContract {
     getWholesaleInventoryAction: (params?: { action: string }) => Promise<ApiResponse<WholesalerReceiptItem[]>>;
     wholesaleStaffAction: (data?: Record<string, any>) => Promise<ApiResponse<WholesalerReceiptItem[]>>;
     wholesaleReceiptsAction: (data: WholesalerReceiptsDispatch) => Promise<ApiResponse<any>>;
     wholesaleRetailerOrdersAction: (data: WholesaleOrderPayload) => Promise<ApiResponse<{ success: boolean }>>;
-    wholesaleRetailerOrdersStaffAction: (data: WholesaleOrderPayload) => Promise<ApiResponse<{ success: boolean }>>;
+    wholesaleRetailerOrdersStaffAction: (data: CreateStaffRetailerOrderPayload) => Promise<ApiResponse<CreateStaffRetailerOrderResponse>>;
+
+    /* ---- Wholesaler receipt-returns ---- */
+    receiptReturnsAction: (data: WholesalerReturnDispatch) => Promise<ApiResponse<any>>;
+    initiateReturnAction: (data: InitiateReturnPayload) => Promise<ApiResponse<any>>;
+    listReturnsAction: (data?: ListReturnsPayload) => Promise<ApiResponse<any>>;
+    getReturnDetailsAction: (data: GetReturnDetailsPayload) => Promise<ApiResponse<any>>;
+    acceptReturnAction: (data: AcceptReturnPayload) => Promise<ApiResponse<any>>;
+    rejectReturnAction: (data: RejectReturnPayload) => Promise<ApiResponse<any>>;
+    cancelReturnAction: (data: CancelReturnPayload) => Promise<ApiResponse<any>>;
 
     priceDiscountCreateAction: (data: FormData) => Promise<ApiResponse<any>>;
     priceDiscountUpdateAction: (data: FormData, id: string) => Promise<ApiResponse<any>>;
@@ -371,7 +571,7 @@ const wholesaleRetailerOrdersAction = (data: WholesaleOrderPayload): Promise<Api
     return client.post("/wholesalers/retailers/orders", data);
 };
 
-const wholesaleRetailerOrdersStaffAction = (data: WholesaleOrderPayload): Promise<ApiResponse<any>> => {
+const wholesaleRetailerOrdersStaffAction = (data: CreateStaffRetailerOrderPayload): Promise<ApiResponse<CreateStaffRetailerOrderResponse>> => {
     return client.post("/wholesalers/retailers/orders/staff", data);
 };
 
@@ -788,7 +988,7 @@ const wholesalerProductRequestsAction = (
     return client.post("/retailers/product-requests", data);
 };
 
-export interface GetWholesalerTaggedRequestsPayload {
+interface GetWholesalerTaggedRequestsPayload {
     status?: ProductRequestStatus;
     urgency?: ProductRequestUrgency;
     page?: number;
@@ -803,7 +1003,7 @@ const getWholesalerTaggedRequestsAction = (
         ...(data ?? {}),
     });
 
-export interface GetWholesalerRequestDetailsPayload {
+interface GetWholesalerRequestDetailsPayload {
     request_id: string;
 }
 
@@ -815,7 +1015,7 @@ const getWholesalerRequestDetailsAction = (
         ...data,
     });
 
-export interface CreateWholesalerOfferPayload {
+interface CreateWholesalerOfferPayload {
     request_id: string;
     line_id: string;
     offered_quantity: number;
@@ -831,7 +1031,7 @@ const createWholesalerOfferAction = (
         ...data,
     });
 
-export interface WithdrawWholesalerOfferPayload {
+interface WithdrawWholesalerOfferPayload {
     offer_id: string;
 }
 
@@ -843,7 +1043,7 @@ const withdrawWholesalerOfferAction = (
         ...data,
     });
 
-export interface RespondToProductRequestPayload {
+interface RespondToProductRequestPayload {
     request_id: string;
     accepted_lines: RespondAcceptedLine[];
     rejected_lines: RespondRejectedLine[];
@@ -874,6 +1074,15 @@ const apiExportInstance: WholesalersApiContract = {
     wholesaleReceiptsAction,
     wholesaleRetailerOrdersAction,
     wholesaleRetailerOrdersStaffAction,
+
+    /* ---- Wholesaler receipt-returns ---- */
+    receiptReturnsAction,
+    initiateReturnAction,
+    listReturnsAction,
+    getReturnDetailsAction,
+    acceptReturnAction,
+    rejectReturnAction,
+    cancelReturnAction,
 
     createCampaignAction,
     updateCampaignAction,

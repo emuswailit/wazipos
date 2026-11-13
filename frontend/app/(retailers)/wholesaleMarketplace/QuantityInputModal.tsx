@@ -112,7 +112,6 @@ export default function QuantityInputModal({
 }: QuantityInputModalProps) {
     const { theme, isDarkMode } = useAuth();
     const {
-        currentOpenIndent,
         hasOpenIndent,
         isDraftIndent,
         findItemByReceipts,
@@ -238,7 +237,7 @@ export default function QuantityInputModal({
         setErrorText(null);
 
         try {
-            const res = await removeFromIndent(existingItem.id);
+            const res = await removeFromIndent(existingItem.remote_id ?? existingItem.draft_id ?? "");
 
             if (!res.ok) {
                 setErrorText(

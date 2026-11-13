@@ -1,6 +1,8 @@
 // components/wholesalers/newWholesaleOrder/UnifiedBarcodeScanner.tsx
 
-import type { ProductItem } from '@/databases/types';
+/** Anything with a barcode (wholesaler receipts, products). */
+type ScannableItem = { bar_code?: string | null };
+import { useAudioPlayer } from 'expo-audio';
 import { Camera, CameraView } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -14,21 +16,13 @@ import {
     View,
 } from 'react-native';
 
-let AudioModule: any = null;
-try {
-    if (Platform.OS !== 'web') {
-        AudioModule = require('expo-av').Audio;
-    }
-} catch (e) {
-    console.warn(
-        'Native audio modules unmapped in current sandbox engine layer.'
-    );
-}
+// Short 880 Hz confirmation beep, played on every successful scan (expo-audio).
+const BEEP_SOUND = require('./assets/beep.wav');
 
 interface UnifiedBarcodeScannerProps {
     theme: any;
     isOpen: boolean;
-    productsCatalog: ProductItem[];
+    productsCatalog: ScannableItem[];
     onScanSuccess: (scannedBarcode: string) => void;
     onCloseScanner: () => void;
 }
@@ -52,6 +46,8 @@ export default function UnifiedBarcodeScanner({
     const laserAnimY = useRef(new Animated.Value(0)).current;
     const webVideoRef = useRef<any>(null);
     const webStreamRef = useRef<any>(null);
+    // expo-audio player (replaces expo-av Audio.Sound); released on unmount by the hook.
+    const beepPlayer = useAudioPlayer(BEEP_SOUND);
 
     /* -------- Open / close lifecycle -------- */
     useEffect(() => {
@@ -151,49 +147,11 @@ export default function UnifiedBarcodeScanner({
     /* -------- Beep -------- */
     const playSuccessBeepSound = async () => {
         try {
-            if (Platform.OS === 'web' || !AudioModule) {
-                const AudioContext =
-                    (window as any).AudioContext ||
-                    (window as any).webkitAudioContext;
-                if (!AudioContext) return;
-                const ctx = new AudioContext();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(
-                    880,
-                    ctx.currentTime
-                );
-                gain.gain.setValueAtTime(
-                    0.05,
-                    ctx.currentTime
-                );
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.1);
-                return;
-            }
-            const soundInstance = new AudioModule.Sound();
-            await soundInstance.loadAsync(
-                require('./assets/beep.mp3'),
-                { shouldPlay: true }
-            );
-            soundInstance.setOnPlaybackStatusUpdate(
-                (status: any) => {
-                    if (
-                        status.isLoaded &&
-                        status.didJustFinish
-                    ) {
-                        soundInstance.unloadAsync();
-                    }
-                }
-            );
+            // expo-audio doesn't rewind after playing: restart from the top each scan.
+            await beepPlayer.seekTo(0);
+            beepPlayer.play();
         } catch (soundErr) {
-            console.warn(
-                'Audio layer soft fallback catch layer executed:',
-                soundErr
-            );
+            console.warn('Scan beep could not play:', soundErr);
         }
     };
 
@@ -204,10 +162,10 @@ export default function UnifiedBarcodeScanner({
         const refinedCode = targetBarcode.trim();
         if (!refinedCode) return false;
 
-        // ProductItem uses `bar_code`
+        // Catalog rows expose `bar_code`
         const itemCatalogMatch = productsCatalog.find(
             (p) =>
-                (p as any).bar_code === refinedCode
+                p.bar_code === refinedCode
         );
 
         if (!itemCatalogMatch) {
@@ -317,7 +275,7 @@ export default function UnifiedBarcodeScanner({
                                 ],
                             }}
                             style={
-                                StyleSheet.absoluteFillObject
+                                StyleSheet.absoluteFill
                             }
                         />
                     )

@@ -25,7 +25,7 @@ import {
 /* =========================================================
  * Types
  * ======================================================= */
-export interface PaymentMethodSelectorProps {
+interface PaymentMethodSelectorProps {
     name?: string;
     mpesaField?: string;
     onAfterSelect?: (method: PaymentMethodItem) => void;
@@ -268,9 +268,6 @@ function SelectorInner({
                                         return;
                                     onChange?.(method);
                                 }}
-                                activeOpacity={
-                                    blockedByNetwork ? 1 : 0.8
-                                }
                                 disabled={
                                     disabled ||
                                     blockedByNetwork

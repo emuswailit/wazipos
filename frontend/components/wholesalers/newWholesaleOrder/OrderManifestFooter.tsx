@@ -14,7 +14,6 @@ interface OrderManifestFooterProps {
     onNotesChange: (text: string) => void;
     grandTotalCost: number;
     isButtonLoading: boolean;
-    onSaveDraft: () => void;
     onSubmit: () => void;
 }
 
@@ -24,7 +23,6 @@ export default function OrderManifestFooter({
     onNotesChange,
     grandTotalCost,
     isButtonLoading,
-    onSaveDraft,
     onSubmit,
 }: OrderManifestFooterProps) {
     const isDark = (theme as any).isDarkMode;
@@ -34,7 +32,6 @@ export default function OrderManifestFooter({
     const placeholderColor = isDark
         ? '#64748b'
         : '#94a3b8';
-    const saveDraftBg = isDark ? '#1e293b' : '#ffffff';
 
     return (
         <View className="w-full">
@@ -95,27 +92,6 @@ export default function OrderManifestFooter({
 
             {/* -------- Actions -------- */}
             <View className="flex-row items-center gap-3 mt-2">
-                <TouchableOpacity
-                    className="flex-1 py-3 px-4 rounded-xl flex-row items-center justify-center border"
-                    style={{
-                        borderColor: theme.primary,
-                        backgroundColor: saveDraftBg,
-                    }}
-                    onPress={onSaveDraft}
-                    disabled={isButtonLoading}
-                    activeOpacity={0.8}
-                >
-                    <Text
-                        style={{
-                            color: theme.primary,
-                            fontFamily: theme.font?.bold,
-                        }}
-                        className="text-sm font-bold"
-                    >
-                        💾 Save Draft
-                    </Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity
                     className={`flex-1 py-3 px-4 rounded-xl flex-row items-center justify-center ${isButtonLoading ? 'opacity-50' : ''
                         }`}

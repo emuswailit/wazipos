@@ -14,9 +14,9 @@ import { Modal } from "./Modal";
  * Tones
  * ======================================================= */
 
-export type AlertTone = "default" | "success" | "danger";
+type AlertTone = "default" | "success" | "danger";
 
-export interface AlertButton {
+interface AlertButton {
     text?: string;
     onPress?: () => void;
     style?: "default" | "cancel" | "destructive";

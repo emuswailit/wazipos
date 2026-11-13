@@ -58,13 +58,13 @@ export type PriceDiscountFilter =
     | "SCHEDULED"
     | "EXPIRED";
 
-export type DiscountStatusLabel =
+type DiscountStatusLabel =
     | "ACTIVE"
     | "SCHEDULED"
     | "EXPIRED"
     | "INACTIVE";
 
-export interface DiscountStatus {
+interface DiscountStatus {
     label: DiscountStatusLabel;
     tone: "success" | "warning" | "neutral";
     isActive: boolean;

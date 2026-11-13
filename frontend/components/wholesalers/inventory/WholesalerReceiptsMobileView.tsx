@@ -1,6 +1,6 @@
 // components/wholesalers/inventory/WholesalerReceiptsMobileView.tsx
 
-import { PaginationBar } from '@/components/retailers/stockOuts/PaginationBar';
+import { PaginationBar } from '@/components/common/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
 import { WholesalerReceipt } from '@/databases/types';
 import React, { useState } from 'react';
@@ -43,13 +43,13 @@ interface Props {
     lastSyncedTime: string;
     pendingCount: number;
     items: WholesalerReceipt[];
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
     onPressReceipt: (r: WholesalerReceipt) => void;
     /** Called when user taps + New. Optional — if omitted, the
      *  view opens its own edit modal in create mode. */
     onOpenCreate?: () => void;
     /** Passed through to the edit modal. */
-    onSave: (
+    onSave?: (
         draft: WholesalerReceiptDraft,
         mode: 'create' | 'edit'
     ) => Promise<void> | void;
@@ -408,7 +408,7 @@ export function WholesalerReceiptsMobileView({
                 receipt={editing}
                 onClose={() => setEditOpen(false)}
                 onSave={async (draft, mode) => {
-                    await onSave(draft, mode);
+                    await onSave?.(draft, mode);
                     setEditOpen(false);
                 }}
             />
@@ -639,9 +639,10 @@ function Chip({ label }: { label: string }) {
 /* =========================================================
  * Helpers
  * ======================================================= */
-function formatKES(value: number | null | undefined): string {
-    if (value == null || Number.isNaN(value)) return '0';
-    return Number(value).toLocaleString('en-KE', {
+function formatKES(value: number | string | null | undefined): string {
+    const n = value == null || value === '' ? NaN : Number(value);
+    if (Number.isNaN(n)) return '0';
+    return n.toLocaleString('en-KE', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
     });

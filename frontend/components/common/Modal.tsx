@@ -50,7 +50,8 @@ export function Modal({
                     <Pressable
                         onPress={(e) => e.stopPropagation()}
                         style={{
-                            width: "min(560px, 100%)",
+                            width: "100%",
+                            maxWidth: 560,
                             maxHeight: panelMaxHeight,
                             backgroundColor: theme.surface,
                             borderColor: theme.border,

@@ -1,14 +1,9 @@
-// app/(admin)/body-systems/index.tsx
+// app/(admin)/drugCategories/index.tsx
 //
-// Admin body systems route.
-//
-// Thin wrapper. `BodySystemItem` is re-exported here so sibling
-// components can import the record shape from one stable path.
+// Admin drug categories route.
 
-import AdminBodySystemsList from "../../../components/admin/drugCategories/AdminDrugCategoriesList";
+import AdminDrugCategoriesList from "../../../components/admin/drugCategories/AdminDrugCategoriesList";
 
-export type { BodySystemItem } from "../../../components/admin/drugCategories/AdminDrugCategoriesList";
-
-export default function AdminBodySystemsRoute() {
-    return <AdminBodySystemsList />;
+export default function AdminDrugCategoriesRoute() {
+    return <AdminDrugCategoriesList />;
 }

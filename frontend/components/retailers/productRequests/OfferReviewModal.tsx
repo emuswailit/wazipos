@@ -31,22 +31,18 @@ import React, {
     useMemo,
     useState,
 } from 'react';
-import {
-    ActivityIndicator,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { Text, View } from 'react-native';
 
-import { useAuth } from '@/context/AuthContext';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { AdminBadgePill, AdminSheet, FormErrorBanner, FormPanel, SheetButton, useListTokens, useSheetIsWide } from '@/components/common/listScreen';
 import type {
     ProductRequest,
     ProductRequestItem,
     ProductRequestOffer,
 } from '@/databases/types';
+
+import { requestStatusBadge } from './productRequestsConfig';
+import { EmptyNote, LineHeader, OfferSummary, formatKES } from './ViewRequestDetailsModal';
 
 /* =========================================================
  * Types
@@ -94,11 +90,6 @@ function isDraftStatus(status?: string | null): boolean {
     );
 }
 
-function formatMoney(v: string | number | null | undefined): string {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return '—';
-    return `KES ${n.toFixed(2)}`;
-}
 
 function offerTotal(o: ProductRequestOffer): number {
     const price = Number(o.offered_unit_price ?? 0);
@@ -109,16 +100,6 @@ function offerTotal(o: ProductRequestOffer): number {
     return price * qty;
 }
 
-function formatDate(value?: string | null): string {
-    if (!value) return '—';
-    const d = new Date(String(value).replace(' ', 'T'));
-    if (isNaN(d.getTime())) return String(value);
-    return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-    });
-}
 
 /* =========================================================
  * Component
@@ -132,8 +113,6 @@ export const OfferReviewModal: React.FC<Props> = ({
     onPublishDraft,
     isLoading = false,
 }) => {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
 
     const [decisions, setDecisions] = useState<
         Map<string, LineDecision>
@@ -153,9 +132,6 @@ export const OfferReviewModal: React.FC<Props> = ({
         setPublishing(false);
     }, [visible, request?.id]);
 
-    useEffect(() => {
-        console.log("request...", request)
-    }, [request])
 
     /* ---- Group lines with their actionable offers ---- */
     const linesWithOffers = useMemo(() => {
@@ -173,15 +149,6 @@ export const OfferReviewModal: React.FC<Props> = ({
             linesWithOffers.filter(
                 (l) => l.actionable.length > 0
             ).length,
-        [linesWithOffers]
-    );
-
-    const totalOffers = useMemo(
-        () =>
-            linesWithOffers.reduce(
-                (s, l) => s + l.actionable.length,
-                0
-            ),
         [linesWithOffers]
     );
 
@@ -414,819 +381,209 @@ export const OfferReviewModal: React.FC<Props> = ({
         }
     }, [canPublish, onPublishDraft, onClose]);
 
+    const wide = useSheetIsWide();
+    const { theme, chipBg } = useListTokens();
+
     if (!request) return null;
 
     const busy = submitting || publishing || isLoading;
+    const status = requestStatusBadge(request);
+    const decided = actionableLineCount - undecidedLineIds.length;
+    const acceptedTotal = linesWithOffers.reduce((sum, { item, actionable }) => {
+        const id = decisions.get(item.id)?.acceptedOfferId;
+        const o = id ? actionable.find((x) => x.id === id) : null;
+        return sum + (o ? offerTotal(o) : 0);
+    }, 0);
 
-    /* =========================================================
-     * Render
-     * ======================================================= */
+    const footerStatus = isDraft
+        ? 'Not sent yet: wholesalers see it once published.'
+        : actionableLineCount === 0
+            ? 'No offers waiting for a decision.'
+            : `${decided}/${actionableLineCount} line${actionableLineCount === 1 ? '' : 's'} decided${confirmCount ? ` · ${confirmCount} accepted (${formatKES(acceptedTotal)})` : ''}`;
+
     return (
-        <Modal
+        <AdminSheet
             visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={busy ? () => { } : onClose}
+            onClose={busy ? () => { } : onClose}
+            dismissible={!busy}
+            title={isDraft ? 'Publish request' : 'Review offers'}
+            subtitle={[request.request_number, status.label].filter(Boolean).join(' · ')}
+            icon={isDraft ? 'paper-plane-outline' : 'pricetags-outline'}
+            width={760}
+            footer={
+                <>
+                    {wide ? (
+                        <Text style={{ flex: 1, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={2}>
+                            {footerStatus}
+                        </Text>
+                    ) : null}
+                    <SheetButton label="Close" variant="ghost" onPress={onClose} disabled={busy} grow={!wide} />
+                    {isDraft ? (
+                        <SheetButton label="Publish" icon="paper-plane-outline" onPress={handlePublish} disabled={!canPublish} loading={publishing} loadingLabel="Publishing…" grow={!wide} />
+                    ) : (
+                        <SheetButton
+                            label={decisionCount > 0 ? `Submit ${decisionCount} decision${decisionCount === 1 ? '' : 's'}` : 'Submit'}
+                            icon="checkmark-done"
+                            onPress={handleSubmit}
+                            disabled={!canSubmit}
+                            loading={submitting}
+                            loadingLabel="Submitting…"
+                            grow={!wide}
+                        />
+                    )}
+                </>
+            }
         >
-            <View className="flex-1 bg-black/40 items-center justify-center p-3">
-                <View
-                    className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
-                    style={{ backgroundColor: theme.panel }}
-                >
-                    {/* ---------- header ---------- */}
-                    <View
-                        className="px-5 pt-4 pb-3 border-b"
-                        style={{
-                            borderBottomColor:
-                                theme.textDark + '22',
-                        }}
-                    >
-                        <View className="flex-row items-start">
-                            <View className="flex-1 min-w-0">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    {request.request_number || '—'}
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    {isDraft
-                                        ? 'Review Draft'
-                                        : 'Review Offers'}
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    {isDraft
-                                        ? `${request.total_line_count} line${request.total_line_count ===
-                                            1
-                                            ? ''
-                                            : 's'
-                                        } · not yet published`
-                                        : `${actionableLineCount} line${actionableLineCount === 1
-                                            ? ''
-                                            : 's'
-                                        } with offers · ${totalOffers} offer${totalOffers === 1
-                                            ? ''
-                                            : 's'
-                                        }`}
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={
-                                    busy ? undefined : onClose
-                                }
-                                hitSlop={12}
-                                disabled={busy}
-                                className="w-8 h-8 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor:
-                                        theme.background,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    ✕
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </View>
+            {error ? <FormErrorBanner message={error} /> : null}
 
-                    {/* ---------- body ---------- */}
-                    <ScrollView
-                        className="flex-1"
-                        contentContainerStyle={{ padding: 16 }}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {linesWithOffers.length === 0 ? (
-                            <View className="items-center py-8">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    No line items on this request.
-                                </Text>
-                            </View>
-                        ) : (
-                            linesWithOffers.map(
-                                ({ item, actionable }, idx) => (
-                                    <LineCard
-                                        key={item.id}
-                                        item={item}
-                                        index={idx}
-                                        actionableOffers={
-                                            actionable
-                                        }
-                                        decision={getDecision(
-                                            item.id
-                                        )}
-                                        onAccept={(offerId) =>
-                                            acceptOffer(
-                                                item.id,
-                                                offerId
-                                            )
-                                        }
-                                        onDecline={(offerId) =>
-                                            declineOffer(
-                                                item.id,
-                                                offerId
-                                            )
-                                        }
-                                        onUndoDecline={(offerId) =>
-                                            undoDecline(
-                                                item.id,
-                                                offerId
-                                            )
-                                        }
-                                    />
-                                )
-                            )
-                        )}
+            {isDraft ? (
+                <FormPanel tint="#6366f1">
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>This request is a draft</Text>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5, marginTop: 4 }}>
+                        Publishing sends it to the selected wholesalers (or all of them), who can then make offers.
+                    </Text>
+                </FormPanel>
+            ) : actionableLineCount > 0 ? (
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5, marginHorizontal: 4 }}>
+                    Accept one offer per product; the others on that line are declined automatically. You can also decline every offer on a line.
+                </Text>
+            ) : null}
 
-                        {!isDraft ? (
-                            <View className="mt-5">
-                                <Text
-                                    className="mb-1.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    OVERALL NOTE (OPTIONAL)
-                                </Text>
-                                <TextInput
-                                    value={note}
-                                    onChangeText={setNote}
-                                    placeholder="Message to wholesalers"
-                                    placeholderTextColor={
-                                        theme.textDark
-                                    }
-                                    multiline
-                                    numberOfLines={3}
-                                    textAlignVertical="top"
-                                    className="px-3 py-2 rounded-lg min-h-[72px]"
-                                    style={{
-                                        backgroundColor:
-                                            theme.background,
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                />
-                            </View>
-                        ) : null}
-
-                        {error ? (
-                            <View
-                                className="rounded-lg px-3 py-2 mt-4"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(239,68,68,0.12)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        'rgba(239,68,68,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#b91c1c',
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    {error}
-                                </Text>
-                            </View>
-                        ) : null}
-                    </ScrollView>
-
-                    {/* ---------- footer ---------- */}
-                    <View
-                        className="px-5 py-3 border-t"
-                        style={{
-                            borderTopColor:
-                                theme.textDark + '22',
-                        }}
-                    >
-                        <View className="flex-row items-center">
-                            <Text
-                                className="flex-1"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.regular,
-                                    fontSize:
-                                        theme.fontSize.xs,
-                                }}
-                            >
-                                {isDraft
-                                    ? 'Not yet published'
-                                    : `${confirmCount} to confirm · ${declineCount} to decline${undecidedLineIds.length >
-                                        0
-                                        ? ` · ${undecidedLineIds.length} undecided`
-                                        : ''
-                                    }`}
-                            </Text>
-
-                            <Pressable
-                                onPress={onClose}
-                                disabled={busy}
-                                className="px-4 py-2 rounded-lg mr-2"
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    Close
-                                </Text>
-                            </Pressable>
-
-                            {isDraft ? (
-                                <Pressable
-                                    onPress={handlePublish}
-                                    disabled={!canPublish}
-                                    className="px-5 py-2 rounded-lg flex-row items-center"
-                                    style={{
-                                        backgroundColor:
-                                            canPublish
-                                                ? theme.primary
-                                                : theme.primary +
-                                                '66',
-                                    }}
-                                >
-                                    {publishing ? (
-                                        <ActivityIndicator
-                                            size="small"
-                                            color="#FFFFFF"
-                                        />
-                                    ) : (
-                                        <Text
-                                            style={{
-                                                color: '#FFFFFF',
-                                                fontFamily:
-                                                    theme.font
-                                                        .semibold,
-                                                fontSize:
-                                                    theme.fontSize
-                                                        .sm,
-                                            }}
-                                        >
-                                            Publish Request
-                                        </Text>
-                                    )}
-                                </Pressable>
-                            ) : (
-                                <Pressable
-                                    onPress={handleSubmit}
-                                    disabled={!canSubmit}
-                                    className="px-5 py-2 rounded-lg flex-row items-center"
-                                    style={{
-                                        backgroundColor:
-                                            canSubmit
-                                                ? theme.primary
-                                                : theme.primary +
-                                                '66',
-                                    }}
-                                >
-                                    {submitting ? (
-                                        <ActivityIndicator
-                                            size="small"
-                                            color="#FFFFFF"
-                                        />
-                                    ) : (
-                                        <Text
-                                            style={{
-                                                color: '#FFFFFF',
-                                                fontFamily:
-                                                    theme.font
-                                                        .semibold,
-                                                fontSize:
-                                                    theme.fontSize
-                                                        .sm,
-                                            }}
-                                        >
-                                            Submit
-                                        </Text>
-                                    )}
-                                </Pressable>
-                            )}
-                        </View>
-                    </View>
+            {!wide && !isDraft ? (
+                <View style={{ borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: chipBg }}>
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 12.5 }}>{footerStatus}</Text>
                 </View>
+            ) : null}
+
+            <View style={{ gap: 10 }}>
+                {linesWithOffers.length === 0 ? (
+                    <EmptyNote text="No products on this request." />
+                ) : (
+                    linesWithOffers.map(({ item, actionable }) => (
+                        <LineReview
+                            key={item.id}
+                            item={item}
+                            actionable={actionable}
+                            decision={decisions.get(item.id)}
+                            undecided={undecidedLineIds.includes(item.id)}
+                            disabled={busy || isDraft}
+                            onAccept={(id) => acceptOffer(item.id, id)}
+                            onDecline={(id) => declineOffer(item.id, id)}
+                            onUndoDecline={(id) => undoDecline(item.id, id)}
+                        />
+                    ))
+                )}
             </View>
-        </Modal>
+
+            {!isDraft && actionableLineCount > 0 ? (
+                <CustomTextField
+                    label="Note to wholesalers"
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder="Optional, e.g. delivery instructions"
+                    multiline
+                    numberOfLines={3}
+                    editable={!busy}
+                />
+            ) : null}
+        </AdminSheet>
     );
 };
 
-export default OfferReviewModal;
+/* ------------------------------------------------------------------ */
 
-/* =========================================================
- * Line card
- * ======================================================= */
-
-const LineCard: React.FC<{
+function LineReview({
+    item,
+    actionable,
+    decision,
+    undecided,
+    disabled,
+    onAccept,
+    onDecline,
+    onUndoDecline,
+}: {
     item: ProductRequestItem;
-    index: number;
-    actionableOffers: ProductRequestOffer[];
-    decision: LineDecision;
+    actionable: ProductRequestOffer[];
+    decision?: LineDecision;
+    undecided: boolean;
+    disabled: boolean;
     onAccept: (offerId: string) => void;
     onDecline: (offerId: string) => void;
     onUndoDecline: (offerId: string) => void;
-}> = ({
-    item,
-    index,
-    actionableOffers,
-    decision,
-    onAccept,
-    onDecline,
-    onUndoDecline,
-}) => {
-        const { theme, isDarkMode } = useAuth();
-        const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
+}) {
+    const { theme, chipBg, divider } = useListTokens();
+    const actionableIds = new Set(actionable.map((o) => o.id));
+    const others = (item.offers ?? []).filter((o) => !actionableIds.has(o.id));
+    const accepted = decision?.acceptedOfferId ?? null;
 
-        const hasOffers = actionableOffers.length > 0;
-        const acceptedId = decision.acceptedOfferId;
-        const declinedIds = decision.explicitDeclineIds;
+    return (
+        <View style={{ borderRadius: 18, padding: 14, gap: 10, backgroundColor: chipBg, borderWidth: 1.5, borderColor: undecided && accepted === null && (decision?.explicitDeclineIds.size ?? 0) > 0 ? '#f59e0b' : 'transparent' }}>
+            <LineHeader line={item} />
 
-        const lineDecided = hasOffers
-            ? !!acceptedId ||
-            actionableOffers.every((o) =>
-                declinedIds.has(o.id)
-            )
-            : true;
+            {actionable.length === 0 && others.length === 0 ? (
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>No offers yet.</Text>
+            ) : null}
 
-        return (
-            <View
-                className="mb-3 rounded-xl border overflow-hidden"
-                style={{
-                    borderColor: lineDecided
-                        ? 'rgba(16,185,129,0.4)'
-                        : borderColor,
-                    borderWidth: lineDecided ? 1.5 : 1,
-                }}
-            >
-                {/* header */}
-                <View
-                    className="p-3"
-                    style={{ backgroundColor: theme.panel }}
-                >
-                    <View className="flex-row items-center">
-                        <Text
-                            className="mr-2"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                                fontSize: 11,
-                            }}
-                        >
-                            #{index + 1}
-                        </Text>
-                        <Text
-                            className="flex-1"
-                            style={{
-                                color: theme.text,
-                                fontFamily:
-                                    theme.font.semibold,
-                                fontSize: theme.fontSize.sm,
-                            }}
-                            numberOfLines={2}
-                        >
-                            {item.product_title ||
-                                'Untitled product'}
-                        </Text>
-                        {hasOffers ? (
-                            <View
-                                className="px-2 py-0.5 rounded-md ml-2"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(99,102,241,0.15)',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: '#6366f1',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 9,
-                                    }}
-                                >
-                                    {actionableOffers.length}{' '}
-                                    {actionableOffers.length === 1
-                                        ? 'offer'
-                                        : 'offers'}
-                                </Text>
-                            </View>
-                        ) : (
-                            <View
-                                className="px-2 py-0.5 rounded-md ml-2"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(148,163,184,0.15)',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: '#94a3b8',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 9,
-                                    }}
-                                >
-                                    Awaiting
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                    <Text
-                        className="mt-1"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.regular,
-                            fontSize: theme.fontSize.xs,
-                        }}
-                    >
-                        {item.requested_quantity} requested
-                    </Text>
-                </View>
-
-                {/* offers or awaiting note */}
-                <View
-                    className="p-3 border-t"
-                    style={{
-                        borderTopColor: theme.textDark + '22',
-                        backgroundColor: theme.background,
-                    }}
-                >
-                    {!hasOffers ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.regular,
-                                fontSize: 11,
-                                opacity: 0.8,
-                            }}
-                        >
-                            No active offers on this line.
-                        </Text>
-                    ) : (
-                        actionableOffers.map((o) => {
-                            const accepted = acceptedId === o.id;
-                            const declined = declinedIds.has(o.id);
-                            const autoDeclined =
-                                !!acceptedId && !accepted;
-
-                            return (
-                                <OfferCard
-                                    key={o.id}
-                                    offer={o}
-                                    accepted={accepted}
-                                    declined={declined}
-                                    autoDeclined={autoDeclined}
-                                    onAccept={() => onAccept(o.id)}
-                                    onDecline={() => onDecline(o.id)}
-                                    onUndoDecline={() =>
-                                        onUndoDecline(o.id)
-                                    }
-                                />
-                            );
-                        })
-                    )}
-                </View>
-            </View>
-        );
-    };
-
-/* =========================================================
- * Offer card
- * ======================================================= */
-
-const OfferCard: React.FC<{
-    offer: ProductRequestOffer;
-    accepted: boolean;
-    declined: boolean;
-    autoDeclined: boolean;
-    onAccept: () => void;
-    onDecline: () => void;
-    onUndoDecline: () => void;
-}> = ({
-    offer,
-    accepted,
-    declined,
-    autoDeclined,
-    onAccept,
-    onDecline,
-    onUndoDecline,
-}) => {
-        const { theme, isDarkMode } = useAuth();
-        const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-
-        const unitPrice = Number(offer.offered_unit_price ?? 0);
-        const total = offerTotal(offer);
-
-        const cardBorder = accepted
-            ? '#16A34A'
-            : declined
-                ? 'rgba(239,68,68,0.4)'
-                : borderColor;
-
-        const cardBg = accepted
-            ? 'rgba(22,163,74,0.06)'
-            : declined
-                ? 'rgba(148,163,184,0.06)'
-                : 'transparent';
-
-        return (
-            <View
-                className="rounded-lg border px-3 py-2 mb-2"
-                style={{
-                    borderColor: cardBorder,
-                    borderWidth: accepted ? 1.5 : 1,
-                    backgroundColor: cardBg,
-                    opacity: autoDeclined ? 0.5 : 1,
-                }}
-            >
-                <View className="flex-row items-center">
-                    <Text
-                        className="flex-1"
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.semibold,
-                            fontSize: theme.fontSize.sm,
-                        }}
-                        numberOfLines={1}
-                    >
-                        {offer.wholesaler_title || 'Wholesaler'}
-                    </Text>
+            {actionable.map((o) => {
+                const isAccepted = accepted === o.id;
+                const isDeclined = !isAccepted && (decision?.explicitDeclineIds.has(o.id) || (accepted !== null && accepted !== o.id));
+                const autoDeclined = isDeclined && accepted !== null && !decision?.explicitDeclineIds.has(o.id);
+                return (
                     <View
-                        className="px-2 py-0.5 rounded-md ml-2"
+                        key={o.id}
                         style={{
-                            backgroundColor:
-                                'rgba(251,191,36,0.15)',
+                            borderRadius: 14,
+                            padding: 12,
+                            gap: 10,
+                            borderWidth: 1.5,
+                            borderColor: isAccepted ? '#10b981' : 'transparent',
+                            backgroundColor: isAccepted ? 'rgba(16,185,129,0.08)' : theme.panel,
+                            opacity: isDeclined ? 0.6 : 1,
                         }}
                     >
-                        <Text
-                            className="uppercase tracking-wide"
-                            style={{
-                                color: '#f59e0b',
-                                fontFamily: theme.font.bold,
-                                fontSize: 9,
-                            }}
-                        >
-                            {offer.status_display || offer.status}
-                        </Text>
+                        <OfferSummary
+                            offer={o}
+                            right={
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{formatKES(offerTotal(o))}</Text>
+                            }
+                        />
+                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                            {isAccepted ? (
+                                <>
+                                    <AdminBadgePill badge={{ label: 'Accepting', tone: 'success', icon: 'checkmark-circle' }} />
+                                    <View style={{ flex: 1 }} />
+                                    <SheetButton label="Decline instead" variant="ghost" onPress={() => onDecline(o.id)} disabled={disabled} />
+                                </>
+                            ) : isDeclined ? (
+                                <>
+                                    <AdminBadgePill badge={{ label: autoDeclined ? 'Declined (another accepted)' : 'Declining', tone: 'danger' }} />
+                                    <View style={{ flex: 1 }} />
+                                    {autoDeclined ? (
+                                        <SheetButton label="Accept this one" variant="secondary" onPress={() => onAccept(o.id)} disabled={disabled} />
+                                    ) : (
+                                        <SheetButton label="Undo" variant="ghost" onPress={() => onUndoDecline(o.id)} disabled={disabled} />
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <SheetButton label="Decline" variant="ghost" icon="close" onPress={() => onDecline(o.id)} disabled={disabled} grow />
+                                    <SheetButton label="Accept" icon="checkmark" onPress={() => onAccept(o.id)} disabled={disabled} grow />
+                                </>
+                            )}
+                        </View>
                     </View>
-                </View>
+                );
+            })}
 
-                <View className="flex-row items-center flex-wrap gap-x-4 gap-y-1 mt-1.5">
-                    <Text
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.medium,
-                            fontSize: 12,
-                        }}
-                    >
-                        {offer.offered_quantity} unit
-                        {offer.offered_quantity === 1 ? '' : 's'}
-                    </Text>
-                    {unitPrice > 0 ? (
-                        <Text
-                            style={{
-                                color: theme.primary,
-                                fontFamily: theme.font.bold,
-                                fontSize: 12,
-                            }}
-                        >
-                            {formatMoney(unitPrice)} / unit
-                        </Text>
-                    ) : null}
-                    {total > 0 ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: 11,
-                            }}
-                        >
-                            Total {formatMoney(total)}
-                        </Text>
-                    ) : null}
-                    {offer.batch ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: 11,
-                            }}
-                        >
-                            Batch {offer.batch}
-                        </Text>
-                    ) : null}
-                    {offer.expiry_date ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: 11,
-                            }}
-                        >
-                            Exp {formatDate(offer.expiry_date)}
-                        </Text>
-                    ) : null}
+            {others.length > 0 ? (
+                <View style={{ gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: divider }}>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' }}>Earlier offers</Text>
+                    {others.map((o) => (
+                        <OfferSummary key={o.id} offer={o} />
+                    ))}
                 </View>
+            ) : null}
+        </View>
+    );
+}
 
-                {offer.response_note?.trim() ? (
-                    <Text
-                        className="mt-1"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: 11,
-                        }}
-                    >
-                        {offer.response_note}
-                    </Text>
-                ) : null}
-
-                {/* actions */}
-                <View className="flex-row items-center gap-2 mt-2">
-                    {autoDeclined ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: 10,
-                                fontStyle: 'italic',
-                            }}
-                        >
-                            Will be declined automatically
-                        </Text>
-                    ) : accepted ? (
-                        <>
-                            <View
-                                className="px-2 py-1 rounded-md"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(22,163,74,0.15)',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: '#16A34A',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    Accepted
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={onDecline}
-                                className="px-2.5 py-1 rounded-md border"
-                                style={{ borderColor }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    Undo
-                                </Text>
-                            </Pressable>
-                        </>
-                    ) : declined ? (
-                        <>
-                            <View
-                                className="px-2 py-1 rounded-md"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(239,68,68,0.12)',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: '#DC2626',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    Declined
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={onUndoDecline}
-                                className="px-2.5 py-1 rounded-md border"
-                                style={{ borderColor }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    Undo
-                                </Text>
-                            </Pressable>
-                        </>
-                    ) : (
-                        <>
-                            <Pressable
-                                onPress={onAccept}
-                                className="px-3 py-1.5 rounded-lg flex-1 items-center"
-                                style={{
-                                    backgroundColor: '#16A34A',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: '#FFFFFF',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    Accept
-                                </Text>
-                            </Pressable>
-                            <Pressable
-                                onPress={onDecline}
-                                className="px-3 py-1.5 rounded-lg flex-1 items-center border"
-                                style={{
-                                    borderColor:
-                                        'rgba(220,38,38,0.5)',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: '#DC2626',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    Decline
-                                </Text>
-                            </Pressable>
-                        </>
-                    )}
-                </View>
-            </View>
-        );
-    };

@@ -4,6 +4,19 @@
 // Wholesale inventory is sourced from WholesalerReceiptsSyncContext
 // inside WholesaleInventoryPicker (via MakeOfferModal), so this
 // container does not pass receipts down.
+//
+// -------------------------------------------------------------------
+// ERROR PROPAGATION
+//
+// When the server rejects a response with a DRF envelope
+// (`{ response_code: 1, response_message: "...", errors: {...} }`),
+// the handler used to throw a plain `Error(response_message)`, which
+// dropped `errors.detail` — the only place the actual reason lives.
+//
+// The modal's `extractErrorMessage` walks `err.response.data.errors`
+// and `err.data.errors`. To let it, we attach the full server body
+// to the thrown error under both `response.data` and `data`.
+// -------------------------------------------------------------------
 
 import React, {
     useCallback,
@@ -18,6 +31,7 @@ import { useRetailerProductRequestsSync } from '@/context/RetailerProductRequest
 import type { RespondPayload } from './MakeOfferModal';
 import { WholesalerProductRequestsMobileView } from './WholesalerProductRequestsMobileView';
 import { WholesalerProductRequestsWebView } from './WholesalerProductRequestsWebView';
+import { isServerOk } from '@/utils/serverResponse';
 
 const LARGE_SCREEN_MIN_WIDTH = 900;
 
@@ -86,7 +100,6 @@ const WholesalerProductRequestsList: React.FC = () => {
         return m;
     }, [requests]);
 
-
     const filtered = useMemo(() => {
         const q = entityQuery.trim().toLowerCase();
         return requests.filter((r) => {
@@ -124,7 +137,7 @@ const WholesalerProductRequestsList: React.FC = () => {
 
     /* ---- submit ---- */
     const submitResponse = useCallback(
-        async (payload: RespondPayload) => {
+        async (payload: RespondPayload): Promise<void> => {
             setIsSubmitting(true);
 
             log(
@@ -191,9 +204,7 @@ const WholesalerProductRequestsList: React.FC = () => {
                     }
                 }
 
-                const ok =
-                    res?.ok === true ||
-                    res?.data?.response_code === 0;
+                const ok = isServerOk(res, res?.data);
 
                 log('interpreted as ok:', ok);
 
@@ -202,16 +213,32 @@ const WholesalerProductRequestsList: React.FC = () => {
                         'wholesalerProductRequestsAction rejected',
                         res
                     );
-                    throw new Error(
-                        (res as any)?.data?.response_message ??
+
+                    // Forward the full server body on the thrown
+                    // error so the caller's error extraction can
+                    // read `errors.detail` (or per-field messages)
+                    // rather than just the generic response_message.
+                    //
+                    // The modal's `extractErrorMessage` looks under
+                    // both `err.response.data.errors` and
+                    // `err.data.errors`, so attach the body to both
+                    // shapes. Also keep the message string on
+                    // `Error.message` as a last-resort fallback.
+                    const body: any =
+                        (res as any)?.data ?? (res as any) ?? {};
+                    const err: any = new Error(
+                        body?.response_message ??
                         'Response rejected'
                     );
+                    err.response = { data: body };
+                    err.data = body;
+                    throw err;
                 }
 
                 log(
                     '========== RESPOND — SUCCESS =========='
                 );
-                return res;
+                return;
             } catch (e: any) {
                 error(
                     '========== RESPOND — ERROR =========='

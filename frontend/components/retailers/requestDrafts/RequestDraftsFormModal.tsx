@@ -24,20 +24,14 @@ import {
     ProductPickerAutocomplete,
     type EntityPickerOption,
 } from '@/components/common';
-import { useAuth, type ThemeShape } from '@/context/AuthContext';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { AdminFormSheet, ChoiceChips, FormSection } from '@/components/common/listScreen';
 import type { Product, RequestDraftItem } from '@/databases/types';
 import { Formik, type FormikHelpers } from 'formik';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
     Alert,
-    KeyboardAvoidingView,
-    Modal,
     Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    useWindowDimensions,
     View,
 } from 'react-native';
 import * as Yup from 'yup';
@@ -225,15 +219,6 @@ export default function RequestDraftsFormModal({
     loadingProducts,
     loadingWholesalers,
 }: Props) {
-    const { theme, isDarkMode } = useAuth();
-    const { width } = useWindowDimensions();
-    const isNarrow = width < 520;
-
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const panelBg = theme.panel;
-    const dividerColor = `${theme.textDark}20`;
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
-
     const initialValues = useMemo(
         () => itemToFormValues(initialItem),
         [initialItem]
@@ -243,7 +228,6 @@ export default function RequestDraftsFormModal({
      * Snapshot of the quantity value at the moment the field gains
      * focus. Used to restore it if the user blurs without typing.
      */
-    const quantityBeforeFocusRef = useRef<string>('');
 
     /* ---- Adapter: wholesalers → picker options ---- */
     const wholesalerOptions: EntityPickerOption[] = useMemo(
@@ -319,537 +303,97 @@ export default function RequestDraftsFormModal({
     if (!visible) return null;
 
     return (
-        <Modal
-            visible={visible}
-            animationType="fade"
-            transparent
-            onRequestClose={onClose}
+        <Formik<FormValues>
+            initialValues={initialValues}
+            enableReinitialize
+            validationSchema={validationSchema}
+            validateOnChange
+            validateOnBlur
+            onSubmit={handleFormSubmit}
         >
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                className="flex-1"
-            >
-                <View
-                    className={[
-                        'flex-1 bg-black/55 items-center justify-center',
-                        isNarrow ? 'p-2' : 'p-4',
-                    ].join(' ')}
-                >
-                    <Pressable
-                        className="absolute inset-0"
-                        onPress={onClose}
-                        accessibilityRole="button"
-                        accessibilityLabel="Dismiss"
-                    />
-
-                    <View
-                        className="w-full max-w-[640px] rounded-2xl border overflow-hidden"
-                        accessibilityViewIsModal
-                        style={{
-                            backgroundColor: panelBg,
-                            borderColor,
-                            maxHeight: '94%',
-                        }}
+            {({ values, errors, touched, submitCount, setFieldValue, setFieldTouched, handleSubmit, isSubmitting }) => {
+                const show = (k: keyof FormValues) => ((touched[k] || submitCount > 0) && typeof errors[k] === 'string' ? (errors[k] as string) : undefined);
+                const picked = values.target_wholesaler_ids.length;
+                return (
+                    <AdminFormSheet
+                        visible={visible}
+                        onClose={onClose}
+                        title={initialItem ? 'Edit product' : 'Add product'}
+                        subtitle="Request basket"
+                        icon="basket-outline"
+                        submitLabel={initialItem ? 'Save changes' : 'Add to basket'}
+                        submitting={isSubmitting}
+                        onSubmit={() => handleSubmit()}
                     >
-                        <Formik<FormValues>
-                            initialValues={initialValues}
-                            enableReinitialize
-                            validationSchema={validationSchema}
-                            validateOnChange
-                            validateOnBlur
-                            onSubmit={handleFormSubmit}
+                        <FormSection title="Product" zIndex={40}>
+                            <View style={{ zIndex: 300 }}>
+                                <ProductPickerAutocomplete
+                                    name="productId"
+                                    fieldMap={{ id: 'productId', title: 'productTitle', bar_code: 'productBarCode', thumbnail_url: 'productThumbnailUrl' }}
+                                    imageKey="thumbnail_url"
+                                    titleKey="title"
+                                    subtitleKey="bar_code"
+                                    products={products as unknown as Product[]}
+                                    label="Product"
+                                    required
+                                    placeholder={loadingProducts && products.length === 0 ? 'Loading catalogue…' : 'Search products…'}
+                                    disabled={!!loadingProducts && products.length === 0}
+                                    error={show('productId')}
+                                />
+                            </View>
+                        </FormSection>
+
+                        <FormSection title="How many, how soon">
+                            <CustomTextField
+                                label="Quantity"
+                                required
+                                value={values.quantity}
+                                onChangeText={(v) => setFieldValue('quantity', v.replace(/[^0-9]/g, ''))}
+                                onBlur={() => {
+                                    if (!values.quantity) setFieldValue('quantity', DEFAULT_QUANTITY);
+                                    setFieldTouched('quantity', true, true);
+                                }}
+                                keyboardType="number-pad"
+                                placeholder={DEFAULT_QUANTITY}
+                                error={show('quantity')}
+                            />
+                            <ChoiceChips
+                                label="Urgency"
+                                options={URGENCY_OPTIONS.map((u) => ({ value: u.value, label: u.label, color: u.tint }))}
+                                value={values.urgency}
+                                onChange={(v) => setFieldValue('urgency', v)}
+                            />
+                        </FormSection>
+
+                        <FormSection
+                            title="Wholesalers"
+                            hint={picked > 0 ? `${picked} selected — only these will be asked for a quote.` : 'Leave empty to ask every wholesaler that stocks it.'}
+                            zIndex={30}
                         >
-                            {({
-                                values,
-                                errors,
-                                touched,
-                                setFieldValue,
-                                setFieldTouched,
-                                handleSubmit,
-                                handleBlur,
-                                isSubmitting,
-                            }) => {
-                                return (
-                                    <>
-                                        {/* Header */}
-                                        <View
-                                            className={[
-                                                'flex-row items-center justify-between border-b',
-                                                isNarrow ? 'p-3' : 'p-4',
-                                            ].join(' ')}
-                                            style={{
-                                                borderBottomColor:
-                                                    dividerColor,
-                                            }}
-                                        >
-                                            <Text
-                                                className="font-bold"
-                                                style={{
-                                                    color: theme.text,
-                                                    fontFamily:
-                                                        theme.font.bold,
-                                                    fontSize: isNarrow
-                                                        ? theme.fontSize.base
-                                                        : theme.fontSize.lg,
-                                                }}
-                                            >
-                                                {initialItem
-                                                    ? 'Edit item'
-                                                    : 'Add item'}
-                                            </Text>
-                                            <Pressable
-                                                onPress={onClose}
-                                                hitSlop={10}
-                                                className="p-1.5"
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Close"
-                                            >
-                                                <Text
-                                                    className="font-bold"
-                                                    style={{
-                                                        color: theme.textDark,
-                                                        fontFamily:
-                                                            theme.font.bold,
-                                                        fontSize:
-                                                            theme.fontSize
-                                                                .base,
-                                                    }}
-                                                >
-                                                    ✕
-                                                </Text>
-                                            </Pressable>
-                                        </View>
+                            <EntitiesMultiselectPicker
+                                options={wholesalerOptions}
+                                value={values.target_wholesaler_ids}
+                                loading={loadingWholesalers}
+                                placeholder="Select wholesalers…"
+                                onChange={(ids: string[]) => setFieldValue('target_wholesaler_ids', ids)}
+                            />
+                        </FormSection>
 
-                                        {/* Body */}
-                                        <ScrollView
-                                            className="flex-1"
-                                            contentContainerStyle={{
-                                                padding: isNarrow
-                                                    ? 10
-                                                    : 16,
-                                            }}
-                                            keyboardShouldPersistTaps="handled"
-                                        >
-                                            <FieldLabel
-                                                label="Product"
-                                                theme={theme}
-                                            />
-                                            <ProductPickerAutocomplete
-                                                name="productId"
-                                                fieldMap={{
-                                                    id: 'productId',
-                                                    title: 'productTitle',
-                                                    bar_code:
-                                                        'productBarCode',
-                                                    thumbnail_url:
-                                                        'productThumbnailUrl',
-                                                }}
-                                                imageKey="thumbnail_url"
-                                                titleKey="title"
-                                                subtitleKey="bar_code"
-                                                products={
-                                                    products as unknown as Product[]
-                                                }
-                                                placeholder="Select a product…"
-                                                disabled={
-                                                    !!loadingProducts &&
-                                                    products.length === 0
-                                                }
-                                            />
-                                            <FieldError
-                                                show={touched.productId}
-                                                message={
-                                                    typeof errors.productId ===
-                                                        'string'
-                                                        ? errors.productId
-                                                        : undefined
-                                                }
-                                                theme={theme}
-                                            />
-
-                                            <View className="flex-row gap-2 mt-3">
-                                                <View className="flex-1">
-                                                    <FieldLabel
-                                                        label="Quantity"
-                                                        theme={theme}
-                                                    />
-                                                    <TextInput
-                                                        value={
-                                                            values.quantity
-                                                        }
-                                                        onChangeText={(v) =>
-                                                            setFieldValue(
-                                                                'quantity',
-                                                                v.replace(
-                                                                    /[^0-9]/g,
-                                                                    ''
-                                                                )
-                                                            )
-                                                        }
-                                                        onFocus={() => {
-                                                            if (
-                                                                values.quantity
-                                                            ) {
-                                                                quantityBeforeFocusRef.current =
-                                                                    values.quantity;
-                                                                setFieldValue(
-                                                                    'quantity',
-                                                                    ''
-                                                                );
-                                                            }
-                                                        }}
-                                                        onBlur={() => {
-                                                            if (
-                                                                !values.quantity
-                                                            ) {
-                                                                setFieldValue(
-                                                                    'quantity',
-                                                                    quantityBeforeFocusRef.current ||
-                                                                    DEFAULT_QUANTITY
-                                                                );
-                                                            }
-                                                            setFieldTouched(
-                                                                'quantity',
-                                                                true,
-                                                                true
-                                                            );
-                                                        }}
-                                                        keyboardType="numeric"
-                                                        inputMode="numeric"
-                                                        placeholder={
-                                                            DEFAULT_QUANTITY
-                                                        }
-                                                        placeholderTextColor={`${theme.textDark}99`}
-                                                        className="h-12 rounded-xl border px-3 text-center text-[14px] font-bold"
-                                                        style={{
-                                                            borderColor:
-                                                                touched.quantity &&
-                                                                    errors.quantity
-                                                                    ? '#ef4444'
-                                                                    : borderColor,
-                                                            backgroundColor:
-                                                                inputBg,
-                                                            color: theme.text,
-                                                            fontFamily:
-                                                                theme.font
-                                                                    .bold,
-                                                            textAlign:
-                                                                'center',
-                                                        }}
-                                                    />
-                                                    <FieldError
-                                                        show={
-                                                            touched.quantity
-                                                        }
-                                                        message={
-                                                            typeof errors.quantity ===
-                                                                'string'
-                                                                ? errors.quantity
-                                                                : undefined
-                                                        }
-                                                        theme={theme}
-                                                    />
-                                                </View>
-                                                <View className="flex-1">
-                                                    <FieldLabel
-                                                        label="Urgency"
-                                                        theme={theme}
-                                                    />
-                                                    <View
-                                                        className="flex-row gap-1"
-                                                        accessibilityRole="radiogroup"
-                                                    >
-                                                        {URGENCY_OPTIONS.map(
-                                                            (u) => {
-                                                                const active =
-                                                                    values.urgency ===
-                                                                    u.value;
-                                                                return (
-                                                                    <Pressable
-                                                                        key={
-                                                                            u.value
-                                                                        }
-                                                                        onPress={() =>
-                                                                            setFieldValue(
-                                                                                'urgency',
-                                                                                u.value
-                                                                            )
-                                                                        }
-                                                                        accessibilityRole="radio"
-                                                                        accessibilityState={{
-                                                                            selected:
-                                                                                active,
-                                                                        }}
-                                                                        accessibilityLabel={
-                                                                            u.label
-                                                                        }
-                                                                        className="flex-1 h-12 rounded-xl border items-center justify-center"
-                                                                        style={{
-                                                                            borderColor:
-                                                                                active
-                                                                                    ? u.tint
-                                                                                    : borderColor,
-                                                                            backgroundColor:
-                                                                                active
-                                                                                    ? `${u.tint}15`
-                                                                                    : inputBg,
-                                                                        }}
-                                                                    >
-                                                                        <Text
-                                                                            className="text-[11px] font-bold uppercase"
-                                                                            style={{
-                                                                                color: active
-                                                                                    ? u.tint
-                                                                                    : theme.textDark,
-                                                                                fontFamily:
-                                                                                    theme
-                                                                                        .font
-                                                                                        .bold,
-                                                                            }}
-                                                                        >
-                                                                            {
-                                                                                u.label
-                                                                            }
-                                                                        </Text>
-                                                                    </Pressable>
-                                                                );
-                                                            }
-                                                        )}
-                                                    </View>
-                                                </View>
-                                            </View>
-
-                                            <View className="mt-3">
-                                                <FieldLabel
-                                                    label={`Wholesalers${values
-                                                            .target_wholesaler_ids
-                                                            .length > 0
-                                                            ? ` · ${values
-                                                                .target_wholesaler_ids
-                                                                .length
-                                                            } selected`
-                                                            : ''
-                                                        }`}
-                                                    theme={theme}
-                                                />
-                                                <EntitiesMultiselectPicker
-                                                    options={wholesalerOptions}
-                                                    value={
-                                                        values.target_wholesaler_ids
-                                                    }
-                                                    loading={
-                                                        loadingWholesalers
-                                                    }
-                                                    placeholder="Select wholesalers…"
-                                                    onChange={(
-                                                        ids: string[]
-                                                    ) =>
-                                                        setFieldValue(
-                                                            'target_wholesaler_ids',
-                                                            ids
-                                                        )
-                                                    }
-                                                />
-                                            </View>
-
-                                            <View className="mt-3">
-                                                <FieldLabel
-                                                    label="Note"
-                                                    theme={theme}
-                                                />
-                                                <TextInput
-                                                    value={values.note}
-                                                    onChangeText={(v) =>
-                                                        setFieldValue(
-                                                            'note',
-                                                            v
-                                                        )
-                                                    }
-                                                    onBlur={handleBlur('note')}
-                                                    placeholder="Optional note to the wholesalers…"
-                                                    placeholderTextColor={`${theme.textDark}99`}
-                                                    multiline
-                                                    numberOfLines={3}
-                                                    className="rounded-xl border px-3 py-2.5 text-[13px]"
-                                                    style={{
-                                                        borderColor:
-                                                            touched.note &&
-                                                                errors.note
-                                                                ? '#ef4444'
-                                                                : borderColor,
-                                                        backgroundColor:
-                                                            inputBg,
-                                                        color: theme.text,
-                                                        fontFamily:
-                                                            theme.font.medium,
-                                                        minHeight: 72,
-                                                        textAlignVertical:
-                                                            'top',
-                                                    }}
-                                                />
-                                                <View className="flex-row justify-between mt-1">
-                                                    <FieldError
-                                                        show={touched.note}
-                                                        message={
-                                                            typeof errors.note ===
-                                                                'string'
-                                                                ? errors.note
-                                                                : undefined
-                                                        }
-                                                        theme={theme}
-                                                    />
-                                                    <Text
-                                                        className="text-[10px] ml-auto"
-                                                        style={{
-                                                            color:
-                                                                values.note
-                                                                    .length >
-                                                                    NOTE_MAX
-                                                                    ? '#ef4444'
-                                                                    : `${theme.textDark}99`,
-                                                            fontFamily:
-                                                                theme.font
-                                                                    .medium,
-                                                        }}
-                                                    >
-                                                        {values.note.length}/
-                                                        {NOTE_MAX}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        </ScrollView>
-
-                                        {/* Footer */}
-                                        <View
-                                            className="border-t"
-                                            style={{
-                                                borderTopColor:
-                                                    dividerColor,
-                                            }}
-                                        >
-                                            <View
-                                                className={[
-                                                    'flex-row justify-end gap-2',
-                                                    isNarrow
-                                                        ? 'p-2.5'
-                                                        : 'p-4',
-                                                ].join(' ')}
-                                            >
-                                                <Pressable
-                                                    onPress={onClose}
-                                                    accessibilityRole="button"
-                                                    className={[
-                                                        'rounded-xl border items-center justify-center min-h-[44px]',
-                                                        isNarrow
-                                                            ? 'px-3.5'
-                                                            : 'px-5',
-                                                    ].join(' ')}
-                                                    style={{
-                                                        borderColor,
-                                                    }}
-                                                >
-                                                    <Text
-                                                        className="uppercase tracking-wide text-[12px] font-bold"
-                                                        style={{
-                                                            color: theme.textDark,
-                                                            fontFamily:
-                                                                theme.font
-                                                                    .bold,
-                                                        }}
-                                                    >
-                                                        Cancel
-                                                    </Text>
-                                                </Pressable>
-                                                <Pressable
-                                                    onPress={() =>
-                                                        handleSubmit()
-                                                    }
-                                                    disabled={isSubmitting}
-                                                    accessibilityRole="button"
-                                                    className={[
-                                                        'rounded-xl items-center justify-center min-h-[44px]',
-                                                        isNarrow
-                                                            ? 'px-5 flex-grow'
-                                                            : 'px-6',
-                                                    ].join(' ')}
-                                                    style={{
-                                                        backgroundColor:
-                                                            theme.primary,
-                                                        opacity: isSubmitting
-                                                            ? 0.6
-                                                            : 1,
-                                                    }}
-                                                >
-                                                    <Text
-                                                        className="uppercase tracking-wide text-white text-[12px] font-bold"
-                                                        style={{
-                                                            fontFamily:
-                                                                theme.font
-                                                                    .bold,
-                                                        }}
-                                                    >
-                                                        {initialItem
-                                                            ? 'Save changes'
-                                                            : 'Add to list'}
-                                                    </Text>
-                                                </Pressable>
-                                            </View>
-                                        </View>
-                                    </>
-                                );
-                            }}
-                        </Formik>
-                    </View>
-                </View>
-            </KeyboardAvoidingView>
-        </Modal>
-    );
-}
-
-/* =========================================================
- * Small pieces
- * ======================================================= */
-
-function FieldLabel({
-    label,
-    theme,
-}: {
-    label: string;
-    theme: ThemeShape;
-}) {
-    return (
-        <Text
-            className="uppercase tracking-widest text-[10px] font-bold mb-1.5"
-            style={{
-                color: theme.textDark,
-                fontFamily: theme.font.bold,
+                        <FormSection title="Note" hint="Optional — shown to the wholesalers.">
+                            <CustomTextField
+                                value={values.note}
+                                onChangeText={(v) => setFieldValue('note', v)}
+                                onBlur={() => setFieldTouched('note', true, true)}
+                                placeholder="e.g. Need it before Friday"
+                                multiline
+                                numberOfLines={3}
+                                error={show('note')}
+                                hint={`${values.note.length}/${NOTE_MAX}`}
+                            />
+                        </FormSection>
+                    </AdminFormSheet>
+                );
             }}
-        >
-            {label}
-        </Text>
-    );
-}
-
-function FieldError({
-    show,
-    message,
-    theme,
-}: {
-    show?: boolean;
-    message?: string;
-    theme: ThemeShape;
-}) {
-    if (!show || !message) return null;
-
-    return (
-        <Text
-            className="mt-1 text-[11px] font-medium"
-            style={{
-                color: '#ef4444',
-                fontFamily: theme.font.medium,
-            }}
-        >
-            {message}
-        </Text>
+        </Formik>
     );
 }

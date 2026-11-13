@@ -66,7 +66,7 @@ export default function OrdersDashboardScreen() {
 
             {/* WEB DESKTOP SHEET VIEW */}
             <View className="hidden md:flex flex-1 rounded-2xl overflow-hidden border" style={{ borderColor: subtleBorderColor }}>
-                <View style={{ backgroundColor: tableHeaderBg }} className="flex-row py-3 px-4 border-b" style={{ borderBottomColor: subtleBorderColor }}>
+                <View className="flex-row py-3 px-4 border-b" style={{ backgroundColor: tableHeaderBg, borderBottomColor: subtleBorderColor }}>
                     <Text className="flex-[1.5] text-slate-400 font-bold text-xs uppercase tracking-wider">Order ID</Text>
                     <Text className="flex-2 text-slate-400 font-bold text-xs uppercase tracking-wider">Client & Firm</Text>
                     <Text className="flex-1 text-slate-400 font-bold text-xs uppercase tracking-wider text-center">Items</Text>

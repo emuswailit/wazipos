@@ -30,7 +30,6 @@ export default function OrderManifestHeader({
     isNetworkLoading,
     onResetWorkspaceTrigger,
 }: OrderManifestHeaderProps) {
-    const isDark = (theme as any).isDarkMode;
 
     const isOk = syncStatus === 'ok';
     const isError = syncStatus === 'error';

@@ -1,14 +1,14 @@
 import { ApiResponse } from "apisauce";
 import client from "../client";
 
-export type UploadProgressCallback = (progressFraction: number) => void;
+type UploadProgressCallback = (progressFraction: number) => void;
 
-export interface EmbeddedIdEntity {
+interface EmbeddedIdEntity {
   id: string;
   [key: string]: any;
 }
 
-export interface ProductInputPayload {
+interface ProductInputPayload {
   title: string;
   description: string;
   units_per_pack: string | number;

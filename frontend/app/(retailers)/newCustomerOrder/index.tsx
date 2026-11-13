@@ -1,9 +1,12 @@
-// app/(retailers)/newCustomerOrder/CreateOrderScreen.tsx
+// app/(retailers)/newCustomerOrder/index.tsx
 
-import retailersApi from '@/api/retailersApi';
+import ApiErrorModal from '@/components/common/ApiErrorModal';
+import PaymentStatusModal from '@/components/common/PaymentStatusModal';
+import { UniversalScannerModal } from '@/components/common/UniversalScannerModal';
+import { FulfillmentControls, FulfillmentModal } from '@/components/retailers/newCustomerOrder/FulfillmentModal';
+import { OrderMainSection } from '@/components/retailers/newCustomerOrder/OrderMainSection';
 import { useAuth } from '@/context/AuthContext';
-import { useApi } from '@/hooks/useApi';
-import { useRouter } from 'expo-router';
+import { useCreateOrder } from '@/hooks/useCreateOrder';
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
     ActivityIndicator,
@@ -13,69 +16,49 @@ import {
     ScrollView,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FulfillmentControls } from '../../../components/retailers/newCustomerOrder/FulfillmentControls';
-import { FulfillmentModal } from '../../../components/retailers/newCustomerOrder/FulfillmentModal';
-import { MomoPollerModal } from '../../../components/retailers/newCustomerOrder/MomoPollerModal';
-import { OrderMainSection } from '../../../components/retailers/newCustomerOrder/OrderMainSection';
-import { UniversalScannerModal } from '../../../components/retailers/newCustomerOrder/UniversalScannerModal';
-import { useCreateOrder } from '../../../components/retailers/newCustomerOrder/useCreateOrder';
 
 export default function CreateOrderScreen() {
     const { theme } = useAuth();
-    const router = useRouter();
-
     const scrollRef = useRef<ScrollView>(null);
     const rowCoordinatesRef = useRef<Record<string, number>>({});
-    const submitOrderApi = useApi(retailersApi.retailStaffAction);
 
     const {
-        retailerReceipts,
-        isSyncing,
-        triggerManualFetch,
-        lastSyncedTime,
-        paymentMethodsList,
-        isPaymentSyncing,
-        deliveryMethod,
-        setDeliveryMethod,
-        selectedPaymentMethodId,
-        setSelectedPaymentMethodId,
-        isBottomSheetVisible,
-        setIsBottomSheetVisible,
-        isScannerOpen,
-        setIsScannerOpen,
-        isMomoPolling,
-        momoActiveDraftId,
-        bannerState,
-        paymentDetails,
-        setPaymentDetails,
-        lineItems,
-        isBlankRowPresent,
-        handleUpdateRow,
-        handleSelectProduct,
-        handleAddRow,
-        handleDeleteRow,
-        handleSaveOrder,
-        handleBarcodeScannedContinuously,
-        handleMomoVerificationFinished,
-        handleSearchFocused,
-        totals,
-        localStats,
-    } = useCreateOrder(submitOrderApi);
+        retailerReceipts, paymentMethodsList, isSyncing, triggerManualFetch,
+        isPaymentSyncing, deliveryMethod, setDeliveryMethod, selectedPaymentMethodId,
+        setSelectedPaymentMethodId, isBottomSheetVisible, setIsBottomSheetVisible,
+        isScannerOpen, setIsScannerOpen, paymentDetails, setPaymentDetails,
+        lineItems, isBlankRowPresent, handleUpdateRow, handleSelectProduct,
+        handleAddRow, handleDeleteRow, handleSaveOrder, handleBarcodeScannedContinuously,
+        handleSearchFocused, totals, errorMessage, successMessage, setErrorMessage,
+        setSuccessMessage, isSaving, wsStatus, wsDescription, resetWsState,
+        isRetryingPayment, handleRetryPayment, handlePaymentSuccess,
+        isRetailerDelivery, setIsRetailerDelivery,
+        selectedCourierId, setSelectedCourierId,
+        selectedCollectionPoint, setSelectedCollectionPoint,
+        couriers, couriersLoading,
+        collectionPoints, pointsLoading,
+        deliveryEmployees, deliveryEmployeesLoading, // 🟢 Destructure Employee state
+        selectedDeliveryEmployeeId, setSelectedDeliveryEmployeeId,
+        shippingLoading,
+    } = useCreateOrder();
 
     const lastRowId = lineItems[lineItems.length - 1]?.id;
 
-    // Auto-scroll to the last row whenever a new row is added.
+    useEffect(() => {
+        if (successMessage && !wsStatus) {
+            const timer = setTimeout(() => setSuccessMessage(null), 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMessage, wsStatus, setSuccessMessage]);
+
     useEffect(() => {
         if (!lastRowId) return;
         const y = rowCoordinatesRef.current[lastRowId];
         if (y === undefined) return;
-
-        const t = setTimeout(() => {
-            scrollRef.current?.scrollTo({ y, animated: true });
-        }, 100);
+        const t = setTimeout(() => scrollRef.current?.scrollTo({ y, animated: true }), 100);
         return () => clearTimeout(t);
     }, [lineItems.length, lastRowId]);
 
@@ -83,457 +66,132 @@ export default function CreateOrderScreen() {
         rowCoordinatesRef.current[id] = y;
     }, []);
 
-    const goToOrdersList = useCallback(() => {
-        router.push('client/orders' as any);
-    }, [router]);
-
     const openFulfillmentSheet = useCallback(() => {
         setIsBottomSheetVisible(true);
     }, [setIsBottomSheetVisible]);
 
-    // `totals` from useOrderCalculations is { totalDiscount, orderTotal }.
-    const grandTotal = Number(totals?.orderTotal ?? 0).toFixed(2);
-    const totalDiscount = Number(
-        totals?.totalDiscount ?? 0
-    ).toFixed(2);
+    const grandTotal = Number(totals?.total ?? 0).toFixed(2);
 
     return (
-        <SafeAreaView
-            style={{ backgroundColor: theme.background }}
-            className="flex-1 w-full relative"
-            edges={['top', 'left', 'right']}
-        >
-            {bannerState.visible && (
-                <View
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderColor:
-                            bannerState.type === 'success'
-                                ? '#10b981'
-                                : '#ef4444',
-                    }}
-                    className="absolute top-6 left-6 right-6 p-4 rounded-2xl border-2 shadow-2xl flex-row items-center space-x-4 z-50"
-                >
-                    <View
-                        style={{
-                            backgroundColor:
-                                bannerState.type === 'success'
-                                    ? 'rgba(16,185,129,0.1)'
-                                    : 'rgba(239,68,68,0.1)',
-                        }}
-                        className="w-10 h-10 rounded-full items-center justify-center"
-                    >
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.base,
-                                color:
-                                    bannerState.type === 'success'
-                                        ? '#10b981'
-                                        : '#ef4444',
-                            }}
-                        >
-                            {bannerState.type === 'success'
-                                ? '✓'
-                                : '✕'}
-                        </Text>
+        <SafeAreaView style={{ backgroundColor: theme.background }} className="flex-1 w-full relative" edges={[]}>
+
+            {/* !! so an empty string never renders as a bare text node inside the View */}
+            {!!successMessage && !wsStatus && (
+                <View style={{ backgroundColor: theme.panel, borderColor: '#10b981' }} className="absolute top-4 left-4 right-4 p-3 rounded-xl border-2 shadow-2xl flex-row items-center space-x-3 z-50">
+                    <View style={{ backgroundColor: 'rgba(16,185,129,0.1)' }} className="w-8 h-8 rounded-full items-center justify-center">
+                        <Text style={{ fontFamily: theme.font.bold, color: '#10b981' }}>✓</Text>
                     </View>
                     <View className="flex-1 flex-col">
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.base,
-                                color: theme.text,
-                            }}
-                            className="tracking-tight font-black"
-                        >
-                            {bannerState.title}
-                        </Text>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.xs,
-                                color: theme.textDark,
-                            }}
-                            className="mt-0.5"
-                        >
-                            {bannerState.subtitle}
-                        </Text>
+                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }}>Success</Text>
+                        <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.textDark }}>{successMessage}</Text>
                     </View>
                 </View>
             )}
 
-            <KeyboardAvoidingView
-                behavior={
-                    Platform.OS === 'ios' ? 'padding' : 'height'
-                }
-                className="flex-1"
-                keyboardVerticalOffset={
-                    Platform.OS === 'ios' ? 88 : 0
-                }
-            >
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
                 <View className="flex-1 relative">
                     <ScrollView
                         ref={scrollRef}
-                        showsVerticalScrollIndicator={true}
-                        contentContainerStyle={{
-                            padding: 16,
-                            paddingBottom:
-                                Platform.OS === 'web' ? 40 : 160,
-                        }}
+                        contentContainerStyle={{ padding: 12, paddingBottom: Platform.OS === 'web' ? 20 : 100 }}
                         className="w-full lg:max-w-[80vw] lg:mx-auto"
                         keyboardShouldPersistTaps="handled"
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={isSyncing}
-                                onRefresh={triggerManualFetch}
-                                tintColor={theme.primary}
-                            />
-                        }
+                        refreshControl={<RefreshControl refreshing={isSyncing} onRefresh={triggerManualFetch} tintColor={theme.primary} />}
                     >
-                        {/* -------------------- Header -------------------- */}
-                        <View className="w-full flex flex-col md:flex-row justify-between items-start md:items-center pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 gap-y-4 md:gap-y-0 min-h-[64px] relative z-40">
-                            <View className="flex-col flex-1 min-w-0 pr-6">
-                                <View className="flex-row items-center flex-wrap gap-x-2.5 gap-y-1">
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.xl,
-                                            color: theme.text,
-                                        }}
-                                        className="tracking-tight font-black"
-                                    >
-                                        New Customer Order
-                                    </Text>
-
-                                    {isSyncing ? (
-                                        <View className="flex-row items-center bg-blue-500/10 px-2 py-0.5 rounded-md space-x-1">
-                                            <ActivityIndicator
-                                                size="small"
-                                                color={theme.primary}
-                                                style={{
-                                                    transform: [
-                                                        {
-                                                            scale: 0.7,
-                                                        },
-                                                    ],
-                                                }}
-                                            />
-                                            <Text className="text-blue-500 font-custom-bold text-xs-size tracking-widest uppercase">
-                                                Syncing
-                                            </Text>
-                                        </View>
-                                    ) : lastSyncedTime ? (
-                                        <View className="bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                                            <Text
-                                                style={{
-                                                    color: '#10b981',
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize:
-                                                        theme.fontSize
-                                                            .xs,
-                                                }}
-                                                className="font-bold uppercase tracking-wider"
-                                            >
-                                                🕒 Synced{' '}
-                                                {lastSyncedTime}
-                                            </Text>
-                                        </View>
-                                    ) : null}
-                                </View>
-
-                                <View className="flex-row items-center space-x-3 mt-1.5 flex-wrap gap-y-1">
-                                    <View className="bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">
-                                        <Text
-                                            style={{
-                                                color: '#10b981',
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            🟢 Synced:{' '}
-                                            {localStats.syncedCount}
-                                        </Text>
-                                    </View>
-                                    <View
-                                        style={{
-                                            backgroundColor:
-                                                localStats.unsyncedCount >
-                                                    0
-                                                    ? 'rgba(244,63,94,0.1)'
-                                                    : 'rgba(148,163,184,0.1)',
-                                            borderColor:
-                                                localStats.unsyncedCount >
-                                                    0
-                                                    ? 'rgba(244,63,94,0.2)'
-                                                    : 'rgba(148,163,184,0.2)',
-                                        }}
-                                        className="border px-2.5 py-1 rounded-md"
-                                    >
-                                        <Text
-                                            style={{
-                                                color:
-                                                    localStats.unsyncedCount >
-                                                        0
-                                                        ? '#f43f5e'
-                                                        : '#94a3b8',
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            🟠 Pending:{' '}
-                                            {localStats.unsyncedCount}
-                                        </Text>
-                                    </View>
-
-                                    <TouchableOpacity
-                                        onPress={goToOrdersList}
-                                        style={{
-                                            backgroundColor:
-                                                theme.primary + '15',
-                                            borderColor:
-                                                theme.primary + '30',
-                                        }}
-                                        className="border px-3 py-1 rounded-md lg:hidden active:scale-95"
-                                        accessibilityRole="button"
-                                        accessibilityLabel="View orders list"
-                                    >
-                                        <Text
-                                            style={{
-                                                color: theme.primary,
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            📋 View List
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-
-                            <TouchableOpacity
-                                onPress={() => setIsScannerOpen(true)}
-                                style={{
-                                    backgroundColor: theme.primary,
-                                }}
-                                className="hidden lg:flex px-5 py-3 rounded-xl shadow-md active:scale-95 flex-row items-center"
-                                accessibilityRole="button"
-                                accessibilityLabel="Scan barcodes"
-                            >
-                                <Text
-                                    style={{
-                                        fontFamily: theme.font.bold,
-                                        fontSize: theme.fontSize.sm,
-                                    }}
-                                    className="text-white"
-                                >
-                                    📷 Scan Barcodes
-                                </Text>
+                        <View className="w-full flex flex-col md:flex-row justify-between items-start md:items-center pb-3 mb-4 border-b border-slate-200 gap-y-2 relative z-40">
+                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.lg, color: theme.text }}>
+                                New Customer Order
+                            </Text>
+                            <TouchableOpacity onPress={() => setIsScannerOpen(true)} style={{ backgroundColor: theme.primary }} className="hidden lg:flex px-4 py-2 rounded-lg shadow-sm active:scale-95 flex-row items-center">
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm }} className="text-white">📷 Scan Barcodes</Text>
                             </TouchableOpacity>
                         </View>
 
-                        {/* -------------------- Body -------------------- */}
-                        <View className="flex-col lg:flex-row gap-4 items-start relative z-10 w-full">
-                            <OrderMainSection
-                                theme={theme}
-                                lineItems={lineItems}
-                                retailerReceipts={retailerReceipts}
-                                isBlankRowPresent={isBlankRowPresent}
-                                handleUpdateRow={handleUpdateRow}
-                                handleDeleteRow={handleDeleteRow}
-                                handleSelectProduct={handleSelectProduct}
-                                handleAddRow={handleAddRow}
-                                setIsScannerOpen={setIsScannerOpen}
-                                setIsBottomSheetVisible={
-                                    setIsBottomSheetVisible
-                                }
-                                onSearchFocused={handleSearchFocused}
-                                totals={totals}
-                                onRowLayout={handleRowLayout}
-                            />
-
-                            <View
-                                style={{
-                                    backgroundColor: theme.panel,
-                                }}
-                                className="hidden lg:flex w-[360px] xl:w-[400px] z-20 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
-                            >
-                                <FulfillmentControls
-                                    deliveryMethod={deliveryMethod}
-                                    setDeliveryMethod={
-                                        setDeliveryMethod
-                                    }
-                                    paymentMethodsList={
-                                        paymentMethodsList
-                                    }
-                                    selectedPaymentMethodId={
-                                        selectedPaymentMethodId
-                                    }
-                                    setSelectedPaymentMethodId={
-                                        setSelectedPaymentMethodId
-                                    }
-                                    isPaymentSyncing={
-                                        isPaymentSyncing
-                                    }
-                                    paymentDetails={paymentDetails}
-                                    setPaymentDetails={
-                                        setPaymentDetails
-                                    }
-                                    totals={totals}
+                        <View className="flex-col lg:flex-row gap-3 items-start relative z-10 w-full">
+                            <View className="w-full lg:flex-1">
+                                <OrderMainSection
+                                    theme={theme} lineItems={lineItems} retailerReceipts={retailerReceipts}
+                                    isBlankRowPresent={isBlankRowPresent} handleUpdateRow={handleUpdateRow}
+                                    handleDeleteRow={handleDeleteRow} handleSelectProduct={handleSelectProduct}
+                                    handleAddRow={handleAddRow} setIsScannerOpen={setIsScannerOpen}
+                                    onSearchFocused={handleSearchFocused}
+                                    totals={totals} onRowLayout={handleRowLayout}
                                 />
-                                <TouchableOpacity
-                                    onPress={handleSaveOrder}
-                                    style={{
-                                        backgroundColor:
-                                            theme.primary,
-                                    }}
-                                    className="mt-6 w-full py-3.5 rounded-xl items-center justify-center shadow-md active:opacity-90"
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Save order"
-                                >
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.base,
-                                        }}
-                                        className="text-white"
-                                    >
-                                        Save Order
-                                    </Text>
+                            </View>
+
+                            <View style={{ backgroundColor: theme.panel }} className="hidden lg:flex w-[340px] z-20 p-4 rounded-xl border border-slate-200 shadow-xs">
+                                <FulfillmentControls
+                                    deliveryMethod={deliveryMethod} setDeliveryMethod={setDeliveryMethod}
+                                    paymentMethodsList={paymentMethodsList} selectedPaymentMethodId={selectedPaymentMethodId}
+                                    setSelectedPaymentMethodId={setSelectedPaymentMethodId} isPaymentSyncing={isPaymentSyncing}
+                                    paymentDetails={paymentDetails} setPaymentDetails={setPaymentDetails} totals={totals}
+
+                                    isRetailerDelivery={isRetailerDelivery} onToggleRetailerDelivery={setIsRetailerDelivery}
+                                    couriers={couriers} couriersLoading={couriersLoading}
+                                    selectedCourierId={selectedCourierId} onSelectCourier={setSelectedCourierId}
+                                    collectionPoints={collectionPoints} collectionPointsLoading={pointsLoading}
+                                    selectedCollectionPoint={selectedCollectionPoint} onSelectCollectionPoint={setSelectedCollectionPoint}
+
+                                    // 🟢 Pass Employee Props
+                                    deliveryEmployees={deliveryEmployees}
+                                    deliveryEmployeesLoading={deliveryEmployeesLoading}
+                                    selectedDeliveryEmployeeId={selectedDeliveryEmployeeId}
+                                    onSelectDeliveryEmployee={setSelectedDeliveryEmployeeId}
+
+                                    shippingLoading={shippingLoading}
+                                />
+                                <TouchableOpacity onPress={handleSaveOrder} disabled={isSaving || !selectedPaymentMethodId} style={{ backgroundColor: theme.primary, opacity: (isSaving || !selectedPaymentMethodId) ? 0.5 : 1 }} className="mt-4 w-full py-2.5 rounded-lg flex-row items-center justify-center shadow-sm">
+                                    {isSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base }} className="text-white">{isRetryingPayment ? 'Retry Payment' : 'Save Order'}</Text>}
                                 </TouchableOpacity>
                             </View>
                         </View>
                     </ScrollView>
 
-                    {/* ---------- Mobile sticky action bar (below lg) ---------- */}
-                    <View
-                        className="lg:hidden absolute bottom-0 left-0 right-0 px-4 pt-3 pb-4 border-t border-slate-200 dark:border-slate-800"
-                        style={{ backgroundColor: theme.panel }}
-                    >
+                    <View className="lg:hidden absolute bottom-0 left-0 right-0 px-3 pt-2 pb-3 border-t border-slate-200" style={{ backgroundColor: theme.panel }}>
                         <View className="flex-row items-center justify-between">
                             <View className="flex-col flex-1 mr-3">
-                                <View className="flex-row items-center justify-between">
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 10,
-                                            color: theme.textDark,
-                                        }}
-                                        className="uppercase tracking-wider"
-                                    >
-                                        Total Discount
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 11,
-                                            color: '#f43f5e',
-                                        }}
-                                    >
-                                        KES -{totalDiscount}
-                                    </Text>
-                                </View>
-                                <View className="flex-row items-center justify-between mt-0.5">
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 11,
-                                            color: theme.textDark,
-                                        }}
-                                        className="uppercase tracking-wider"
-                                    >
-                                        Order Total
-                                    </Text>
-                                    <Text
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize:
-                                                theme.fontSize.base,
-                                            color: theme.text,
-                                        }}
-                                    >
-                                        KES {grandTotal}
-                                    </Text>
-                                </View>
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textDark }} className="uppercase">Order Total</Text>
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }}>KES {grandTotal}</Text>
                             </View>
-
-                            <TouchableOpacity
-                                onPress={openFulfillmentSheet}
-                                style={{
-                                    backgroundColor: theme.primary,
-                                    minWidth: 140,
-                                }}
-                                className="py-3 px-5 rounded-xl items-center justify-center shadow-md active:opacity-90"
-                                accessibilityRole="button"
-                                accessibilityLabel="Review and save order"
-                            >
-                                <Text
-                                    style={{
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                    className="text-white"
-                                >
-                                    Review & Save
-                                </Text>
+                            <TouchableOpacity onPress={openFulfillmentSheet} style={{ backgroundColor: theme.primary, minWidth: 130 }} className="py-2.5 px-4 rounded-lg items-center justify-center shadow-sm">
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm }} className="text-white">Review & Save</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* -------------------- Modals -------------------- */}
                     <FulfillmentModal
-                        visible={isBottomSheetVisible}
-                        onClose={() =>
-                            setIsBottomSheetVisible(false)
-                        }
-                        deliveryMethod={deliveryMethod}
-                        setDeliveryMethod={setDeliveryMethod}
-                        paymentMethodsList={paymentMethodsList}
-                        selectedPaymentMethodId={
-                            selectedPaymentMethodId
-                        }
-                        setSelectedPaymentMethodId={
-                            setSelectedPaymentMethodId
-                        }
-                        isPaymentSyncing={isPaymentSyncing}
-                        paymentDetails={paymentDetails}
-                        setPaymentDetails={setPaymentDetails}
-                        onSave={handleSaveOrder}
-                        totals={totals}
-                        theme={theme}
+                        visible={isBottomSheetVisible} onClose={() => setIsBottomSheetVisible(false)}
+                        deliveryMethod={deliveryMethod} setDeliveryMethod={setDeliveryMethod}
+                        paymentMethodsList={paymentMethodsList} selectedPaymentMethodId={selectedPaymentMethodId}
+                        setSelectedPaymentMethodId={setSelectedPaymentMethodId} isPaymentSyncing={isPaymentSyncing}
+                        paymentDetails={paymentDetails} setPaymentDetails={setPaymentDetails}
+                        onSave={handleSaveOrder} totals={totals} theme={theme} isSaving={isSaving}
+                        isRetryingPayment={isRetryingPayment}
+
+                        isRetailerDelivery={isRetailerDelivery} onToggleRetailerDelivery={setIsRetailerDelivery}
+                        couriers={couriers} couriersLoading={couriersLoading}
+                        selectedCourierId={selectedCourierId} onSelectCourier={setSelectedCourierId}
+                        collectionPoints={collectionPoints} collectionPointsLoading={pointsLoading}
+                        selectedCollectionPoint={selectedCollectionPoint} onSelectCollectionPoint={setSelectedCollectionPoint}
+
+                        // 🟢 Pass Employee Props
+                        deliveryEmployees={deliveryEmployees}
+                        deliveryEmployeesLoading={deliveryEmployeesLoading}
+                        selectedDeliveryEmployeeId={selectedDeliveryEmployeeId}
+                        onSelectDeliveryEmployee={setSelectedDeliveryEmployeeId}
+
+                        shippingLoading={shippingLoading}
                     />
 
-                    <UniversalScannerModal
-                        visible={isScannerOpen}
-                        onClose={() => setIsScannerOpen(false)}
-                        onBarcodeScanned={
-                            handleBarcodeScannedContinuously
-                        }
-                    />
+                    <UniversalScannerModal visible={isScannerOpen} onClose={() => setIsScannerOpen(false)} onBarcodeScanned={handleBarcodeScannedContinuously} />
+                    <ApiErrorModal visible={!!errorMessage} message={errorMessage} errors={[]} onClose={() => setErrorMessage(null)} />
 
-                    <MomoPollerModal
-                        visible={isMomoPolling}
-                        draftId={momoActiveDraftId}
-                        theme={theme}
-                        submitOrderApi={submitOrderApi}
-                        onVerificationComplete={
-                            handleMomoVerificationFinished
-                        }
+                    <PaymentStatusModal
+                        visible={!!wsStatus}
+                        status={wsStatus}
+                        description={wsDescription}
+                        onClose={resetWsState}
+                        onSuccess={handlePaymentSuccess}
+                        onRetry={handleRetryPayment}
                     />
                 </View>
             </KeyboardAvoidingView>

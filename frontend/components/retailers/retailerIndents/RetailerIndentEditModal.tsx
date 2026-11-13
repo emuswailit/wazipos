@@ -1,7 +1,8 @@
 // components/retailers/retailerIndents/RetailerIndentEditModal.tsx
 //
-// Edit modal for retailer indent parameters: open state, lead time,
-// order days, pricing %, budget amount and budget enforcement.
+// Edit sheet for retailer indent parameters: lead time, order days,
+// pricing %, budget amount and budget enforcement. (The params endpoint
+// does not accept is_open; an indent is closed by submitting it.)
 //
 // Behaviour
 //   - Optimistic: values are written into local state the moment Save
@@ -16,21 +17,12 @@
 // follow-up — for now a failed save simply reverts.
 
 import retailersApi from '@/api/retailersApi';
-import { useAuth } from '@/context/AuthContext';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { AdminFormSheet, ChoiceChips, FormRow, FormSection, type ChoiceOption } from '@/components/common/listScreen';
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
 import { RetailerIndent } from '@/databases/types';
 import React, { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { isServerOk } from '@/utils/serverResponse';
 
 /* =========================================================
  * Helpers
@@ -89,10 +81,8 @@ function RetailerIndentEditModal({
     onClose: () => void;
     onSaved: () => void;
 }) {
-    const { theme } = useAuth();
     const { patchIndentLocally } = useRetailerIndentsSync();
 
-    const [isOpen, setIsOpen] = useState('true');
     const [leadTime, setLeadTime] = useState('0');
     const [orderDays, setOrderDays] = useState('0');
     const [pricingPct, setPricingPct] = useState('0');
@@ -106,7 +96,6 @@ function RetailerIndentEditModal({
 
     useEffect(() => {
         if (!indent) return;
-        setIsOpen(toBool(indent.is_open) ? 'true' : 'false');
         setLeadTime(String(indent.lead_time ?? 0));
         setOrderDays(String(indent.order_days ?? 0));
         setPricingPct(
@@ -158,7 +147,6 @@ function RetailerIndentEditModal({
 
         /* Optimistic local write — the list row flips immediately. */
         patchIndentLocally(indent.remote_id, {
-            is_open: isOpen,
             lead_time: nextParams.lead_time,
             order_days: nextParams.order_days,
             pricing_percentage: String(
@@ -195,14 +183,7 @@ function RetailerIndentEditModal({
 
         const payload = res?.data ?? res;
 
-        const isOk =
-            res?.ok === true ||
-            res?.status === 200 ||
-            res?.status === 201 ||
-            res?.status === 202 ||
-            payload?.status === 'accepted' ||
-            payload?.status === 'ok' ||
-            String(payload?.response_code ?? '') === '0';
+        const isOk = isServerOk(res, payload);
 
         if (!isOk) {
             /* Roll back the optimistic write. */
@@ -268,431 +249,80 @@ function RetailerIndentEditModal({
         onSaved();
     };
 
-    /* ── Styling ──────────────────────────────────────────── */
-
-    const borderColor = theme.isDarkMode
-        ? '#334155'
-        : '#e2e8f0';
-    const dividerColor = theme.isDarkMode
-        ? '#334155'
-        : '#f1f5f9';
-    const inputBg = theme.isDarkMode
-        ? '#0f172a'
-        : '#f8fafc';
-
-    const inputStyle = {
-        borderColor,
-        backgroundColor: inputBg,
-        color: theme.text,
-        fontFamily: theme.font.medium,
-        fontSize: theme.fontSize.sm,
-    };
-
     const busy = saving;
-
-    /* ── Render ───────────────────────────────────────────── */
+    const budgetOn = budgetEnforced === 'true';
 
     return (
-        <Modal
+        <AdminFormSheet
             visible={!!indent}
-            animationType="fade"
-            transparent
-            onRequestClose={busy ? undefined : onClose}
+            onClose={busy ? () => { } : onClose}
+            title="Edit indent"
+            subtitle={[indent.indent_number, indent.entity_title].filter(Boolean).join(' · ') || null}
+            icon="options-outline"
+            submitLabel="Save changes"
+            submitting={saving}
+            onSubmit={handleSave}
+            error={errorText}
+            width={600}
         >
-            <KeyboardAvoidingView
-                className="flex-1 bg-black/55 items-center justify-center p-4"
-                behavior={
-                    Platform.OS === 'ios'
-                        ? 'padding'
-                        : undefined
-                }
-            >
-                <View
-                    className="w-full max-w-[560px] rounded-2xl border overflow-hidden"
-                    style={{
-                        backgroundColor: theme.panel,
-                        borderColor,
-                    }}
-                >
-                    {/* Header */}
-                    <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{
-                            borderBottomColor: dividerColor,
-                        }}
-                    >
-                        <View className="flex-1 min-w-0 pr-3">
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize:
-                                        theme.fontSize.lg,
-                                }}
-                            >
-                                Edit Indent Parameters
-                            </Text>
-                            <Text
-                                className="mt-0.5"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                    fontSize:
-                                        theme.fontSize.xs,
-                                }}
-                                numberOfLines={1}
-                            >
-                                {indent.entity_title ||
-                                    indent.remote_id}
-                            </Text>
-                        </View>
-                        <Pressable
-                            onPress={
-                                busy ? undefined : onClose
-                            }
-                            disabled={busy}
-                            hitSlop={10}
-                            className="p-1.5"
-                            style={{
-                                opacity: busy ? 0.4 : 1,
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize:
-                                        theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
+            <FormSection title="Planning" hint="Used to work out how much of each item the indent should cover.">
+                <FormRow>
+                    <CustomTextField
+                        label="Lead time (days)"
+                        value={leadTime}
+                        onChangeText={(t) => setLeadTime(t.replace(/[^0-9]/g, ''))}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        hint="How long wholesalers take to deliver."
+                        editable={!busy}
+                    />
+                    <CustomTextField
+                        label="Order days"
+                        value={orderDays}
+                        onChangeText={(t) => setOrderDays(t.replace(/[^0-9]/g, ''))}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        hint="Days of stock each order should cover."
+                        editable={!busy}
+                    />
+                </FormRow>
+                <CustomTextField
+                    label="Pricing %"
+                    value={pricingPct}
+                    onChangeText={(t) => setPricingPct(t.replace(/[^0-9.]/g, ''))}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    hint="Markup applied when working out profit."
+                    editable={!busy}
+                />
+            </FormSection>
 
-                    {/* Form */}
-                    <ScrollView
-                        contentContainerStyle={{ padding: 16 }}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {errorText ? (
-                            <View
-                                style={{
-                                    backgroundColor:
-                                        'rgba(220,38,38,0.1)',
-                                    borderColor:
-                                        'rgba(220,38,38,0.35)',
-                                    borderWidth: 1,
-                                    borderRadius: 8,
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 8,
-                                    marginBottom: 16,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#dc2626',
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    {errorText}
-                                </Text>
-                            </View>
-                        ) : null}
-
-                        {/* Status */}
-                        <FieldLabel label="Status" />
-                        <View className="flex-row gap-2 mb-4">
-                            {['true', 'false'].map((v) => {
-                                const selected = isOpen === v;
-                                return (
-                                    <Pressable
-                                        key={v}
-                                        onPress={() =>
-                                            setIsOpen(v)
-                                        }
-                                        disabled={busy}
-                                        className="flex-1 py-2.5 rounded-xl border items-center"
-                                        style={{
-                                            borderColor:
-                                                selected
-                                                    ? theme.primary
-                                                    : borderColor,
-                                            backgroundColor:
-                                                selected
-                                                    ? `${theme.primary}15`
-                                                    : 'transparent',
-                                            opacity: busy
-                                                ? 0.6
-                                                : 1,
-                                        }}
-                                    >
-                                        <Text
-                                            className="uppercase tracking-wide"
-                                            style={{
-                                                color: selected
-                                                    ? theme.primary
-                                                    : theme.textDark,
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            {v === 'true'
-                                                ? 'Open'
-                                                : 'Closed'}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-
-                        {/* Lead / Order */}
-                        <View className="flex-row gap-3 mb-4">
-                            <View className="flex-1">
-                                <FieldLabel label="Lead Time (days)" />
-                                <TextInput
-                                    keyboardType="number-pad"
-                                    value={leadTime}
-                                    onChangeText={setLeadTime}
-                                    editable={!busy}
-                                    placeholder="0"
-                                    placeholderTextColor="#94a3b8"
-                                    className="h-11 rounded-xl border px-3.5"
-                                    style={{
-                                        ...inputStyle,
-                                        opacity: busy ? 0.6 : 1,
-                                    }}
-                                />
-                            </View>
-                            <View className="flex-1">
-                                <FieldLabel label="Order Days" />
-                                <TextInput
-                                    keyboardType="number-pad"
-                                    value={orderDays}
-                                    onChangeText={setOrderDays}
-                                    editable={!busy}
-                                    placeholder="0"
-                                    placeholderTextColor="#94a3b8"
-                                    className="h-11 rounded-xl border px-3.5"
-                                    style={{
-                                        ...inputStyle,
-                                        opacity: busy ? 0.6 : 1,
-                                    }}
-                                />
-                            </View>
-                        </View>
-
-                        {/* Pricing / Budget */}
-                        <View className="flex-row gap-3 mb-4">
-                            <View className="flex-1">
-                                <FieldLabel label="Pricing %" />
-                                <TextInput
-                                    keyboardType="decimal-pad"
-                                    value={pricingPct}
-                                    onChangeText={setPricingPct}
-                                    editable={!busy}
-                                    placeholder="0.00"
-                                    placeholderTextColor="#94a3b8"
-                                    className="h-11 rounded-xl border px-3.5"
-                                    style={{
-                                        ...inputStyle,
-                                        opacity: busy ? 0.6 : 1,
-                                    }}
-                                />
-                            </View>
-                            <View className="flex-1">
-                                <FieldLabel label="Budget Amount" />
-                                <TextInput
-                                    keyboardType="decimal-pad"
-                                    value={budgetAmount}
-                                    onChangeText={setBudgetAmount}
-                                    editable={!busy}
-                                    placeholder="0.00"
-                                    placeholderTextColor="#94a3b8"
-                                    className="h-11 rounded-xl border px-3.5"
-                                    style={{
-                                        ...inputStyle,
-                                        opacity: busy ? 0.6 : 1,
-                                    }}
-                                />
-                            </View>
-                        </View>
-
-                        {/* Budget enforced */}
-                        <FieldLabel label="Budget Enforced" />
-                        <View className="flex-row gap-2 mb-2">
-                            {['true', 'false'].map((v) => {
-                                const selected =
-                                    budgetEnforced === v;
-                                return (
-                                    <Pressable
-                                        key={v}
-                                        onPress={() =>
-                                            setBudgetEnforced(v)
-                                        }
-                                        disabled={busy}
-                                        className="flex-1 py-2.5 rounded-xl border items-center"
-                                        style={{
-                                            borderColor:
-                                                selected
-                                                    ? theme.primary
-                                                    : borderColor,
-                                            backgroundColor:
-                                                selected
-                                                    ? `${theme.primary}15`
-                                                    : 'transparent',
-                                            opacity: busy
-                                                ? 0.6
-                                                : 1,
-                                        }}
-                                    >
-                                        <Text
-                                            className="uppercase tracking-wide"
-                                            style={{
-                                                color: selected
-                                                    ? theme.primary
-                                                    : theme.textDark,
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            {v === 'true'
-                                                ? 'Yes'
-                                                : 'No'}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View
-                        className="flex-row justify-end gap-2 p-4 border-t"
-                        style={{
-                            borderTopColor: dividerColor,
-                        }}
-                    >
-                        <Pressable
-                            onPress={onClose}
-                            disabled={busy}
-                            className="px-4 py-2.5 rounded-xl border"
-                            style={{
-                                borderColor,
-                                opacity: busy ? 0.4 : 1,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                Cancel
-                            </Text>
-                        </Pressable>
-                        <Pressable
-                            onPress={handleSave}
-                            disabled={busy}
-                            className="px-4 py-2.5 rounded-xl flex-row items-center gap-2"
-                            style={{
-                                backgroundColor: theme.primary,
-                                opacity: busy ? 0.6 : 1,
-                                minHeight: 40,
-                            }}
-                        >
-                            {saving && (
-                                <ActivityIndicator
-                                    size="small"
-                                    color="#ffffff"
-                                />
-                            )}
-                            <Text
-                                className="uppercase tracking-wide text-white"
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                {saving ? 'Saving…' : 'Save'}
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* Blocking overlay while saving */}
-                {busy ? (
-                    <View
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor:
-                                'rgba(0,0,0,0.35)',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 999,
-                        }}
-                    >
-                        <View
-                            className="rounded-2xl px-6 py-5 items-center"
-                            style={{
-                                backgroundColor: theme.panel,
-                                minWidth: 200,
-                            }}
-                        >
-                            <ActivityIndicator
-                                size="large"
-                                color={theme.primary}
-                            />
-                            <Text
-                                className="mt-3"
-                                style={{
-                                    color: theme.text,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize:
-                                        theme.fontSize.sm,
-                                }}
-                            >
-                                Saving changes…
-                            </Text>
-                        </View>
-                    </View>
-                ) : null}
-            </KeyboardAvoidingView>
-        </Modal>
+            <FormSection title="Budget">
+                <CustomTextField
+                    label="Budget amount (KES)"
+                    value={budgetAmount}
+                    onChangeText={(t) => setBudgetAmount(t.replace(/[^0-9.]/g, ''))}
+                    keyboardType="decimal-pad"
+                    placeholder="No budget"
+                    hint="Leave empty for no budget."
+                    editable={!busy}
+                />
+                <ChoiceChips
+                    label="When over budget"
+                    options={BUDGET_OPTIONS}
+                    value={budgetOn ? 'true' : 'false'}
+                    onChange={setBudgetEnforced}
+                    disabled={busy || !budgetAmount}
+                    hint={!budgetAmount ? 'Set a budget amount first.' : budgetOn ? 'Items that would go over the budget are blocked.' : 'You are warned but can still add items.'}
+                />
+            </FormSection>
+        </AdminFormSheet>
     );
 }
 
-/* =========================================================
- * Field label
- * ======================================================= */
-
-function FieldLabel({ label }: { label: string }) {
-    const { theme } = useAuth();
-    return (
-        <Text
-            className="uppercase tracking-widest mb-1.5"
-            style={{
-                color: theme.textDark,
-                fontFamily: theme.font.bold,
-                fontSize: 10,
-            }}
-        >
-            {label}
-        </Text>
-    );
-}
+const BUDGET_OPTIONS: ChoiceOption<'true' | 'false'>[] = [
+    { value: 'false', label: 'Warn only', icon: 'alert-circle-outline' },
+    { value: 'true', label: 'Block items', icon: 'hand-left-outline', color: '#f43f5e' },
+];
 
 export default RetailerIndentEditModal;

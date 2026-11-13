@@ -22,7 +22,9 @@ export interface AdminDrugClassesSharedProps {
     sourceTone: "server" | "cache" | "none";
     lastSyncedTime: string;
     items: DrugClassItem[];
-    emptyComponent?: React.ReactNode;
+    /** Whole filtered list; the mobile view shows all of it. */
+    allItems?: DrugClassItem[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
     onPressItem: (item: DrugClassItem) => void;
     onEditItem: (item: DrugClassItem) => void;

@@ -8,6 +8,12 @@
 // reopen the request to review what they offered.
 //
 // No editing, no submit. Just a scrollable summary.
+//
+// Date + money formatting is manual — no `Intl` / `toLocaleString` /
+// `toLocaleDateString`. Hermes on Android ships a partial Intl shim
+// that crashes with:
+//   `can't access property "length", returns is undefined`
+// when locale-tagged lookups miss their ICU data.
 
 import React, { useMemo } from 'react';
 import {
@@ -97,15 +103,42 @@ function formatMoney(v: string | number | null | undefined): string {
     return `KES ${n.toFixed(2)}`;
 }
 
+/* -------- Manual date formatting (Hermes-safe) -------- */
+
+const MONTHS_SHORT = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+] as const;
+
 function formatDate(value?: string | null): string {
     if (!value) return '—';
-    const d = new Date(String(value).replace(' ', 'T'));
-    if (isNaN(d.getTime())) return String(value);
-    return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-    });
+
+    const raw = String(value).trim();
+    if (!raw) return '—';
+
+    // "YYYY-MM-DD HH:mm:ss" → "YYYY-MM-DDTHH:mm:ss"
+    const normalized = raw.includes(' ')
+        ? raw.replace(' ', 'T')
+        : raw;
+
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return raw;
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = MONTHS_SHORT[d.getMonth()] ?? '???';
+    const year = d.getFullYear();
+
+    return `${day} ${month} ${year}`;
 }
 
 /* =========================================================
@@ -124,7 +157,7 @@ const ViewRequestDetailsModal: React.FC<Props> = ({
 
     const items = useMemo(
         () => request?.items ?? [],
-        [request]
+        [request],
     );
 
     const totalRequested = useMemo(
@@ -132,9 +165,9 @@ const ViewRequestDetailsModal: React.FC<Props> = ({
             items.reduce(
                 (s, it) =>
                     s + (Number(it.requested_quantity) || 0),
-                0
+                0,
             ),
-        [items]
+        [items],
     );
 
     const totalOffered = useMemo(
@@ -147,20 +180,20 @@ const ViewRequestDetailsModal: React.FC<Props> = ({
                         (so, o) =>
                             so +
                             (Number(o.offered_quantity) || 0),
-                        0
+                        0,
                     )
                 );
             }, 0),
-        [items]
+        [items],
     );
 
     const offerCount = useMemo(
         () =>
             items.reduce(
                 (s, it) => s + (it.offers?.length ?? 0),
-                0
+                0,
             ),
-        [items]
+        [items],
     );
 
     if (!request) return null;
@@ -570,18 +603,6 @@ const LineCard: React.FC<{
                             {item.requested_quantity ?? 0} requested
                         </Text>
                     </View>
-
-                    {item.bar_code ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.medium,
-                                fontSize: 10,
-                            }}
-                        >
-                            {item.bar_code}
-                        </Text>
-                    ) : null}
                 </View>
 
                 {/* line note */}
@@ -805,7 +826,7 @@ const OfferRow: React.FC<{ offer: ProductRequestOffer }> = ({
                 Offered {formatDate(offer.created)}
                 {offer.responded_at
                     ? ` · Responded ${formatDate(
-                        offer.responded_at
+                        offer.responded_at,
                     )}`
                     : ''}
             </Text>

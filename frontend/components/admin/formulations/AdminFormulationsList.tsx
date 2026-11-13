@@ -38,8 +38,6 @@ import {
     type PageSize,
 } from "./types";
 
-export type { FormulationItem } from "./types";
-
 /* =========================================================
  * Alert helper
  *
@@ -251,7 +249,7 @@ export default function AdminFormulationsList() {
                     : "—";
 
             const ok =
-                response?.ok === true ||
+                response?.ok === true &&
                 String(data?.response_code ?? "") === "0";
 
             showResultAlert(
@@ -345,9 +343,7 @@ export default function AdminFormulationsList() {
     const sourceLabel =
         sourceTone === "server"
             ? "Server"
-            : sourceTone === "cache"
-                ? "Local cache"
-                : "No data";
+            : "No data";
 
     const sharedProps: AdminFormulationsSharedProps = {
         query,
@@ -358,6 +354,7 @@ export default function AdminFormulationsList() {
         sourceTone,
         lastSyncedTime: "",
         items: paginated,
+        allItems: filteredFormulations,
         onOpenCreate: handleOpenCreateFlow,
         onPressItem: handleOpenDetails,
         onEditItem: handleOpenEditFlow,
@@ -392,19 +389,12 @@ export default function AdminFormulationsList() {
                     headerShown: true,
                     headerTintColor: theme.primary,
                     headerShadowVisible: false,
-                    headerStatusBarHeight: 0,
                     headerTitleStyle: {
                         fontWeight: "900",
                         fontSize: 14,
                     },
-                    headerTitleContainerStyle: {
-                        margin: 0,
-                        padding: 0,
-                    },
                     headerStyle: {
                         backgroundColor: theme.surface,
-                        height:
-                            Platform.OS === "ios" ? 44 : 40,
                     },
                 }}
             />

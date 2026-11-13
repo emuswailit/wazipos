@@ -1,15 +1,13 @@
 // components/retailers/customerOrders/CustomerOrdersWebView.tsx
-//
-// Web table view for customer orders.
-//
-// Also exports the shared primitives (CustomerOrdersViewProps,
-// CustomerOrdersCounts, formatters, pills, FilterPill,
-// SummaryBadge) reused by the mobile view and the shell.
 
+import { isTrueFlag } from '@/utils/flags';
+import { PaginationBar, type PageSize } from '@/components/common/PaginationBar';
 import type { CustomerOrder } from '@/databases/types';
-import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     FlatList,
+    Platform,
     Pressable,
     RefreshControl,
     Text,
@@ -17,16 +15,51 @@ import {
     View,
 } from 'react-native';
 
-import { useAuth, type ThemeShape } from '@/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
+
+/* =========================================================
+ * Platform
+ * ======================================================= */
+
+const TABLE_MAX_WIDTH = 1600;
+const isWeb = Platform.OS === 'web';
+const webPointer = isWeb ? ({ cursor: 'pointer' } as any) : {};
 
 /* =========================================================
  * View-layer contracts
  * ======================================================= */
 
+/** Payment method filter. Values match the payment method titles the app saves. */
+export const PAYMENT_METHOD_FILTERS = ['ALL', 'CASH', 'CREDIT', 'MOBILE MONEY'] as const;
+export type PaymentMethodFilter = (typeof PAYMENT_METHOD_FILTERS)[number];
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethodFilter, string> = {
+    ALL: 'All methods',
+    CASH: 'Cash',
+    CREDIT: 'Credit',
+    'MOBILE MONEY': 'Mobile money',
+};
+
+export const PAYMENT_METHOD_ICONS: Record<PaymentMethodFilter, keyof typeof Ionicons.glyphMap> = {
+    ALL: 'apps-outline',
+    CASH: 'cash-outline',
+    CREDIT: 'time-outline',
+    'MOBILE MONEY': 'phone-portrait-outline',
+};
+
+export function matchesPaymentMethod(o: CustomerOrder, filter: PaymentMethodFilter): boolean {
+    if (filter === 'ALL') return true;
+    const title = String(o.selected_payment_method_title || '').trim().toUpperCase();
+    if (filter === 'MOBILE MONEY') return title === 'MOBILE MONEY' || /MOBILE|M-?PESA|AIRTEL/.test(title);
+    return title === filter;
+}
+
 export interface CustomerOrdersCounts {
     total: number;
     visible: number;
     unpaid: number;
+    /** Orders per payment method, after the paid/unpaid toggle and search. */
+    byMethod: Record<PaymentMethodFilter, number>;
 }
 
 export interface CustomerOrdersViewProps {
@@ -39,6 +72,9 @@ export interface CustomerOrdersViewProps {
     onlyUnpaid: boolean;
     onToggleOnlyUnpaid: () => void;
 
+    paymentMethod: PaymentMethodFilter;
+    onPaymentMethodChange: (m: PaymentMethodFilter) => void;
+
     refreshing: boolean;
     onRefresh: () => void;
 
@@ -47,14 +83,34 @@ export interface CustomerOrdersViewProps {
     totalValue: number;
 
     onView: (order: CustomerOrder) => void;
+
+    /** Retry uploading orders created offline (uploads every pending order). */
+    onRetryUpload?: () => void;
+    /** True while an upload run is in progress. */
+    isUploading?: boolean;
 }
 
 /* =========================================================
  * Formatting
  * ======================================================= */
 
+const MONTHS_SHORT = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+] as const;
+
 export const toBool = (v: any): boolean =>
-    v === true || v === 'true' || v === 1 || v === '1';
+    isTrueFlag(v); // case-insensitive: the backend sends "true" / "True" strings
 
 export const formatKES = (
     raw: string | number | null | undefined
@@ -71,13 +127,19 @@ export const formatDate = (
     raw: string | null | undefined
 ): string => {
     if (!raw) return '—';
-    const d = new Date(raw.replace(' ', 'T'));
-    if (isNaN(d.getTime())) return raw;
-    return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-    });
+
+    const s = String(raw).trim();
+    if (!s) return '—';
+
+    const normalized = s.includes(' ') ? s.replace(' ', 'T') : s;
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return s;
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = MONTHS_SHORT[d.getMonth()] ?? '???';
+    const year = d.getFullYear();
+
+    return `${day} ${month} ${year}`;
 };
 
 export const orderRef = (o: CustomerOrder): string =>
@@ -100,12 +162,12 @@ export const orderAmount = (o: CustomerOrder): number => {
  * Pills
  * ======================================================= */
 
-export interface StatusTint {
+interface StatusTint {
     bg: string;
     fg: string;
 }
 
-export const STATUS_TINTS: Record<string, StatusTint> = {
+const STATUS_TINTS: Record<string, StatusTint> = {
     DRAFT: { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' },
     PENDING: { bg: 'rgba(251,191,36,0.15)', fg: '#f59e0b' },
     CONFIRMED: { bg: 'rgba(59,130,246,0.15)', fg: '#3b82f6' },
@@ -198,123 +260,112 @@ export function PaymentPill({
 }
 
 /* =========================================================
- * Summary + filter badges
+ * Shared bits for the table + cards
  * ======================================================= */
 
-export function SummaryBadge({
-    label,
-    tone = 'neutral',
-}: {
-    label: string;
-    tone?: 'neutral' | 'primary' | 'danger';
-}) {
-    const { theme, isDarkMode } = useAuth();
-    const bg =
-        tone === 'primary'
-            ? `${theme.primary}20`
-            : tone === 'danger'
-                ? 'rgba(244,63,94,0.12)'
-                : isDarkMode
-                    ? 'rgba(148,163,184,0.15)'
-                    : 'rgba(148,163,184,0.22)';
-    const fg =
-        tone === 'primary'
-            ? theme.primary
-            : tone === 'danger'
-                ? '#f43f5e'
-                : theme.textDark;
+/** Initials for the customer avatar ("Michael Omaria" -> "MO"). */
+function customerInitials(name?: string | null): string {
+    const words = String(name || '')
+        .replace(/[^A-Za-z\s]/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    if (words.length === 0) return '#';
+    return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase();
+}
+
+/** Stable pastel colour per customer so avatars are easy to tell apart. */
+const AVATAR_TINTS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
+function avatarTint(seed?: string | null): string {
+    const s = String(seed || '');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return AVATAR_TINTS[h % AVATAR_TINTS.length];
+}
+
+export function Avatar({ name, size = 32 }: { name?: string | null; size?: number }) {
+    const { theme } = useAuth();
+    const tint = avatarTint(name);
     return (
         <View
-            className="px-2 py-0.5 rounded-md"
-            style={{ backgroundColor: bg }}
+            className="items-center justify-center rounded-full"
+            style={{ width: size, height: size, backgroundColor: `${tint}1f` }}
         >
-            <Text
-                className="uppercase tracking-widest"
-                style={{
-                    color: fg,
-                    fontFamily: theme.font.bold,
-                    fontSize: 9,
-                }}
-            >
-                {label}
+            <Text style={{ color: tint, fontFamily: theme.font.bold, fontSize: size * 0.36 }}>
+                {customerInitials(name)}
             </Text>
         </View>
     );
 }
 
-export function FilterPill({
-    label,
-    active,
-    count,
-    tint,
-    onPress,
+/* =========================================================
+ * Upload status (orders created offline)
+ * ======================================================= */
+
+export const isPendingUpload = (o: any): boolean => String(o?.synced ?? '').toUpperCase() === 'FALSE';
+
+/**
+ * For orders created offline: "Waiting to upload", or "Upload failed: <reason>" with a
+ * Retry button when the server rejected the last attempt. Renders nothing for synced orders.
+ */
+export function UploadStatus({
+    order,
+    onRetry,
+    retrying,
 }: {
-    label: string;
-    active: boolean;
-    count?: number;
-    tint: { fg: string; dot: string; bg: string };
-    onPress: () => void;
+    order: CustomerOrder;
+    onRetry?: () => void;
+    retrying?: boolean;
 }) {
     const { theme } = useAuth();
-    const fg = active ? tint.fg : theme.textDark;
+    if (!isPendingUpload(order)) return null;
+
+    const error: string = String((order as any).sync_error || '').trim();
+    const failed = !!error;
+    const color = failed ? '#e11d48' : '#b45309';
 
     return (
-        <Pressable
-            onPress={onPress}
-            className="flex-row items-center px-2.5 py-1 mr-2 rounded-full border"
-            style={{
-                backgroundColor: active ? tint.bg : 'transparent',
-                borderColor: active
-                    ? tint.fg + '55'
-                    : theme.textDark + '33',
-            }}
-        >
-            <View
-                className="w-1.5 h-1.5 rounded-full mr-1.5"
-                style={{
-                    backgroundColor: active ? tint.fg : tint.dot,
-                }}
-            />
-            <Text
-                className="uppercase tracking-wide"
-                style={{
-                    color: fg,
-                    fontFamily: theme.font.bold,
-                    fontSize: 10,
-                }}
-                numberOfLines={1}
-            >
-                {label}
+        <View className="flex-row items-center gap-1.5 mt-1 flex-wrap">
+            <Ionicons name={failed ? 'alert-circle' : 'cloud-upload-outline'} size={13} color={color} />
+            <Text style={{ color, fontFamily: theme.font.medium, fontSize: 11, flexShrink: 1 }} numberOfLines={2}>
+                {failed ? `Upload failed: ${error}` : 'Waiting to upload'}
             </Text>
-            {count && count > 0 ? (
-                <Text
-                    style={{
-                        color: fg,
-                        opacity: 0.7,
-                        marginLeft: 6,
-                        fontFamily: theme.font.bold,
-                        fontSize: 9,
+            {failed && onRetry ? (
+                <Pressable
+                    onPress={(e: any) => {
+                        e?.stopPropagation?.(); // don't open the order
+                        onRetry();
                     }}
+                    disabled={retrying}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry upload"
+                    hitSlop={6}
+                    className="flex-row items-center gap-1 px-2 h-6 rounded-md border"
+                    style={{ borderColor: 'rgba(225,29,72,0.4)', opacity: retrying ? 0.5 : 1, ...webPointer }}
                 >
-                    {count}
-                </Text>
+                    <Ionicons name="refresh" size={11} color="#e11d48" />
+                    <Text style={{ color: '#e11d48', fontFamily: theme.font.bold, fontSize: 11 }}>
+                        {retrying ? 'Retrying…' : 'Retry'}
+                    </Text>
+                </Pressable>
             ) : null}
-        </Pressable>
+        </View>
     );
 }
 
 /* =========================================================
- * Column widths
+ * Column layout (flex weights, so the table fills any width)
  * ======================================================= */
 
 const COLS = {
-    orderNumber: '15%',
-    customer: '18%',
-    status: '12%',
-    method: '12%',
-    providerRef: '14%',
-    amount: '15%',
-    actions: '14%',
+    order: 1.3,
+    customer: 2,
+    items: 0.7,
+    method: 1.1,
+    status: 1,
+    payment: 0.9,
+    amount: 1.2,
+    chevron: 0.3,
 } as const;
 
 /* =========================================================
@@ -328,294 +379,348 @@ export function CustomerOrdersWebView({
     onQueryChange,
     onlyUnpaid,
     onToggleOnlyUnpaid,
+    paymentMethod,
+    onPaymentMethodChange,
     refreshing,
     onRefresh,
     isConnected,
     lastSynced,
     totalValue,
     onView,
+    onRetryUpload,
+    isUploading,
 }: CustomerOrdersViewProps) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const headerBg = isDarkMode ? '#0f172a' : '#f8fafc';
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
+    const borderColor = isDarkMode ? '#1e293b' : '#e2e8f0';
+    const headerBg = isDarkMode ? '#0b1220' : '#f8fafc';
+    const inputBg = isDarkMode ? '#0f172a' : '#f8fafc';
 
-    const sourceLabel = isConnected
-        ? 'Live · websocket'
-        : 'Offline';
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState<PageSize>(25);
 
-    const sourceTint = isConnected
-        ? { bg: 'rgba(16,185,129,0.12)', fg: '#10b981', dot: '#10b981' }
-        : { bg: 'rgba(251,191,36,0.15)', fg: '#f59e0b', dot: '#f59e0b' };
+    // Back to the first page whenever the filters change
+    useEffect(() => {
+        setPage(1);
+    }, [query, onlyUnpaid, paymentMethod, pageSize]);
 
-    const hasActiveFilter = onlyUnpaid || query.trim() !== '';
+    const totalItems = orders.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
+    // Keep the page valid when live updates shrink the list
+    useEffect(() => {
+        if (page > totalPages) setPage(totalPages);
+    }, [page, totalPages]);
+
+    // PaginationBar contract: zero-based start, exclusive end
+    const pageStart = (page - 1) * pageSize;
+    const pageEnd = Math.min(pageStart + pageSize, totalItems);
+    const pageItems = useMemo(
+        () => orders.slice(pageStart, pageEnd),
+        [orders, pageStart, pageEnd]
+    );
+
+    const hasActiveFilter = onlyUnpaid || paymentMethod !== 'ALL' || query.trim() !== '';
     const clearFilters = () => {
         if (onlyUnpaid) onToggleOnlyUnpaid();
+        if (paymentMethod !== 'ALL') onPaymentMethodChange('ALL');
         if (query.trim() !== '') onQueryChange('');
     };
 
     return (
-        <View
-            className="flex-1 w-full"
-            style={{ backgroundColor: theme.background }}
-        >
-            {/* ============ Header ============ */}
-            <View
-                className="p-4 border-b"
-                style={{
-                    backgroundColor: theme.panel,
-                    borderBottomColor: borderColor,
-                }}
-            >
-                <View className="flex-row items-start justify-between mb-3 gap-3">
-                    <View className="flex-1 min-w-0">
-                        <Text
-                            className="tracking-tight"
-                            style={{
-                                color: theme.text,
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.lg,
-                            }}
-                        >
-                            Customer Orders
-                        </Text>
-                        <View className="flex-row items-center gap-2 mt-1 flex-wrap">
-                            <FilterPill
-                                label={sourceLabel}
-                                active
-                                tint={sourceTint}
-                                onPress={() => { }}
-                            />
-                            <SummaryBadge
-                                label={`${counts.visible} of ${counts.total}`}
-                            />
-                            {counts.unpaid > 0 ? (
-                                <SummaryBadge
-                                    label={`${counts.unpaid} unpaid`}
-                                    tone="danger"
-                                />
-                            ) : null}
-                            <SummaryBadge
-                                label={`KES ${formatKES(totalValue)}`}
-                                tone="primary"
-                            />
-                            {lastSynced ? (
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily: theme.font.medium,
-                                        fontSize: theme.fontSize.xs,
-                                    }}
-                                >
-                                    Synced {lastSynced}
-                                </Text>
-                            ) : null}
-                        </View>
-                    </View>
-
-                    <View className="flex-row items-center gap-2.5">
-                        <Pressable
-                            onPress={onToggleOnlyUnpaid}
-                            accessibilityRole="button"
-                            accessibilityState={{
-                                selected: onlyUnpaid,
-                            }}
-                            className="px-4 py-2.5 rounded-full items-center justify-center border"
-                            style={{
-                                borderColor: onlyUnpaid
-                                    ? theme.primary
-                                    : borderColor,
-                                backgroundColor: onlyUnpaid
-                                    ? `${theme.primary}15`
-                                    : 'transparent',
-                                minHeight: 40,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color: onlyUnpaid
-                                        ? theme.primary
-                                        : theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                }}
-                            >
-                                Unpaid only
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            onPress={onRefresh}
-                            disabled={refreshing}
-                            accessibilityRole="button"
-                            accessibilityState={{
-                                disabled: refreshing,
-                            }}
-                            className="px-4 py-2.5 rounded-full items-center justify-center"
-                            style={{
-                                backgroundColor: theme.primary,
-                                opacity: refreshing ? 0.5 : 1,
-                                minHeight: 40,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest text-white"
-                                style={{
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                }}
-                            >
-                                {refreshing ? 'Refreshing…' : 'Refresh'}
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                <View className="flex-row items-center gap-3">
-                    <TextInput
-                        value={query}
-                        onChangeText={onQueryChange}
-                        placeholder="Search order number, customer…"
-                        placeholderTextColor="#94a3b8"
-                        autoCorrect={false}
-                        autoCapitalize="none"
-                        className="h-11 rounded-xl border px-3.5 max-w-[480px] flex-1"
-                        style={{
-                            borderColor,
-                            backgroundColor: inputBg,
-                            color: theme.text,
-                            fontFamily: theme.font.medium,
-                            fontSize: theme.fontSize.sm,
-                        }}
-                    />
-                    {hasActiveFilter && (
-                        <Pressable
-                            onPress={clearFilters}
-                            className="px-3 py-2 rounded-lg border"
-                            style={{ borderColor }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 10,
-                                }}
-                            >
-                                Clear
-                            </Text>
-                        </Pressable>
-                    )}
-                </View>
-            </View>
-
-            {/* ============ Table ============ */}
-            <View className="p-4 flex-1">
-                <View
-                    className="flex-row rounded-xl border px-3 py-2.5 mb-1"
-                    style={{ backgroundColor: headerBg, borderColor }}
-                >
-                    <Text style={headerStyle(theme, COLS.orderNumber)}>
-                        Order Number
-                    </Text>
-                    <Text style={headerStyle(theme, COLS.customer)}>
-                        Customer
-                    </Text>
-                    <Text style={headerStyle(theme, COLS.status)}>
-                        Status
-                    </Text>
-                    <Text style={headerStyle(theme, COLS.method)}>
-                        Method
-                    </Text>
-                    <Text style={headerStyle(theme, COLS.providerRef)}>
-                        Provider Ref
-                    </Text>
+        <View className="flex-1 w-full" style={{ backgroundColor: theme.background }}>
+            <View className="flex-1 w-full self-center px-6 pt-4 pb-4" style={{ maxWidth: TABLE_MAX_WIDTH }}>
+                {/* ============ Compact header: title · live · stats · refresh ============ */}
+                <View className="flex-row items-center mb-3 gap-4">
                     <Text
-                        style={{
-                            ...headerStyle(theme, COLS.amount),
-                            textAlign: 'right',
-                        }}
+                        className="tracking-tight"
+                        style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 18 }}
                     >
-                        Amount
+                        Customer Orders
                     </Text>
-                    <Text
-                        style={{
-                            ...headerStyle(theme, COLS.actions),
-                            textAlign: 'right',
-                        }}
-                    >
-                        Actions
-                    </Text>
-                </View>
-
-                <FlatList
-                    data={orders}
-                    keyExtractor={(item) =>
-                        item.remote_id ||
-                        item.draft_id ||
-                        String(item.id ?? '')
-                    }
-                    contentContainerStyle={{ paddingBottom: 40 }}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor={theme.primary}
-                        />
-                    }
-                    ListEmptyComponent={
+                    <View className="flex-row items-center gap-1.5">
                         <View
-                            className="rounded-xl border p-8 items-center"
-                            style={{
-                                borderColor,
-                                backgroundColor: headerBg,
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.sm,
-                                }}
-                            >
-                                {hasActiveFilter
-                                    ? 'No orders match the filters.'
-                                    : 'No customer orders yet.'}
-                            </Text>
-                            {hasActiveFilter && (
-                                <Pressable
-                                    onPress={clearFilters}
-                                    className="mt-4 px-4 py-2.5 rounded-full"
-                                    style={{
-                                        backgroundColor: theme.primary,
-                                        minHeight: 40,
-                                    }}
-                                >
-                                    <Text
-                                        className="uppercase tracking-widest text-white"
-                                        style={{
-                                            fontFamily: theme.font.bold,
-                                            fontSize: theme.fontSize.sm,
-                                        }}
-                                    >
-                                        Clear filters
-                                    </Text>
-                                </Pressable>
-                            )}
-                        </View>
-                    }
-                    renderItem={({ item }) => (
-                        <Row
-                            item={item}
-                            onView={() => onView(item)}
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: isConnected ? '#10b981' : '#f59e0b' }}
                         />
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                            {isConnected ? 'Live' : 'Offline'}
+                            {lastSynced ? ` · ${lastSynced}` : ''}
+                        </Text>
+                    </View>
+
+                    <View className="flex-1" />
+
+                    <InlineStat label="Orders" value={counts.total.toLocaleString()} />
+                    <InlineStat label="Unpaid" value={counts.unpaid.toLocaleString()} color={counts.unpaid > 0 ? '#f43f5e' : undefined} />
+                    <InlineStat
+                        label={hasActiveFilter ? 'Value (filtered)' : 'Value'}
+                        value={`KES ${formatKES(totalValue)}`}
+                        color="#10b981"
+                    />
+
+                    <Pressable
+                        onPress={onRefresh}
+                        disabled={refreshing}
+                        accessibilityRole="button"
+                        accessibilityLabel="Refresh orders"
+                        className="flex-row items-center gap-1.5 px-3 h-8 rounded-lg"
+                        style={{ backgroundColor: theme.primary, opacity: refreshing ? 0.6 : 1, ...webPointer }}
+                    >
+                        <Ionicons name="refresh" size={14} color="#fff" />
+                        <Text className="text-white" style={{ fontFamily: theme.font.bold, fontSize: 12 }}>
+                            {refreshing ? 'Refreshing…' : 'Refresh'}
+                        </Text>
+                    </Pressable>
+                </View>
+
+                {/* ============ Table card ============ */}
+                <View
+                    className="flex-1 rounded-2xl border overflow-hidden"
+                    style={{
+                        backgroundColor: theme.panel,
+                        borderColor,
+                        ...(isWeb ? ({ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 16px rgba(15,23,42,0.04)' } as any) : {}),
+                    }}
+                >
+                    {/* Toolbar */}
+                    <View className="flex-row flex-wrap items-center gap-3 px-4 py-3 border-b" style={{ borderBottomColor: borderColor }}>
+                        <View
+                            className="flex-row items-center flex-1 min-w-[220px] max-w-[360px] h-9 rounded-xl border px-3"
+                            style={{ borderColor, backgroundColor: inputBg }}
+                        >
+                            <Ionicons name="search" size={16} color={theme.textDark} />
+                            <TextInput
+                                value={query}
+                                onChangeText={onQueryChange}
+                                placeholder="Search order #, customer, phone, method…"
+                                placeholderTextColor="#94a3b8"
+                                autoCorrect={false}
+                                autoCapitalize="none"
+                                className="flex-1 h-full ml-2"
+                                style={{
+                                    color: theme.text,
+                                    fontFamily: theme.font.medium,
+                                    fontSize: 13,
+                                    ...(isWeb ? ({ outlineStyle: 'none' } as any) : {}),
+                                }}
+                            />
+                            {query ? (
+                                <Pressable onPress={() => onQueryChange('')} hitSlop={8} style={webPointer}>
+                                    <Ionicons name="close-circle" size={16} color={theme.textDark} />
+                                </Pressable>
+                            ) : null}
+                        </View>
+
+                        <SegmentedFilter onlyUnpaid={onlyUnpaid} onToggle={onToggleOnlyUnpaid} unpaid={counts.unpaid} />
+
+                        <MethodFilter value={paymentMethod} onChange={onPaymentMethodChange} counts={counts.byMethod} />
+
+                        {hasActiveFilter ? (
+                            <Pressable onPress={clearFilters} hitSlop={6} style={webPointer}>
+                                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12 }}>Clear</Text>
+                            </Pressable>
+                        ) : null}
+
+                        <View className="flex-1" />
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                            {counts.visible.toLocaleString()} {counts.visible === 1 ? 'order' : 'orders'}
+                        </Text>
+                    </View>
+
+                    {/* Column header */}
+                    <View className="flex-row items-center px-5 py-2.5" style={{ backgroundColor: headerBg }}>
+                        <HeaderCell flex={COLS.order}>Order</HeaderCell>
+                        <HeaderCell flex={COLS.customer}>Customer</HeaderCell>
+                        <HeaderCell flex={COLS.items} align="center">Items</HeaderCell>
+                        <HeaderCell flex={COLS.method}>Method</HeaderCell>
+                        <HeaderCell flex={COLS.status}>Status</HeaderCell>
+                        <HeaderCell flex={COLS.payment}>Payment</HeaderCell>
+                        <HeaderCell flex={COLS.amount} align="right">Amount</HeaderCell>
+                        <View style={{ flex: COLS.chevron }} />
+                    </View>
+
+                    {/* Rows */}
+                    <FlatList
+                        data={pageItems}
+                        keyExtractor={(item, idx) => `${item.remote_id || item.draft_id || item.id || 'order'}-${idx}`}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+                        ListEmptyComponent={
+                            <View className="py-16 items-center">
+                                <View
+                                    className="w-12 h-12 rounded-full items-center justify-center mb-3"
+                                    style={{ backgroundColor: `${theme.primary}14` }}
+                                >
+                                    <Ionicons name={hasActiveFilter ? 'search' : 'receipt-outline'} size={22} color={theme.primary} />
+                                </View>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>
+                                    {hasActiveFilter ? 'No matching orders' : 'No customer orders yet'}
+                                </Text>
+                                <Text className="mt-1" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>
+                                    {hasActiveFilter ? 'Try a different search or filter.' : 'New orders will appear here as they arrive.'}
+                                </Text>
+                                {hasActiveFilter && (
+                                    <Pressable
+                                        onPress={clearFilters}
+                                        className="mt-4 px-4 h-9 rounded-xl items-center justify-center border"
+                                        style={{ borderColor, ...webPointer }}
+                                    >
+                                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>Clear filters</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                        }
+                        renderItem={({ item, index }) => (
+                            <Row
+                                item={item}
+                                isFirst={index === 0}
+                                onView={() => onView(item)}
+                                onRetryUpload={onRetryUpload}
+                                isUploading={isUploading}
+                            />
+                        )}
+                        showsVerticalScrollIndicator={false}
+                    />
+
+                    {/* Pagination footer (shared component; it draws its own top border) */}
+                    {totalItems > 0 && (
+                        <View className="px-5 pb-3">
+                            <PaginationBar
+                                page={page}
+                                pageSize={pageSize}
+                                totalItems={totalItems}
+                                totalPages={totalPages}
+                                pageStart={pageStart}
+                                pageEnd={pageEnd}
+                                onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                onPageSizeChange={setPageSize}
+                            />
+                        </View>
                     )}
-                    showsVerticalScrollIndicator={false}
-                />
+                </View>
             </View>
         </View>
+    );
+}
+
+/* =========================================================
+ * Small building blocks
+ * ======================================================= */
+
+/** One compact "Label  value" stat in the header line. */
+function InlineStat({ label, value, color }: { label: string; value: string; color?: string }) {
+    const { theme, isDarkMode } = useAuth();
+    return (
+        <View
+            className="flex-row items-center gap-1.5 px-3 h-8 rounded-lg"
+            style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9' }}
+        >
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>{label}</Text>
+            <Text style={{ color: color ?? theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{value}</Text>
+        </View>
+    );
+}
+
+/** Cash / Credit / Mobile money filter chips with per-method counts. */
+export function MethodFilter({
+    value,
+    onChange,
+    counts,
+}: {
+    value: PaymentMethodFilter;
+    onChange: (m: PaymentMethodFilter) => void;
+    counts: Record<PaymentMethodFilter, number>;
+}) {
+    const { theme, isDarkMode } = useAuth();
+    const idleBorder = isDarkMode ? '#1e293b' : '#e2e8f0';
+    return (
+        <View className="flex-row flex-wrap items-center gap-1.5">
+            {PAYMENT_METHOD_FILTERS.map((m) => {
+                const active = m === value;
+                return (
+                    <Pressable
+                        key={m}
+                        onPress={() => onChange(m)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        className="flex-row items-center gap-1.5 px-3 h-8 rounded-full border"
+                        style={{
+                            borderColor: active ? theme.primary : idleBorder,
+                            backgroundColor: active ? `${theme.primary}12` : 'transparent',
+                            ...webPointer,
+                        }}
+                    >
+                        <Ionicons name={PAYMENT_METHOD_ICONS[m]} size={13} color={active ? theme.primary : theme.textDark} />
+                        <Text style={{ color: active ? theme.primary : theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>
+                            {PAYMENT_METHOD_LABELS[m]}
+                        </Text>
+                        <Text style={{ color: active ? theme.primary : theme.textDark, fontFamily: theme.font.medium, fontSize: 11, opacity: 0.8 }}>
+                            {counts?.[m] ?? 0}
+                        </Text>
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
+}
+
+function SegmentedFilter({ onlyUnpaid, onToggle, unpaid }: { onlyUnpaid: boolean; onToggle: () => void; unpaid: number }) {
+    const { theme, isDarkMode } = useAuth();
+    const trackBg = isDarkMode ? '#0f172a' : '#f1f5f9';
+    const options = [
+        { key: 'all', label: 'All', active: !onlyUnpaid },
+        { key: 'unpaid', label: unpaid > 0 ? `Unpaid · ${unpaid}` : 'Unpaid', active: onlyUnpaid },
+    ];
+    return (
+        <View className="flex-row p-1 rounded-xl" style={{ backgroundColor: trackBg }}>
+            {options.map((o) => (
+                <Pressable
+                    key={o.key}
+                    onPress={() => {
+                        if (!o.active) onToggle();
+                    }}
+                    className="px-3.5 h-8 rounded-lg items-center justify-center"
+                    style={{
+                        backgroundColor: o.active ? theme.panel : 'transparent',
+                        ...(isWeb && o.active ? ({ boxShadow: '0 1px 2px rgba(15,23,42,0.08)' } as any) : {}),
+                        ...webPointer,
+                    }}
+                >
+                    <Text style={{ color: o.active ? theme.text : theme.textDark, fontFamily: theme.font.bold, fontSize: 12 }}>
+                        {o.label}
+                    </Text>
+                </Pressable>
+            ))}
+        </View>
+    );
+}
+
+function HeaderCell({
+    flex,
+    align = 'left',
+    children,
+}: {
+    flex: number;
+    align?: 'left' | 'center' | 'right';
+    children: React.ReactNode;
+}) {
+    const { theme } = useAuth();
+    return (
+        <Text
+            style={{
+                flex,
+                textAlign: align,
+                color: theme.textDark,
+                fontFamily: theme.font.bold,
+                fontSize: 11,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                paddingRight: align === 'right' ? 0 : 12,
+            }}
+            numberOfLines={1}
+        >
+            {children}
+        </Text>
     );
 }
 
@@ -625,110 +730,107 @@ export function CustomerOrdersWebView({
 
 function Row({
     item,
+    isFirst,
     onView,
+    onRetryUpload,
+    isUploading,
 }: {
     item: CustomerOrder;
+    isFirst: boolean;
     onView: () => void;
+    onRetryUpload?: () => void;
+    isUploading?: boolean;
 }) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
+    const [hovered, setHovered] = useState(false);
 
+    const borderColor = isDarkMode ? '#1e293b' : '#f1f5f9';
+    const hoverBg = isDarkMode ? 'rgba(148,163,184,0.06)' : 'rgba(15,23,42,0.025)';
     const paid = toBool(item.is_paid);
+    const itemCount = orderItemCount(item);
+    const pendingUpload = String((item as any).synced).toUpperCase() === 'FALSE';
 
     return (
         <Pressable
             onPress={onView}
-            className="flex-row rounded-xl border px-3 py-2.5 mb-1 items-center"
-            style={{ borderColor }}
+            onHoverIn={() => setHovered(true)}
+            onHoverOut={() => setHovered(false)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open order ${orderRef(item)}`}
+            className="flex-row items-center px-5 py-3"
+            style={{
+                backgroundColor: hovered ? hoverBg : 'transparent',
+                borderTopWidth: isFirst ? 0 : 1,
+                borderTopColor: borderColor,
+                ...webPointer,
+            }}
         >
-            <Text
-                style={cellStyle(theme, COLS.orderNumber, true)}
-                numberOfLines={1}
-            >
-                {orderRef(item)}
-            </Text>
-            <Text
-                style={cellStyle(theme, COLS.customer)}
-                numberOfLines={1}
-            >
-                {item.customer_name || '—'}
-            </Text>
-            <View style={{ width: COLS.status }}>
-                <StatusPill status={item.status} size="sm" />
+            {/* Order # + date */}
+            <View style={{ flex: COLS.order, paddingRight: 12 }}>
+                <View className="flex-row items-center gap-1.5">
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }} numberOfLines={1}>
+                        {orderRef(item)}
+                    </Text>
+                    {pendingUpload ? <Ionicons name="cloud-upload-outline" size={13} color="#f59e0b" /> : null}
+                </View>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                    {formatDate(item.created)}
+                </Text>
+                <UploadStatus order={item} onRetry={onRetryUpload} retrying={isUploading} />
             </View>
+
+            {/* Customer */}
+            <View style={{ flex: COLS.customer, paddingRight: 12 }} className="flex-row items-center gap-2.5">
+                <Avatar name={item.customer_name} size={32} />
+                <View className="flex-1 min-w-0">
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }} numberOfLines={1}>
+                        {item.customer_name || 'Walk-in Customer'}
+                    </Text>
+                    {item.customer_phone ? (
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 1 }} numberOfLines={1}>
+                            {item.customer_phone}
+                        </Text>
+                    ) : null}
+                </View>
+            </View>
+
+            {/* Items */}
             <Text
-                style={cellStyle(theme, COLS.method)}
+                style={{ flex: COLS.items, textAlign: 'center', color: theme.text, fontFamily: theme.font.medium, fontSize: 13, paddingRight: 12 }}
+                numberOfLines={1}
+            >
+                {itemCount}
+            </Text>
+
+            {/* Method */}
+            <Text
+                style={{ flex: COLS.method, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, paddingRight: 12 }}
                 numberOfLines={1}
             >
                 {item.selected_payment_method_title || '—'}
             </Text>
+
+            {/* Status */}
+            <View style={{ flex: COLS.status, paddingRight: 12 }}>
+                <StatusPill status={item.status} size="sm" />
+            </View>
+
+            {/* Payment */}
+            <View style={{ flex: COLS.payment, paddingRight: 12 }}>
+                <PaymentPill paid={paid} compact />
+            </View>
+
+            {/* Amount */}
             <Text
-                style={cellStyle(theme, COLS.providerRef)}
-                numberOfLines={1}
-            >
-                {item.provider_reference_number || '—'}
-            </Text>
-            <Text
-                style={{
-                    ...cellStyle(theme, COLS.amount),
-                    textAlign: 'right',
-                    color: paid ? '#10b981' : theme.text,
-                    fontFamily: theme.font.bold,
-                }}
+                style={{ flex: COLS.amount, textAlign: 'right', color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}
                 numberOfLines={1}
             >
                 KES {formatKES(orderAmount(item))}
             </Text>
-            <View
-                style={{
-                    width: COLS.actions,
-                    flexDirection: 'row',
-                    justifyContent: 'flex-end',
-                    alignItems: 'center',
-                    gap: 8,
-                }}
-            >
-                <PaymentPill paid={paid} compact />
-                <Text
-                    className="uppercase tracking-wide"
-                    style={{
-                        color: theme.primary,
-                        fontFamily: theme.font.bold,
-                        fontSize: 10,
-                    }}
-                >
-                    View
-                </Text>
+
+            <View style={{ flex: COLS.chevron, alignItems: 'flex-end' }}>
+                <Ionicons name="chevron-forward" size={16} color={hovered ? theme.primary : theme.textDark} />
             </View>
         </Pressable>
     );
-}
-
-/* =========================================================
- * Styles
- * ======================================================= */
-
-function headerStyle(theme: ThemeShape, width: string) {
-    return {
-        width,
-        color: theme.textDark,
-        fontFamily: theme.font.bold,
-        fontSize: 10,
-        textTransform: 'uppercase' as const,
-        letterSpacing: 0.5,
-    };
-}
-
-function cellStyle(
-    theme: ThemeShape,
-    width: string,
-    bold = false
-) {
-    return {
-        width,
-        color: bold ? theme.text : theme.textDark,
-        fontFamily: bold ? theme.font.bold : theme.font.medium,
-        fontSize: 11,
-        paddingRight: 8,
-    };
 }

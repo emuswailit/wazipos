@@ -1,4 +1,5 @@
 import authService from '@/api/authApi';
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useAuth } from "@/context/AuthContext";
 import useApi from "@/hooks/useApi";
 import { useRouter } from "expo-router";
@@ -22,6 +23,46 @@ export default function LoginForm() {
         console.log("Credentials Outbound:", payload);
         return await authService.login(payload.phone_or_email, payload.password);
     });
+    const googleLoginApi = useApi<any>(async (idToken: string) => authService.googleLogin(idToken));
+
+    /** Shared by password and Google sign-in: both endpoints reply in the same shape. */
+    const completeSignIn = async (response: any) => {
+        if (!response) {
+            setAuthErrors(["No response from authorization gateway."]);
+            return;
+        }
+
+        const access_token = response.data?.tokens?.access;
+        const response_code = response.data?.response_code;
+
+        if (response_code === 1) {
+            setAuthErrors([response.data?.response_message || "Invalid credentials provided."]);
+            return;
+        }
+
+        if (response_code === 0 && access_token) {
+            await login(access_token);
+            router.replace("/(tabs)");
+            return;
+        }
+
+        if (!response.ok) {
+            setAuthErrors([response.data?.message || response.data?.response_message || "Network error. Please try again later."]);
+        }
+    };
+
+    const handleGoogleIdToken = async (idToken: string) => {
+        setAuthErrors([]);
+        try {
+            const response = await googleLoginApi.request(idToken);
+            await completeSignIn(response);
+        } catch (error: any) {
+            console.error("Google sign-in exchange failed:", error);
+            setAuthErrors([error?.response?.data?.message || "Network error. Please try again later."]);
+        }
+    };
+
+    const anySignInBusy = loginApi.loading || googleLoginApi.loading;
 
     return (
         <Formik
@@ -37,30 +78,8 @@ export default function LoginForm() {
                         password: values.password
                     });
 
-                    console.log("Server API Response Received:", response);
-
-                    if (!response) {
-                        setAuthErrors(["No response from authorization gateway."]);
-                        return;
-                    }
-
-                    // 🌟 STEP 2: Handle Backend validation flag systems safely
-                    const access_token = response.data?.tokens?.access;
-                    const response_code = response.data?.response_code;
-
-                    if (response_code === 1) {
-                        setAuthErrors([response.data?.response_message || "Invalid credentials provided."]);
-                        return;
-                    }
-
-                    // 🌟 STEP 3: Handle authorization token commit and redirect route
-                    if (response_code === 0 && access_token) {
-                        console.log("res", response_code)
-                        console.log("token", access_token)
-                        await login(access_token);
-                        console.log("Session synchronized. Routing profile payload inside Layout context.");
-                        router.replace("/(tabs)"); // Update path to your protected home screen
-                    }
+                    // 🌟 STEP 2–3: Validate the backend flag, commit the token and redirect
+                    await completeSignIn(response);
 
                 } catch (error: any) {
                     // 🌟 STEP 4: Capture 401 Unauthorized, 500 Server Crashes, and offline dropouts instantly
@@ -83,17 +102,22 @@ export default function LoginForm() {
                             Account Email/Phone
                         </Text>
                         <TextInput
-                            style={{ backgroundColor: theme.surface, borderColor: touched.email && formikErrors.email ? "#ef4444" : theme.border }}
-                            className="w-full text-slate-900 rounded-xl px-4 h-[50px] md:h-[40px] py-3.5 md:py-2 border outline-none text-sm md:text-xs"
+                            style={{ backgroundColor: theme.surface, color: theme.text, borderColor: touched.email && formikErrors.email ? "#ef4444" : theme.border }}
+                            className="w-full rounded-xl px-4 h-[50px] md:h-[40px] py-3.5 md:py-2 border outline-none text-base md:text-sm"
                             placeholder="name@wazipos.com"
                             placeholderTextColor="#94a3b8"
                             autoCapitalize="none"
+                            autoCorrect={false}
+                            keyboardType="email-address"
+                            autoComplete="username"
+                            textContentType="username"
+                            returnKeyType="next"
                             onChangeText={handleChange("email")}
                             onBlur={handleBlur("email")}
                             value={values.email}
                         />
                         {touched.email && formikErrors.email && (
-                            <Text className="text-red-500 text-[10px] font-semibold mt-1 ml-1">{formikErrors.email}</Text>
+                            <Text className="text-red-500 text-xs font-semibold mt-1 ml-1">{formikErrors.email}</Text>
                         )}
                     </View>
 
@@ -103,18 +127,23 @@ export default function LoginForm() {
                             Security Password
                         </Text>
                         <TextInput
-                            style={{ backgroundColor: theme.surface, borderColor: touched.password && formikErrors.password ? "#ef4444" : theme.border }}
-                            className="w-full text-slate-900 rounded-xl px-4 h-[50px] md:h-[40px] py-3.5 md:py-2 border outline-none text-sm md:text-xs"
+                            style={{ backgroundColor: theme.surface, color: theme.text, borderColor: touched.password && formikErrors.password ? "#ef4444" : theme.border }}
+                            className="w-full rounded-xl px-4 h-[50px] md:h-[40px] py-3.5 md:py-2 border outline-none text-base md:text-sm"
                             placeholder="••••••••"
                             placeholderTextColor="#94a3b8"
                             secureTextEntry
                             autoCapitalize="none"
+                            autoCorrect={false}
+                            autoComplete="password"
+                            textContentType="password"
+                            returnKeyType="go"
+                            onSubmitEditing={() => handleSubmit()}
                             onChangeText={handleChange("password")}
                             onBlur={handleBlur("password")}
                             value={values.password}
                         />
                         {touched.password && formikErrors.password && (
-                            <Text className="text-red-500 text-[10px] font-semibold mt-1 ml-1">{formikErrors.password}</Text>
+                            <Text className="text-red-500 text-xs font-semibold mt-1 ml-1">{formikErrors.password}</Text>
                         )}
                     </View>
 
@@ -130,7 +159,7 @@ export default function LoginForm() {
                     {/* Sign In Button Action */}
                     <TouchableOpacity
                         onPress={() => handleSubmit()}
-                        disabled={isSubmitting || loginApi.loading}
+                        disabled={isSubmitting || anySignInBusy}
                         style={{ backgroundColor: theme.primary }}
                         className="mt-4 w-full items-center justify-center rounded-xl h-[52px] md:h-[44px] shadow-md active:opacity-90"
                     >
@@ -144,16 +173,38 @@ export default function LoginForm() {
                     </TouchableOpacity>
 
                     {/* Redirect Sub-Actions Links */}
-                    <View className="mt-2 flex-row justify-end items-center px-1">
-                        <TouchableOpacity onPress={() => router.push("/(auth)/passwordReset" as any)}>
-                            <Text style={{ color: theme.primary }} className="text-xs font-bold tracking-tight">
+                    <View className="mt-2 flex-row justify-end items-center">
+                        <TouchableOpacity
+                            onPress={() => router.push("/(auth)/passwordReset" as any)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            className="py-2 px-1"
+                        >
+                            <Text style={{ color: theme.primary }} className="text-sm md:text-xs font-bold tracking-tight">
                                 Forgot Password?
                             </Text>
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity onPress={() => router.push("/(auth)/register" as any)} className="mt-4 items-center py-1">
-                        <Text className="text-xs text-slate-500 font-medium">
+                    {/* Social Sign-In */}
+                    <View className="flex-row items-center gap-x-3 my-1">
+                        <View style={{ backgroundColor: theme.border }} className="flex-1 h-px" />
+                        <Text className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">or</Text>
+                        <View style={{ backgroundColor: theme.border }} className="flex-1 h-px" />
+                    </View>
+
+                    <GoogleSignInButton
+                        onIdToken={handleGoogleIdToken}
+                        onError={(message) => setAuthErrors([message])}
+                        loading={googleLoginApi.loading}
+                        disabled={isSubmitting || loginApi.loading}
+                    />
+
+                    <TouchableOpacity
+                        onPress={() => router.push("/(auth)/register" as any)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        className="mt-2 items-center py-3"
+                    >
+                        <Text className="text-sm md:text-xs text-slate-500 font-medium">
                             Not Registered? <Text style={{ color: theme.primary }} className="font-black">Create Account</Text>
                         </Text>
                     </TouchableOpacity>

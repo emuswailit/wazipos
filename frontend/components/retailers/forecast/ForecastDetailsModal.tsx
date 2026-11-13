@@ -1,542 +1,197 @@
 // components/retailers/forecast/ForecastDetailsModal.tsx
+//
+// Forecast details on the shared details sheet: demand summary and profile,
+// daily forecast (bars with the P10–P90 band), offers and campaigns.
 
-import { useAuth } from '@/context/AuthContext';
-import {
-    RetailerForecastDailyRow,
-    RetailerForecastNormalized,
-} from '@/databases/types';
+import { AdminBadgePill, AdminDetailsSheet, SheetButton, formatDate, textOr, useListTokens, useSheetIsWide, webPointer, type AdminBadge } from '@/components/common/listScreen';
+import type { RetailerForecastDailyRow, RetailerForecastNormalized } from '@/databases/types';
 import React, { useMemo, useState } from 'react';
-import {
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
-} from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-/* =========================================================
- * Props
- * ======================================================= */
+import { formatKES, units } from './forecastsConfig';
+
 interface Props {
     forecast: RetailerForecastNormalized | null;
     onClose: () => void;
+    /** Opens the offers picker (shown when the product has offers or campaigns). */
+    onViewOffers?: (f: RetailerForecastNormalized) => void;
+    /** Opens the supply request picker (shown when there are no offers). */
+    onRequestSupply?: (f: RetailerForecastNormalized) => void;
 }
 
-/* =========================================================
- * Modal
- * ======================================================= */
-export function ForecastDetailsModal({ forecast, onClose }: Props) {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const dividerColor = isDarkMode ? '#334155' : '#f1f5f9';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
+const GOOD_PATTERNS = ['stable', 'seasonal', 'trending_up'];
+const humanize = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
-    const [dailyExpanded, setDailyExpanded] = useState(false);
+export function ForecastDetailsModal({ forecast, onClose, onViewOffers, onRequestSupply }: Props) {
+    const wide = useSheetIsWide();
 
-    const hasDaily = (forecast?.daily?.length ?? 0) > 0;
-    const hasOffers = (forecast?.wholesaler_offers?.length ?? 0) > 0;
-    const hasCampaigns = (forecast?.wholesaler_campaigns?.length ?? 0) > 0;
+    if (!forecast) {
+        return <AdminDetailsSheet visible={false} onClose={onClose} heading="" icon="trending-up-outline" title="" sections={[]} />;
+    }
 
-    const dailyRows = useMemo(
-        () => (dailyExpanded ? forecast?.daily ?? [] : (forecast?.daily ?? []).slice(0, 7)),
-        [forecast, dailyExpanded]
-    );
+    const f = forecast;
+    const hasSupply = f.has_offers || f.has_campaigns;
+    const badges: AdminBadge[] = [];
+    if (f.demand_pattern) badges.push({ label: humanize(f.demand_pattern), tone: GOOD_PATTERNS.includes(f.demand_pattern) ? 'success' : 'warning' });
+    if (f.trend_direction) {
+        const pct = f.trend_pct != null ? ` ${(f.trend_pct * 100).toFixed(0)}%` : '';
+        const up = /up/i.test(f.trend_direction);
+        badges.push({ label: `${humanize(f.trend_direction)}${pct}`, tone: up ? 'success' : /down/i.test(f.trend_direction) ? 'danger' : 'neutral', icon: up ? 'trending-up' : /down/i.test(f.trend_direction) ? 'trending-down' : 'remove' });
+    }
 
-    if (!forecast) return null;
+    const action = hasSupply
+        ? onViewOffers
+            ? <SheetButton label="View offers" icon="pricetags-outline" onPress={() => (onClose(), onViewOffers(f))} grow={!wide} />
+            : null
+        : onRequestSupply
+            ? <SheetButton label="Request supply" icon="paper-plane-outline" onPress={() => (onClose(), onRequestSupply(f))} grow={!wide} />
+            : null;
 
     return (
-        <Modal
+        <AdminDetailsSheet
             visible={!!forecast}
-            animationType="fade"
-            transparent
-            onRequestClose={onClose}
-        >
-            <View className="flex-1 bg-black/55 items-center justify-center p-4">
-                <View
-                    className="w-full max-w-[900px] max-h-[92%] rounded-2xl border overflow-hidden"
-                    style={{ backgroundColor: theme.panel, borderColor }}
-                >
-                    {/* Header */}
-                    <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{ borderBottomColor: dividerColor }}
-                    >
-                        <View className="flex-1">
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.lg,
-                                }}
-                                numberOfLines={1}
-                            >
-                                {forecast.product_title}
-                            </Text>
-                            <Text
-                                className="mt-0.5"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.medium,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                            >
-                                Forecast details · run {forecast.created}
-                            </Text>
+            onClose={onClose}
+            heading="Demand forecast"
+            icon="trending-up-outline"
+            title={textOr(f.product_title, 'Unknown product')}
+            subtitle={`Forecast run ${formatDate(f.created)} · ${f.days_covered} day${f.days_covered === 1 ? '' : 's'}`}
+            avatar={{ icon: 'trending-up-outline', color: hasSupply ? '#10b981' : '#64748b' }}
+            badges={badges}
+            stats={[
+                { label: 'To order', value: units(f.required_quantity), color: '#6366f1' },
+                { label: 'Forecast', value: units(f.total_forecast) },
+                { label: 'Per day', value: f.avg_daily_forecast.toFixed(1) },
+            ]}
+            sections={[
+                {
+                    title: 'Demand',
+                    icon: 'stats-chart-outline',
+                    fields: [
+                        { label: 'Likely range (P10–P90)', value: `${units(f.total_p10)} – ${units(f.total_p90)}` },
+                        { label: 'Days covered', value: String(f.days_covered) },
+                        { label: 'Sales history', value: f.history_days != null ? `${f.history_days} days` : '' },
+                        { label: 'Variability (CV)', value: f.demand_cv != null ? f.demand_cv.toFixed(2) : '' },
+                        { label: 'Days with no sales', value: f.zero_demand_pct != null ? `${(f.zero_demand_pct * 100).toFixed(0)}%` : '' },
+                    ],
+                },
+                { title: 'Daily forecast', icon: 'calendar-outline', children: <DailyBars rows={f.daily ?? []} /> },
+                { title: `Offers (${f.wholesaler_offers.length})`, icon: 'pricetags-outline', children: <Offers f={f} /> },
+                ...(f.wholesaler_campaigns.length > 0 ? [{ title: `Campaigns (${f.wholesaler_campaigns.length})`, icon: 'megaphone-outline' as const, children: <Campaigns f={f} /> }] : []),
+            ]}
+            actions={action}
+        />
+    );
+}
+
+/* ------------------------------------------------------------------ */
+
+function Empty({ text }: { text: string }) {
+    const { theme, chipBg } = useListTokens();
+    return (
+        <View style={{ borderRadius: 16, padding: 14, backgroundColor: chipBg }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center' }}>{text}</Text>
+        </View>
+    );
+}
+
+/** One bar per day: solid = point forecast, faint band = P10–P90. */
+function DailyBars({ rows }: { rows: RetailerForecastDailyRow[] }) {
+    const { theme, chipBg, divider } = useListTokens();
+    const [expanded, setExpanded] = useState(false);
+    const shown = useMemo(() => (expanded ? rows : rows.slice(0, 7)), [rows, expanded]);
+    const max = useMemo(() => Math.max(1, ...rows.map((r) => Math.max(r.p90 ?? 0, r.point_forecast ?? 0))), [rows]);
+
+    if (rows.length === 0) return <Empty text="Daily breakdown is not available for this forecast." />;
+
+    return (
+        <View style={{ borderRadius: 16, padding: 14, gap: 8, backgroundColor: chipBg }}>
+            {shown.map((r) => {
+                const lo = Math.max(0, (r.p10 ?? r.point_forecast) / max) * 100;
+                const hi = Math.max(0, (r.p90 ?? r.point_forecast) / max) * 100;
+                const pt = Math.max(0, r.point_forecast / max) * 100;
+                return (
+                    <View key={`${r.forecast_date}-${r.horizon_days}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ width: 56, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }} numberOfLines={1}>
+                            {shortDay(r.forecast_date)}
+                        </Text>
+                        <View style={{ flex: 1, height: 10, borderRadius: 5, backgroundColor: divider, overflow: 'hidden' }}>
+                            <View style={{ position: 'absolute', left: `${lo}%`, width: `${Math.max(0, hi - lo)}%`, top: 0, bottom: 0, backgroundColor: `${theme.primary}33` }} />
+                            <View style={{ width: `${pt}%`, height: '100%', borderRadius: 5, backgroundColor: theme.primary }} />
                         </View>
-                        <Pressable onPress={onClose} hitSlop={10} className="p-1.5">
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
+                        <Text style={{ width: 40, textAlign: 'right', color: theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>{r.point_forecast.toFixed(1)}</Text>
                     </View>
+                );
+            })}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>
+                    Units per day · band shows P10–P90{shown[0]?.model_name ? ` · ${shown[0].model_name}` : ''}
+                </Text>
+                {rows.length > 7 ? (
+                    <Pressable onPress={() => setExpanded((v) => !v)} hitSlop={8} style={webPointer}>
+                        <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12 }}>{expanded ? 'Show less' : `Show all ${rows.length}`}</Text>
+                    </Pressable>
+                ) : null}
+            </View>
+        </View>
+    );
+}
 
-                    {/* Body */}
-                    <ScrollView contentContainerStyle={{ padding: 16 }}>
-                        {/* ---------------- Summary ---------------- */}
-                        <SectionTitle label="Summary" />
-                        <View
-                            className="rounded-xl p-3 flex-row flex-wrap gap-3 mb-4"
-                            style={{ backgroundColor: subBg }}
-                        >
-                            <SummaryCell
-                                label="Total forecast"
-                                value={`${forecast.total_forecast.toFixed(1)} u`}
-                            />
-                            <SummaryCell
-                                label="P10 – P90"
-                                value={`${forecast.total_p10.toFixed(1)} – ${forecast.total_p90.toFixed(1)}`}
-                            />
-                            <SummaryCell
-                                label="Avg daily"
-                                value={forecast.avg_daily_forecast.toFixed(2)}
-                            />
-                            <SummaryCell
-                                label="Days covered"
-                                value={String(forecast.days_covered)}
-                            />
-                            <SummaryCell
-                                label="Suggested qty"
-                                value={String(forecast.required_quantity)}
-                            />
-                        </View>
+function shortDay(raw: string): string {
+    const d = new Date(String(raw).replace(' ', 'T'));
+    return isNaN(d.getTime()) ? raw : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+}
 
-                        {/* ---------------- Demand profile ---------------- */}
-                        {(forecast.demand_pattern ||
-                            forecast.demand_cv != null ||
-                            forecast.history_days != null) ? (
-                            <>
-                                <SectionTitle label="Demand profile" />
-                                <View
-                                    className="rounded-xl p-3 flex-row flex-wrap gap-3 mb-4"
-                                    style={{ backgroundColor: subBg }}
-                                >
-                                    {forecast.demand_pattern ? (
-                                        <PatternBadge pattern={forecast.demand_pattern} />
-                                    ) : null}
-                                    {forecast.history_days != null ? (
-                                        <SummaryCell
-                                            label="History"
-                                            value={`${forecast.history_days}d`}
-                                        />
-                                    ) : null}
-                                    {forecast.demand_cv != null ? (
-                                        <SummaryCell
-                                            label="Variability (CV)"
-                                            value={forecast.demand_cv.toFixed(2)}
-                                        />
-                                    ) : null}
-                                    {forecast.zero_demand_pct != null ? (
-                                        <SummaryCell
-                                            label="Zero-demand days"
-                                            value={`${(forecast.zero_demand_pct * 100).toFixed(0)}%`}
-                                        />
-                                    ) : null}
-                                    {forecast.trend_direction ? (
-                                        <SummaryCell
-                                            label="Trend"
-                                            value={
-                                                forecast.trend_pct != null
-                                                    ? `${forecast.trend_direction} (${(forecast.trend_pct * 100).toFixed(0)}%)`
-                                                    : forecast.trend_direction
-                                            }
-                                        />
-                                    ) : null}
-                                </View>
-                            </>
-                        ) : null}
-
-                        {/* ---------------- Daily forecast ---------------- */}
-                        {hasDaily ? (
-                            <>
-                                <View className="flex-row items-center justify-between mb-2">
-                                    <SectionTitle label="Daily forecast" inline />
-                                    {forecast.daily.length > 7 ? (
-                                        <Pressable
-                                            onPress={() => setDailyExpanded((v) => !v)}
-                                        >
-                                            <Text
-                                                className="uppercase tracking-wide"
-                                                style={{
-                                                    color: theme.primary,
-                                                    fontFamily: theme.font.bold,
-                                                    fontSize: 10,
-                                                }}
-                                            >
-                                                {dailyExpanded ? 'Collapse' : `Show all (${forecast.daily.length})`}
-                                            </Text>
-                                        </Pressable>
-                                    ) : null}
-                                </View>
-
-                                {/* Header row */}
-                                <View
-                                    className="flex-row rounded-xl border px-3 py-2 mb-1"
-                                    style={{ backgroundColor: subBg, borderColor }}
-                                >
-                                    <Text style={styles.headerCell(theme)} flex={1.4}>Date</Text>
-                                    <Text style={styles.headerCell(theme)} flex={1}>Point</Text>
-                                    <Text style={styles.headerCell(theme)} flex={1}>P10</Text>
-                                    <Text style={styles.headerCell(theme)} flex={1}>P90</Text>
-                                    <Text style={styles.headerCell(theme)} flex={1.4}>Model</Text>
-                                </View>
-
-                                {/* Data rows */}
-                                {dailyRows.map((d) => (
-                                    <DailyRow
-                                        key={`${d.forecast_date}-${d.horizon_days}`}
-                                        row={d}
-                                    />
-                                ))}
-                            </>
-                        ) : (
-                            <>
-                                <SectionTitle label="Daily forecast" />
-                                <View
-                                    className="rounded-xl p-4 items-center mb-4"
-                                    style={{ backgroundColor: subBg }}
-                                >
-                                    <Text
-                                        style={{
-                                            color: theme.textDark,
-                                            fontFamily: theme.font.medium,
-                                            fontSize: theme.fontSize.sm,
-                                        }}
-                                    >
-                                        Daily breakdown not available (include_daily was off).
-                                    </Text>
-                                </View>
-                            </>
-                        )}
-
-                        {/* ---------------- Offers summary ---------------- */}
-                        <SectionTitle label={`Offers (${forecast.wholesaler_offers.length})`} />
-                        {hasOffers ? (
-                            forecast.wholesaler_offers.slice(0, 5).map((o) => (
-                                <View
-                                    key={o.receipt_id}
-                                    className="rounded-xl border p-3 mb-2"
-                                    style={{ backgroundColor: subBg, borderColor }}
-                                >
-                                    <View className="flex-row justify-between items-center mb-1.5">
-                                        <Text
-                                            style={{
-                                                color: theme.text,
-                                                fontFamily: theme.font.bold,
-                                                fontSize: 13,
-                                                flex: 1,
-                                            }}
-                                            numberOfLines={1}
-                                        >
-                                            {o.wholesaler_title || 'Unknown'}
-                                        </Text>
-                                        <Text
-                                            style={{
-                                                color: theme.text,
-                                                fontFamily: theme.font.bold,
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            KES {o.effective_unit_price}
-                                        </Text>
-                                    </View>
-
-                                    <View className="flex-row flex-wrap gap-1.5 mt-1">
-                                        {o.price_discount_percent > 0 ? (
-                                            <MiniBadge
-                                                label={`${o.price_discount_percent.toFixed(0)}% off`}
-                                                tone="success"
-                                            />
-                                        ) : null}
-                                        {o.quantity_discount ? (
-                                            <MiniBadge
-                                                label={`Buy ${o.quantity_discount.limit_quantity} get ${o.quantity_discount.awarded_quantity}`}
-                                                tone="success"
-                                            />
-                                        ) : null}
-                                        <MiniBadge label={`${o.current_quantity} in stock`} />
-                                        {o.days_to_expiry != null ? (
-                                            <MiniBadge
-                                                label={`${o.days_to_expiry}d expiry`}
-                                                tone={o.days_to_expiry < 60 ? 'warning' : 'default'}
-                                            />
-                                        ) : null}
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <EmptyBlock message="No offers available." />
-                        )}
-
-                        {forecast.wholesaler_offers.length > 5 ? (
-                            <Text
-                                className="text-[11px] mt-1 mb-3"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.medium,
-                                    opacity: 0.7,
-                                }}
-                            >
-                                +{forecast.wholesaler_offers.length - 5} more offers
-                            </Text>
-                        ) : null}
-
-                        {/* ---------------- Campaigns summary ---------------- */}
-                        <SectionTitle label={`Campaigns (${forecast.wholesaler_campaigns.length})`} />
-                        {hasCampaigns ? (
-                            forecast.wholesaler_campaigns.map((c) => (
-                                <View
-                                    key={c.campaign_id}
-                                    className="rounded-xl border p-3 mb-2"
-                                    style={{ backgroundColor: subBg, borderColor }}
-                                >
-                                    <Text
-                                        style={{
-                                            color: theme.text,
-                                            fontFamily: theme.font.bold,
-                                            fontSize: 13,
-                                            marginBottom: 4,
-                                        }}
-                                        numberOfLines={1}
-                                    >
-                                        {c.campaign_title}
-                                    </Text>
-                                    <View className="flex-row flex-wrap gap-1.5">
-                                        <MiniBadge label={c.wholesaler_title} />
-                                        {c.published_bonus_quantity > 0 ? (
-                                            <MiniBadge
-                                                label={`+${c.published_bonus_quantity} bonus`}
-                                                tone="success"
-                                            />
-                                        ) : null}
-                                        <MiniBadge
-                                            label={`Ends in ${c.days_remaining}d`}
-                                            tone={c.days_remaining <= 7 ? 'warning' : 'default'}
-                                        />
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <EmptyBlock message="No active campaigns for this product." />
-                        )}
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View
-                        className="flex-row justify-end p-4 border-t"
-                        style={{ borderTopColor: dividerColor }}
-                    >
-                        <Pressable
-                            onPress={onClose}
-                            className="px-4 py-2.5 rounded-xl border"
-                            style={{ borderColor }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                Close
-                            </Text>
-                        </Pressable>
+function Offers({ f }: { f: RetailerForecastNormalized }) {
+    const { theme, chipBg } = useListTokens();
+    if (f.wholesaler_offers.length === 0) return <Empty text="No wholesaler offers for this product yet." />;
+    const shown = f.wholesaler_offers.slice(0, 5);
+    return (
+        <View style={{ gap: 8 }}>
+            {shown.map((o, i) => (
+                <View key={o.receipt_id} style={{ borderRadius: 16, padding: 12, gap: 6, backgroundColor: chipBg }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }} numberOfLines={1}>
+                            {textOr(o.wholesaler_title, 'Wholesaler')}
+                        </Text>
+                        {i === 0 ? <AdminBadgePill badge={{ label: 'Best', tone: 'primary', icon: 'star' }} /> : null}
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{formatKES(o.effective_unit_price)}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {o.price_discount_percent > 0 ? <AdminBadgePill badge={{ label: `${o.price_discount_percent.toFixed(0)}% off`, tone: 'success' }} /> : null}
+                        {o.quantity_discount ? <AdminBadgePill badge={{ label: `Buy ${o.quantity_discount.limit_quantity} get ${o.quantity_discount.awarded_quantity}`, tone: 'success' }} /> : null}
+                        <AdminBadgePill badge={{ label: `${units(o.current_quantity)} in stock`, tone: 'neutral' }} />
+                        {o.days_to_expiry != null ? <AdminBadgePill badge={{ label: `Expires in ${o.days_to_expiry}d`, tone: o.days_to_expiry < 60 ? 'warning' : 'neutral' }} /> : null}
+                        {o.in_placement ? <AdminBadgePill badge={{ label: 'Consignment', tone: 'violet' }} /> : null}
                     </View>
                 </View>
-            </View>
-        </Modal>
-    );
-}
-
-/* =========================================================
- * Daily row
- * ======================================================= */
-function DailyRow({ row }: { row: RetailerForecastDailyRow }) {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-
-    return (
-        <View
-            className="flex-row rounded-xl border px-3 py-2 mb-1"
-            style={{ borderColor }}
-        >
-            <Text style={{ flex: 1.4, color: theme.text, fontFamily: theme.font.medium, fontSize: 11 }}>
-                {row.forecast_date}
-            </Text>
-            <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 11 }}>
-                {row.point_forecast.toFixed(1)}
-            </Text>
-            <Text style={{ flex: 1, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>
-                {row.p10 != null ? row.p10.toFixed(1) : '—'}
-            </Text>
-            <Text style={{ flex: 1, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>
-                {row.p90 != null ? row.p90.toFixed(1) : '—'}
-            </Text>
-            <Text style={{ flex: 1.4, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>
-                {row.model_name}
-            </Text>
+            ))}
+            {f.wholesaler_offers.length > shown.length ? (
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginLeft: 4 }}>+{f.wholesaler_offers.length - shown.length} more in View offers</Text>
+            ) : null}
         </View>
     );
 }
 
-/* =========================================================
- * Small pieces
- * ======================================================= */
-function SectionTitle({ label, inline }: { label: string; inline?: boolean }) {
-    const { theme } = useAuth();
+function Campaigns({ f }: { f: RetailerForecastNormalized }) {
+    const { theme, chipBg } = useListTokens();
     return (
-        <Text
-            className="uppercase tracking-widest mb-2"
-            style={{
-                color: theme.textDark,
-                fontFamily: theme.font.bold,
-                fontSize: 10,
-                marginTop: inline ? 0 : 8,
-            }}
-        >
-            {label}
-        </Text>
-    );
-}
-
-function SummaryCell({ label, value }: { label: string; value: string }) {
-    const { theme } = useAuth();
-    return (
-        <View style={{ minWidth: 100 }}>
-            <Text
-                className="uppercase tracking-wide"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.bold,
-                    fontSize: 10,
-                }}
-            >
-                {label}
-            </Text>
-            <Text
-                className="mt-0.5"
-                numberOfLines={1}
-                style={{
-                    color: theme.text,
-                    fontFamily: theme.font.bold,
-                    fontSize: theme.fontSize.sm,
-                }}
-            >
-                {value}
-            </Text>
+        <View style={{ gap: 8 }}>
+            {f.wholesaler_campaigns.map((c) => (
+                <View key={c.campaign_id} style={{ borderRadius: 16, padding: 12, gap: 6, backgroundColor: chipBg }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }} numberOfLines={1}>
+                            {textOr(c.campaign_title, 'Campaign')}
+                        </Text>
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{formatKES(c.published_unit_price)}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        <AdminBadgePill badge={{ label: textOr(c.wholesaler_title, 'Wholesaler'), tone: 'neutral' }} />
+                        {c.published_bonus_quantity > 0 ? <AdminBadgePill badge={{ label: `+${c.published_bonus_quantity} bonus`, tone: 'success' }} /> : null}
+                        <AdminBadgePill badge={{ label: `${c.days_remaining}d left`, tone: c.days_remaining <= 3 ? 'warning' : 'info' }} />
+                        {c.opted_in ? <AdminBadgePill badge={{ label: 'Opted in', tone: 'success', icon: 'checkmark' }} /> : null}
+                    </View>
+                </View>
+            ))}
         </View>
     );
 }
-
-function PatternBadge({ pattern }: { pattern: string }) {
-    const { theme } = useAuth();
-    const isGood = ['stable', 'seasonal', 'trending_up'].includes(pattern);
-    const bg = isGood ? 'rgba(16,185,129,0.15)' : 'rgba(251,191,36,0.15)';
-    const color = isGood ? '#10b981' : '#f59e0b';
-    return (
-        <View
-            className="px-2 py-0.5 rounded-md self-start"
-            style={{ backgroundColor: bg }}
-        >
-            <Text
-                className="uppercase tracking-wide"
-                style={{ color, fontFamily: theme.font.bold, fontSize: 10 }}
-            >
-                {pattern.replace('_', ' ')}
-            </Text>
-        </View>
-    );
-}
-
-function MiniBadge({
-    label,
-    tone = 'default',
-}: {
-    label: string;
-    tone?: 'default' | 'success' | 'warning';
-}) {
-    const { theme, isDarkMode } = useAuth();
-    const bg =
-        tone === 'success' ? 'rgba(16,185,129,0.15)'
-            : tone === 'warning' ? 'rgba(251,191,36,0.15)'
-                : isDarkMode ? '#0f172a' : '#f8fafc';
-    const border =
-        tone === 'success' ? 'rgba(16,185,129,0.3)'
-            : tone === 'warning' ? 'rgba(251,191,36,0.3)'
-                : isDarkMode ? '#334155' : '#e2e8f0';
-    const color =
-        tone === 'success' ? '#10b981'
-            : tone === 'warning' ? '#f59e0b'
-                : theme.textDark;
-
-    return (
-        <View
-            className="px-2 py-0.5 rounded-md border"
-            style={{ backgroundColor: bg, borderColor: border }}
-        >
-            <Text
-                className="uppercase tracking-wide"
-                style={{ color, fontFamily: theme.font.bold, fontSize: 10 }}
-            >
-                {label}
-            </Text>
-        </View>
-    );
-}
-
-function EmptyBlock({ message }: { message: string }) {
-    const { theme, isDarkMode } = useAuth();
-    return (
-        <View
-            className="rounded-xl p-4 items-center mb-3"
-            style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc' }}
-        >
-            <Text
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.medium,
-                    fontSize: theme.fontSize.sm,
-                }}
-            >
-                {message}
-            </Text>
-        </View>
-    );
-}
-
-/* =========================================================
- * Inline styles
- * ======================================================= */
-const styles = {
-    headerCell: (theme: any) => ({
-        color: theme.textDark,
-        fontFamily: theme.font.bold,
-        fontSize: 10,
-    }),
-};

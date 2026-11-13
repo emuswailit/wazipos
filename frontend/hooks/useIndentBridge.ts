@@ -14,14 +14,9 @@ import type {
 } from '@/databases/types';
 import { useCallback } from 'react';
 
-export type {
-    LastSyncResult,
-    SyncFailure
-} from '@/context/RetailerIndentsSyncContext';
-
 /* ── Public types ──────────────────────────────────────────── */
 
-export interface AddToIndentInput {
+interface AddToIndentInput {
     wholesaleReceipt: string;
     quantity: number;
     meta?: {
@@ -35,7 +30,7 @@ export interface AddToIndentInput {
     };
 }
 
-export interface AddToIndentResult {
+interface AddToIndentResult {
     ok: boolean;
     mode: 'remote' | 'draft' | 'failed';
     itemId?: string;
@@ -43,7 +38,7 @@ export interface AddToIndentResult {
     message?: string;
 }
 
-export interface RemoveFromIndentResult {
+interface RemoveFromIndentResult {
     ok: boolean;
     mode: 'remote' | 'draft' | 'failed';
     message?: string;

@@ -15,7 +15,6 @@ function HomeWebLayoutContainer() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
-    const currentUserRole = user?.role || "Client";
     const workspaceBg = isDarkMode ? "#0f172a" : "#f8fafc";
 
     console.log("usee", user)
@@ -32,8 +31,12 @@ function HomeWebLayoutContainer() {
                         setDropdownOpen={setProfileDropdownOpen}
                         sidebarOpen={sidebarOpen}
                         setSidebarOpen={setSidebarOpen}
-                        userCompany={user ? user.entity_title : ""}
+                        userCompany={user?.entity_title ?? ""}
                         userFullName={user ? user.name : ""}
+                        userUsername={user?.email ? user.email.split("@")[0] : ""}
+                        userEmail={user?.email ?? ""}
+                        themePrimaryColor={theme.primary}
+                        onLogoutTrigger={logout}
                     />
                 )}
 
@@ -66,7 +69,6 @@ function HomeWebLayoutContainer() {
 
                                 {/* Sidebar Navigation Links List Container */}
                                 <SidebarNavigationList
-                                    currentUserRole={currentUserRole}
                                     themePrimaryColor={theme.primary}
                                     themeTextDarkColor={theme.textDark}
                                 />

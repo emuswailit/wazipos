@@ -53,7 +53,7 @@ interface Props {
     isSubmitting: boolean;
     onSubmitResponse: (payload: RespondPayload) => Promise<void>;
 
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
 }
 
 function rowKey(r: ProductRequestSummary): string {

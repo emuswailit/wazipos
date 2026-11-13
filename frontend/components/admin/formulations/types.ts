@@ -37,7 +37,9 @@ export interface AdminFormulationsSharedProps {
     sourceTone: "server" | "cache" | "none";
     lastSyncedTime: string;
     items: FormulationItem[];
-    emptyComponent?: React.ReactNode;
+    /** Whole filtered list; the mobile view shows all of it. */
+    allItems?: FormulationItem[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
     onPressItem: (item: FormulationItem) => void;
     onEditItem: (item: FormulationItem) => void;

@@ -1,325 +1,259 @@
 // components/retailers/retailerInventory/RetailerInventoryWebView.tsx
 //
-// Web table view for retailer inventory.
-//
-// Also exports the shared primitives (StatusPill, SummaryBadge,
-// FilterPill, SyncPill, isExpired, expiryLabel, formatKES,
-// formatDate) reused by the mobile view and the shell.
+// Wide-screen view for the retailer's inventory (stock receipts), styled like Customer
+// Orders: compact header line, one table card with a toolbar, shared PaginationBar.
+// Pills, formatters and filter helpers are exported for the mobile view and the details modal.
 
 import ImageWithFallback from '@/components/common/ImageWithFallback';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { PaginationBar } from '@/components/common/PaginationBar';
 import { useAuth } from '@/context/AuthContext';
 import { resolveImageUrl } from '@/lib/images';
-import React from 'react';
-import {
-    ActivityIndicator,
-    FlatList,
-    Pressable,
-    RefreshControl,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { FlatList, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+
+const TABLE_MAX_WIDTH = 1600;
+const isWeb = Platform.OS === 'web';
+const webPointer = isWeb ? ({ cursor: 'pointer' } as any) : {};
 
 /* =========================================================
- * Column widths
+ * Filters
  * ======================================================= */
 
-const COLS = {
-    asset: '25%',
-    barcode: '14%',
-    qty: '7%',
-    price: '12%',
-    status: '12%',
-    sync: '15%',
-    actions: '15%',
-} as const;
+export const INVENTORY_FILTERS = ['ALL', 'ACTIVE', 'LOW', 'EXPIRING', 'EXPIRED'] as const;
+export type InventoryFilter = (typeof INVENTORY_FILTERS)[number];
 
-/* =========================================================
- * Shared primitives
- * ======================================================= */
+export const INVENTORY_FILTER_LABELS: Record<InventoryFilter, string> = {
+    ALL: 'All',
+    ACTIVE: 'In date',
+    LOW: 'Low stock',
+    EXPIRING: 'Expiring soon',
+    EXPIRED: 'Expired',
+};
 
-export type InventoryFilter = 'ALL' | 'ACTIVE' | 'EXPIRED';
+export const INVENTORY_FILTER_ICONS: Record<InventoryFilter, keyof typeof Ionicons.glyphMap> = {
+    ALL: 'apps-outline',
+    ACTIVE: 'checkmark-circle-outline',
+    LOW: 'trending-down-outline',
+    EXPIRING: 'hourglass-outline',
+    EXPIRED: 'close-circle-outline',
+};
+
+export const INVENTORY_FILTER_COLORS: Record<InventoryFilter, string | null> = {
+    ALL: null, // theme primary
+    ACTIVE: '#10b981',
+    LOW: '#f59e0b',
+    EXPIRING: '#f97316',
+    EXPIRED: '#f43f5e',
+};
+
+/** Stock at or below this (but above zero) counts as low. */
+const LOW_STOCK_THRESHOLD = 5;
+/** Batches expiring within this many days count as "expiring soon". */
+const EXPIRING_SOON_DAYS = 90;
 
 export interface InventoryCounts {
     total: number;
     active: number;
     expired: number;
     lowStock: number;
+    expiring: number;
+    /** Items in the current filtered list. */
+    visible: number;
+    byFilter: Record<InventoryFilter, number>;
 }
 
 export function isExpired(item: any): boolean {
-    return (
-        (typeof item?.days_to_expiry === 'number' &&
-            item.days_to_expiry <= 0) ||
-        item?.expiry_status === 'EXPIRED'
-    );
+    return (typeof item?.days_to_expiry === 'number' && item.days_to_expiry <= 0) || item?.expiry_status === 'EXPIRED';
 }
 
-export function expiryLabel(item: any): string {
-    if (item?.expiry_status === 'UNKNOWN') {
-        return isExpired(item) ? 'EXPIRED' : 'ACTIVE';
+export function stockQty(item: any): number {
+    const n = Number(item?.current_unit_quantity ?? 0);
+    return Number.isFinite(n) ? n : 0;
+}
+
+export function isLowStock(item: any): boolean {
+    const q = stockQty(item);
+    return q > 0 && q <= LOW_STOCK_THRESHOLD;
+}
+
+export function isExpiringSoon(item: any): boolean {
+    if (isExpired(item)) return false;
+    const status = String(item?.expiry_status || '').toUpperCase();
+    if (status === 'EXPIRING' || status === 'EXPIRING_SOON') return true;
+    return typeof item?.days_to_expiry === 'number' && item.days_to_expiry <= EXPIRING_SOON_DAYS;
+}
+
+export function matchesInventoryFilter(item: any, filter: InventoryFilter): boolean {
+    switch (filter) {
+        case 'ACTIVE':
+            return !isExpired(item);
+        case 'LOW':
+            return isLowStock(item);
+        case 'EXPIRING':
+            return isExpiringSoon(item);
+        case 'EXPIRED':
+            return isExpired(item);
+        default:
+            return true;
     }
-    return item?.expiry_status || 'ACTIVE';
+}
+
+/* =========================================================
+ * Formatting
+ * ======================================================= */
+
+export function expiryLabel(item: any): string {
+    if (isExpired(item)) return 'EXPIRED';
+    if (isExpiringSoon(item)) return 'EXPIRING';
+    if (!item?.expiry_status || item.expiry_status === 'UNKNOWN') return 'ACTIVE';
+    return item.expiry_status;
+}
+
+/** "in 45 days" / "12 days ago" / "today", from days_to_expiry. */
+export function expiryRelative(item: any): string | null {
+    const d = item?.days_to_expiry;
+    if (typeof d !== 'number') return null;
+    if (d === 0) return 'today';
+    if (d < 0) return `${Math.abs(d)} day${d === -1 ? '' : 's'} ago`;
+    return `in ${d} day${d === 1 ? '' : 's'}`;
 }
 
 export function formatKES(raw: any): string {
     const n = Number(raw);
     if (!Number.isFinite(n)) return '0.00';
-    return n.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function formatDate(
-    raw: string | null | undefined
-): string {
+export function formatDate(raw: string | null | undefined): string {
     if (!raw) return '—';
     const d = new Date(String(raw).replace(' ', 'T'));
     if (isNaN(d.getTime())) return raw;
-    return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-    });
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
 }
 
-export function StatusPill({
-    label,
-    tone,
-    size = 'md',
-}: {
-    label: string;
-    tone: 'active' | 'expired' | 'warning';
-    size?: 'sm' | 'md';
-}) {
-    const { theme } = useAuth();
-    const bg =
-        tone === 'active'
-            ? 'rgba(16,185,129,0.12)'
-            : tone === 'expired'
-                ? 'rgba(244,63,94,0.12)'
-                : 'rgba(251,191,36,0.15)';
-    const color =
-        tone === 'active'
-            ? '#10b981'
-            : tone === 'expired'
-                ? '#f43f5e'
-                : '#f59e0b';
+export function productTitle(item: any): string {
+    const t = item?.title || item?.product_title || item?.long_title || item?.product_name;
+    return String(t ?? '').trim() || 'Unnamed product';
+}
 
-    return (
-        <View
-            className={`self-start rounded ${size === 'sm' ? 'px-1.5 py-px' : 'px-2 py-0.5'
-                }`}
-            style={{ backgroundColor: bg }}
-        >
-            <Text
-                className={`uppercase tracking-widest ${size === 'sm' ? 'text-[9px]' : 'text-[10px]'
-                    }`}
-                style={{
-                    color,
-                    fontFamily: theme.font.bold,
-                }}
-                numberOfLines={1}
-            >
-                {label}
-            </Text>
-        </View>
-    );
+/** The preparation (strength / form / pack), or null when absent or already part of the product title. */
+export function preparationTitle(item: any): string | null {
+    const prep = String(item?.preparation_title ?? '').trim();
+    if (!prep) return null;
+    if (productTitle(item).toLowerCase().includes(prep.toLowerCase())) return null;
+    return prep;
+}
+
+export function unitPrice(item: any): number {
+    const p = parseFloat(item?.final_unit_selling_price ?? item?.unit_selling_price ?? '0');
+    return Number.isFinite(p) ? p : 0;
+}
+
+export function stockValue(item: any): number {
+    return Math.max(0, stockQty(item)) * unitPrice(item);
+}
+
+export function itemImageUrl(item: any): string | null {
+    return resolveImageUrl(item?.thumbnail_url || item?.image_url || item?.images?.[0]) as any;
+}
+
+/** Red for expired, amber for low stock, orange for expiring soon, green otherwise. */
+export function healthColor(item: any): string {
+    if (isExpired(item)) return '#f43f5e';
+    if (isLowStock(item)) return '#f59e0b';
+    if (isExpiringSoon(item)) return '#f97316';
+    return '#10b981';
 }
 
 /* =========================================================
- * SyncPill
- *
- * Three states driven by CachedReceipt fields:
- *   - sync_error set  → red   "Sync error"
- *   - synced === true → green "Synced"
- *   - otherwise       → amber "Pending"
+ * Pills
  * ======================================================= */
-export function SyncPill({
-    synced,
-    error,
-    size = 'md',
-}: {
-    synced?: boolean;
-    error?: string | null;
-    size?: 'sm' | 'md';
-}) {
+
+export function StatusPill({ label, tone, size = 'md' }: { label: string; tone: 'active' | 'expired' | 'warning'; size?: 'sm' | 'md' }) {
     const { theme } = useAuth();
-
-    const state: 'synced' | 'pending' | 'error' = error
-        ? 'error'
-        : synced
-            ? 'synced'
-            : 'pending';
-
-    const meta = {
-        synced: {
-            dot: '#10b981',
-            label: 'Synced',
-            bg: 'rgba(16,185,129,0.12)',
-            fg: '#10b981',
-        },
-        pending: {
-            dot: '#f59e0b',
-            label: 'Pending',
-            bg: 'rgba(245,158,11,0.12)',
-            fg: '#f59e0b',
-        },
-        error: {
-            dot: '#ef4444',
-            label: 'Sync error',
-            bg: 'rgba(239,68,68,0.12)',
-            fg: '#ef4444',
-        },
-    }[state];
-
+    const tint =
+        tone === 'active'
+            ? { bg: 'rgba(16,185,129,0.12)', fg: '#10b981' }
+            : tone === 'expired'
+                ? { bg: 'rgba(244,63,94,0.12)', fg: '#f43f5e' }
+                : { bg: 'rgba(249,115,22,0.14)', fg: '#f97316' };
     return (
         <View
-            className={`flex-row items-center self-start rounded-full ${size === 'sm'
-                ? 'px-1.5 py-px'
-                : 'px-2 py-0.5'
-                }`}
-            style={{ backgroundColor: meta.bg }}
-            accessibilityRole="text"
-            accessibilityLabel={`Sync status: ${meta.label}`}
+            className="self-start rounded-full"
+            style={{ backgroundColor: tint.bg, paddingHorizontal: size === 'sm' ? 6 : 8, paddingVertical: size === 'sm' ? 1 : 2 }}
         >
-            <View
-                style={{
-                    width: size === 'sm' ? 5 : 6,
-                    height: size === 'sm' ? 5 : 6,
-                    borderRadius: size === 'sm' ? 2.5 : 3,
-                    backgroundColor: meta.dot,
-                    marginRight: 4,
-                }}
-            />
-            <Text
-                className={`uppercase tracking-widest ${size === 'sm'
-                    ? 'text-[9px]'
-                    : 'text-[10px]'
-                    }`}
-                style={{
-                    color: meta.fg,
-                    fontFamily: theme.font.bold,
-                }}
-                numberOfLines={1}
-            >
-                {meta.label}
+            <Text className="uppercase tracking-wide" style={{ color: tint.fg, fontFamily: theme.font.bold, fontSize: size === 'sm' ? 9 : 10 }} numberOfLines={1}>
+                {label}
             </Text>
         </View>
     );
 }
 
-export function SummaryBadge({
-    label,
-    tone = 'neutral',
+export function statusToneOf(item: any): 'active' | 'expired' | 'warning' {
+    if (isExpired(item)) return 'expired';
+    if (isExpiringSoon(item)) return 'warning';
+    return 'active';
+}
+
+/** All / In date / Low stock / Expiring soon / Expired chips with counts (web toolbar and mobile). */
+function InventoryFilterChips({
+    value,
+    onChange,
+    counts,
+    large = false,
 }: {
-    label: string;
-    tone?: 'neutral' | 'primary' | 'danger' | 'warning';
+    value: InventoryFilter;
+    onChange: (f: InventoryFilter) => void;
+    counts: Record<InventoryFilter, number>;
+    large?: boolean;
 }) {
     const { theme, isDarkMode } = useAuth();
-    const bg =
-        tone === 'primary'
-            ? `${theme.primary}20`
-            : tone === 'danger'
-                ? 'rgba(244,63,94,0.12)'
-                : tone === 'warning'
-                    ? 'rgba(251,191,36,0.15)'
-                    : isDarkMode
-                        ? 'rgba(148,163,184,0.15)'
-                        : 'rgba(148,163,184,0.22)';
-    const fg =
-        tone === 'primary'
-            ? theme.primary
-            : tone === 'danger'
-                ? '#f43f5e'
-                : tone === 'warning'
-                    ? '#f59e0b'
-                    : theme.textDark;
-
+    const idleBorder = isDarkMode ? '#1e293b' : '#e2e8f0';
     return (
-        <View
-            className="px-2 py-0.5 rounded-md"
-            style={{ backgroundColor: bg }}
-        >
-            <Text
-                className="uppercase tracking-widest text-[9px]"
-                style={{
-                    color: fg,
-                    fontFamily: theme.font.bold,
-                }}
-            >
-                {label}
-            </Text>
+        <View className="flex-row items-center gap-1.5" style={large ? undefined : { flexWrap: 'wrap' }}>
+            {INVENTORY_FILTERS.map((f) => {
+                const active = f === value;
+                const color = INVENTORY_FILTER_COLORS[f] ?? theme.primary;
+                const n = counts?.[f] ?? 0;
+                return (
+                    <Pressable
+                        key={f}
+                        onPress={() => onChange(f)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        className={`flex-row items-center gap-1.5 px-3 rounded-full border ${large ? 'h-9' : 'h-8'}`}
+                        style={{ borderColor: active ? color : idleBorder, backgroundColor: active ? `${color}14` : 'transparent', ...webPointer }}
+                    >
+                        <Ionicons name={INVENTORY_FILTER_ICONS[f]} size={13} color={active ? color : f !== 'ALL' && n > 0 ? color : theme.textDark} />
+                        <Text style={{ color: active ? color : theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>{INVENTORY_FILTER_LABELS[f]}</Text>
+                        <Text style={{ color: active ? color : theme.textDark, fontFamily: theme.font.medium, fontSize: 11, opacity: 0.85 }}>{n}</Text>
+                    </Pressable>
+                );
+            })}
         </View>
     );
 }
 
-export function FilterPill({
-    label,
-    active,
-    count,
-    tint,
-    onPress,
-}: {
-    label: string;
-    active: boolean;
-    count?: number;
-    tint: { fg: string; dot: string; bg: string };
-    onPress: () => void;
-}) {
-    const { theme } = useAuth();
-    const fg = active ? tint.fg : theme.textDark;
-
+/** Thin stock-left bar (current vs received). */
+export function StockBar({ item, width = '100%' }: { item: any; width?: any }) {
+    const { isDarkMode } = useAuth();
+    const qty = stockQty(item);
+    const received = Number(item?.received_unit_quantity ?? 0);
+    const ratio = received > 0 ? Math.max(0, Math.min(1, qty / received)) : qty > 0 ? 1 : 0;
     return (
-        <Pressable
-            onPress={onPress}
-            className="flex-row items-center px-2.5 py-1 mr-2 rounded-full border"
-            style={{
-                backgroundColor: active ? tint.bg : 'transparent',
-                borderColor: active
-                    ? tint.fg + '55'
-                    : theme.textDark + '33',
-            }}
-        >
-            <View
-                className="w-1.5 h-1.5 rounded-full mr-1.5"
-                style={{
-                    backgroundColor: active ? tint.fg : tint.dot,
-                }}
-            />
-            <Text
-                className="uppercase tracking-wide text-[10px]"
-                style={{
-                    color: fg,
-                    fontFamily: theme.font.bold,
-                }}
-                numberOfLines={1}
-            >
-                {label}
-            </Text>
-            {count && count > 0 ? (
-                <Text
-                    className="ml-1.5 text-[9px]"
-                    style={{
-                        color: fg,
-                        opacity: 0.7,
-                        fontFamily: theme.font.bold,
-                    }}
-                >
-                    {count}
-                </Text>
-            ) : null}
-        </Pressable>
+        <View className="h-1 rounded-full overflow-hidden" style={{ width, backgroundColor: isDarkMode ? 'rgba(148,163,184,0.15)' : 'rgba(15,23,42,0.06)' }}>
+            <View className="h-full rounded-full" style={{ width: `${ratio * 100}%`, backgroundColor: healthColor(item) }} />
+        </View>
     );
 }
 
 /* =========================================================
  * Props
  * ======================================================= */
-interface Props {
+
+export interface InventoryViewProps {
     query: string;
     setQuery: (v: string) => void;
     activeFilter: InventoryFilter;
@@ -334,8 +268,9 @@ interface Props {
     items: any[];
     onView?: (item: any) => void;
     onEdit?: (item: any) => void;
+}
 
-    /* Pagination */
+interface WebProps extends InventoryViewProps {
     page: number;
     pageSize: PageSize;
     totalItems: number;
@@ -347,9 +282,13 @@ interface Props {
     onPageSizeChange: (size: PageSize) => void;
 }
 
+/* Column flex weights */
+const COLS = { product: 3.8, batch: 1.5, expiry: 1.5, stock: 1.2, price: 1.1, value: 1.3, status: 1.1, actions: 0.8 } as const;
+
 /* =========================================================
- * Web view
+ * Component
  * ======================================================= */
+
 export function RetailerInventoryWebView({
     query,
     setQuery,
@@ -374,575 +313,341 @@ export function RetailerInventoryWebView({
     onPrev,
     onNext,
     onPageSizeChange,
-}: Props) {
+}: WebProps) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const headerBg = isDarkMode ? '#0f172a' : '#f8fafc';
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
+    const borderColor = isDarkMode ? '#1e293b' : '#e2e8f0';
+    const headerBg = isDarkMode ? '#0b1220' : '#f8fafc';
+    const inputBg = isDarkMode ? '#0f172a' : '#f8fafc';
 
-    const sourceLabel = isLiveConnected
-        ? 'Live · websocket'
-        : 'Offline';
-
-    const sourceTint = isLiveConnected
-        ? {
-            bg: 'rgba(16,185,129,0.12)',
-            fg: '#10b981',
-            dot: '#10b981',
-        }
-        : {
-            bg: 'rgba(244,63,94,0.12)',
-            fg: '#f43f5e',
-            dot: '#f43f5e',
-        };
-
-    const hasActiveFilter =
-        activeFilter !== 'ALL' || query.trim() !== '';
-
+    const hasActiveFilter = activeFilter !== 'ALL' || query.trim() !== '';
     const clearFilters = () => {
         if (activeFilter !== 'ALL') setActiveFilter('ALL');
         if (query.trim() !== '') setQuery('');
     };
 
     return (
-        <View
-            className="flex-1 w-full"
-            style={{ backgroundColor: theme.background }}
-        >
-            {/* ============ Header ============ */}
-            <View
-                className="p-4 border-b"
-                style={{
-                    backgroundColor: theme.panel,
-                    borderBottomColor: borderColor,
-                }}
-            >
-                <View className="flex-row items-start justify-between mb-3 gap-3">
-                    <View className="flex-1 min-w-0">
-                        <Text
-                            className="tracking-tight"
-                            style={{
-                                color: theme.text,
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.lg,
-                            }}
-                        >
-                            Retailer Inventory
+        <View className="flex-1 w-full" style={{ backgroundColor: theme.background }}>
+            <View className="flex-1 w-full self-center px-6 pt-4 pb-4" style={{ maxWidth: TABLE_MAX_WIDTH }}>
+                {/* ============ Compact header: title · live · stats · actions ============ */}
+                <View className="flex-row items-center mb-3 gap-4 flex-wrap">
+                    <Text className="tracking-tight" style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 18 }}>
+                        Inventory
+                    </Text>
+                    <View className="flex-row items-center gap-1.5">
+                        <View className="w-2 h-2 rounded-full" style={{ backgroundColor: isLiveConnected ? '#10b981' : '#f59e0b' }} />
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                            {isLiveConnected ? 'Live' : 'Offline'}
+                            {lastSyncedTime ? ` · ${lastSyncedTime}` : ''}
                         </Text>
-                        <View className="flex-row items-center gap-2 mt-1 flex-wrap">
-                            <FilterPill
-                                label={sourceLabel}
-                                active
-                                tint={sourceTint}
-                                onPress={() => { }}
+                    </View>
+
+                    <View className="flex-1" />
+
+                    <InlineStat label="Items" value={counts.total.toLocaleString()} />
+                    <InlineStat label="Low" value={counts.lowStock.toLocaleString()} color={counts.lowStock > 0 ? '#f59e0b' : undefined} />
+                    <InlineStat label="Expired" value={counts.expired.toLocaleString()} color={counts.expired > 0 ? '#f43f5e' : undefined} />
+                    <InlineStat label={hasActiveFilter ? 'Value (filtered)' : 'Stock value'} value={`KES ${formatKES(totalValue)}`} color="#10b981" />
+
+                    <Pressable
+                        onPress={onOpenCreate}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add stock"
+                        className="flex-row items-center gap-1.5 px-3 h-8 rounded-lg border"
+                        style={{ borderColor: theme.primary, backgroundColor: `${theme.primary}12`, ...webPointer }}
+                    >
+                        <Ionicons name="add" size={15} color={theme.primary} />
+                        <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12 }}>Add stock</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={onRefresh}
+                        disabled={refreshing}
+                        accessibilityRole="button"
+                        accessibilityLabel="Refresh inventory"
+                        className="flex-row items-center gap-1.5 px-3 h-8 rounded-lg"
+                        style={{ backgroundColor: theme.primary, opacity: refreshing ? 0.6 : 1, ...webPointer }}
+                    >
+                        <Ionicons name="refresh" size={14} color="#fff" />
+                        <Text className="text-white" style={{ fontFamily: theme.font.bold, fontSize: 12 }}>
+                            {refreshing ? 'Refreshing…' : 'Refresh'}
+                        </Text>
+                    </Pressable>
+                </View>
+
+                {/* ============ Table card ============ */}
+                <View
+                    className="flex-1 rounded-2xl border overflow-hidden"
+                    style={{
+                        backgroundColor: theme.panel,
+                        borderColor,
+                        ...(isWeb ? ({ boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 4px 16px rgba(15,23,42,0.04)' } as any) : {}),
+                    }}
+                >
+                    {/* Toolbar */}
+                    <View className="flex-row flex-wrap items-center gap-3 px-4 py-3 border-b" style={{ borderBottomColor: borderColor }}>
+                        <View className="flex-row items-center flex-1 min-w-[220px] max-w-[360px] h-9 rounded-xl border px-3" style={{ borderColor, backgroundColor: inputBg }}>
+                            <Ionicons name="search" size={16} color={theme.textDark} />
+                            <TextInput
+                                value={query}
+                                onChangeText={setQuery}
+                                placeholder="Search product, batch, barcode, supplier…"
+                                placeholderTextColor="#94a3b8"
+                                autoCorrect={false}
+                                autoCapitalize="none"
+                                className="flex-1 h-full ml-2"
+                                style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13, ...(isWeb ? ({ outlineStyle: 'none' } as any) : {}) }}
                             />
-                            <SummaryBadge
-                                label={`${counts.total} item${counts.total === 1 ? '' : 's'
-                                    }`}
-                            />
-                            <SummaryBadge
-                                label={`KES ${formatKES(
-                                    totalValue
-                                )}`}
-                                tone="primary"
-                            />
-                            {counts.lowStock > 0 ? (
-                                <SummaryBadge
-                                    label={`${counts.lowStock} low stock`}
-                                    tone="warning"
-                                />
-                            ) : null}
-                            {counts.expired > 0 ? (
-                                <SummaryBadge
-                                    label={`${counts.expired} expired`}
-                                    tone="danger"
-                                />
-                            ) : null}
-                            {lastSyncedTime ? (
-                                <Text
-                                    className="text-[11px]"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                    }}
-                                >
-                                    Synced {lastSyncedTime}
-                                </Text>
+                            {query ? (
+                                <Pressable onPress={() => setQuery('')} hitSlop={8} style={webPointer}>
+                                    <Ionicons name="close-circle" size={16} color={theme.textDark} />
+                                </Pressable>
                             ) : null}
                         </View>
+
+                        <InventoryFilterChips value={activeFilter} onChange={setActiveFilter} counts={counts.byFilter} />
+
+                        {hasActiveFilter ? (
+                            <Pressable onPress={clearFilters} hitSlop={6} style={webPointer}>
+                                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12 }}>Clear</Text>
+                            </Pressable>
+                        ) : null}
+
+                        <View className="flex-1" />
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                            {counts.visible.toLocaleString()} {counts.visible === 1 ? 'item' : 'items'}
+                        </Text>
                     </View>
 
-                    <View className="flex-row items-center gap-2.5">
-                        <Pressable
-                            onPress={onOpenCreate}
-                            accessibilityRole="button"
-                            accessibilityLabel="Add inventory"
-                            className="px-4 py-2.5 min-h-[40px] rounded-full items-center justify-center border"
-                            style={{
-                                borderColor: theme.primary,
-                                backgroundColor: `${theme.primary}15`,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest text-sm"
-                                style={{
-                                    color: theme.primary,
-                                    fontFamily: theme.font.bold,
-                                }}
-                            >
-                                + Add
-                            </Text>
-                        </Pressable>
+                    {/* Column header */}
+                    <View className="flex-row items-center px-5 py-2.5" style={{ backgroundColor: headerBg }}>
+                        <HeaderCell flex={COLS.product}>Product</HeaderCell>
+                        <HeaderCell flex={COLS.batch}>Batch / barcode</HeaderCell>
+                        <HeaderCell flex={COLS.expiry}>Expiry</HeaderCell>
+                        <HeaderCell flex={COLS.stock} align="right">Stock</HeaderCell>
+                        <HeaderCell flex={COLS.price} align="right">Unit price</HeaderCell>
+                        <HeaderCell flex={COLS.value} align="right">Value</HeaderCell>
+                        <HeaderCell flex={COLS.status}>Status</HeaderCell>
+                        <View style={{ flex: COLS.actions }} />
+                    </View>
 
-                        <Pressable
-                            onPress={onRefresh}
-                            disabled={refreshing}
-                            accessibilityRole="button"
-                            accessibilityState={{
-                                disabled: refreshing,
-                            }}
-                            className="px-4 py-2.5 min-h-[40px] rounded-full items-center justify-center"
-                            style={{
-                                backgroundColor: theme.primary,
-                                opacity: refreshing ? 0.5 : 1,
-                            }}
-                        >
-                            {refreshing ? (
-                                <ActivityIndicator
-                                    size="small"
-                                    color="#ffffff"
-                                />
-                            ) : (
-                                <Text
-                                    className="uppercase tracking-widest text-white text-sm"
-                                    style={{
-                                        fontFamily:
-                                            theme.font.bold,
-                                    }}
-                                >
-                                    Refresh
+                    {/* Rows */}
+                    <FlatList
+                        data={items}
+                        keyExtractor={(item, idx) => `${item?.remote_id ?? item?.key ?? item?.id ?? 'item'}-${idx}`}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+                        ListEmptyComponent={
+                            <View className="py-16 items-center">
+                                <View className="w-12 h-12 rounded-full items-center justify-center mb-3" style={{ backgroundColor: `${theme.primary}14` }}>
+                                    <Ionicons name={hasActiveFilter ? 'search' : 'cube-outline'} size={22} color={theme.primary} />
+                                </View>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>
+                                    {hasActiveFilter ? 'No matching items' : 'No inventory yet'}
                                 </Text>
-                            )}
-                        </Pressable>
-                    </View>
-                </View>
-
-                <View className="flex-row items-center gap-3">
-                    <TextInput
-                        value={query}
-                        onChangeText={setQuery}
-                        placeholder="Search product, barcode, supplier…"
-                        placeholderTextColor="#94a3b8"
-                        autoCorrect={false}
-                        autoCapitalize="none"
-                        className="h-11 rounded-xl border px-3.5 max-w-[480px] flex-1 text-sm"
-                        style={{
-                            borderColor,
-                            backgroundColor: inputBg,
-                            color: theme.text,
-                            fontFamily: theme.font.medium,
-                        }}
-                    />
-                    {hasActiveFilter && (
-                        <Pressable
-                            onPress={clearFilters}
-                            className="px-3 py-2 rounded-lg border"
-                            style={{ borderColor }}
-                        >
-                            <Text
-                                className="uppercase tracking-widest text-[10px]"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.bold,
-                                }}
-                            >
-                                Clear
-                            </Text>
-                        </Pressable>
-                    )}
-                </View>
-
-                {/* Filter pills */}
-                <View className="flex-row items-center mt-3">
-                    <FilterPill
-                        label="All"
-                        active={activeFilter === 'ALL'}
-                        count={counts.total}
-                        tint={{
-                            fg: theme.primary,
-                            dot: theme.primary,
-                            bg: `${theme.primary}15`,
-                        }}
-                        onPress={() => setActiveFilter('ALL')}
-                    />
-                    <FilterPill
-                        label="Active"
-                        active={activeFilter === 'ACTIVE'}
-                        count={counts.active}
-                        tint={{
-                            fg: '#10b981',
-                            dot: '#10b981',
-                            bg: 'rgba(16,185,129,0.12)',
-                        }}
-                        onPress={() => setActiveFilter('ACTIVE')}
-                    />
-                    <FilterPill
-                        label="Expired"
-                        active={activeFilter === 'EXPIRED'}
-                        count={counts.expired}
-                        tint={{
-                            fg: '#f43f5e',
-                            dot: '#f43f5e',
-                            bg: 'rgba(244,63,94,0.12)',
-                        }}
-                        onPress={() => setActiveFilter('EXPIRED')}
-                    />
-                </View>
-            </View>
-
-            {/* ============ Table ============ */}
-            <View className="p-4 flex-1">
-                {/* Table header bar */}
-                <View
-                    className="flex-row rounded-xl border px-3 py-2.5 mb-1"
-                    style={{ backgroundColor: headerBg, borderColor }}
-                >
-                    <Text
-                        className="uppercase tracking-wider text-[10px]"
-                        style={{
-                            width: COLS.asset,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Asset Details
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wider text-[10px]"
-                        style={{
-                            width: COLS.barcode,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Barcode / SKU
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wider text-[10px] text-right"
-                        style={{
-                            width: COLS.qty,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Qty
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wider text-[10px] text-right"
-                        style={{
-                            width: COLS.price,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Pricing
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wider text-[10px]"
-                        style={{
-                            width: COLS.status,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Status
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wider text-[10px]"
-                        style={{
-                            width: COLS.sync,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Sync
-                    </Text>
-                    <Text
-                        className="uppercase tracking-wider text-[10px] text-right"
-                        style={{
-                            width: COLS.actions,
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Actions
-                    </Text>
-                </View>
-
-                <FlatList
-                    data={items}
-                    keyExtractor={(item, idx) =>
-                        `${item?.remote_id ??
-                        item?.key ??
-                        item?.id ??
-                        'item'
-                        }-${idx}`
-                    }
-                    contentContainerStyle={{ paddingBottom: 8 }}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor={theme.primary}
-                        />
-                    }
-                    ListEmptyComponent={
-                        <View
-                            className="rounded-xl border p-8 items-center"
-                            style={{
-                                borderColor,
-                                backgroundColor: headerBg,
-                            }}
-                        >
-                            <Text
-                                className="text-sm"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily:
-                                        theme.font.medium,
-                                }}
-                            >
-                                {hasActiveFilter
-                                    ? 'No items match the filters.'
-                                    : 'No inventory yet.'}
-                            </Text>
-                            {hasActiveFilter && (
+                                <Text className="mt-1" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>
+                                    {hasActiveFilter ? 'Try a different search or filter.' : 'Add stock to start selling.'}
+                                </Text>
                                 <Pressable
-                                    onPress={clearFilters}
-                                    className="mt-4 px-4 py-2.5 min-h-[40px] rounded-full"
-                                    style={{
-                                        backgroundColor:
-                                            theme.primary,
-                                    }}
+                                    onPress={hasActiveFilter ? clearFilters : onOpenCreate}
+                                    className="mt-4 px-4 h-9 rounded-xl items-center justify-center border"
+                                    style={{ borderColor, ...webPointer }}
                                 >
-                                    <Text
-                                        className="uppercase tracking-widest text-white text-sm"
-                                        style={{
-                                            fontFamily:
-                                                theme.font.bold,
-                                        }}
-                                    >
-                                        Clear filters
+                                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>
+                                        {hasActiveFilter ? 'Clear filters' : 'Add stock'}
                                     </Text>
                                 </Pressable>
-                            )}
-                        </View>
-                    }
-                    renderItem={({ item }) => (
-                        <Row
-                            item={item}
-                            onView={() => onView?.(item)}
-                            onEdit={() => onEdit?.(item)}
-                        />
-                    )}
-                    showsVerticalScrollIndicator={false}
-                />
+                            </View>
+                        }
+                        renderItem={({ item, index }) => (
+                            <Row item={item} isFirst={index === 0} onView={() => onView?.(item)} onEdit={() => onEdit?.(item)} />
+                        )}
+                        showsVerticalScrollIndicator={false}
+                    />
 
-                {/* ============ Pagination ============ */}
-                <PaginationBar
-                    page={page}
-                    pageSize={pageSize}
-                    totalItems={totalItems}
-                    totalPages={totalPages}
-                    pageStart={pageStart}
-                    pageEnd={pageEnd}
-                    onPrev={onPrev}
-                    onNext={onNext}
-                    onPageSizeChange={onPageSizeChange}
-                />
+                    {totalItems > 0 && (
+                        <View className="px-5 pb-3">
+                            <PaginationBar
+                                page={page}
+                                pageSize={pageSize}
+                                totalItems={totalItems}
+                                totalPages={totalPages}
+                                pageStart={pageStart}
+                                pageEnd={pageEnd}
+                                onPrev={onPrev}
+                                onNext={onNext}
+                                onPageSizeChange={onPageSizeChange}
+                            />
+                        </View>
+                    )}
+                </View>
             </View>
         </View>
     );
 }
 
 /* =========================================================
+ * Small building blocks
+ * ======================================================= */
+
+function InlineStat({ label, value, color }: { label: string; value: string; color?: string }) {
+    const { theme, isDarkMode } = useAuth();
+    return (
+        <View className="flex-row items-center gap-1.5 px-3 h-8 rounded-lg" style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9' }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>{label}</Text>
+            <Text style={{ color: color ?? theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{value}</Text>
+        </View>
+    );
+}
+
+function HeaderCell({ flex, align = 'left', children }: { flex: number; align?: 'left' | 'center' | 'right'; children: React.ReactNode }) {
+    const { theme } = useAuth();
+    return (
+        <Text
+            style={{
+                flex,
+                textAlign: align,
+                color: theme.textDark,
+                fontFamily: theme.font.bold,
+                fontSize: 11,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                paddingRight: 12,
+            }}
+            numberOfLines={1}
+        >
+            {children}
+        </Text>
+    );
+}
+
+/* =========================================================
  * Row
  * ======================================================= */
-function Row({
-    item,
-    onEdit,
-    onView,
-}: {
-    item: any;
-    onEdit: () => void;
-    onView: () => void;
-}) {
+
+function Row({ item, isFirst, onView, onEdit }: { item: any; isFirst: boolean; onView: () => void; onEdit: () => void }) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
+    const [hovered, setHovered] = useState(false);
 
-    const exp = isExpired(item);
-    const qty = Number(item?.current_unit_quantity ?? 0);
-    const fp = parseFloat(
-        item?.final_unit_selling_price || '0'
-    );
-    const url = resolveImageUrl(
-        item?.thumbnail_url ||
-        item?.image_url ||
-        item?.images?.[0]
-    );
+    const borderColor = isDarkMode ? '#1e293b' : '#f1f5f9';
+    const hoverBg = isDarkMode ? 'rgba(148,163,184,0.06)' : 'rgba(15,23,42,0.025)';
 
-    const statusTone: 'active' | 'expired' | 'warning' = exp
-        ? 'expired'
-        : item?.expiry_status === 'EXPIRING' ||
-            item?.expiry_status === 'EXPIRING_SOON'
-            ? 'warning'
-            : 'active';
+    const qty = stockQty(item);
+    const price = unitPrice(item);
+    const health = healthColor(item);
+    const attention = isExpired(item) || isLowStock(item) || isExpiringSoon(item);
+    const notUploaded = item?.synced === false || !!item?.sync_error;
+    const meta = [item?.manufacturer_title, item?.received_from_title].filter(Boolean).join(' · ');
+    const rel = expiryRelative(item);
+    const prep = preparationTitle(item);
 
     return (
         <Pressable
-            onPress={onEdit}
-            className="flex-row rounded-xl border px-3 py-2.5 mb-1 items-center"
-            style={{ borderColor }}
+            onPress={onView}
+            onHoverIn={() => setHovered(true)}
+            onHoverOut={() => setHovered(false)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${productTitle(item)}`}
+            className="flex-row items-center px-5 py-3"
+            style={{
+                backgroundColor: hovered ? hoverBg : 'transparent',
+                borderTopWidth: isFirst ? 0 : 1,
+                borderTopColor: borderColor,
+                ...webPointer,
+            }}
         >
-            {/* Asset */}
-            <View
-                className="flex-row items-center gap-2.5 pr-2"
-                style={{ width: COLS.asset }}
-            >
-                <View className="w-8 h-8 rounded-lg overflow-hidden items-center justify-center shrink-0">
-                    <ImageWithFallback
-                        uri={url}
-                        width={32}
-                        height={32}
-                        fallback="📦"
-                        fallbackSize={14}
-                        borderRadius={8}
-                    />
+            {/* Product */}
+            <View style={{ flex: COLS.product, paddingRight: 12 }} className="flex-row items-start gap-3">
+                <View className="w-9 h-9 rounded-xl overflow-hidden items-center justify-center" style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9' }}>
+                    <ImageWithFallback uri={itemImageUrl(item)} width={36} height={36} fallback="📦" fallbackSize={15} borderRadius={10} />
                 </View>
                 <View className="flex-1 min-w-0">
-                    <Text
-                        className="text-[11px]"
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                        }}
-                        numberOfLines={1}
-                    >
-                        {item?.title ||
-                            item?.product_title ||
-                            'Unnamed'}
-                    </Text>
-                    <Text
-                        className="mt-0.5 text-[9px] opacity-75"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                        }}
-                        numberOfLines={1}
-                    >
-                        {item?.manufacturer_title || '—'}
-                    </Text>
+                    <View className="flex-row items-center gap-1.5">
+                        {/* Full title, wrapping as needed — never truncated */}
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13, lineHeight: 18, flexShrink: 1 }}>
+                            {productTitle(item)}
+                        </Text>
+                        {notUploaded ? <Ionicons name="cloud-upload-outline" size={13} color={item?.sync_error ? '#ef4444' : '#f59e0b'} /> : null}
+                    </View>
+                    {prep ? (
+                        <Text style={{ color: theme.primary, fontFamily: theme.font.semibold, fontSize: 12, lineHeight: 16, marginTop: 1 }}>
+                            {prep}
+                        </Text>
+                    ) : null}
+                    {meta ? (
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                            {meta}
+                        </Text>
+                    ) : null}
                 </View>
             </View>
 
-            {/* Barcode */}
-            <Text
-                className="text-[11px] pr-2"
-                style={{
-                    width: COLS.barcode,
-                    color: theme.textDark,
-                    fontFamily: theme.font.medium,
-                }}
-                numberOfLines={1}
-            >
-                {item?.bar_code || '—'}
+            {/* Batch / barcode */}
+            <View style={{ flex: COLS.batch, paddingRight: 12 }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
+                    {item?.batch ? `Batch ${item.batch}` : '—'}
+                </Text>
+                {item?.bar_code ? (
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.mono ?? theme.font.medium, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                        {item.bar_code}
+                    </Text>
+                ) : null}
+            </View>
+
+            {/* Expiry */}
+            <View style={{ flex: COLS.expiry, paddingRight: 12 }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
+                    {formatDate(item?.expiry_date)}
+                </Text>
+                {rel ? (
+                    <Text
+                        style={{ color: isExpired(item) || isExpiringSoon(item) ? health : theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 2 }}
+                        numberOfLines={1}
+                    >
+                        {rel}
+                    </Text>
+                ) : null}
+            </View>
+
+            {/* Stock */}
+            <View style={{ flex: COLS.stock, paddingRight: 12, alignItems: 'flex-end' }}>
+                <Text style={{ color: attention && isLowStock(item) ? health : theme.text, fontFamily: theme.font.bold, fontSize: 13 }} numberOfLines={1}>
+                    {qty.toLocaleString()}
+                </Text>
+                <View className="mt-1" style={{ width: 56 }}>
+                    <StockBar item={item} />
+                </View>
+            </View>
+
+            {/* Unit price */}
+            <Text style={{ flex: COLS.price, textAlign: 'right', color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, paddingRight: 12 }} numberOfLines={1}>
+                {formatKES(price)}
             </Text>
 
-            {/* Qty */}
-            <Text
-                className="text-[11px] text-right pr-2"
-                style={{
-                    width: COLS.qty,
-                    color: qty <= 5 ? '#f43f5e' : theme.text,
-                    fontFamily: theme.font.bold,
-                }}
-                numberOfLines={1}
-            >
-                {qty}
-            </Text>
-
-            {/* Pricing */}
-            <Text
-                className="text-[11px] text-right pr-2"
-                style={{
-                    width: COLS.price,
-                    color: theme.primary,
-                    fontFamily: theme.font.bold,
-                }}
-                numberOfLines={1}
-            >
-                KES {fp.toFixed(2)}
+            {/* Value */}
+            <Text style={{ flex: COLS.value, textAlign: 'right', color: theme.text, fontFamily: theme.font.bold, fontSize: 13, paddingRight: 12 }} numberOfLines={1}>
+                KES {formatKES(stockValue(item))}
             </Text>
 
             {/* Status */}
-            <View style={{ width: COLS.status }}>
-                <StatusPill
-                    label={expiryLabel(item)}
-                    tone={statusTone}
-                    size="sm"
-                />
+            <View style={{ flex: COLS.status, paddingRight: 12, gap: 3 }}>
+                <StatusPill label={expiryLabel(item)} tone={statusToneOf(item)} size="sm" />
+                {isLowStock(item) ? <StatusPill label="Low" tone="warning" size="sm" /> : null}
             </View>
 
-            {/* Sync */}
-            <View style={{ width: COLS.sync }}>
-                <SyncPill
-                    synced={item?.synced}
-                    error={item?.sync_error}
-                    size="sm"
-                />
-            </View>
-
-            {/* Actions — VIEW (details) + EDIT (form) */}
-            <View
-                className="flex-row justify-end items-center gap-3"
-                style={{ width: COLS.actions }}
-            >
-                <Pressable
-                    onPress={(e: any) => {
-                        e?.stopPropagation?.();
-                        onView();
-                    }}
-                    hitSlop={6}
-                >
-                    <Text
-                        className="uppercase tracking-wide text-[10px]"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        View
-                    </Text>
-                </Pressable>
+            {/* Actions */}
+            <View style={{ flex: COLS.actions }} className="flex-row items-center justify-end gap-2">
                 <Pressable
                     onPress={(e: any) => {
                         e?.stopPropagation?.();
                         onEdit();
                     }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${productTitle(item)}`}
                     hitSlop={6}
+                    className="w-7 h-7 rounded-lg items-center justify-center"
+                    style={{ backgroundColor: hovered ? `${theme.primary}14` : 'transparent', ...webPointer }}
                 >
-                    <Text
-                        className="uppercase tracking-wide text-[10px]"
-                        style={{
-                            color: theme.primary,
-                            fontFamily: theme.font.bold,
-                        }}
-                    >
-                        Edit
-                    </Text>
+                    <Ionicons name="create-outline" size={15} color={hovered ? theme.primary : theme.textDark} />
                 </Pressable>
+                <Ionicons name="chevron-forward" size={16} color={hovered ? theme.primary : theme.textDark} />
             </View>
         </Pressable>
     );

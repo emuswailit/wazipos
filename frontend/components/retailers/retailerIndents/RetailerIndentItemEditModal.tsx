@@ -43,18 +43,10 @@
 //     (via the pending-ops queue), but the modal still reports the
 //     failure because the response carries `ok: false`.
 
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { AdminSheet, FormErrorBanner, FormPanel, FormRow, FormSection, SheetButton, useListTokens } from '@/components/common/listScreen';
 import React, { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
-} from 'react-native';
-
-import { useAuth } from '@/context/AuthContext';
+import { Text, View } from 'react-native';
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
 import type { RetailerIndentItem } from '@/databases/types';
 
@@ -102,7 +94,7 @@ export function RetailerIndentItemEditModal({
     onClose,
     onSaved,
 }: Props) {
-    const { theme, isDarkMode } = useAuth();
+    const { theme } = useListTokens();
     const {
         removeOfferFromIndent,
         updateIndentItem,
@@ -118,9 +110,6 @@ export function RetailerIndentItemEditModal({
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [banner, setBanner] = useState<Banner | null>(null);
 
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
-    const placeholderColor = isDarkMode ? '#64748b' : '#94a3b8';
 
     useEffect(() => {
         if (!visible || !item) return;
@@ -296,568 +285,97 @@ export function RetailerIndentItemEditModal({
         (item as any).cost_per_unit ?? '—',
     );
 
-    /* ── Render ───────────────────────────────────────────── */
+    const title = item.wholesale_receipt_title || (item as any).product_title || 'Untitled product';
+    const qtyNum = numFromInput(quantity);
 
     return (
-        <Modal
+        <AdminSheet
             visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={
-                busy
-                    ? undefined
-                    : confirmDelete
-                        ? cancelDelete
-                        : onClose
+            onClose={busy ? () => { } : confirmDelete ? cancelDelete : onClose}
+            dismissible={!busy}
+            title="Edit item"
+            subtitle={title}
+            icon="cube-outline"
+            width={600}
+            footer={
+                confirmDelete ? (
+                    <>
+                        <SheetButton label="Keep item" variant="secondary" onPress={cancelDelete} disabled={busy} grow />
+                        <SheetButton label="Yes, remove" variant="danger" icon="trash-outline" onPress={performDelete} loading={deleting} loadingLabel="Removing…" grow />
+                    </>
+                ) : (
+                    <>
+                        <SheetButton label="Remove" variant="ghost" icon="trash-outline" onPress={handleDeletePress} disabled={busy} />
+                        <View style={{ flex: 1 }} />
+                        <SheetButton label="Cancel" variant="secondary" onPress={onClose} disabled={busy} />
+                        <SheetButton label="Save" icon="checkmark" onPress={handleSave} loading={saving} disabled={busy} />
+                    </>
+                )
             }
         >
-            <View className="flex-1 bg-black/40 items-center justify-center p-3">
-                <View
-                    className="rounded-2xl w-full max-w-xl overflow-hidden"
-                    style={{ backgroundColor: theme.panel }}
-                >
-                    {/* Header */}
-                    <View
-                        className="px-5 pt-4 pb-3 border-b"
-                        style={{ borderBottomColor: borderColor }}
-                    >
-                        <View className="flex-row items-start justify-between">
-                            <View className="flex-1 min-w-0 pr-3">
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: theme.fontSize.lg,
-                                    }}
-                                >
-                                    Edit Item
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    {item.wholesale_receipt_title ||
-                                        (item as any)
-                                            .product_title ||
-                                        'Untitled product'}
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={
-                                    busy ? undefined : onClose
-                                }
-                                disabled={busy}
-                                hitSlop={12}
-                                className="w-8 h-8 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor:
-                                        theme.background,
-                                    opacity: busy ? 0.4 : 1,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    ✕
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </View>
+            {banner ? <FormErrorBanner message={banner.detail ? `${banner.title}\n${banner.detail}` : banner.title} /> : null}
 
-                    {/* Body */}
-                    <ScrollView
-                        contentContainerStyle={{ padding: 20 }}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        {/* Inline banner */}
-                        {banner ? (
-                            <View
-                                className="rounded-xl px-3 py-2.5 mb-4"
-                                style={{
-                                    backgroundColor:
-                                        banner.kind === 'error'
-                                            ? 'rgba(239,68,68,0.12)'
-                                            : banner.kind ===
-                                                'success'
-                                                ? 'rgba(16,185,129,0.12)'
-                                                : 'rgba(59,130,246,0.12)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        banner.kind === 'error'
-                                            ? 'rgba(239,68,68,0.35)'
-                                            : banner.kind ===
-                                                'success'
-                                                ? 'rgba(16,185,129,0.35)'
-                                                : 'rgba(59,130,246,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color:
-                                            banner.kind === 'error'
-                                                ? '#b91c1c'
-                                                : banner.kind ===
-                                                    'success'
-                                                    ? '#047857'
-                                                    : '#1d4ed8',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                >
-                                    {banner.title}
-                                </Text>
-                                {banner.detail ? (
-                                    <Text
-                                        className="mt-1"
-                                        style={{
-                                            color:
-                                                banner.kind ===
-                                                    'error'
-                                                    ? '#b91c1c'
-                                                    : banner.kind ===
-                                                        'success'
-                                                        ? '#047857'
-                                                        : '#1d4ed8',
-                                            fontFamily:
-                                                theme.font.regular,
-                                            fontSize:
-                                                theme.fontSize.xs,
-                                            opacity: 0.9,
-                                        }}
-                                    >
-                                        {banner.detail}
-                                    </Text>
-                                ) : null}
-                            </View>
-                        ) : null}
+            {confirmDelete ? (
+                <FormPanel tint="#f43f5e">
+                    <Text style={{ color: '#be123c', fontFamily: theme.font.bold, fontSize: 14 }}>Remove this item from the indent?</Text>
+                    <Text style={{ color: '#be123c', fontFamily: theme.font.medium, fontSize: 12.5, marginTop: 4 }}>
+                        It will no longer be ordered when the indent is submitted. You can add it again from the marketplace or stock-outs.
+                    </Text>
+                </FormPanel>
+            ) : null}
 
-                        {/* Delete confirmation strip */}
-                        {confirmDelete ? (
-                            <View
-                                className="rounded-xl px-3 py-3 mb-4"
-                                style={{
-                                    backgroundColor:
-                                        'rgba(220,38,38,0.08)',
-                                    borderWidth: 1,
-                                    borderColor:
-                                        'rgba(220,38,38,0.35)',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: '#b91c1c',
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    Remove this item?
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: '#b91c1c',
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        opacity: 0.9,
-                                    }}
-                                >
-                                    The item will be removed from
-                                    the indent. This cannot be
-                                    undone.
-                                </Text>
-                                <View className="flex-row gap-2 mt-3">
-                                    <Pressable
-                                        onPress={cancelDelete}
-                                        disabled={busy}
-                                        className="px-3 py-1.5 rounded-lg border"
-                                        style={{
-                                            borderColor:
-                                                'rgba(220,38,38,0.35)',
-                                            opacity: busy
-                                                ? 0.5
-                                                : 1,
-                                        }}
-                                    >
-                                        <Text
-                                            className="uppercase tracking-wide"
-                                            style={{
-                                                color: '#b91c1c',
-                                                fontFamily:
-                                                    theme.font
-                                                        .bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            Cancel
-                                        </Text>
-                                    </Pressable>
-                                    <Pressable
-                                        onPress={performDelete}
-                                        disabled={busy}
-                                        className="px-3 py-1.5 rounded-lg"
-                                        style={{
-                                            backgroundColor:
-                                                '#DC2626',
-                                            opacity: busy
-                                                ? 0.5
-                                                : 1,
-                                        }}
-                                    >
-                                        <Text
-                                            className="uppercase tracking-wide text-white"
-                                            style={{
-                                                fontFamily:
-                                                    theme.font
-                                                        .bold,
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            Yes, remove
-                                        </Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        ) : null}
-
-                        <View
-                            className="rounded-xl px-4 py-3 flex-row items-center justify-between"
-                            style={{ backgroundColor: subBg }}
-                        >
-                            <MetaCell
-                                label="Source"
-                                value={sourceLabel}
-                                theme={theme}
-                            />
-                            <MetaCell
-                                label="Final unit"
-                                value={finalUnit}
-                                theme={theme}
-                                align="center"
-                            />
-                            <MetaCell
-                                label="Cost / unit"
-                                value={costUnit}
-                                theme={theme}
-                                align="right"
-                            />
-                        </View>
-
-                        <FieldLabel theme={theme}>
-                            MARKUP PERCENTAGE USED (%)
-                        </FieldLabel>
-                        <TextInput
-                            value={markup}
-                            onChangeText={setMarkup}
-                            editable={!busy}
-                            keyboardType="numeric"
-                            inputMode="decimal"
-                            placeholder="30.00"
-                            placeholderTextColor={placeholderColor}
-                            className="h-11 rounded-lg border px-3"
-                            style={{
-                                borderColor,
-                                backgroundColor:
-                                    theme.background,
-                                color: theme.text,
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.sm,
-                                opacity: busy ? 0.6 : 1,
-                            }}
-                        />
-
-                        <FieldLabel theme={theme}>
-                            RECOMMENDED RETAIL PRICE
-                        </FieldLabel>
-                        <TextInput
-                            value={retailPrice}
-                            onChangeText={setRetailPrice}
-                            editable={!busy}
-                            keyboardType="numeric"
-                            inputMode="decimal"
-                            placeholder="e.g. 150.00"
-                            placeholderTextColor={placeholderColor}
-                            className="h-11 rounded-lg border px-3"
-                            style={{
-                                borderColor,
-                                backgroundColor:
-                                    theme.background,
-                                color: theme.text,
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.sm,
-                                opacity: busy ? 0.6 : 1,
-                            }}
-                        />
-
-                        <FieldLabel theme={theme}>
-                            REQUIRED QUANTITY
-                        </FieldLabel>
-                        <TextInput
-                            value={quantity}
-                            onChangeText={(t) =>
-                                setQuantity(
-                                    t.replace(/[^0-9]/g, ''),
-                                )
-                            }
-                            editable={!busy}
-                            keyboardType="numeric"
-                            inputMode="numeric"
-                            placeholder="0"
-                            placeholderTextColor={placeholderColor}
-                            className="h-11 rounded-lg border px-3"
-                            style={{
-                                borderColor,
-                                backgroundColor:
-                                    theme.background,
-                                color: theme.text,
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.sm,
-                                opacity: busy ? 0.6 : 1,
-                            }}
-                        />
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View
-                        className="px-5 py-3 border-t"
-                        style={{ borderTopColor: borderColor }}
-                    >
-                        <View className="flex-row items-center justify-between">
-                            <Pressable
-                                onPress={handleDeletePress}
-                                disabled={busy || confirmDelete}
-                                className="px-4 py-2 rounded-lg border flex-row items-center gap-2"
-                                style={{
-                                    borderColor: '#DC2626',
-                                    opacity:
-                                        busy || confirmDelete
-                                            ? 0.5
-                                            : 1,
-                                    minHeight: 40,
-                                }}
-                            >
-                                {deleting ? (
-                                    <>
-                                        <ActivityIndicator
-                                            size="small"
-                                            color="#DC2626"
-                                        />
-                                        <Text
-                                            className="uppercase tracking-wide"
-                                            style={{
-                                                color: '#DC2626',
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            Deleting…
-                                        </Text>
-                                    </>
-                                ) : (
-                                    <Text
-                                        className="uppercase tracking-wide"
-                                        style={{
-                                            color: '#DC2626',
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 13,
-                                        }}
-                                    >
-                                        Delete
-                                    </Text>
-                                )}
-                            </Pressable>
-
-                            <View className="flex-row items-center gap-2">
-                                <Pressable
-                                    onPress={onClose}
-                                    disabled={busy}
-                                    className="px-4 py-2 rounded-lg border"
-                                    style={{
-                                        borderColor,
-                                        opacity: busy ? 0.5 : 1,
-                                    }}
-                                >
-                                    <Text
-                                        className="uppercase tracking-wide"
-                                        style={{
-                                            color: theme.textDark,
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 13,
-                                        }}
-                                    >
-                                        Cancel
-                                    </Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={handleSave}
-                                    disabled={busy}
-                                    className="px-5 py-2 rounded-lg flex-row items-center gap-2"
-                                    style={{
-                                        backgroundColor:
-                                            theme.primary,
-                                        opacity: busy ? 0.5 : 1,
-                                        minHeight: 40,
-                                    }}
-                                >
-                                    {saving ? (
-                                        <>
-                                            <ActivityIndicator
-                                                size="small"
-                                                color="#FFFFFF"
-                                            />
-                                            <Text
-                                                className="uppercase tracking-wide text-white"
-                                                style={{
-                                                    fontFamily:
-                                                        theme.font
-                                                            .bold,
-                                                    fontSize: 13,
-                                                }}
-                                            >
-                                                Saving…
-                                            </Text>
-                                        </>
-                                    ) : (
-                                        <Text
-                                            className="uppercase tracking-wide text-white"
-                                            style={{
-                                                fontFamily:
-                                                    theme.font.bold,
-                                                fontSize: 13,
-                                            }}
-                                        >
-                                            Save
-                                        </Text>
-                                    )}
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-
-                {/* Blocking overlay */}
-                {busy ? (
-                    <View
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: 'rgba(0,0,0,0.35)',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 999,
-                        }}
-                    >
-                        <View
-                            className="rounded-2xl px-6 py-5 items-center"
-                            style={{
-                                backgroundColor: theme.panel,
-                                minWidth: 200,
-                            }}
-                        >
-                            <ActivityIndicator
-                                size="large"
-                                color={theme.primary}
-                            />
-                            <Text
-                                className="mt-3"
-                                style={{
-                                    color: theme.text,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.sm,
-                                }}
-                            >
-                                {deleting
-                                    ? 'Removing item…'
-                                    : 'Saving changes…'}
-                            </Text>
-                        </View>
-                    </View>
-                ) : null}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <InfoTile label="Source" value={sourceLabel} />
+                <InfoTile label="Wholesaler" value={item.wholesaler_title || '—'} />
+                <InfoTile label="Cost / unit" value={costUnit === '—' ? '—' : `KES ${costUnit}`} />
+                <InfoTile label="Final / unit" value={finalUnit === '—' ? '—' : `KES ${finalUnit}`} />
             </View>
-        </Modal>
+
+            <FormSection title="Order">
+                <CustomTextField
+                    label="Required quantity"
+                    required
+                    value={quantity}
+                    onChangeText={(t) => setQuantity(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 10"
+                    error={quantity !== '' && qtyNum <= 0 ? 'Must be greater than zero.' : undefined}
+                    editable={!busy}
+                />
+            </FormSection>
+
+            <FormSection title="Pricing" hint="Used for the shelf price when this stock is received.">
+                <FormRow>
+                    <CustomTextField
+                        label="Markup %"
+                        value={markup}
+                        onChangeText={(t) => setMarkup(t.replace(/[^0-9.]/g, ''))}
+                        keyboardType="decimal-pad"
+                        placeholder="30.00"
+                        editable={!busy}
+                    />
+                    <CustomTextField
+                        label="Recommended retail price (KES)"
+                        value={retailPrice}
+                        onChangeText={(t) => setRetailPrice(t.replace(/[^0-9.]/g, ''))}
+                        keyboardType="decimal-pad"
+                        placeholder="Optional"
+                        editable={!busy}
+                    />
+                </FormRow>
+            </FormSection>
+        </AdminSheet>
     );
 }
 
-/* =========================================================
- * Sub-components
- * ======================================================= */
-
-function FieldLabel({
-    children,
-    theme,
-}: {
-    children: React.ReactNode;
-    theme: any;
-}) {
+function InfoTile({ label, value }: { label: string; value: string }) {
+    const { theme, chipBg } = useListTokens();
     return (
-        <Text
-            className="uppercase tracking-widest mt-5 mb-1.5"
-            style={{
-                color: theme.textDark,
-                fontFamily: theme.font.bold,
-                fontSize: 10,
-            }}
-        >
-            {children}
-        </Text>
-    );
-}
-
-function MetaCell({
-    label,
-    value,
-    theme,
-    align = 'left',
-}: {
-    label: string;
-    value: string;
-    theme: any;
-    align?: 'left' | 'center' | 'right';
-}) {
-    return (
-        <View style={{ alignItems: align }}>
-            <Text
-                className="uppercase tracking-widest"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.bold,
-                    fontSize: 9,
-                }}
-            >
+        <View style={{ flexGrow: 1, flexBasis: 120, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: chipBg }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }} numberOfLines={1}>
                 {label}
             </Text>
-            <Text
-                className="mt-0.5"
-                style={{
-                    color: theme.text,
-                    fontFamily: theme.font.bold,
-                    fontSize: 13,
-                }}
-                numberOfLines={1}
-            >
+            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14, marginTop: 2 }} numberOfLines={1}>
                 {value}
             </Text>
         </View>

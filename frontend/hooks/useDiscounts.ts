@@ -39,7 +39,7 @@ function unwrap<T>(data: any, ...keys: string[]): Envelope<T> {
  * Filter shapes
  * ======================================================= */
 
-export interface DiscountListFilters {
+interface DiscountListFilters {
     state?: "active" | "scheduled" | "expired" | "inactive";
     search?: string;
     page?: number;

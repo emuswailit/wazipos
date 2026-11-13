@@ -38,9 +38,8 @@ import {
 } from 'lucide-react-native';
 import React, {
     useCallback,
-    useEffect,
     useMemo,
-    useState,
+    useState
 } from 'react';
 import {
     ActivityIndicator,
@@ -70,9 +69,8 @@ import QuantityInputModal from './QuantityInputModal';
 
 const isWeb = Platform.OS === 'web';
 const H_PADDING = 12;
-const GRID_GAP = 10;
+const GRID_GAP = 14;
 const COLUMNS = 2;
-const PAGE_SIZE = 20;
 const MAX_VISIBLE_CHIPS = 5;
 const FAB_SIZE = 56;
 
@@ -124,7 +122,6 @@ export default function WholesalerMarketplaceMobile({
     const [category, setCategory] = useState('All');
     const [sort, setSort] = useState<SortKey>('relevance');
     const [inStockOnly, setInStockOnly] = useState(false);
-    const [page, setPage] = useState(1);
     const [categorySheetOpen, setCategorySheetOpen] = useState(false);
     const [cartSheetOpen, setCartSheetOpen] = useState(false);
 
@@ -199,16 +196,12 @@ export default function WholesalerMarketplaceMobile({
         }
     }, [products, search, category, sort, inStockOnly]);
 
-    useEffect(() => {
-        setPage(1);
-    }, [search, category, sort, inStockOnly]);
-
-    const visible = useMemo(
-        () => filtered.slice(0, page * PAGE_SIZE),
-        [filtered, page],
-    );
-    const hasMore = visible.length < filtered.length;
-
+    /*
+     * Card width calculation — account for:
+     *   - horizontal padding on both sides
+     *   - a single grid gap between the two columns
+     * Rounded down to avoid fractional pixel accumulation.
+     */
     const cardWidth = useMemo(
         () =>
             Math.floor(
@@ -230,7 +223,7 @@ export default function WholesalerMarketplaceMobile({
             setCartBusy(true);
             setCartError(null);
             try {
-                const res = await removeFromIndent(item.id);
+                const res = await removeFromIndent(item.remote_id ?? item.draft_id ?? "");
                 if (!res.ok) {
                     setCartError(
                         res.message ?? 'Could not remove item.',
@@ -284,8 +277,8 @@ export default function WholesalerMarketplaceMobile({
             style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                paddingHorizontal: 12,
-                paddingVertical: 5,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
                 borderRadius: 999,
                 borderWidth: 1,
                 backgroundColor: active
@@ -333,23 +326,23 @@ export default function WholesalerMarketplaceMobile({
                 backgroundColor: theme.background,
             }}
         >
-            {/* ═══ Header ════════════════════════════════════ */}
+            {/* ═══ Compact Header ════════════════════════════ */}
             <View
                 style={{
                     paddingHorizontal: H_PADDING,
-                    paddingTop: 14 + insets.top,
-                    paddingBottom: 10,
+                    paddingTop: 8 + insets.top,
+                    paddingBottom: 8,
                     borderBottomWidth: 1,
                     borderBottomColor: borderColor,
                     backgroundColor: theme.panel,
                 }}
             >
-                {/* Row 1 — back / title / refresh */}
+                {/* Row 1 — back / title + count / refresh */}
                 <View
                     style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        marginBottom: 10,
+                        marginBottom: 8,
                     }}
                 >
                     <TouchableOpacity
@@ -358,21 +351,24 @@ export default function WholesalerMarketplaceMobile({
                         accessibilityRole="button"
                         accessibilityLabel="Back"
                         style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: 17,
+                            width: 30,
+                            height: 30,
+                            borderRadius: 15,
                             alignItems: 'center',
                             justifyContent: 'center',
                             backgroundColor: subtleBg,
                         }}
                     >
-                        <ArrowLeft size={16} color={theme.text} />
+                        <ArrowLeft size={15} color={theme.text} />
                     </TouchableOpacity>
 
                     <View
                         style={{
                             flex: 1,
-                            marginHorizontal: 10,
+                            marginHorizontal: 8,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
                         }}
                     >
                         <Text
@@ -381,6 +377,7 @@ export default function WholesalerMarketplaceMobile({
                                 fontFamily: theme.font.bold,
                                 fontSize: theme.fontSize.base,
                                 color: theme.text,
+                                flexShrink: 1,
                             }}
                         >
                             {wholesalerTitle ?? 'Wholesaler'}
@@ -389,14 +386,12 @@ export default function WholesalerMarketplaceMobile({
                             numberOfLines={1}
                             style={{
                                 fontFamily: theme.font.regular,
-                                fontSize: theme.fontSize.xs,
+                                fontSize: 11,
                                 color: theme.textDark,
                             }}
                         >
-                            {filtered.length} of {products.length}{' '}
-                            {products.length === 1
-                                ? 'item'
-                                : 'items'}
+                            · {filtered.length}/
+                            {products.length}
                         </Text>
                     </View>
 
@@ -407,9 +402,9 @@ export default function WholesalerMarketplaceMobile({
                         accessibilityRole="button"
                         accessibilityLabel="Refresh inventory"
                         style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: 17,
+                            width: 30,
+                            height: 30,
+                            borderRadius: 15,
                             alignItems: 'center',
                             justifyContent: 'center',
                             backgroundColor: subtleBg,
@@ -417,7 +412,7 @@ export default function WholesalerMarketplaceMobile({
                         }}
                     >
                         <RefreshCw
-                            size={15}
+                            size={14}
                             color={theme.textDark}
                         />
                     </TouchableOpacity>
@@ -433,13 +428,13 @@ export default function WholesalerMarketplaceMobile({
                         borderColor,
                         backgroundColor: subtleBg,
                         paddingHorizontal: 10,
-                        height: 38,
-                        marginBottom: 10,
+                        height: 36,
+                        marginBottom: 8,
                     }}
                 >
                     <View style={{ marginRight: 8 }}>
                         <Search
-                            size={15}
+                            size={14}
                             color={theme.textDark}
                         />
                     </View>
@@ -478,7 +473,7 @@ export default function WholesalerMarketplaceMobile({
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            marginBottom: 8,
+                            marginBottom: 6,
                         }}
                     >
                         <View style={{ flex: 1 }}>
@@ -521,8 +516,8 @@ export default function WholesalerMarketplaceMobile({
                                 style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 5,
+                                    paddingHorizontal: 9,
+                                    paddingVertical: 4,
                                     borderRadius: 999,
                                     borderWidth: 1,
                                     borderColor,
@@ -588,8 +583,8 @@ export default function WholesalerMarketplaceMobile({
                                         activeOpacity={0.8}
                                         accessibilityRole="button"
                                         style={{
-                                            paddingHorizontal: 9,
-                                            paddingVertical: 4,
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 3,
                                             borderRadius: 7,
                                             backgroundColor: active
                                                 ? subtleBg
@@ -626,8 +621,8 @@ export default function WholesalerMarketplaceMobile({
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            paddingHorizontal: 8,
-                            paddingVertical: 5,
+                            paddingHorizontal: 7,
+                            paddingVertical: 4,
                             borderRadius: 8,
                             borderWidth: 1,
                             borderColor: inStockOnly
@@ -641,8 +636,8 @@ export default function WholesalerMarketplaceMobile({
                     >
                         <View
                             style={{
-                                width: 12,
-                                height: 12,
+                                width: 11,
+                                height: 11,
                                 borderRadius: 3,
                                 borderWidth: 1.5,
                                 borderColor: inStockOnly
@@ -659,11 +654,11 @@ export default function WholesalerMarketplaceMobile({
                             {inStockOnly && (
                                 <Text
                                     style={{
-                                        fontSize: 9,
+                                        fontSize: 8,
                                         color: theme.primary,
                                         fontFamily:
                                             theme.font.bold,
-                                        lineHeight: 10,
+                                        lineHeight: 9,
                                     }}
                                 >
                                     ✓
@@ -673,7 +668,7 @@ export default function WholesalerMarketplaceMobile({
                         <Text
                             style={{
                                 fontFamily: theme.font.bold,
-                                fontSize: 11,
+                                fontSize: 10,
                                 color: inStockOnly
                                     ? '#fff'
                                     : theme.textDark,
@@ -763,40 +758,31 @@ export default function WholesalerMarketplaceMobile({
                 </View>
             ) : (
                 <FlatList
-                    data={visible}
+                    data={filtered}
                     keyExtractor={(item) => item.product_id}
                     numColumns={COLUMNS}
+                    /*
+                     * `columnWrapperStyle` handles spacing between the
+                     * two columns automatically. Combined with a
+                     * bottom margin on each card wrapper, this gives
+                     * consistent vertical + horizontal spacing without
+                     * fragile per-index math.
+                     */
+                    columnWrapperStyle={{
+                        justifyContent: 'space-between',
+                        marginBottom: GRID_GAP,
+                    }}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
                     contentContainerStyle={{
                         paddingHorizontal: H_PADDING,
                         paddingTop: H_PADDING,
-                        paddingBottom:
-                            H_PADDING + 96 + insets.bottom,
+                        paddingBottom: H_PADDING + 96 + insets.bottom,
                         flexGrow: 1,
                     }}
                     showsVerticalScrollIndicator={false}
-                    onEndReachedThreshold={0.4}
-                    onEndReached={() => {
-                        if (hasMore) setPage((p) => p + 1);
-                    }}
                     refreshing={refreshing}
                     onRefresh={refresh}
-                    ListFooterComponent={
-                        hasMore ? (
-                            <Text
-                                style={{
-                                    textAlign: 'center',
-                                    paddingVertical: 16,
-                                    fontFamily: theme.font.regular,
-                                    fontSize: theme.fontSize.sm,
-                                    color: theme.textDark,
-                                }}
-                            >
-                                Loading more…
-                            </Text>
-                        ) : null
-                    }
                     ListEmptyComponent={
                         <View
                             style={{
@@ -824,7 +810,7 @@ export default function WholesalerMarketplaceMobile({
                             </Text>
                         </View>
                     }
-                    renderItem={({ item, index }) => {
+                    renderItem={({ item }) => {
                         const indentQty =
                             getQuantityByReceipts(item.receipt_ids);
                         const onIndent = !!findItemByReceipts(
@@ -832,17 +818,7 @@ export default function WholesalerMarketplaceMobile({
                         );
 
                         return (
-                            <View
-                                style={{
-                                    width: cardWidth,
-                                    marginRight:
-                                        index % COLUMNS ===
-                                            COLUMNS - 1
-                                            ? 0
-                                            : GRID_GAP,
-                                    marginBottom: GRID_GAP,
-                                }}
-                            >
+                            <View style={{ width: cardWidth }}>
                                 <ProductCard
                                     product={item}
                                     theme={theme}
@@ -1163,6 +1139,9 @@ export default function WholesalerMarketplaceMobile({
                                 indent={currentOpenIndent}
                                 isDraftIndent={isDraftIndent}
                                 pendingOpCount={pendingOpCount}
+                                syncing={false}
+                                syncTotal={0}
+                                syncDone={0}
                                 onRemoveItem={handleRemoveItem}
                                 onCloseIndent={handleCloseIndent}
                                 onSyncNow={handleSyncNow}

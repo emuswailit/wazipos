@@ -1,38 +1,17 @@
 // components/retailers/productRequests/ViewRequestDetailsModal.tsx
 //
-// Read-only viewer for a product request.
-//
-// Mounted for statuses that don't require action:
-//   PUBLISHED, FULFILLED, CANCELLED, EXPIRED.
-//
-// The retailer's actionable statuses (DRAFT, ACKNOWLEDGED,
-// PARTIALLY_FULFILLED) are routed to OfferReviewModal instead.
-//
-// Renders every line and every offer that ever existed on the
-// request — history only, no buttons, no decisions.
-//
-// Export shape: named export `ViewRequestDetailsModal`, matching
-// the folder convention. A default export is also provided.
+// Read-only product request on the shared details sheet: status, progress,
+// each requested line with the wholesaler offers it received.
+// (Requests that need a decision open OfferReviewModal instead.)
 
-import React, { useMemo } from 'react';
-import {
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
-} from 'react-native';
+import { AdminBadgePill, AdminDetailsSheet, formatDate, textOr, useListTokens, type AdminBadge, type BadgeTone } from '@/components/common/listScreen';
+import type { ProductRequest, ProductRequestItem, ProductRequestOffer } from '@/databases/types';
+import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Text, View } from 'react-native';
 
-import { useAuth } from '@/context/AuthContext';
-import type {
-    ProductRequest,
-    ProductRequestItem,
-    ProductRequestOffer,
-} from '@/databases/types';
-
-/* =========================================================
- * Types
- * ======================================================= */
+import { requestStatusBadge, urgencyBadge } from './productRequestsConfig';
+import { offerStatusLabel } from './statusPrimitives';
 
 interface Props {
     visible: boolean;
@@ -40,885 +19,176 @@ interface Props {
     onClose: () => void;
 }
 
-/* =========================================================
- * Status → color tint maps
- * ======================================================= */
-
-function requestStatusTint(status?: string) {
-    const key = String(status ?? '').trim().toUpperCase();
-    switch (key) {
-        case 'DRAFT':
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
-        case 'PUBLISHED':
-            return { bg: 'rgba(16,185,129,0.15)', fg: '#10b981' };
-        case 'ACKNOWLEDGED':
-            return { bg: 'rgba(99,102,241,0.15)', fg: '#6366f1' };
-        case 'PARTIALLY_FULFILLED':
-            return { bg: 'rgba(251,191,36,0.15)', fg: '#f59e0b' };
-        case 'FULFILLED':
-            return { bg: 'rgba(59,130,246,0.15)', fg: '#3b82f6' };
-        case 'CANCELLED':
-            return { bg: 'rgba(239,68,68,0.15)', fg: '#ef4444' };
-        case 'EXPIRED':
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
-        default:
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
+export function ViewRequestDetailsModal({ visible, request, onClose }: Props) {
+    if (!request) {
+        return <AdminDetailsSheet visible={false} onClose={onClose} heading="" icon="search-circle-outline" title="" sections={[]} />;
     }
-}
 
-function urgencyTint(urgency?: string) {
-    switch ((urgency ?? '').toLowerCase()) {
-        case 'high':
-        case 'critical':
-            return { bg: 'rgba(239,68,68,0.15)', fg: '#ef4444' };
-        case 'medium':
-            return { bg: 'rgba(251,191,36,0.15)', fg: '#f59e0b' };
-        case 'low':
-        default:
-            return { bg: 'rgba(14,165,233,0.15)', fg: '#0ea5e9' };
-    }
-}
-
-function offerStatusTint(status?: string) {
-    const key = String(status ?? '').trim().toUpperCase();
-    switch (key) {
-        case 'OFFERED':
-            return { bg: 'rgba(251,191,36,0.15)', fg: '#f59e0b' };
-        case 'ACCEPTED':
-        case 'CONFIRMED':
-            return { bg: 'rgba(16,185,129,0.15)', fg: '#10b981' };
-        case 'DECLINED':
-        case 'REJECTED':
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
-        case 'CANCELLED':
-        case 'WITHDRAWN':
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
-        case 'EXPIRED':
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
-        default:
-            return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' };
-    }
-}
-
-/**
- * Map an offer's status code to a retailer-voice label.
- *
- * The API's `status_display` field is authored from the
- * wholesaler's perspective ("Awaiting retailer"). Read-only
- * view for the retailer needs a neutral label — no "you" or
- * "awaiting", just the state.
- */
-function offerStatusLabel(
-    status: string | undefined | null,
-    fallbackDisplay?: string | null
-): string {
-    const key = String(status ?? '').trim().toUpperCase();
-    switch (key) {
-        case 'OFFERED':
-            return 'Awaiting decision';
-        case 'ACCEPTED':
-        case 'CONFIRMED':
-            return 'Accepted';
-        case 'DECLINED':
-        case 'REJECTED':
-            return 'Declined';
-        case 'CANCELLED':
-            return 'Cancelled by wholesaler';
-        case 'WITHDRAWN':
-            return 'Withdrawn by wholesaler';
-        case 'EXPIRED':
-            return 'Expired';
-        default:
-            return fallbackDisplay?.trim() || key || 'Unknown';
-    }
-}
-
-/* =========================================================
- * Formatting
- * ======================================================= */
-
-function formatMoney(v: string | number | null | undefined): string {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return '—';
-    return `KES ${n.toFixed(2)}`;
-}
-
-function formatDate(value?: string | null): string {
-    if (!value) return '—';
-    const d = new Date(String(value).replace(' ', 'T'));
-    if (isNaN(d.getTime())) return String(value);
-    return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-    });
-}
-
-function offerTotal(o: ProductRequestOffer): number {
-    const price = Number(o.offered_unit_price ?? 0);
-    const qty = Number(o.offered_quantity ?? 0);
-    if (!Number.isFinite(price) || !Number.isFinite(qty)) {
-        return 0;
-    }
-    return price * qty;
-}
-
-/* =========================================================
- * Component
- * ======================================================= */
-
-export const ViewRequestDetailsModal: React.FC<Props> = ({
-    visible,
-    request,
-    onClose,
-}) => {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
-
-    const items = useMemo(
-        () => request?.items ?? [],
-        [request]
-    );
-
-    const totalRequested = useMemo(
-        () =>
-            items.reduce(
-                (s, it) =>
-                    s + (Number(it.requested_quantity) || 0),
-                0
-            ),
-        [items]
-    );
-
-    const totalOffered = useMemo(
-        () =>
-            items.reduce((s, it) => {
-                const offers = it.offers ?? [];
-                return (
-                    s +
-                    offers.reduce(
-                        (so, o) =>
-                            so +
-                            (Number(o.offered_quantity) || 0),
-                        0
-                    )
-                );
-            }, 0),
-        [items]
-    );
-
-    const totalAccepted = useMemo(
-        () =>
-            items.reduce((s, it) => {
-                const offers = it.offers ?? [];
-                return (
-                    s +
-                    offers
-                        .filter((o) => {
-                            const k = String(o.status ?? '')
-                                .trim()
-                                .toUpperCase();
-                            return (
-                                k === 'ACCEPTED' ||
-                                k === 'CONFIRMED'
-                            );
-                        })
-                        .reduce(
-                            (so, o) =>
-                                so +
-                                (Number(o.offered_quantity) ||
-                                    0),
-                            0
-                        )
-                );
-            }, 0),
-        [items]
-    );
-
-    const offerCount = useMemo(
-        () =>
-            items.reduce(
-                (s, it) => s + (it.offers?.length ?? 0),
-                0
-            ),
-        [items]
-    );
-
-    if (!request) return null;
-
-    const status = requestStatusTint(request.status);
-    const urgency = urgencyTint(request.urgency);
+    const items = request.items ?? [];
+    const offers = items.reduce((n, i) => n + (i.offers?.length ?? 0), 0);
+    const urg = urgencyBadge(request.urgency);
+    const badges: AdminBadge[] = [requestStatusBadge(request), ...(urg ? [urg] : [])];
 
     return (
-        <Modal
+        <AdminDetailsSheet
             visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-        >
-            <View className="flex-1 bg-black/40 items-center justify-center p-3">
-                <View
-                    className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
-                    style={{ backgroundColor: theme.panel }}
-                >
-                    {/* ============ header ============ */}
-                    <View
-                        className="px-5 pt-4 pb-3 border-b"
-                        style={{
-                            borderBottomColor:
-                                theme.textDark + '22',
-                        }}
-                    >
-                        <View className="flex-row items-start">
-                            <View className="flex-1 min-w-0">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    {request.request_number || '—'}
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    Request Details
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    {request.entity_title ||
-                                        'Unknown retailer'}
-                                </Text>
-                            </View>
-                            <Pressable
-                                onPress={onClose}
-                                hitSlop={12}
-                                className="w-8 h-8 items-center justify-center rounded-full"
-                                style={{
-                                    backgroundColor:
-                                        theme.background,
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontSize:
-                                            theme.fontSize.lg,
-                                    }}
-                                >
-                                    ✕
-                                </Text>
-                            </Pressable>
+            onClose={onClose}
+            heading="Product request"
+            icon="search-circle-outline"
+            title={textOr(request.request_number, 'Product request')}
+            subtitle={textOr(request.entity_title, '') || null}
+            avatar={{ icon: 'search-circle-outline' }}
+            badges={badges}
+            stats={[
+                { label: 'Lines', value: String(request.total_line_count ?? items.length) },
+                { label: 'Fulfilled', value: `${request.fulfilled_line_count ?? 0}/${request.total_line_count ?? items.length}`, color: (request.fulfilled_line_count ?? 0) > 0 ? '#10b981' : undefined },
+                { label: 'Offers', value: String(offers) },
+            ]}
+            sections={[
+                {
+                    title: 'Request',
+                    icon: 'document-text-outline',
+                    fields: [
+                        { label: 'Created', value: formatDate(request.created) },
+                        { label: 'Expires', value: formatDate(request.expires_at) },
+                        { label: 'Fulfilled on', value: request.fulfilled_at ? formatDate(request.fulfilled_at) : '' },
+                        { label: 'Cancelled on', value: request.cancelled_at ? formatDate(request.cancelled_at) : '' },
+                        { label: 'Note', value: request.note?.trim() ?? '', full: true },
+                    ],
+                },
+                {
+                    title: `Requested products (${items.length})`,
+                    icon: 'cube-outline',
+                    children: (
+                        <View style={{ gap: 10 }}>
+                            {items.length === 0 ? <EmptyNote text="No lines on this request." /> : items.map((line) => <RequestLineCard key={line.id} line={line} />)}
                         </View>
-
-                        {/* meta chips */}
-                        <View className="flex-row items-center flex-wrap gap-1.5 mt-3">
-                            <View
-                                className="px-2 py-0.5 rounded-md"
-                                style={{
-                                    backgroundColor: status.bg,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: status.fg,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    {request.status_display ||
-                                        request.status}
-                                </Text>
-                            </View>
-
-                            <View
-                                className="px-2 py-0.5 rounded-md"
-                                style={{
-                                    backgroundColor: urgency.bg,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: urgency.fg,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    {(
-                                        request.urgency_display ||
-                                        request.urgency ||
-                                        ''
-                                    ).toUpperCase()}
-                                </Text>
-                            </View>
-
-                            <View
-                                className="px-2 py-0.5 rounded-md border"
-                                style={{
-                                    borderColor,
-                                    backgroundColor:
-                                        isDarkMode
-                                            ? '#0f172a'
-                                            : '#f1f5f9',
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    {items.length}{' '}
-                                    {items.length === 1
-                                        ? 'line'
-                                        : 'lines'}
-                                </Text>
-                            </View>
-
-                            {offerCount > 0 ? (
-                                <View
-                                    className="px-2 py-0.5 rounded-md"
-                                    style={{
-                                        backgroundColor:
-                                            'rgba(99,102,241,0.15)',
-                                    }}
-                                >
-                                    <Text
-                                        className="uppercase tracking-wide"
-                                        style={{
-                                            color: '#6366f1',
-                                            fontFamily:
-                                                theme.font.bold,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {offerCount}{' '}
-                                        {offerCount === 1
-                                            ? 'offer'
-                                            : 'offers'}
-                                    </Text>
-                                </View>
-                            ) : null}
-                        </View>
-
-                        {/* request note */}
-                        {request.note?.trim() ? (
-                            <View
-                                className="rounded-lg px-3 py-2 mt-3"
-                                style={{ backgroundColor: subBg }}
-                            >
-                                <Text
-                                    className="uppercase tracking-widest"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 9,
-                                    }}
-                                >
-                                    Retailer note
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {request.note}
-                                </Text>
-                            </View>
-                        ) : null}
-                    </View>
-
-                    {/* ============ body ============ */}
-                    <ScrollView
-                        className="flex-1"
-                        contentContainerStyle={{ padding: 16 }}
-                    >
-                        {items.length === 0 ? (
-                            <View className="items-center py-8">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.regular,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    No line items on this request.
-                                </Text>
-                            </View>
-                        ) : (
-                            items.map((it, i) => (
-                                <LineCard
-                                    key={it.id ?? String(i)}
-                                    item={it}
-                                    index={i}
-                                />
-                            ))
-                        )}
-                    </ScrollView>
-
-                    {/* ============ footer ============ */}
-                    <View
-                        className="px-5 py-3 border-t"
-                        style={{
-                            borderTopColor:
-                                theme.textDark + '22',
-                        }}
-                    >
-                        <View className="flex-row items-center">
-                            <View className="flex-1">
-                                <Text
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize: 9,
-                                        letterSpacing: 0.5,
-                                    }}
-                                >
-                                    REQUESTED · OFFERED · ACCEPTED
-                                </Text>
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily:
-                                            theme.font.semibold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    {totalRequested} ·{' '}
-                                    {totalOffered} ·{' '}
-                                    {totalAccepted} units
-                                </Text>
-                            </View>
-
-                            <Pressable
-                                onPress={onClose}
-                                className="px-5 py-2 rounded-lg"
-                                style={{
-                                    backgroundColor:
-                                        theme.primary,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide text-white"
-                                    style={{
-                                        fontFamily:
-                                            theme.font.bold,
-                                        fontSize:
-                                            theme.fontSize.sm,
-                                    }}
-                                >
-                                    Close
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </View>
-        </Modal>
+                    ),
+                },
+            ]}
+        />
     );
-};
+}
 
-export default ViewRequestDetailsModal;
+/* ------------------------------------------------------------------ */
+/* Shared pieces (also used by OfferReviewModal)                       */
+/* ------------------------------------------------------------------ */
 
-/* =========================================================
- * Line card
- * ======================================================= */
-
-const LineCard: React.FC<{
-    item: ProductRequestItem;
-    index: number;
-}> = ({ item, index }) => {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-    const subBg = isDarkMode ? '#0f172a' : '#f8fafc';
-
-    const urgency = urgencyTint(item.urgency);
-    const lineStatus = requestStatusTint(item.status);
-    const offers = item.offers ?? [];
-
+export function EmptyNote({ text }: { text: string }) {
+    const { theme, chipBg } = useListTokens();
     return (
-        <View
-            className="mb-3 rounded-xl border overflow-hidden"
-            style={{ borderColor }}
-        >
-            {/* header */}
-            <View
-                className="p-3"
-                style={{ backgroundColor: theme.panel }}
-            >
-                <View className="flex-row items-start">
-                    <Text
-                        className="mr-2"
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.bold,
-                            fontSize: 11,
-                        }}
-                    >
-                        #{index + 1}
-                    </Text>
-                    <Text
-                        className="flex-1"
-                        style={{
-                            color: theme.text,
-                            fontFamily:
-                                theme.font.semibold,
-                            fontSize: theme.fontSize.sm,
-                        }}
-                        numberOfLines={2}
-                    >
-                        {item.product_title ||
-                            'Untitled product'}
-                    </Text>
-                </View>
-
-                <View className="flex-row items-center flex-wrap gap-1.5 mt-2">
-                    {item.urgency_display || item.urgency ? (
-                        <View
-                            className="px-2 py-0.5 rounded-md"
-                            style={{
-                                backgroundColor: urgency.bg,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: urgency.fg,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 9,
-                                }}
-                            >
-                                {(
-                                    item.urgency_display ||
-                                    item.urgency ||
-                                    ''
-                                ).toUpperCase()}
-                            </Text>
-                        </View>
-                    ) : null}
-
-                    {item.status_display || item.status ? (
-                        <View
-                            className="px-2 py-0.5 rounded-md"
-                            style={{
-                                backgroundColor: lineStatus.bg,
-                            }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: lineStatus.fg,
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 9,
-                                }}
-                            >
-                                {item.status_display ||
-                                    item.status}
-                            </Text>
-                        </View>
-                    ) : null}
-
-                    <View
-                        className="px-2 py-0.5 rounded-md border"
-                        style={{
-                            borderColor,
-                            backgroundColor: isDarkMode
-                                ? '#0f172a'
-                                : '#f1f5f9',
-                        }}
-                    >
-                        <Text
-                            className="uppercase tracking-wide"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                                fontSize: 9,
-                            }}
-                        >
-                            {item.requested_quantity ?? 0}{' '}
-                            requested
-                        </Text>
-                    </View>
-
-                    {item.product_bar_code ? (
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily:
-                                    theme.font.medium,
-                                fontSize: 10,
-                            }}
-                        >
-                            {item.product_bar_code}
-                        </Text>
-                    ) : null}
-                </View>
-
-                {item.note?.trim() ? (
-                    <View
-                        className="rounded-lg px-2.5 py-1.5 mt-2"
-                        style={{ backgroundColor: subBg }}
-                    >
-                        <Text
-                            style={{
-                                color: theme.textDark,
-                                fontFamily:
-                                    theme.font.medium,
-                                fontSize: 11,
-                            }}
-                        >
-                            {item.note}
-                        </Text>
-                    </View>
-                ) : null}
-            </View>
-
-            {/* offers */}
-            <View
-                className="p-3 border-t"
-                style={{
-                    borderTopColor: theme.textDark + '22',
-                    backgroundColor: theme.background,
-                }}
-            >
-                <Text
-                    className="uppercase tracking-widest mb-2"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.bold,
-                        fontSize: 9,
-                        letterSpacing: 0.5,
-                    }}
-                >
-                    {offers.length === 0
-                        ? 'No offers'
-                        : `${offers.length} offer${offers.length === 1 ? '' : 's'
-                        }`}
-                </Text>
-
-                {offers.length === 0 ? (
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.regular,
-                            fontSize: 11,
-                            opacity: 0.7,
-                        }}
-                    >
-                        No offers were made on this line.
-                    </Text>
-                ) : (
-                    offers.map((o) => (
-                        <OfferRow key={o.id} offer={o} />
-                    ))
-                )}
-            </View>
+        <View style={{ borderRadius: 14, padding: 12, backgroundColor: chipBg }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center' }}>{text}</Text>
         </View>
     );
+}
+
+const OFFER_TONE: Record<string, BadgeTone> = {
+    OFFERED: 'warning',
+    ACCEPTED: 'success',
+    CONFIRMED: 'success',
+    DECLINED: 'danger',
+    REJECTED: 'danger',
+    CANCELLED: 'neutral',
+    WITHDRAWN: 'neutral',
+    EXPIRED: 'neutral',
 };
 
-/* =========================================================
- * Offer row — read-only
- * ======================================================= */
+function offerBadge(o: ProductRequestOffer): AdminBadge {
+    const key = String(o.status ?? '').trim().toUpperCase();
+    return { label: offerStatusLabel(o.status, o.status_display), tone: OFFER_TONE[key] ?? 'neutral' };
+}
 
-const OfferRow: React.FC<{ offer: ProductRequestOffer }> = ({
-    offer,
-}) => {
-    const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
+export function formatKES(raw: string | number | null | undefined): string {
+    const n = Number(raw ?? 0);
+    return `KES ${(Number.isFinite(n) ? n : 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
 
-    const status = offerStatusTint(offer.status);
-    const label = offerStatusLabel(
-        offer.status,
-        offer.status_display
-    );
-
-    const unitPrice = offer.offered_unit_price
-        ? Number(offer.offered_unit_price)
-        : 0;
-    const total = offerTotal(offer);
-
+/** Header of a requested line: product, quantity, urgency, status, note. */
+export function LineHeader({ line }: { line: ProductRequestItem }) {
+    const { theme } = useListTokens();
+    const urg = urgencyBadge(line.urgency);
+    const status = line.status_display || line.status;
     return (
-        <View
-            className="rounded-lg border px-3 py-2 mb-2"
-            style={{
-                borderColor,
-                backgroundColor: isDarkMode
-                    ? '#0f172a'
-                    : '#f8fafc',
-            }}
-        >
-            <View className="flex-row items-center">
-                <Text
-                    className="flex-1"
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.semibold,
-                        fontSize: theme.fontSize.sm,
-                    }}
-                    numberOfLines={1}
-                >
-                    {offer.wholesaler_title || 'Wholesaler'}
+        <View style={{ gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }} numberOfLines={2}>
+                    {textOr(line.product_title, 'Product')}
                 </Text>
-                <View
-                    className="px-2 py-0.5 rounded-md ml-2"
-                    style={{ backgroundColor: status.bg }}
-                >
-                    <Text
-                        className="uppercase tracking-wide"
-                        style={{
-                            color: status.fg,
-                            fontFamily: theme.font.bold,
-                            fontSize: 9,
-                        }}
-                    >
-                        {label}
-                    </Text>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>×{Number(line.requested_quantity ?? 0).toLocaleString()}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {status ? <AdminBadgePill badge={{ label: textOr(status), tone: 'neutral' }} /> : null}
+                {urg ? <AdminBadgePill badge={urg} /> : null}
+                {line.product_bar_code ? <AdminBadgePill badge={{ label: line.product_bar_code, tone: 'neutral', icon: 'barcode-outline' }} /> : null}
+                {Number(line.confirmed_quantity) > 0 ? <AdminBadgePill badge={{ label: `${line.confirmed_quantity} confirmed`, tone: 'success' }} /> : null}
+            </View>
+            {line.note?.trim() ? (
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }} numberOfLines={3}>
+                    “{line.note.trim()}”
+                </Text>
+            ) : null}
+        </View>
+    );
+}
+
+/** One wholesaler offer, read-only. `right` lets the review modal add controls. */
+export function OfferSummary({ offer, right }: { offer: ProductRequestOffer; right?: React.ReactNode }) {
+    const { theme } = useListTokens();
+    const facts = [
+        `${Number(offer.offered_quantity ?? 0).toLocaleString()} unit${offer.offered_quantity === 1 ? '' : 's'}`,
+        offer.offered_unit_price ? `${formatKES(offer.offered_unit_price)} each` : '',
+        offer.batch ? `Batch ${offer.batch}` : '',
+        offer.expiry_date ? `Expires ${formatDate(offer.expiry_date)}` : '',
+    ].filter(Boolean);
+    return (
+        <View style={{ gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="storefront-outline" size={15} color={theme.textDark} />
+                <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }} numberOfLines={1}>
+                    {textOr(offer.wholesaler_title, 'Wholesaler')}
+                </Text>
+                {right ?? <AdminBadgePill badge={offerBadge(offer)} />}
+            </View>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5, marginLeft: 23 }}>{facts.join(' · ')}</Text>
+            {offer.is_placement ? (
+                <View style={{ marginLeft: 23, flexDirection: 'row' }}>
+                    <AdminBadgePill badge={{ label: 'Consignment', tone: 'violet' }} />
                 </View>
-            </View>
-
-            <View className="flex-row items-center flex-wrap gap-x-4 gap-y-1 mt-1.5">
-                <Text
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.medium,
-                        fontSize: 12,
-                    }}
-                >
-                    {offer.offered_quantity} unit
-                    {offer.offered_quantity === 1 ? '' : 's'}
-                </Text>
-
-                {offer.offered_unit_price ? (
-                    <Text
-                        style={{
-                            color: theme.primary,
-                            fontFamily: theme.font.bold,
-                            fontSize: 12,
-                        }}
-                    >
-                        {formatMoney(unitPrice)} / unit
-                    </Text>
-                ) : null}
-
-                {total > 0 ? (
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: 11,
-                        }}
-                    >
-                        Total {formatMoney(total)}
-                    </Text>
-                ) : null}
-
-                {offer.batch ? (
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: 11,
-                        }}
-                    >
-                        Batch {offer.batch}
-                    </Text>
-                ) : null}
-
-                {offer.expiry_date ? (
-                    <Text
-                        style={{
-                            color: theme.textDark,
-                            fontFamily: theme.font.medium,
-                            fontSize: 11,
-                        }}
-                    >
-                        Exp {formatDate(offer.expiry_date)}
-                    </Text>
-                ) : null}
-            </View>
-
+            ) : null}
             {offer.response_note?.trim() ? (
-                <Text
-                    className="mt-1"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.medium,
-                        fontSize: 11,
-                    }}
-                >
-                    {offer.response_note}
+                <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12.5, marginLeft: 23 }} numberOfLines={3}>
+                    “{offer.response_note.trim()}”
                 </Text>
             ) : null}
-
             {offer.retailer_response_note?.trim() ? (
-                <Text
-                    className="mt-1"
-                    style={{
-                        color: theme.text,
-                        fontFamily: theme.font.medium,
-                        fontSize: 11,
-                    }}
-                >
-                    You: {offer.retailer_response_note}
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginLeft: 23 }} numberOfLines={2}>
+                    You: {offer.retailer_response_note.trim()}
                 </Text>
             ) : null}
-
-            <Text
-                className="mt-1"
-                style={{
-                    color: theme.textDark,
-                    fontFamily: theme.font.regular,
-                    fontSize: 10,
-                    opacity: 0.7,
-                }}
-            >
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginLeft: 23, opacity: 0.8 }}>
                 Offered {formatDate(offer.created)}
-                {offer.retailer_confirmed_at
-                    ? ` · Confirmed ${formatDate(
-                        offer.retailer_confirmed_at
-                    )}`
-                    : ''}
+                {offer.retailer_confirmed_at ? ` · Confirmed ${formatDate(offer.retailer_confirmed_at)}` : ''}
             </Text>
         </View>
     );
-};
+}
+
+function RequestLineCard({ line }: { line: ProductRequestItem }) {
+    const { theme, chipBg, divider } = useListTokens();
+    const offers = line.offers ?? [];
+    return (
+        <View style={{ borderRadius: 18, padding: 14, gap: 10, backgroundColor: chipBg }}>
+            <LineHeader line={line} />
+            {offers.length === 0 ? (
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>No offers yet.</Text>
+            ) : (
+                offers.map((o, i) => (
+                    <View key={o.id} style={{ paddingTop: 10, borderTopWidth: 1, borderTopColor: divider }}>
+                        <OfferSummary offer={o} />
+                    </View>
+                ))
+            )}
+        </View>
+    );
+}

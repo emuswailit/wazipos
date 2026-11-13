@@ -2,6 +2,7 @@
 
 import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
+import { describeFailure, isAuthFailure } from '@/utils/authGuard';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { db, dbInstance } from '@/databases/db';
 import {
@@ -23,11 +24,12 @@ import React, {
     useState,
 } from 'react';
 import { Platform } from 'react-native';
+import { isServerOk } from '@/utils/serverResponse';
 
 /* ------------------------------------------------------------------ */
 /* Public types                                                        */
 /* ------------------------------------------------------------------ */
-export interface OutOfStockItemParamsResponse {
+interface OutOfStockItemParamsResponse {
     status?: string;
     item_id?: string;
     params?: Partial<RetailerOutOfStock>;
@@ -75,8 +77,6 @@ const RetailerOutOfStocksSyncContext = createContext<
 /* ------------------------------------------------------------------ */
 /* Constants                                                           */
 /* ------------------------------------------------------------------ */
-const NATIVE_OUT_OF_STOCKS_KEY =
-    'wazipos_async_retailer_out_of_stocks_registry';
 const NATIVE_OUT_OF_STOCKS_SYNCED_AT =
     'wazipos_async_retailer_out_of_stocks_synced_at';
 const WEB_OUT_OF_STOCKS_KEY =
@@ -149,7 +149,7 @@ const extractOutOfStocksArray = (
 /* ------------------------------------------------------------------ */
 /* Normalizers                                                         */
 /* ------------------------------------------------------------------ */
-export function resolveImageUrl(
+function resolveImageUrl(
     rawPath: any
 ): string | null {
     if (!rawPath) return null;
@@ -592,12 +592,12 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
         RetailerOutOfStockNormalized[]
     >([]);
     const reconnectTimeoutRef =
-        useRef<NodeJS.Timeout | null>(null);
+        useRef<ReturnType<typeof setTimeout> | null>(null);
     const wsGenerationRef = useRef(0);
     const pollIntervalRef =
-        useRef<NodeJS.Timeout | null>(null);
+        useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingFlushIntervalRef =
-        useRef<NodeJS.Timeout | null>(null);
+        useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingFlushInProgressRef = useRef(false);
 
     const pendingEditsRef = useRef<PendingOutOfStockEdit[]>(
@@ -646,9 +646,23 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
             source: 'server' | 'cache'
         ) => {
             const nowStr = new Date().toISOString();
-            const normalized = raw.map((r) =>
+            const fromServer = raw.map((r) =>
                 normalizeOutOfStock(r, nowStr)
             );
+
+            // Fail safe: a server snapshot can't contain drafts created offline that
+            // haven't uploaded yet. Keep them until the server returns them (matched
+            // by draft_id), so they don't vanish from the list on every sync.
+            const serverDraftIds = new Set(
+                fromServer.map((n) => n.draft_id).filter(Boolean)
+            );
+            const localDrafts =
+                source === 'server'
+                    ? outOfStocksStateRef.current.filter(
+                        (i) => i.is_pending && !(i.draft_id && serverDraftIds.has(i.draft_id))
+                    )
+                    : [];
+            const normalized = localDrafts.length ? [...localDrafts, ...fromServer] : fromServer;
 
             await writeOutOfStocksToStorage(normalized);
 
@@ -816,13 +830,7 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
                         payload
                     );
                 const data = res?.data ?? res;
-                const isOk =
-                    res?.ok === true ||
-                    res?.status === 200 ||
-                    res?.status === 201 ||
-                    res?.status === 202 ||
-                    data?.status === 'accepted' ||
-                    data?.status === 'ok';
+                const isOk = isServerOk(res, data);
 
                 if (isOk) succeededIds.add(edit.id);
                 else
@@ -924,13 +932,7 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
                         payload
                     );
                 const data = res?.data ?? res;
-                const isOk =
-                    res?.ok === true ||
-                    res?.status === 200 ||
-                    res?.status === 201 ||
-                    res?.status === 202 ||
-                    data?.status === 'accepted' ||
-                    data?.status === 'ok';
+                const isOk = isServerOk(res, data);
 
                 if (isOk) {
                     pendingEditsRef.current =
@@ -982,14 +984,7 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
                         payload
                     );
                 const data = res?.data ?? res;
-                const isOk =
-                    res?.ok === true ||
-                    res?.status === 200 ||
-                    res?.status === 201 ||
-                    res?.status === 202 ||
-                    data?.status === 'accepted' ||
-                    data?.status === 'ok' ||
-                    data?.id;
+                const isOk = isServerOk(res, data);
 
                 if (isOk) {
                     succeededIds.add(create.id);
@@ -1283,19 +1278,28 @@ export const RetailerOutOfStocksSyncProvider: React.FC<{
         async () => {
             if (!token) return;
 
+            let res: any;
             try {
-                await getOutOfStocksApi.request();
-            } catch (e) {
-                warn('HTTP request threw:', e);
+                // Use the returned response: `getOutOfStocksApi.data` is React state and
+                // still holds the PREVIOUS value inside this callback.
+                res = await getOutOfStocksApi.request();
+            } catch (e: any) {
+                warn('HTTP request threw:', e?.message ?? e);
                 return;
             }
 
-            const payload = getOutOfStocksApi.data;
-            if (!payload) {
-                warn('HTTP returned no payload');
+            if (!res?.ok) {
+                if (!isAuthFailure(res)) warn('HTTP sync failed:', describeFailure(res));
                 return;
             }
 
+            const payload = res.data;
+            if (payload === undefined || payload === null) {
+                warn('HTTP sync returned an empty body');
+                return;
+            }
+
+            // `results: []` is a valid answer: there are no out-of-stocks.
             const data = extractOutOfStocksArray(payload);
             if (!Array.isArray(data)) {
                 warn('Unexpected HTTP out-of-stocks shape', payload);

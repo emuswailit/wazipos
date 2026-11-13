@@ -22,7 +22,9 @@ export interface AdminRoutesSharedProps {
     sourceTone: "server" | "cache" | "none";
     lastSyncedTime: string;
     items: DrugRouteItem[];
-    emptyComponent?: React.ReactNode;
+    /** Whole filtered list; the mobile view shows all of it. */
+    allItems?: DrugRouteItem[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
     onPressItem: (item: DrugRouteItem) => void;
     onEditItem: (item: DrugRouteItem) => void;

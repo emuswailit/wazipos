@@ -6,8 +6,9 @@
 // Domain types (RetailerOrder, RetailerOrderItem) live in
 // @/databases/types — import them directly from there.
 
+import { isTrueFlag } from '@/utils/flags';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useAuth } from '@/context/AuthContext';
 import type { RetailerOrder } from '@/databases/types';
@@ -23,7 +24,23 @@ export interface RequisitionsCounts {
     visible: number;
     unpaid: number;
     submitted: number;
+    /** Sum of final_price_total over the visible (filtered) requisitions. */
+    visibleValue: number;
+    /** Sum of payment_summary.balance_due over the visible requisitions. */
+    visibleBalance: number;
 }
+
+/** Balance still owed on a requisition. */
+export const balanceOf = (order: RetailerOrder): number => {
+    const n = Number(order.payment_summary?.balance_due ?? 0);
+    return Number.isNaN(n) ? 0 : n;
+};
+
+/** Requisition total. */
+export const totalOf = (order: RetailerOrder): number => {
+    const n = Number(order.final_price_total ?? 0);
+    return Number.isNaN(n) ? 0 : n;
+};
 
 export interface RetailerRequisitionsViewProps {
     orders: RetailerOrder[];
@@ -57,7 +74,7 @@ export interface RequisitionsDetailsModalProps {
  * ======================================================= */
 
 export const toBool = (v: any): boolean =>
-    v === true || v === 'true' || v === 1 || v === '1';
+    isTrueFlag(v); // case-insensitive: the backend sends "true" / "True" strings
 
 export const isPaid = (order: RetailerOrder): boolean =>
     toBool(order.is_paid);
@@ -99,12 +116,12 @@ export const orderItemCount = (order: RetailerOrder): number =>
  * Status tint map
  * ======================================================= */
 
-export interface StatusTint {
+interface StatusTint {
     bg: string;
     fg: string;
 }
 
-export const STATUS_TINTS: Record<string, StatusTint> = {
+const STATUS_TINTS: Record<string, StatusTint> = {
     DRAFT: { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8' },
     SUBMITTED: { bg: 'rgba(59,130,246,0.15)', fg: '#3b82f6' },
     PROCESSED: { bg: 'rgba(13,148,136,0.15)', fg: '#0d9488' },
@@ -198,115 +215,5 @@ numberOfLines = { 1}
     { paid? 'Paid': 'Unpaid' }
     </Text>
     </View>
-    );
-}
-
-/* =========================================================
- * Summary + filter badges
- * ======================================================= */
-
-export function SummaryBadge({
-    label,
-    tone = 'neutral',
-}: {
-    label: string;
-    tone?: 'neutral' | 'primary' | 'danger';
-}) {
-    const { theme, isDarkMode } = useAuth();
-    const bg =
-        tone === 'primary'
-            ? `${theme.primary}20`
-            : tone === 'danger'
-                ? 'rgba(244,63,94,0.12)'
-                : isDarkMode
-                    ? 'rgba(148,163,184,0.15)'
-                    : 'rgba(148,163,184,0.22)';
-    const fg =
-        tone === 'primary'
-            ? theme.primary
-            : tone === 'danger'
-                ? '#f43f5e'
-                : theme.textDark;
-    return (
-        <View
-            className= "px-2 py-0.5 rounded-md"
-    style = {{ backgroundColor: bg }
-}
-        >
-    <Text
-                className="uppercase tracking-widest"
-style = {{
-    color: fg,
-        fontFamily: theme.font.bold,
-            fontSize: 9,
-                }}
-            >
-    { label }
-    </Text>
-    </View>
-    );
-}
-
-export function FilterPill({
-    label,
-    active,
-    count,
-    tint,
-    onPress,
-}: {
-    label: string;
-    active: boolean;
-    count?: number;
-    tint: { fg: string; dot: string; bg: string };
-    onPress: () => void;
-}) {
-    const { theme } = useAuth();
-    const fg = active ? tint.fg : theme.textDark;
-
-    return (
-        <Pressable
-            onPress= { onPress }
-    className = "flex-row items-center px-2.5 py-1 mr-2 rounded-full border"
-    style = {{
-        backgroundColor: active ? tint.bg : 'transparent',
-            borderColor: active
-                ? tint.fg + '55'
-                : theme.textDark + '33',
-            }
-}
-        >
-    <View
-                className="w-1.5 h-1.5 rounded-full mr-1.5"
-style = {{
-    backgroundColor: active ? tint.fg : tint.dot,
-                }}
-            />
-    < Text
-className = "uppercase tracking-wide"
-style = {{
-    color: fg,
-        fontFamily: theme.font.bold,
-            fontSize: 10,
-                }}
-numberOfLines = { 1}
-    >
-    { label }
-    </Text>
-{
-    count && count > 0 ? (
-        <Text
-                    style= {{
-        color: fg,
-            opacity: 0.7,
-                marginLeft: 6,
-                    fontFamily: theme.font.bold,
-                        fontSize: 9,
-                    }
-}
-                >
-    { count }
-    </Text>
-            ) : null}
-</Pressable>
     );
 }

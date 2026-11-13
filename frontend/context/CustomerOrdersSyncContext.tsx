@@ -1,7 +1,11 @@
-// @/context/OrdersSyncContext.tsx
+// @/context/CustomerOrdersSyncContext.tsx
 
+import { isTrueFlag, toFlagString } from '@/utils/flags';
 import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
+import { useNetworkStatus } from '@/context/NetworkMonitorContext';
+import { uploadPendingCustomerOrders } from '@/services/customerOrderUploader';
+import { storageService } from '@/components/retailers/customerOrders/storageService';
 import { dbInstance } from '@/databases/db';
 import {
     CustomerOrder,
@@ -19,14 +23,18 @@ import React, {
 } from 'react';
 import { Platform } from 'react-native';
 
-interface OrdersSyncContextType {
+interface CustomerOrdersSyncContextType {
     isSyncing: boolean;
     isManualRefreshing: boolean;
     isLiveConnected: boolean;
     triggerManualFetch: () => Promise<void>;
+    /** 🟢 ADDED: Standard refetch function for UI compatibility */
+    refetch: () => Promise<void>;
+    /** Fetch ALL orders for the current entity (not just the user's own). */
+    fetchEntityOrders: () => Promise<void>;
     forceManualRefresh: () => Promise<void>;
     lastSyncedTime: string;
-    retailerOrders: CustomerOrder[];
+    customerOrders: CustomerOrder[];
     localCustomerOrders: CustomerOrder[];
     queueRevision: number;
     /** Count of local orders whose `synced` flag is still 'FALSE'. */
@@ -37,14 +45,14 @@ interface OrdersSyncContextType {
     drainOutboundQueue: () => Promise<void>;
 }
 
-const OrdersSyncContext = createContext<
-    OrdersSyncContextType | undefined
+const CustomerOrdersSyncContext = createContext<
+    CustomerOrdersSyncContextType | undefined
 >(undefined);
 
-const NATIVE_ORDERS_KEY = 'wazipos_async_orders_registry';
-const NATIVE_ORDERS_SYNCED_AT = 'wazipos_async_orders_synced_at';
-const NATIVE_CUSTOMER_ORDERS_KEY =
-    'wazipos_customer_orders_payload';
+const NATIVE_ORDERS_KEY = 'wazipos_customer_orders_sync_cache';
+const NATIVE_ORDERS_SYNCED_AT = 'wazipos_customer_orders_sync_cache_synced_at';
+/** Close codes the backend uses when the WebSocket login fails (chats/middleware.py). */
+const WS_AUTH_CLOSE_CODES = [4001, 4002, 4003];
 const WS_ORDERS_URL =
     'wss://api.wazipos.co.ke/ws/retailers/orders/list/';
 
@@ -62,7 +70,7 @@ const firstDefined = (...vals: any[]) =>
     vals.find((v) => v !== undefined && v !== null);
 
 const toBool = (v: any): boolean =>
-    v === true || v === 'true' || v === 1 || v === '1';
+    isTrueFlag(v); // case-insensitive: the backend sends "true" / "True" strings
 
 const deriveFulfillmentStatus = (o: any): string => {
     if (o.fulfillment_status) return String(o.fulfillment_status);
@@ -85,21 +93,12 @@ const extractOrdersArray = (payload: any): any[] | null => {
 };
 
 const log = (...args: any[]) => {
-    if (__DEV__) console.log('[OrdersSync]', ...args);
+    if (__DEV__) console.log('[CustomerOrdersSync]', ...args);
 };
 const warn = (...args: any[]) => {
-    if (__DEV__) console.warn('[OrdersSync]', ...args);
+    if (__DEV__) console.warn('[CustomerOrdersSync]', ...args);
 };
 
-/** Strip anything that isn't a UUID-ish string before sending. */
-const sanitizeReceiptId = (raw: any): string => {
-    if (raw === undefined || raw === null) return '';
-    const s = String(raw);
-    if (s === 'undefined' || s === 'null' || s.trim() === '') {
-        return '';
-    }
-    return s;
-};
 
 const isPendingRemoteSync = (o: CustomerOrder): boolean =>
     o.synced === 'FALSE';
@@ -115,17 +114,33 @@ const describePending = (list: CustomerOrder[]): string => {
         .join(', ');
 };
 
+/** Resolve a row's primary key from whichever field the server used. */
+const extractRowId = (raw: any): string => {
+    if (!raw) return '';
+    return String(
+        firstDefined(
+            raw.id,
+            raw.uuid,
+            raw.pk,
+            raw.remote_id,
+            raw.order_id,
+            raw.key,
+            ''
+        )
+    );
+};
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
-export const OrdersSyncProvider: React.FC<{
+export const CustomerOrdersSyncProvider: React.FC<{
     children: React.ReactNode;
 }> = ({ children }) => {
-    const { token, user } = useAuth();
-    const currentUserId = String((user as any)?.id ?? '');
+    const { token } = useAuth();
+    const { isOnline } = useNetworkStatus();
 
-    const [retailerOrders, setRetailerOrders] = useState<
+    const [customerOrders, setCustomerOrders] = useState<
         CustomerOrder[]
     >([]);
     const [localCustomerOrders, setLocalCustomerOrders] = useState<
@@ -137,19 +152,18 @@ export const OrdersSyncProvider: React.FC<{
     const [isLiveConnected, setIsLiveConnected] = useState(false);
     const [isOutboundSyncing, setIsOutboundSyncing] = useState(false);
 
-    const getOrdersApi = useApi(retailersApi.retailerOrdersAction);
-    const submitOrderApi = useApi(retailersApi.retailStaffAction);
+    const getOrdersApi = useApi(retailersApi.retailStaffAction);
+    const getEntityOrdersApi = useApi(retailersApi.customerOrdersAdminAction);
 
     const wsRef = useRef<WebSocket | null>(null);
     const ordersStateRef = useRef<CustomerOrder[]>([]);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const wsGenerationRef = useRef(0);
-    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const outboundGuardRef = useRef(false);
+    const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        ordersStateRef.current = retailerOrders;
-    }, [retailerOrders]);
+        ordersStateRef.current = customerOrders;
+    }, [customerOrders]);
 
     // -----------------------------------------------------------------------
     // Outbound queue — derived from localCustomerOrders
@@ -196,9 +210,7 @@ export const OrdersSyncProvider: React.FC<{
         return {
             cached_at: String(firstDefined(order.cached_at, ts)),
 
-            remote_id: String(
-                firstDefined(order.id, order.key, '')
-            ),
+            remote_id: extractRowId(order),
             remote_key: order.key
                 ? String(order.key)
                 : undefined,
@@ -247,7 +259,7 @@ export const OrdersSyncProvider: React.FC<{
             order_tax_total: Number(order.order_tax_total ?? 0),
             shipping_cost: String(order.shipping_cost ?? '0.00'),
             is_quoted: String(order.is_quoted ?? 'false'),
-            is_paid: String(order.is_paid ?? 'false'),
+            is_paid: toFlagString(order.is_paid),
             paid_at: String(order.paid_at ?? ''),
             due_date: String(order.due_date ?? ''),
             is_delivered: String(order.is_delivered ?? 'false'),
@@ -354,8 +366,8 @@ export const OrdersSyncProvider: React.FC<{
                 ) {
                     return;
                 }
-                if (dbInstance?.retailerOrders) {
-                    await dbInstance.retailerOrders.clear();
+                if (dbInstance?.customerOrdersSyncCache) {
+                    await dbInstance.customerOrdersSyncCache.clear();
                 }
                 if (typeof window !== 'undefined') {
                     window.localStorage.setItem(
@@ -388,14 +400,14 @@ export const OrdersSyncProvider: React.FC<{
     };
 
     // -----------------------------------------------------------------------
-    // Persistence — retailerOrders cache
+    // Persistence — customerOrders cache
     // -----------------------------------------------------------------------
     const hydrateFromLocalDB = async () => {
         try {
             const cached: CustomerOrder[] =
                 Platform.OS === 'web'
-                    ? dbInstance?.retailerOrders
-                        ? await dbInstance.retailerOrders.toArray()
+                    ? dbInstance?.customerOrdersSyncCache
+                        ? await dbInstance.customerOrdersSyncCache.toArray()
                         : []
                     : JSON.parse(
                         (await AsyncStorage.getItem(
@@ -404,7 +416,7 @@ export const OrdersSyncProvider: React.FC<{
                     );
 
             if (Array.isArray(cached) && cached.length > 0) {
-                setRetailerOrders(cached);
+                setCustomerOrders(cached);
                 log(`Hydrated ${cached.length} cached orders`);
             }
 
@@ -434,10 +446,10 @@ export const OrdersSyncProvider: React.FC<{
         try {
             if (
                 Platform.OS === 'web' &&
-                dbInstance?.retailerOrders
+                dbInstance?.customerOrdersSyncCache
             ) {
-                await dbInstance.retailerOrders.clear();
-                await dbInstance.retailerOrders.bulkPut(data);
+                await dbInstance.customerOrdersSyncCache.clear();
+                await dbInstance.customerOrdersSyncCache.bulkPut(data);
             } else {
                 await AsyncStorage.setItem(
                     NATIVE_ORDERS_KEY,
@@ -456,19 +468,13 @@ export const OrdersSyncProvider: React.FC<{
     // -----------------------------------------------------------------------
     // Persistence — local customer-orders queue
     // -----------------------------------------------------------------------
+    // The local customer-orders store shared with the Customer Orders screen, the order
+    // screen and the offline uploader (storageService), on web and native alike.
     const loadLocalCustomerOrders =
         async (): Promise<CustomerOrder[]> => {
             try {
-                const raw =
-                    Platform.OS === 'web' &&
-                        dbInstance?.customerOrders
-                        ? await dbInstance.customerOrders.toArray()
-                        : JSON.parse(
-                            (await AsyncStorage.getItem(
-                                NATIVE_CUSTOMER_ORDERS_KEY
-                            )) || '[]'
-                        );
-                return Array.isArray(raw) ? raw : [];
+                const raw = await storageService.getAllOrders();
+                return Array.isArray(raw) ? (raw as any) : [];
             } catch (e) {
                 warn('loadLocalCustomerOrders', e);
                 return [];
@@ -479,18 +485,8 @@ export const OrdersSyncProvider: React.FC<{
         queue: CustomerOrder[]
     ) => {
         try {
-            if (
-                Platform.OS === 'web' &&
-                dbInstance?.customerOrders
-            ) {
-                await dbInstance.customerOrders.clear();
-                await dbInstance.customerOrders.bulkPut(queue);
-            } else {
-                await AsyncStorage.setItem(
-                    NATIVE_CUSTOMER_ORDERS_KEY,
-                    JSON.stringify(queue)
-                );
-            }
+            // Update rows in place. Never clear: other screens keep their rows in this store.
+            await storageService.putOrders(queue as any[]);
         } catch (e) {
             warn('saveLocalCustomerOrders', e);
         }
@@ -624,7 +620,7 @@ export const OrdersSyncProvider: React.FC<{
     };
 
     // -----------------------------------------------------------------------
-    // Inbound HTTP — bootstrap + manual refresh only
+    // Inbound HTTP — user's own orders (bootstrap + manual refresh only)
     // -----------------------------------------------------------------------
     const runRemoteOrdersSynchronizer = async () => {
         if (!token) return;
@@ -659,7 +655,7 @@ export const OrdersSyncProvider: React.FC<{
             );
 
             await commitToStorage(normalized);
-            setRetailerOrders(normalized);
+            setCustomerOrders(normalized);
             setLastSyncedTime(
                 new Date().toLocaleTimeString([], {
                     hour: '2-digit',
@@ -679,169 +675,83 @@ export const OrdersSyncProvider: React.FC<{
     };
 
     // -----------------------------------------------------------------------
-    // Outbound drain — the poller's job
+    // Inbound HTTP — entity-wide orders (admin/staff context)
     // -----------------------------------------------------------------------
-    const drainOutboundQueue = async () => {
+    const fetchEntityOrders = async () => {
         if (!token) return;
-        if (outboundGuardRef.current) return;
-
-        const queue = await loadLocalCustomerOrders();
-        const pending = queue.filter(isPendingRemoteSync);
-        if (pending.length === 0) {
-            return;
-        }
-
-        outboundGuardRef.current = true;
-        setIsOutboundSyncing(true);
-
-        log(
-            `Outbound drain starting — ${pending.length} order(s)`
-        );
-
-        let succeeded = 0;
-        let failed = 0;
-
+        const startedAt = Date.now();
+        log('Inbound HTTP (entity orders) starting…');
         try {
-            for (const order of pending) {
-                const items = (
-                    order.customerOrderItems ?? []
-                ).map((i) => ({
-                    retailer_receipt: sanitizeReceiptId(
-                        i.retailer_receipt
-                    ),
-                    purchased_quantity: Number(
-                        i.purchased_quantity ?? 0
-                    ),
-                    unit_selling_price: String(
-                        i.unit_selling_price ?? '0.00'
-                    ),
-                    final_unit_selling_price: String(
-                        i.final_unit_selling_price ??
-                        i.unit_selling_price ??
-                        '0.00'
-                    ),
-                    item_discount: String(
-                        i.item_discount ?? '0.00'
-                    ),
-                }));
+            const res = await getEntityOrdersApi
+                .request({
+                    action: 'RetrieveEntityOrders',
+                    page: 1,
+                    page_size: 100,
+                })
+                .catch(() => null);
 
-                const cleanItems = items.filter(
-                    (i) => i.retailer_receipt !== ''
+            if (!res?.ok) {
+                warn(
+                    'Entity orders fetch failed:',
+                    res?.status,
+                    res?.problem
                 );
-
-                if (cleanItems.length === 0) {
-                    warn(
-                        `  ✗ ${order.draft_id} — no valid retailer_receipt`
-                    );
-                    failed++;
-                    continue;
-                }
-
-                const res = await submitOrderApi
-                    .request({
-                        action: 'CreateCustomerOrder',
-                        customer_order_details: {
-                            city_name: '',
-                            customer_name: order.customerName,
-                            customer_phone: order.customerPhone,
-                            destination_latitude: 0,
-                            destination_longitude: 0,
-                            draft_id: order.draft_id,
-                            farness: '',
-                            order_channel:
-                                Platform.OS === 'web'
-                                    ? 'WEB'
-                                    : 'ANDROID',
-                            order_origin:
-                                Platform.OS === 'web'
-                                    ? 'WEB'
-                                    : Platform.OS.toUpperCase(),
-                            delivery_method:
-                                order.deliveryMethod,
-                            shipping_amount: '0.00',
-                            payment_method:
-                                order.selectedPaymentMethodId,
-                            payment_account_number:
-                                order.paymentAccountNumber,
-                            credit_due_date: order.dueDate,
-                            vendor_session_id: null,
-                            order_items: cleanItems,
-                        },
-                    })
-                    .catch(() => null);
-
-                if (res?.ok && !res?.data?.errors) {
-                    const serverUuid = String(
-                        res?.data?.data?.id ||
-                        res?.data?.id ||
-                        ''
-                    );
-
-                    succeeded++;
-                    log(
-                        `  ✓ ${order.draft_id} → ${serverUuid}`
-                    );
-
-                    // Update the persisted queue row.
-                    if (
-                        Platform.OS === 'web' &&
-                        dbInstance?.customerOrders
-                    ) {
-                        const target =
-                            await dbInstance.customerOrders
-                                .where('draft_id')
-                                .equals(order.draft_id)
-                                .first();
-                        if (target?.id != null) {
-                            await dbInstance.customerOrders.update(
-                                target.id,
-                                {
-                                    synced: 'TRUE',
-                                    remote_id: serverUuid,
-                                }
-                            );
-                        }
-                    } else {
-                        const raw = await AsyncStorage.getItem(
-                            NATIVE_CUSTOMER_ORDERS_KEY
-                        );
-                        const fullList: CustomerOrder[] = raw
-                            ? JSON.parse(raw)
-                            : [];
-                        const match = fullList.find(
-                            (x) =>
-                                x.draft_id === order.draft_id
-                        );
-                        if (match) {
-                            match.synced = 'TRUE';
-                            match.remote_id = serverUuid;
-                        }
-                        await AsyncStorage.setItem(
-                            NATIVE_CUSTOMER_ORDERS_KEY,
-                            JSON.stringify(fullList)
-                        );
-                    }
-                } else {
-                    failed++;
-                    warn(
-                        `  ✗ ${order.draft_id} — ${res?.data?.message ||
-                        res?.problem ||
-                        'unknown error'
-                        }`
-                    );
-                }
+                return;
             }
 
-            // Refresh in-memory queue so the pending count updates.
-            await hydrateLocalCustomerOrders();
+            const data = extractOrdersArray(res);
+            if (!Array.isArray(data)) {
+                warn('Unexpected entity-orders shape:', res?.data);
+                return;
+            }
+
+            const nowStr = new Date().toISOString();
+            const normalized: CustomerOrder[] = data.map(
+                (item: any) => normalizeOrder(item, nowStr)
+            );
+
+            await commitToStorage(normalized);
+            setCustomerOrders(normalized);
+            setLastSyncedTime(
+                new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                })
+            );
+
+            await reconcileLocalCustomerOrders(normalized);
 
             log(
-                `Outbound drain done — ${succeeded} ok, ${failed} failed`
+                `Entity orders done — ${normalized.length} rows in ${Date.now() - startedAt
+                }ms`
             );
+        } catch (e) {
+            warn('fetchEntityOrders', e);
+        }
+    };
+
+    // -----------------------------------------------------------------------
+    // Outbound drain — the poller's job
+    // -----------------------------------------------------------------------
+    /**
+     * Outbound: upload orders created offline. Delegates to the shared uploader
+     * (services/customerOrderUploader.ts) so only one upload runs at a time across the
+     * app, then refreshes the local queue view.
+     */
+    const drainOutboundQueue = async () => {
+        if (!token) return;
+        setIsOutboundSyncing(true);
+        try {
+            const summary = await uploadPendingCustomerOrders();
+            if (summary.uploaded || summary.failed) {
+                log(
+                    `Outbound upload — ${summary.uploaded} uploaded, ${summary.failed} failed, ${summary.remaining} pending`
+                );
+            }
+            setLocalCustomerOrders(await loadLocalCustomerOrders());
         } catch (e) {
             warn('drainOutboundQueue', e);
         } finally {
-            outboundGuardRef.current = false;
             setIsOutboundSyncing(false);
         }
     };
@@ -849,9 +759,7 @@ export const OrdersSyncProvider: React.FC<{
     // -----------------------------------------------------------------------
     // WebSocket — inbound only
     // -----------------------------------------------------------------------
-    const establishLiveWebSocketSync = (
-        currentToken: string
-    ) => {
+    const establishLiveWebSocketSync = (currentToken: string) => {
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
@@ -896,24 +804,30 @@ export const OrdersSyncProvider: React.FC<{
                     log(`WS push — ${incoming.length} orders`);
 
                     const nowStr = new Date().toISOString();
-                    const currentMap = new Map<
-                        string,
-                        CustomerOrder
-                    >(
-                        ordersStateRef.current.map((item) => [
-                            item.remote_id,
-                            item,
-                        ])
+
+                    // { customer_orders: [...] } is the server's complete list: rebuild from it
+                    // so orders the server no longer has disappear locally. Anything else is a
+                    // partial update and is merged into the current list.
+                    const isSnapshot = Array.isArray(parsed?.customer_orders);
+                    const existingById = new Map<string, CustomerOrder>(
+                        ordersStateRef.current.map((item) => [item.remote_id, item])
+                    );
+                    const currentMap = new Map<string, CustomerOrder>(
+                        isSnapshot ? [] : existingById
                     );
 
                     incoming.forEach((raw: any) => {
-                        const rid = String(
-                            firstDefined(raw.id, raw.key, '')
-                        );
-                        if (!rid) return;
+                        const rid = extractRowId(raw);
+                        if (!rid) {
+                            warn(
+                                'WS row skipped — no id field',
+                                raw
+                            );
+                            return;
+                        }
 
-                        if (currentMap.has(rid)) {
-                            const ext = currentMap.get(rid)!;
+                        if (existingById.has(rid)) {
+                            const ext = existingById.get(rid)!;
                             const mergedRaw = {
                                 ...ext,
                                 ...raw,
@@ -936,7 +850,7 @@ export const OrdersSyncProvider: React.FC<{
                     const updated = Array.from(
                         currentMap.values()
                     );
-                    setRetailerOrders(updated);
+                    setCustomerOrders(updated);
                     setLastSyncedTime(
                         new Date().toLocaleTimeString([], {
                             hour: '2-digit',
@@ -951,10 +865,19 @@ export const OrdersSyncProvider: React.FC<{
                 }
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 if (generation !== wsGenerationRef.current) return;
                 setIsLiveConnected(false);
                 wsRef.current = null;
+
+                // 4001 no token, 4002 invalid, 4003 expired (chats/middleware.py).
+                // Retrying with the same token can't succeed; this effect reconnects
+                // when the token changes (e.g. after logging in again).
+                if (WS_AUTH_CLOSE_CODES.includes(event?.code)) {
+                    warn(`WS rejected the login (code ${event.code}) — not reconnecting until the token changes`);
+                    return;
+                }
+
                 log(`WS closed — reconnecting in 7s`);
                 if (currentToken) {
                     reconnectTimeoutRef.current = setTimeout(
@@ -995,6 +918,12 @@ export const OrdersSyncProvider: React.FC<{
         }
     };
 
+    // 🟢 Standard refetch function for UI compatibility
+    const refetch = async () => {
+        await runRemoteOrdersSynchronizer();
+        await fetchEntityOrders();
+    };
+
     // -----------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------
@@ -1033,7 +962,7 @@ export const OrdersSyncProvider: React.FC<{
                     'Bootstrap complete — inbound via WS, outbound every 2 min'
                 );
             } else {
-                setRetailerOrders([]);
+                setCustomerOrders([]);
                 if (wsRef.current) {
                     try {
                         wsRef.current.onclose = null;
@@ -1072,18 +1001,35 @@ export const OrdersSyncProvider: React.FC<{
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
+    // Back online: reconnect straight away (the server pushes its full list on connect),
+    // instead of waiting for a retry that may have given up or be far off.
+    useEffect(() => {
+        if (!isOnline || !token) return;
+        const ws = wsRef.current;
+        const live = ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
+        if (!live) {
+            log('Back online — reconnecting');
+            establishLiveWebSocketSync(token);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOnline]);
+
     return (
-        <OrdersSyncContext.Provider
+        <CustomerOrdersSyncContext.Provider
             value={{
                 isSyncing:
-                    getOrdersApi.loading || isOutboundSyncing,
+                    getOrdersApi.loading ||
+                    getEntityOrdersApi.loading ||
+                    isOutboundSyncing,
                 isManualRefreshing,
                 isLiveConnected,
                 triggerManualFetch:
                     runRemoteOrdersSynchronizer,
+                refetch, // 🟢 Added to Context Value
+                fetchEntityOrders,
                 forceManualRefresh,
                 lastSyncedTime,
-                retailerOrders,
+                customerOrders,
                 localCustomerOrders,
                 queueRevision,
                 pendingRemoteSyncCount: pendingOrders.length,
@@ -1094,15 +1040,15 @@ export const OrdersSyncProvider: React.FC<{
             }}
         >
             {children}
-        </OrdersSyncContext.Provider>
+        </CustomerOrdersSyncContext.Provider>
     );
 };
 
-export const useOrdersSync = () => {
-    const context = useContext(OrdersSyncContext);
+export const useCustomerOrdersSync = () => {
+    const context = useContext(CustomerOrdersSyncContext);
     if (!context) {
         throw new Error(
-            'useOrdersSync must be used within an OrdersSyncProvider'
+            'useCustomerOrdersSync must be used within a CustomerOrdersSyncProvider'
         );
     }
     return context;

@@ -1,6 +1,7 @@
 // context/PaymentMethodsSyncContext.tsx
 
 import paymentMethodsApi from '@/api/paymentMethodsApi';
+import { useAuth } from '@/context/AuthContext';
 import { dbInstance } from '@/databases/db';
 import { PaymentMethodItem } from '@/databases/types';
 import { useApi } from '@/hooks/useApi';
@@ -107,8 +108,13 @@ export const PaymentMethodsSyncProvider: React.FC<{
     );
 
     /* Guards */
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastProcessedDataRef = useRef<any>(null);
+
+    // Fail safe: never call the server without a login.
+    const { token } = useAuth();
+    const tokenRef = useRef(token);
+    tokenRef.current = token;
 
     /* ---------------------------------------------------------
      * Remote fetch
@@ -116,6 +122,7 @@ export const PaymentMethodsSyncProvider: React.FC<{
 
     const runRemotePaymentMethodsSynchronizer = useCallback(
         async () => {
+            if (!tokenRef.current) return;
             try {
                 await getMethodsApi.request({
                     action: 'GetAllPaymentMethods',
@@ -152,11 +159,7 @@ export const PaymentMethodsSyncProvider: React.FC<{
             normalizePaymentMethod
         );
 
-        console.log(
-            '[Payment Context] normalized methods:',
-            normalized.length,
-            normalized
-        );
+        if (__DEV__) console.log('[Payment Context] normalized methods:', normalized.length);
 
         /* Only update state if content actually changed */
         setPaymentMethodsList((prev) => {
@@ -208,6 +211,8 @@ export const PaymentMethodsSyncProvider: React.FC<{
 
     const forcePaymentMethodsRefresh = useCallback(
         async () => {
+            // Clearing the cache without a login would leave nothing to refill it.
+            if (!tokenRef.current) return;
             setIsPaymentRefreshing(true);
             try {
                 if (isWeb && dbInstance?.paymentMethods) {
@@ -304,6 +309,11 @@ export const PaymentMethodsSyncProvider: React.FC<{
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    /* Fetch as soon as someone logs in (bootstrap skipped it while logged out). */
+    useEffect(() => {
+        if (token) void actionsRef.current.runRemotePaymentMethodsSynchronizer();
+    }, [token]);
 
     /* ---------------------------------------------------------
      * Memoized context value

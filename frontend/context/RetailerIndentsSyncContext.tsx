@@ -46,31 +46,32 @@ import React, {
     useRef,
     useState,
 } from 'react';
+import { isServerOk } from '@/utils/serverResponse';
 
 /* ------------------------------------------------------------------ */
 /* Response shapes                                                     */
 /* ------------------------------------------------------------------ */
 
-export interface IndentItemParamsResponse {
+interface IndentItemParamsResponse {
     status?: string;
     item_id?: string;
     indent_id?: string;
     params?: Partial<RetailerIndentItem>;
 }
 
-export interface CloseIndentResult {
+interface CloseIndentResult {
     ok: boolean;
     message: string;
     errors: string[];
 }
 
-export interface RemoveIndentItemResult {
+interface RemoveIndentItemResult {
     ok: boolean;
     message?: string;
     errors?: string[];
 }
 
-export interface CreateRetailerIndentResult {
+interface CreateRetailerIndentResult {
     ok: boolean;
     indent_id?: string;
     message?: string;
@@ -78,13 +79,13 @@ export interface CreateRetailerIndentResult {
     errors?: string[];
 }
 
-export interface UpdateIndentItemResult {
+interface UpdateIndentItemResult {
     ok: boolean;
     message?: string;
     errors?: string[];
 }
 
-export interface DrainProgress {
+interface DrainProgress {
     done: number;
     total: number;
     startedAt: number;
@@ -200,11 +201,6 @@ const DEFAULT_LEAD_TIME = '1';
 /* ------------------------------------------------------------------ */
 /* Logging                                                             */
 /* ------------------------------------------------------------------ */
-
-const log = (..._args: any[]) => { };
-const warn = (..._args: any[]) => { };
-const trace = (..._args: any[]) => { };
-const patchTrace = (..._args: any[]) => { };
 
 /* ------------------------------------------------------------------ */
 /* Draft ID helpers                                                    */
@@ -785,6 +781,8 @@ function mergeIndentsSnapshot(
     current: RetailerIndent[],
     incoming: RetailerIndent[],
     protectedIds: Set<string>,
+    /** Called when queued ops for closed indents were dropped, so the provider can refresh its queue count. */
+    onPendingOpsDropped?: () => void,
 ): RetailerIndent[] {
     if (incoming.length === 0) return current;
 
@@ -817,7 +815,7 @@ function mergeIndentsSnapshot(
         if (droppedIds.length > 0) {
             dropPendingOpsForAnyId(droppedIds)
                 .then((n) => {
-                    if (n > 0) setQueueRevision((r) => r + 1);
+                    if (n > 0) onPendingOpsDropped?.();
                 })
                 .catch(() => { });
         }
@@ -943,28 +941,28 @@ export const RetailerIndentsSyncProvider: React.FC<{
         useState<LastSyncResult | null>(null);
 
     const addOfferApi = useApi<any>(async (payload: any) =>
-        await retailersApi.retailStaffAction(payload),
+        await (retailersApi as any).retailStaffAction(payload),
     );
     const updateOfferApi = useApi<any>(async (payload: any) =>
-        await retailersApi.retailStaffAction(payload),
+        await (retailersApi as any).retailStaffAction(payload),
     );
     const removeOfferApi = useApi<any>(async (payload: any) =>
-        await retailersApi.retailStaffAction(payload),
+        await (retailersApi as any).retailStaffAction(payload),
     );
     const closeIndentApi = useApi<any>(async (payload: any) =>
-        await retailersApi.retailStaffAction(payload),
+        await (retailersApi as any).retailStaffAction(payload),
     );
     const createIndentApi = useApi<any>(async (payload: any) =>
-        await retailersApi.retailStaffAction(payload),
+        await (retailersApi as any).retailStaffAction(payload),
     );
     const drainApi = useApi<any>(async (payload: any) =>
-        await retailersApi.retailStaffAction(payload),
+        await (retailersApi as any).retailStaffAction(payload),
     );
 
     const wsRef = useRef<WebSocket | null>(null);
     const indentsStateRef = useRef<RetailerIndent[]>([]);
     const reconnectTimeoutRef =
-        useRef<NodeJS.Timeout | null>(null);
+        useRef<ReturnType<typeof setTimeout> | null>(null);
     const wsGenerationRef = useRef(0);
     const isOnlineRef = useRef(isOnline);
     const userRef = useRef(user);
@@ -1160,9 +1158,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                 const { responseMessage, errors } =
                     extractServerError(data);
 
-                const isOk =
-                    res?.ok === true ||
-                    String(data?.response_code ?? '') === '0';
+                const isOk = isServerOk(res, data);
 
                 if (!isOk) {
                     const serverMessage = String(
@@ -1183,9 +1179,16 @@ export const RetailerIndentsSyncProvider: React.FC<{
                     };
                 }
 
+                // Success payload: { response_code: 0, retailer_indent: { id, ... } }
+                const indentObj =
+                    data?.retailer_indent && typeof data.retailer_indent === 'object'
+                        ? data.retailer_indent
+                        : null;
                 const indentId =
                     data?.indent_id ??
-                    data?.retailer_indent ??
+                    indentObj?.id ??
+                    indentObj?.remote_id ??
+                    (typeof data?.retailer_indent === 'string' ? data.retailer_indent : undefined) ??
                     data?.id ??
                     data?.params?.indent_id ??
                     data?.params?.id ??
@@ -1573,10 +1576,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                     );
 
                     const data = res?.data ?? res;
-                    const isOk =
-                        res?.ok === true ||
-                        String(data?.response_code ?? '') ===
-                        '0';
+                    const isOk = isServerOk(res, data);
 
                     if (!isOk) {
                         const { responseMessage, errors } =
@@ -1654,9 +1654,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                 );
 
                 const data = res?.data ?? res;
-                const isOk =
-                    res?.ok === true ||
-                    String(data?.response_code ?? '') === '0';
+                const isOk = isServerOk(res, data);
 
                 if (!isOk) {
                     const { responseMessage, errors } =
@@ -1847,9 +1845,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                 console.log('[UpdateRetailerIndentItem] res', res);
 
                 const data = res?.data ?? res;
-                const isOk =
-                    res?.ok === true ||
-                    String(data?.response_code ?? '') === '0';
+                const isOk = isServerOk(res, data);
 
                 if (!isOk) {
                     const { responseMessage, errors } =
@@ -1973,9 +1969,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                 });
 
                 const data = res?.data ?? res;
-                const isOk =
-                    res?.ok === true ||
-                    String(data?.response_code ?? '') === '0';
+                const isOk = isServerOk(res, data);
 
                 if (!isOk) {
                     const { responseMessage, errors } =
@@ -2074,9 +2068,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                 const { responseMessage, errors } =
                     extractServerError(data);
 
-                const isOk =
-                    res?.ok === true ||
-                    String(data?.response_code ?? '') === '0';
+                const isOk = isServerOk(res, data);
 
                 if (!isOk) {
                     return {
@@ -2161,9 +2153,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
         data?: any;
     } => {
         const data = res?.data ?? res;
-        const ok =
-            res?.ok === true ||
-            String(data?.response_code ?? '') === '0';
+        const ok = isServerOk(res, data);
         if (ok) return { ok: true, data };
 
         const { responseMessage, errors } =
@@ -2711,6 +2701,7 @@ export const RetailerIndentsSyncProvider: React.FC<{
                             indentsStateRef.current,
                             normalizedIncoming,
                             protectedIds,
+                            () => setQueueRevision((r) => r + 1),
                         );
 
                         await commitToStorage(merged);

@@ -5,11 +5,11 @@ const AUTH_TOKEN_KEY = "wazipos_auth_token";
 
 const REG_DETAILS_KEY = "registrationDetails";
 
-export interface RegistrationDetails {
+interface RegistrationDetails {
   [key: string]: any;
 }
 
-export interface JwtPayload {
+interface JwtPayload {
   exp: number;
   [key: string]: any;
 }

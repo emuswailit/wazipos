@@ -1,6 +1,6 @@
 // services/inventoryMigration.ts
 
-import { CachedReceipt } from '@/databases/types';
+import { RetailerReceipt } from '@/databases/types';
 import {
     readAllLocal,
     writeAllLocal,
@@ -114,7 +114,7 @@ export async function backfillDraftIds(
                 (createdMs
                     ? new Date(createdMs).toISOString()
                     : new Date().toISOString()),
-        } as CachedReceipt;
+        } as RetailerReceipt;
     });
 
     if (updated === 0) {

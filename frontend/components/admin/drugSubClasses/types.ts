@@ -39,7 +39,9 @@ export interface AdminDrugSubClassesSharedProps {
     sourceTone: "server" | "cache" | "none";
     lastSyncedTime: string;
     items: DrugSubClassItem[];
-    emptyComponent?: React.ReactNode;
+    /** Whole filtered list; the mobile view shows all of it. */
+    allItems?: DrugSubClassItem[];
+    emptyComponent?: React.ReactElement | null;
     onOpenCreate: () => void;
     onPressItem: (item: DrugSubClassItem) => void;
     onEditItem: (item: DrugSubClassItem) => void;

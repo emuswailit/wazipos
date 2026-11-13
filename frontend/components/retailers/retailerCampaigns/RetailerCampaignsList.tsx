@@ -1,62 +1,86 @@
+// components/retailers/retailerCampaigns/RetailerCampaignsList.tsx
+//
 // Retailer campaign inbox — container.
-//
-// Responsibilities:
-//   1. Own the list data hook (useRetailerCampaigns)
-//   2. Own the detail modal's open/close state
-//   3. Branch between mobile and web presentations by Platform.OS
-//
-// This mirrors the wholesaler pattern (WholesalerCampaignsList), so
-// the two role modules read identically.
-//
-// The route file (app/(retailers)/retailerCampaigns/index.tsx) is
-// just a one-liner that renders this component.
+//   1. Owns the list data (useRetailerCampaigns, live campaigns only).
+//   2. Owns search + paging (wide screens page; phones show the whole list).
+//   3. Owns the detail modal's open/close state.
+//   4. Picks the table (wide) or cards (phones / narrow web) by window width.
 
-import { useState } from "react";
-import { Platform } from "react-native";
-import RetailerCampaignDetailModal from "./RetailerCampaignDetailModal";
-import { useRetailerCampaigns } from "./retailerCampaigns";
-import RetailerCampaignsMobileView from "./RetailerCampaignsMobileView";
-import RetailerCampaignsWebView from "./RetailerCampaignsWebView";
-import type { UUID } from "./types";
+import type { PageSize } from '@/components/common/PaginationBar';
+import { useEffect, useMemo, useState } from 'react';
+import { useWindowDimensions } from 'react-native';
+
+import RetailerCampaignDetailModal from './RetailerCampaignDetailModal';
+import { useRetailerCampaigns } from './retailerCampaigns';
+import RetailerCampaignsMobileView from './RetailerCampaignsMobileView';
+import RetailerCampaignsWebView from './RetailerCampaignsWebView';
+import type { UUID } from './types';
+
+const LARGE_SCREEN_MIN_WIDTH = 900;
 
 export default function RetailerCampaignsList() {
-    // Which campaign's detail modal is open, if any.
+    const { width } = useWindowDimensions();
+    const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
+
     const [openId, setOpenId] = useState<UUID | undefined>(undefined);
+    const [query, setQuery] = useState('');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState<PageSize>(10);
 
-    // List data. `active_only` restricts to campaigns whose window
-    // includes today — the retailer inbox shouldn't surface expired
-    // or not-yet-started campaigns.
-    const { campaigns, isLoading, error, refresh } = useRetailerCampaigns({
-        active_only: true,
-    });
+    // The inbox shows only campaigns running today.
+    const { campaigns, isLoading, error, refresh } = useRetailerCampaigns({ active_only: true });
 
-    // The two views below share the same prop shape, so we can build
-    // one object and spread it into either.
-    const listProps = {
-        campaigns,
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return campaigns;
+        return campaigns.filter((c) =>
+            [c.title, c.entity_title, c.description, c.discount_summary].some((v) => String(v ?? '').toLowerCase().includes(q))
+        );
+    }, [campaigns, query]);
+
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+    useEffect(() => setPage(1), [query, pageSize]);
+    useEffect(() => {
+        if (page > totalPages) setPage(totalPages);
+    }, [page, totalPages]);
+
+    const pageStart = (page - 1) * pageSize;
+    const pageEnd = Math.min(pageStart + pageSize, totalItems);
+    const paginated = useMemo(() => filtered.slice(pageStart, pageEnd), [filtered, pageStart, pageEnd]);
+
+    const viewProps = {
+        campaigns: paginated,
+        allCampaigns: filtered,
+        totalCampaigns: campaigns.length,
         isLoading,
         error,
         refreshing: false,
         onRefresh: refresh,
         onOpen: (id: UUID) => setOpenId(id),
+        query,
+        setQuery,
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        pageStart,
+        pageEnd,
+        onPrev: () => setPage((p) => Math.max(1, p - 1)),
+        onNext: () => setPage((p) => Math.min(totalPages, p + 1)),
+        onPageSizeChange: (size: PageSize) => {
+            setPageSize(size);
+            setPage(1);
+        },
     };
 
     return (
         <>
-            {Platform.OS === "web" ? (
-                <RetailerCampaignsWebView {...listProps} />
-            ) : (
-                <RetailerCampaignsMobileView {...listProps} />
-            )}
+            {isLarge ? <RetailerCampaignsWebView {...viewProps} /> : <RetailerCampaignsMobileView {...viewProps} />}
 
-            {/* Detail modal. Mounted once and toggled by `visible` so
-                the internal fetch state resets cleanly on open. */}
-            <RetailerCampaignDetailModal
-                visible={!!openId}
-                campaignId={openId}
-                onClose={() => setOpenId(undefined)}
-                onAccepted={refresh}
-            />
+            {/* Mounted once and toggled by `visible` so its fetch state resets on open. */}
+            <RetailerCampaignDetailModal visible={!!openId} campaignId={openId} onClose={() => setOpenId(undefined)} onChanged={refresh} />
         </>
     );
 }

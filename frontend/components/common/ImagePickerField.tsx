@@ -19,7 +19,6 @@ import { Image, Pressable, Text, View } from "react-native";
 
 import {
     type ImageFieldValue,
-    isPendingUpload,
     pickImage,
     previewUri,
     releasePreview,
@@ -77,7 +76,7 @@ function SmallButton({
  * Controlled component
  * ======================================================= */
 
-export interface ImagePickerFieldProps {
+interface ImagePickerFieldProps {
     value: ImageFieldValue;
     onChange: (next: ImageFieldValue) => void;
     onError?: (message: string) => void;
@@ -273,7 +272,7 @@ export function ImagePickerField({
  * Formik component
  * ======================================================= */
 
-export interface FormikImagePickerProps
+interface FormikImagePickerProps
     extends Omit<ImagePickerFieldProps, "value" | "onChange" | "onError"> {
     name: string;
     showFormikError?: boolean;
@@ -315,65 +314,4 @@ export function FormikImagePicker({
             ) : null}
         </View>
     );
-}
-
-/* =========================================================
- * Hook — for callers who want their own UI
- * ======================================================= */
-
-export interface FormikImagePickerApi {
-    value: ImageFieldValue;
-    previewUri: string | null;
-    pick: (opts?: {
-        aspect?: [number, number];
-        quality?: number;
-    }) => Promise<void>;
-    clear: () => void;
-    picking: boolean;
-    isPendingUpload: boolean;
-    hasImage: boolean;
-    error?: string;
-}
-
-export function useFormikImagePicker(name: string): FormikImagePickerApi {
-    const [field, meta, helpers] = useField<ImageFieldValue>(name);
-    const [picking, setPicking] = useState(false);
-
-    const value = field.value ?? null;
-
-    const pick = useCallback(
-        async (opts?: { aspect?: [number, number]; quality?: number }) => {
-            if (picking) return;
-            setPicking(true);
-            try {
-                const picked = await pickImage(opts ?? {});
-                if (!picked) return;
-                releasePreview(value);
-                helpers.setValue(picked);
-                helpers.setTouched(true, false);
-            } finally {
-                setPicking(false);
-            }
-        },
-        [picking, value, helpers]
-    );
-
-    const clear = useCallback(() => {
-        releasePreview(value);
-        helpers.setValue(null);
-        helpers.setTouched(true, false);
-    }, [value, helpers]);
-
-    const uri = previewUri(value);
-
-    return {
-        value,
-        previewUri: uri,
-        pick,
-        clear,
-        picking,
-        isPendingUpload: isPendingUpload(value),
-        hasImage: !!uri,
-        error: meta.touched && meta.error ? String(meta.error) : undefined,
-    };
 }

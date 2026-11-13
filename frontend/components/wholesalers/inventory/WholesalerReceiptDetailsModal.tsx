@@ -47,13 +47,13 @@ export function WholesalerReceiptDetailsModal({
     const hasPriceTiers =
         (receipt.price_tiers?.length ?? 0) > 0;
 
+    // Prices arrive as decimal strings ("120.00"): convert explicitly.
+    const sellPrice = Number(receipt.final_unit_selling_price);
+    const buyPrice =
+        receipt.unit_buying_price != null ? Number(receipt.unit_buying_price) : null;
     const marginPct =
-        receipt.final_unit_selling_price > 0 &&
-            receipt.unit_buying_price != null
-            ? ((receipt.final_unit_selling_price -
-                receipt.unit_buying_price) /
-                receipt.final_unit_selling_price) *
-            100
+        sellPrice > 0 && buyPrice != null && Number.isFinite(buyPrice)
+            ? ((sellPrice - buyPrice) / sellPrice) * 100
             : null;
 
     return (
@@ -162,13 +162,13 @@ export function WholesalerReceiptDetailsModal({
                             <SummaryCell
                                 label="Selling"
                                 value={`KES ${formatKES(
-                                    receipt.final_unit_selling_price
+                                    Number(receipt.final_unit_selling_price)
                                 )}`}
                             />
                             <SummaryCell
                                 label="Buying"
                                 value={`KES ${formatKES(
-                                    receipt.unit_buying_price
+                                    receipt.unit_buying_price != null ? Number(receipt.unit_buying_price) : null
                                 )}`}
                             />
                             {marginPct != null ? (
@@ -256,34 +256,22 @@ export function WholesalerReceiptDetailsModal({
                                     }}
                                 >
                                     <Text
-                                        style={styles.headerCell(
-                                            theme
-                                        )}
-                                        flex={1.4}
+                                        style={[styles.headerCell(theme), { flex: 1.4 }]}
                                     >
                                         Batch
                                     </Text>
                                     <Text
-                                        style={styles.headerCell(
-                                            theme
-                                        )}
-                                        flex={1}
+                                        style={[styles.headerCell(theme), { flex: 1 }]}
                                     >
                                         Qty
                                     </Text>
                                     <Text
-                                        style={styles.headerCell(
-                                            theme
-                                        )}
-                                        flex={1.2}
+                                        style={[styles.headerCell(theme), { flex: 1.2 }]}
                                     >
                                         Expiry
                                     </Text>
                                     <Text
-                                        style={styles.headerCell(
-                                            theme
-                                        )}
-                                        flex={1}
+                                        style={[styles.headerCell(theme), { flex: 1 }]}
                                     >
                                         Status
                                     </Text>

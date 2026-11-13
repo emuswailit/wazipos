@@ -100,14 +100,11 @@ export default function WholesalerMarketplaceWeb({
 
     const {
         currentOpenIndent,
-        hasOpenIndent,
         isDraftIndent,
         pendingOpCount,
         findItemByReceipts,
         getQuantityByReceipts,
-        addToIndent,
         removeFromIndent,
-        queueRevision,
     } = useIndentBridge();
 
     /* ── UI state ──────────────────────────────────────────── */
@@ -208,7 +205,7 @@ export default function WholesalerMarketplaceWeb({
             setCartBusy(true);
             setCartError(null);
             try {
-                const res = await removeFromIndent(item.id);
+                const res = await removeFromIndent(item.remote_id ?? item.draft_id ?? "");
                 if (!res.ok) {
                     setCartError(
                         res.message ?? 'Could not remove item.',
@@ -1024,8 +1021,7 @@ export default function WholesalerMarketplaceWeb({
                         onSyncNow={handleSyncNow}
                         onDismiss={() => setCartOpen(false)}
                         busy={cartBusy}
-                        errorText={cartError}
-                    />
+                        errorText={cartError} syncing={false} syncTotal={0} syncDone={0} />
                 </View>
             )}
 

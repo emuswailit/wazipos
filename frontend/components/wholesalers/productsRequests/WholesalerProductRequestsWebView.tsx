@@ -9,6 +9,7 @@
 // useWholesalerReceiptsSync() directly. This view does not pass
 // receipts down.
 
+import type { DimensionValue } from 'react-native';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -47,7 +48,7 @@ export function isPublishedStatus(
  * Shared filter primitives (exported for mobile view)
  * ======================================================= */
 
-export interface StatusOption {
+interface StatusOption {
     value: string;
     label: string;
     bg: string;
@@ -249,7 +250,7 @@ interface Props {
     isSubmitting: boolean;
     onSubmitResponse: (payload: RespondPayload) => Promise<void>;
 
-    emptyComponent?: React.ReactNode;
+    emptyComponent?: React.ReactElement | null;
 }
 
 function rowKey(r: ProductRequestSummary): string {
@@ -764,7 +765,7 @@ function Row({
  * Helpers
  * ======================================================= */
 
-function headerStyle(theme: any, width: string) {
+function headerStyle(theme: any, width: DimensionValue) {
     return {
         width,
         color: theme.textDark,
@@ -777,7 +778,7 @@ function headerStyle(theme: any, width: string) {
 
 function cellStyle(
     theme: any,
-    width: string,
+    width: DimensionValue,
     bold = false
 ) {
     return {

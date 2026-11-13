@@ -1,13 +1,13 @@
 // components/wholesalers/newWholesaleOrder/OrderFormBusinessLogic.tsx
 
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
-import { router } from 'expo-router';
+
 import React from 'react';
 import { useWholesaleOrderForm } from './useWholesaleOrderForm';
 
 interface OrderFormBusinessLogicProps {
     user: any;
-    productsCatalog?: any[];
+
     onSubmitFinished?: (
         retailerId: string,
         notes: string,
@@ -53,7 +53,12 @@ export default function OrderFormBusinessLogic({
         setSubmitToast,
 
         grandTotalCost,
-        commitOrder,
+        submitOrder,
+
+        isScannerOpen,
+        setIsScanningOpen,
+        processBarcodeScanResult,
+        wholesalerReceipts,
     } = useWholesaleOrderForm({
         onSubmitFinished,
         onRowsCountChange,
@@ -63,22 +68,6 @@ export default function OrderFormBusinessLogic({
     const triggerNotificationToast = (msg: string) => {
         setSubmitToast(msg);
         setTimeout(() => setSubmitToast(null), 5000);
-    };
-
-    /* -------- Save draft (local only) -------- */
-    const handleSaveDraftManual = async () => {
-        if (!selectedRetailer) {
-            const msg =
-                '⚠️ Assign a client customer to declare a draft.';
-            alert(msg);
-            triggerNotificationToast(msg);
-            return;
-        }
-        await clearActiveDraftSession();
-        setMpesaNumber('');
-        triggerNotificationToast(
-            '💾 Draft session saved locally.'
-        );
     };
 
     /* -------- Submit -------- */
@@ -154,52 +143,54 @@ export default function OrderFormBusinessLogic({
             return;
         }
 
+        /* ---- Online guard (no offline queue) ---- */
+        if (!isOnline) {
+            const msg =
+                '⚠️ You are offline. Connect to the internet to submit this order.';
+            alert(msg);
+            triggerNotificationToast(msg);
+            return;
+        }
+
         try {
             setIsSubmitting(true);
+            setSyncStatus('syncing');
 
-            /* ---- Persist locally ---- */
-            const order = await commitOrder({
-                retailerId: (selectedRetailer as any)
-                    .remote_id,
-                retailerTitle: selectedRetailer.title,
-                paymentMethodId:
-                    selectedPaymentMethod.id,
-                paymentMethodTitle:
-                    selectedPaymentMethod.title,
-                mpesaNumber,
-                notes,
+            const retailerId = String(
+                (selectedRetailer as any).remote_id ?? ''
+            );
+            const submittedItems = formRows.filter((r) => r.selectedReceipt);
+
+            const result = await submitOrder({
+                retailerId,
+                paymentMethodId: selectedPaymentMethod.id,
+                mobileMoneyPhone: isMobileMoney ? mpesaNumber : null,
                 userId: String(user?.id ?? ''),
             });
 
-            setSyncStatus('syncing');
-
-            /* ---- Notify parent ---- */
-            if (onSubmitFinished) {
-                onSubmitFinished(
-                    (selectedRetailer as any).remote_id,
-                    notes,
-                    order.order_items
-                );
+            if (!result.ok) {
+                setSyncStatus('error');
+                alert(`Wholesale Submission Error\n\n${result.message}`);
+                triggerNotificationToast(`❌ Failed: ${result.message}`);
+                return;
             }
 
+            setSyncStatus('ok');
+            onSubmitFinished?.(retailerId, notes, submittedItems);
             triggerNotificationToast(
-                '✅ Order saved — syncing in background'
+                result.reference
+                    ? `✅ Success: order ${result.reference} created`
+                    : '✅ Success: order created'
             );
 
-            /* ---- Reset and navigate ---- */
             await clearActiveDraftSession();
-            router.replace(
-                '/(wholesalers)/newWholesaleOrder'
-            );
         } catch (e: any) {
             console.error(
                 '[OrderFormBusinessLogic] submit failed',
                 e
             );
             setSyncStatus('error');
-            const msg =
-                e?.message ??
-                'Failed to save order locally.';
+            const msg = e?.message ?? 'Failed to submit order.';
             alert(`Wholesale Submission Error\n\n${msg}`);
             triggerNotificationToast(`❌ Failed: ${msg}`);
         } finally {
@@ -242,8 +233,13 @@ export default function OrderFormBusinessLogic({
                 isSubmitting,
 
                 /* Actions */
-                handleSaveDraftManual,
                 handleSubmit,
+
+                /* Scanner */
+                isScannerOpen,
+                setIsScanningOpen,
+                processBarcodeScanResult,
+                wholesalerReceipts,
 
                 /* Toast */
                 submitToast,
