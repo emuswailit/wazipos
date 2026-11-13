@@ -1384,7 +1384,7 @@ class Prescriptions(EntityRelatedModel):
     )
 
     # Uploading with a pharmacy is optional: without one, the system / an admin
-    # digitizes it and forwards it to pharmacies for quotation.
+    # digitizes it and its owner then sends it to one pharmacy.
     entity = models.ForeignKey(
         "authentication.Entities",
         related_name="retailers_prescriptions_set",
@@ -1438,7 +1438,7 @@ class Prescriptions(EntityRelatedModel):
 
 
 class PrescriptionItems(EntityRelatedModel):
-    """Retail prescription item (shared by every pharmacy quoting the prescription)."""
+    """Retail prescription item (a medicine on the prescription)."""
 
     entity = models.ForeignKey(
         "authentication.Entities",
@@ -1586,12 +1586,15 @@ class PrescriptionItemAdministrations(EntityRelatedModel):
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
     comment = models.CharField(max_length=120, null=True, blank=True)
+    # When the patient confirmed taking this dose.
+    administered_at = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
 
     class Meta:
         verbose_name_plural = "Retail Prescription Item Administrations"
+        ordering = ["administration_date", "administration_time"]
         constraints = [
             models.UniqueConstraint(
                 fields=["prescription_item", "administration_date", "administration_time"],
@@ -1695,6 +1698,17 @@ class CustomerOrders(EntityRelatedModel):
     payment_account_number = models.CharField(max_length=50, null=True, blank=True)
     reference_number = models.CharField(max_length=100, null=True, blank=True)
     prescription = models.ForeignKey("Prescriptions", null=True, blank=True, on_delete=models.SET_NULL)
+    # On a prescription purchase order: the pharmacy's open quotation it was
+    # bought from. (The purchase's own quotation is `prescription_quotation`.)
+    source_quotation = models.ForeignKey(
+        "PrescriptionQuotations",
+        related_name="purchases",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    # Set once the paid medicines were added to the patient's dosing schedule.
+    supply_recorded_at = models.DateTimeField(null=True, blank=True)
     order_type = models.CharField(max_length=100, null=True, blank=True, default="NORMAL", choices=OrderTypeOptions.choices)
     draft_id = models.CharField(max_length=256, null=True, blank=True)
     city_name = models.CharField(max_length=256, null=True, blank=True)
@@ -3021,75 +3035,27 @@ class RetailerProductRequestResponse(EntityRelatedModel):
 # Signals
 # ===========================================================================
 
-def generate_administration_schedule(prescription_item):
-    """
-    Create `doses_per_day * days` administration rows for a prescription item.
+# The dosing (administration) schedule of a prescription item is built when the
+# customer pays for it, starting from then: see utils/prescription_schedule.py.
 
-    Doses are evenly spaced across a 24-hour day. The old code used
-    `range(1, doses_per_day + 1)` and `total_minutes = interval * dose_index`,
-    which produced `hour=24` (invalid) for the final dose of every frequency
-    (e.g. 2x/day → 12:00, 24:00 → ValueError). The silent try/except in the
-    signal handler hid this. Fix: iterate `0..doses_per_day-1` so the last
-    dose lands before 24:00, plus a defensive `hour % 24` clamp.
-    """
-    frequency = getattr(prescription_item, "frequency", None)
-    if frequency is None:
+@receiver(post_save, sender=CustomerOrders)
+def record_prescription_supply_on_paid(sender, instance, **kwargs):
+    """A paid prescription purchase: put the medicines on the patient's schedule."""
+    if instance.order_type != "PRESCRIPTION" or instance.is_paid != "true":
         return
-
-    try:
-        doses_per_day = int(getattr(frequency, "numerical", 0) or 0)
-    except (TypeError, ValueError):
+    if instance.supply_recorded_at is not None or not instance.prescription_id:
         return
+    order_id = instance.pk
 
-    if doses_per_day <= 0:
-        return
+    def _go():
+        try:
+            from .utils.prescription_schedule import record_supply_for_order
 
-    interval_minutes = (24 * 60) // doses_per_day  # int, deterministic
+            record_supply_for_order(order_id)
+        except Exception:
+            logger.exception("Recording prescription supply for order %s failed", order_id)
 
-    days = int(prescription_item.days or 0)
-    if days <= 0:
-        return
-
-    rows = []
-    today = date.today()
-
-    for day_offset in range(1, days + 1):
-        administration_date = today + timedelta(days=day_offset)
-        for dose_index in range(doses_per_day):  # 0..n-1, never hits 24:00
-            total_minutes = interval_minutes * dose_index
-            hour, minute = divmod(total_minutes, 60)
-            if hour >= 24:
-                hour = hour % 24
-            rows.append(
-                PrescriptionItemAdministrations(
-                    prescription_item=prescription_item,
-                    administration_date=administration_date,
-                    administration_time=dt_time(hour=hour, minute=minute),
-                    owner=prescription_item.owner,
-                    entity=prescription_item.entity,
-                )
-            )
-
-    if rows:
-        PrescriptionItemAdministrations.objects.bulk_create(rows)
-
-
-@receiver(post_save, sender=PrescriptionItems)
-def on_prescription_item_created(sender, instance, created, **kwargs):
-    if not created:
-        return
-    if not instance.days or not instance.frequency:
-        return
-    if not getattr(instance.frequency, "numerical", None):
-        return
-
-    try:
-        generate_administration_schedule(instance)
-    except Exception:
-        logger.exception(
-            "Failed to generate administration schedule for PrescriptionItems %s",
-            instance.pk,
-        )
+    transaction.on_commit(_go)
 
 
 @receiver(post_save, sender=CustomerOrders)
@@ -3130,19 +3096,33 @@ class PrescriptionQuotations(models.Model):
     """
     A pharmacy's quotation for a prescription. Each one is backed by its own,
     independent customer order whose lines price the prescription's items.
-    REQUESTED: sent to the pharmacy (upload or forward) · QUOTED: sent to the customer ·
-    CHECKOUT: the customer chose lines and started paying · DECLINED / CANCELLED.
+
+    A pharmacy has ONE open quotation per prescription (`parent` empty): what it
+    offers for the quantities still to be dispensed. Every purchase the customer
+    makes from it is a quotation of its own (`parent` = the open one) with its
+    own order holding exactly what was bought; when that is paid, the open
+    quotation is cut down to what is left to dispense.
+
+    Open: REQUESTED (sent to the pharmacy) · QUOTED (sent to the customer) ·
+    FULFILLED (nothing left to buy from it) · DECLINED / CANCELLED.
+    Purchase: CHECKOUT (the customer is paying) · PAID.
     """
 
     STATUS_CHOICES = (
         ("REQUESTED", "REQUESTED"),
         ("QUOTED", "QUOTED"),
         ("CHECKOUT", "CHECKOUT"),
+        ("PAID", "PAID"),
+        ("FULFILLED", "FULFILLED"),
         ("DECLINED", "DECLINED"),
         ("CANCELLED", "CANCELLED"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Set on a purchase: the pharmacy's open quotation it was bought from.
+    parent = models.ForeignKey(
+        "self", related_name="purchase_quotations", on_delete=models.CASCADE, null=True, blank=True
+    )
     prescription = models.ForeignKey(Prescriptions, related_name="quotations", on_delete=models.CASCADE)
     entity = models.ForeignKey("authentication.Entities", related_name="prescription_quotations", on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="REQUESTED")
@@ -3156,6 +3136,11 @@ class PrescriptionQuotations(models.Model):
         User, related_name="prescription_quotations_quoted", on_delete=models.SET_NULL, null=True, blank=True
     )
     quoted_at = models.DateTimeField(null=True, blank=True)
+    # True: the pharmacy insists the patient collects in person (further advice,
+    # pharmaceutical care such as guided administration) and no shipping is
+    # charged. False: the customer chooses at checkout; delivery adds shipping.
+    pickup_required = models.BooleanField(default=False)
+    pickup_reason = models.CharField(max_length=256, blank=True, default="")
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -3163,7 +3148,12 @@ class PrescriptionQuotations(models.Model):
         verbose_name_plural = "Prescription Quotations"
         ordering = ["created"]
         constraints = [
-            models.UniqueConstraint(fields=["prescription", "entity"], name="unique_prescription_quotation_per_pharmacy"),
+            # One open quotation per pharmacy; any number of purchases under it.
+            models.UniqueConstraint(
+                fields=["prescription", "entity"],
+                condition=Q(parent__isnull=True),
+                name="unique_open_prescription_quotation_per_pharmacy",
+            ),
         ]
 
     def __str__(self):

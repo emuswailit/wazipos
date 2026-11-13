@@ -1596,6 +1596,7 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
     patient_age = serializers.SerializerMethodField(read_only=True)
     key = serializers.SerializerMethodField(read_only=True)
     quotations = serializers.SerializerMethodField(read_only=True)
+    has_long_term_items = serializers.SerializerMethodField(read_only=True)
     digitized_by_name = serializers.SerializerMethodField(read_only=True)
     digitized_by_entity_title = serializers.SerializerMethodField(read_only=True)
 
@@ -1613,6 +1614,8 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
             "patient_date_of_birth", "patient_age", "comment",
             "ai_extraction_status",
             "digitized_at", "digitized_by_name", "digitized_by_entity", "digitized_by_entity_title", "quotations",
+            # A medicine prescribed for a month or longer: advise a follow-up with the prescriber.
+            "has_long_term_items",
             "key", "created", "updated",
         )
         read_only_fields = ("id", "created_by", "created", "updated", "ai_extraction_status", "digitized_at", "digitized_by_entity")
@@ -1626,6 +1629,11 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
         return PrescriptionItemsSerializer(
             items, many=True, context=self.context
         ).data
+
+    def get_has_long_term_items(self, obj):
+        from .utils.prescription_flow import has_long_term_items
+
+        return has_long_term_items(obj)
 
     def get_items_count(self, obj):
         return models.PrescriptionItems.objects.filter(prescription=obj).count()
@@ -1645,11 +1653,12 @@ class RetailPrescriptionsSerializer(serializers.ModelSerializer):
 
     def get_quotations(self, obj):
         """
-        The customer (owner) and admins see every pharmacy's quotation; a
-        pharmacy sees only its own (never competitors' prices).
+        A prescription has one pharmacy, so this is at most one open quotation.
+        The customer (owner) and admins see it; pharmacy staff only their own.
         """
         user, pharmacy_id, admin = self._viewer()
-        qs = models.PrescriptionQuotations.objects.filter(prescription=obj).select_related("entity", "customer_order")
+        # Open quotations only; each lists the purchases made from it (`purchases`).
+        qs = models.PrescriptionQuotations.objects.filter(prescription=obj, parent__isnull=True).select_related("entity", "customer_order")
         is_owner = user is not None and (obj.owner_id == user.id or obj.created_by_id == user.id)
         if not (admin or is_owner):
             if not pharmacy_id:
@@ -1747,7 +1756,7 @@ class PrescriptionItemsSerializer(serializers.ModelSerializer):
         return obj.id
 
     def get_bought_quantity(self, obj):
-        """Units already paid for, across all pharmacies."""
+        """Units already paid for."""
         from django.db.models import Sum
 
         agg = models.CustomerOrderItems.objects.filter(
@@ -2255,10 +2264,55 @@ class PrescriptionQuotationSerializer(serializers.ModelSerializer):
     entity_town = serializers.SerializerMethodField(read_only=True)
     order = serializers.SerializerMethodField(read_only=True)
     lines = serializers.SerializerMethodField(read_only=True)
+    delivery_available = serializers.SerializerMethodField(read_only=True)
+    purchases = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = models.PrescriptionQuotations
-        fields = ("id", "prescription", "entity", "entity_title", "entity_town", "status", "quoted_at", "created", "order", "lines")
+        fields = (
+            "id", "prescription", "entity", "entity_title", "entity_town", "status", "quoted_at", "created",
+            "order", "lines",
+            # pickup_required: the pharmacy insists on collection in person (no
+            # shipping). Otherwise the customer chooses at checkout.
+            "pickup_required", "pickup_reason", "delivery_available", "purchases",
+        )
+
+    def get_delivery_available(self, obj):
+        from .utils.prescription_flow import delivery_available
+
+        return delivery_available(obj)
+
+    def get_purchases(self, obj):
+        """
+        Paid purchases made from this (open) quotation, newest first. Each is a
+        quotation of its own (`id`) with its own order (`order`).
+        """
+        out = []
+        paid = (
+            obj.purchase_quotations.filter(customer_order__is_paid="true")
+            .select_related("customer_order")
+            .prefetch_related("customer_order__parent_order")
+            .order_by("-created")
+        )
+        for purchase in paid:
+            o = purchase.customer_order
+            out.append({
+                "id": str(purchase.id),
+                "order": str(o.id),
+                "status": o.status,
+                "paid_at": o.paid_at.isoformat() if o.paid_at else None,
+                "created": o.created.isoformat() if o.created else None,
+                "total": str(o.order_net_price_total or 0),
+                "items_total": str(o.order_price_total or 0),
+                "delivery_method": o.delivery_method or "",
+                "shipping_cost": str(o.shipping_cost or 0),
+                "reference_number": o.reference_number or "",
+                "lines": [
+                    {"prescription_item": str(l.prescription_item_id) if l.prescription_item_id else None, "quantity": int(l.quantity or 0)}
+                    for l in o.parent_order.all()
+                ],
+            })
+        return out
 
     def get_entity_title(self, obj):
         return obj.entity.title if obj.entity else ""
@@ -2276,6 +2330,11 @@ class PrescriptionQuotationSerializer(serializers.ModelSerializer):
             "is_paid": o.is_paid,
             "total": str(o.order_net_price_total or 0),
             "reference_number": o.reference_number or "",
+            # PICKUP (collect in person) or DELIVERY; total already includes shipping.
+            "delivery_method": o.delivery_method or "",
+            "shipping_cost": str(o.shipping_cost or 0),
+            "items_total": str(o.order_price_total or 0),
+            "distance_km": str(o.farness) if o.farness is not None else None,
         }
 
     def get_lines(self, obj):

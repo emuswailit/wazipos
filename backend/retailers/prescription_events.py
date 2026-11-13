@@ -8,7 +8,7 @@ they have no handler for):
 
 Consumer: PrescriptionEventsConsumer at ws/retailers/prescriptions/events/.
 Each event: {"event": <name>, "prescription": <serialized for that audience>}.
-Pharmacies only ever receive their own quotation (never competitors' prices).
+A prescription is handled by one pharmacy, which only ever receives its own quotation.
 """
 import json
 import logging
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 EVENT_DIGITIZED = "prescription.digitized"
 EVENT_QUOTED = "prescription.quoted"
 EVENT_REQUESTED = "prescription.quotation_requested"
+EVENT_DISPENSED = "prescription.dispensed"
 
 
 def user_group(user_id):
@@ -81,7 +82,8 @@ def notify_digitized(prescription):
         _push(
             prescription.owner,
             "Prescription digitized",
-            f"{who} has read your prescription. Pharmacies can now send quotations.",
+            f"{who} has read your prescription."
+            + (f" {prescription.entity.title} will send its quotation." if prescription.entity_id else " Send it to a pharmacy to get prices."),
             {"type": EVENT_DIGITIZED, "prescription": str(prescription.id)},
         )
 
@@ -115,6 +117,31 @@ def notify_quotation_requested(quotation):
         prescription = quotation.prescription
         _send(entity_group(quotation.entity_id), EVENT_REQUESTED, _for_pharmacy(prescription, quotation.entity_id))
         _send(user_group(prescription.owner_id), EVENT_REQUESTED, _for_owner(prescription))
+
+    transaction.on_commit(_go)
+
+
+def notify_dispensed(prescription, long_term):
+    """
+    Every medicine is bought. Customer and pharmacy: refresh; the customer is
+    also told, with follow-up advice when a medicine was long-term.
+    """
+
+    def _go():
+        from .utils.prescription_flow import FOLLOW_UP_ADVICE
+
+        _send(user_group(prescription.owner_id), EVENT_DISPENSED, _for_owner(prescription))
+        for entity_id in _pharmacy_ids(prescription):
+            _send(entity_group(entity_id), EVENT_DISPENSED, _for_pharmacy(prescription, entity_id))
+        body = f"You've bought every medicine on {prescription.patient_name}'s prescription."
+        if long_term:
+            body += " " + FOLLOW_UP_ADVICE
+        _push(
+            prescription.owner,
+            "Prescription fully dispensed",
+            body,
+            {"type": EVENT_DISPENSED, "prescription": str(prescription.id), "long_term": bool(long_term)},
+        )
 
     transaction.on_commit(_go)
 

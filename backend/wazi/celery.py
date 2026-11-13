@@ -124,6 +124,13 @@ app.conf.beat_schedule = {
         "args": None,
     },
 
+    # ── Prescription refill reminders (7 / 3 / 1 day(s) before a partly-bought medicine runs out)
+    "send-prescription-refill-reminders-daily": {
+        "task": "retailers.tasks.send_prescription_refill_reminders",
+        "schedule": crontab(hour=8, minute=0),
+        "args": None,
+    },
+
     # ── DeepRead AI Prescription Safety Net ────────────────────────
     "retry-pending-prescription-extractions": {
         "task": "retailers.tasks.retry_pending_prescription_extractions",

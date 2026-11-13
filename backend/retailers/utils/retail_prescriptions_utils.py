@@ -20,14 +20,17 @@ from .prescription_flow import (  # noqa: F401
     get_all_prescriptions,
     get_inventory_for_item as get_related_inventory_for_product,
     get_pharmacy_prescriptions as get_entity_retail_prescriptions,
+    get_wholesale_sources,
     mark_prescription_digitized,
     pay_quotation,
+    preview_checkout,
     remove_quote_line,
     remove_prescription_item as remove_retail_prescription_item,
     search_pharmacies,
     submit_quotation,
     update_prescription_item as update_retail_prescription_item,
 )
+from .prescription_schedule import confirm_administration, get_medication_schedule  # noqa: F401
 from payments.validators import payments_models_validators
 from core.constants import EntityType 
 
@@ -45,8 +48,12 @@ def make_prescription_order_payment(data,user):
     if not "payment_method" in data or data["payment_method"]=="":
         errors.append("Payment method is required")
         return errors,None
-    else: 
+    else:
         payment_method = payments_models_validators.validate_payment_method_exists(data["payment_method"])
+    # Remote prescription purchases are paid by mobile money only.
+    if not payment_method or payment_method.title != "MOBILE MONEY":
+        errors.append("Prescription purchases are paid by mobile money")
+        return errors, None
 
     if not "mobile_money_phone" in data or data["mobile_money_phone"]=="":
         errors.append("Mobile money phone number is required")

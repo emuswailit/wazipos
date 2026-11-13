@@ -1613,7 +1613,11 @@ KNOWN_ACTIONS = {
     "ForwardPrescriptionForQuotation",
     "PayPrescriptionQuotation",
     "SearchPharmacies",
+    "GetPrescriptionWholesaleSources",
     "RemovePrescriptionQuoteLine",
+    "PreviewPrescriptionCheckout",
+    "GetMedicationSchedule",
+    "ConfirmPrescriptionAdministration",
 }
 
 def _paginated_prescriptions_response(queryset, request):
@@ -1651,16 +1655,36 @@ def _prescription_flow_action(action, request):
     if action == "ForwardPrescriptionForQuotation":
         errors, prescription = retail_prescriptions_utils.forward_for_quotation(data, user)
         if prescription:
-            return _rx_ok("Prescription sent for quotation. The pharmacies have been notified.", prescription, request)
-        return custom_errors_response(1, "Prescription not forwarded", errors)
+            return _rx_ok("Prescription sent. The pharmacy has been notified.", prescription, request)
+        return custom_errors_response(1, "Prescription not sent", errors)
+    if action == "SearchPharmacies":
+        return custom_success_message(0, "Pharmacies retrieved", retail_prescriptions_utils.search_pharmacies(data, user), "pharmacies")
     if action == "PayPrescriptionQuotation":
         errors, order = retail_prescriptions_utils.pay_quotation(data, user)
         if order:
             serializer = serializers.CustomerOrdersSerializer(order, many=False, context={"request": request})
             return custom_success_message(0, "Payment started. Confirm the prompt on your phone.", serializer.data, "customer_order")
         return custom_errors_response(1, "Payment not started", errors)
-    if action == "SearchPharmacies":
-        return custom_success_message(0, "Pharmacies retrieved", retail_prescriptions_utils.search_pharmacies(data, user), "pharmacies")
+    if action == "PreviewPrescriptionCheckout":
+        errors, preview = retail_prescriptions_utils.preview_checkout(data, user)
+        if errors:
+            return custom_errors_response(1, "Checkout not priced", errors)
+        return custom_success_message(0, "Checkout priced", preview, "checkout")
+    if action == "GetMedicationSchedule":
+        errors, schedule = retail_prescriptions_utils.get_medication_schedule(data, user)
+        if errors:
+            return custom_errors_response(1, "Medication schedule not retrieved", errors)
+        return custom_success_message(0, "Medication schedule retrieved", schedule, "schedule")
+    if action == "ConfirmPrescriptionAdministration":
+        errors, result = retail_prescriptions_utils.confirm_administration(data, user)
+        if errors:
+            return custom_errors_response(1, "Dose not updated", errors)
+        return custom_success_message(0, "Dose updated", result, "result")
+    if action == "GetPrescriptionWholesaleSources":
+        errors, sources = retail_prescriptions_utils.get_wholesale_sources(data, user)
+        if errors:
+            return custom_errors_response(1, "Wholesale sources not retrieved", errors)
+        return custom_success_message(0, "Wholesale sources retrieved", sources, "items")
     if action == "RemovePrescriptionQuoteLine":
         item = models.PrescriptionItems.objects.filter(id=data.get("prescription_item")).first() if data.get("prescription_item") else None
         if not item:
@@ -1679,8 +1703,6 @@ ADMIN_PRESCRIPTION_ACTIONS = {
     "UpdateRetailPrescriptionItem",
     "RemoveRetailPrescriptionItem",
     "MarkPrescriptionDigitized",
-    "ForwardPrescriptionForQuotation",
-    "SearchPharmacies",
 }
 
 
@@ -1688,9 +1710,9 @@ ADMIN_PRESCRIPTION_ACTIONS = {
 @permission_classes([permissions.IsAdminUser])
 def adminRetailPrescriptionsAPIView(request):
     """
-    Admin prescriptions: list every user prescription, digitize it (preparation
-    and/or product only — admins have no inventory, so they never quote), and
-    forward it to pharmacies for quotation.
+    Admin prescriptions: list every user prescription and digitize it
+    (preparation and/or product only — admins have no inventory, so they never
+    quote). Only the prescription's owner can send it to a pharmacy (exactly one).
     """
     if not isinstance(request.data, dict):
         raise exceptions.ValidationError("Request body must be a JSON object.")
@@ -1698,7 +1720,7 @@ def adminRetailPrescriptionsAPIView(request):
     if action not in ADMIN_PRESCRIPTION_ACTIONS:
         raise exceptions.ValidationError(f"Action {action} is unknown")
     if request.data.get("retailer_receipt"):
-        return custom_errors_response(1, "Not saved", ["Admins can't quote: forward the prescription to pharmacies instead"])
+        return custom_errors_response(1, "Not saved", ["Admins can't quote: they have no inventory"])
 
     if action == "RetrieveAllPrescriptions":
         queryset = retail_prescriptions_utils.get_all_prescriptions(request.data, request.user)
@@ -2053,9 +2075,23 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
         destination_latitude = request.POST.get("destination_latitude", None)
         destination_longitude = request.POST.get("destination_longitude", None)
 
-        origin_point = None
-        if origin_latitude and origin_longitude:
-            origin_point = fromstr(f"POINT({origin_longitude} {origin_latitude})", srid=4326)
+        # The uploader's location is required: if the pharmacy offers delivery,
+        # it prices intracity shipping from its own location to this point.
+        try:
+            lat, lng = float(origin_latitude), float(origin_longitude)
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response(
+                data={
+                    "response_code": 1,
+                    "response_message": "Retail prescription not created",
+                    "errors": ["Your location is required. Turn on location services and try again."],
+                    "status": status.HTTP_200_OK,
+                },
+                status=status.HTTP_200_OK,
+            )
+        origin_point = fromstr(f"POINT({lng} {lat})", srid=4326)
 
         destination_point = None
         if destination_latitude and destination_longitude:
@@ -2076,7 +2112,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 )
 
         # Choosing a pharmacy is optional: without one the system / an admin
-        # digitizes the prescription and forwards it to pharmacies for quotation.
+        # digitizes the prescription and the owner then sends it to ONE pharmacy.
         pharmacy_id = request.POST.get("entity", None)
         retailer = validate_entity(pharmacy_id) if pharmacy_id else None
 
@@ -2168,7 +2204,7 @@ class RetailPrescriptionsCreateAPIView(generics.GenericAPIView):
                 item = serializer.instance
                 if retailer:
                     models.PrescriptionQuotations.objects.get_or_create(
-                        prescription=item, entity=retailer, defaults={"requested_by": request.user}
+                        prescription=item, entity=retailer, parent=None, defaults={"requested_by": request.user}
                     )
 
                 saved_images = []

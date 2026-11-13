@@ -521,3 +521,11 @@ def retry_pending_prescription_extractions():
             
     logger.info(f"Sweeper found and triggered {count} pending prescription extractions.")
     return f"Triggered {count} tasks"
+
+
+@app.task
+def send_prescription_refill_reminders():
+    """Daily: push "running out in 7 / 3 / 1 day(s)" for partly-bought prescription medicines."""
+    from retailers.utils.prescription_schedule import send_refill_reminders
+
+    return send_refill_reminders()
