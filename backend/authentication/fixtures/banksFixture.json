@@ -1,0 +1,794 @@
+[
+  {
+    "model": "authentication.Entities",
+    "pk": "01a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
+    "fields": {
+      "title": "Kenya Commercial Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "01",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "02b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
+    "fields": {
+      "title": "Standard Chartered Bank Kenya Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "02",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "03c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e",
+    "fields": {
+      "title": "Absa Bank Kenya Plc",
+      "categories": [],
+      "phone": "",
+      "bank_code": "03",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "04d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f",
+    "fields": {
+      "title": "Bank of India",
+      "categories": [],
+      "phone": "",
+      "bank_code": "05",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "05e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a",
+    "fields": {
+      "title": "Bank of Baroda(Kenya Ltd)",
+      "categories": [],
+      "phone": "",
+      "bank_code": "06",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "06f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a0b",
+    "fields": {
+      "title": "NCBA Bank Kenya Plc",
+      "categories": [],
+      "phone": "",
+      "bank_code": "07",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "07a8b9c0-d1e2-4f3a-4b5c-6d7e8f9a0b1c",
+    "fields": {
+      "title": "Central Bank Of Kenya",
+      "categories": [],
+      "phone": "",
+      "bank_code": "09",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "08b9c0d1-e2f3-4a4b-5c6d-7e8f9a0b1c2d",
+    "fields": {
+      "title": "Prime Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "10",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "09c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d3e",
+    "fields": {
+      "title": "Co-operative Bank of Kenya Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "11",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "10d1e2f3-a4b5-4c6d-7e8f-9a0b1c2d3e4f",
+    "fields": {
+      "title": "National Bank Of Kenya",
+      "categories": [],
+      "phone": "",
+      "bank_code": "12",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "11e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f5a",
+    "fields": {
+      "title": "M-Oriental Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "14",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "12f3a4b5-c6d7-4e8f-9a0b-1c2d3e4f5a6b",
+    "fields": {
+      "title": "CITI BANK N A",
+      "categories": [],
+      "phone": "",
+      "bank_code": "16",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "13a4b5c6-d7e8-4f9a-0b1c-2d3e4f5a6b7c",
+    "fields": {
+      "title": "Habib Bank AG Zurich",
+      "categories": [],
+      "phone": "",
+      "bank_code": "17",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "14b5c6d7-e8f9-4a0b-1c2d-3e4f5a6b7c8d",
+    "fields": {
+      "title": "Middle East Bank Kenya Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "18",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "15c6d7e8-f9a0-4b1c-2d3e-4f5a6b7c8d9e",
+    "fields": {
+      "title": "Bank of Africa Kenya Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "19",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "16d7e8f9-a0b1-4c2d-3e4f-5a6b7c8d9e0f",
+    "fields": {
+      "title": "Consolidated Bank of Kenya Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "23",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "17e8f9a0-b1c2-4d3e-4f5a-6b7c8d9e0f1a",
+    "fields": {
+      "title": "Credit Bank PLC",
+      "categories": [],
+      "phone": "",
+      "bank_code": "25",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "18f9a0b1-c2d3-4e4f-5a6b-7c8d9e0f1a2b",
+    "fields": {
+      "title": "Access Bank Kenya PLC",
+      "categories": [],
+      "phone": "",
+      "bank_code": "26",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "19a0b1c2-d3e4-4f5a-6b7c-8d9e0f1a2b3c",
+    "fields": {
+      "title": "Stanbic Bank Plc",
+      "categories": [],
+      "phone": "",
+      "bank_code": "31",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "20b1c2d3-e4f5-4a6b-7c8d-9e0f1a2b3c4d",
+    "fields": {
+      "title": "African Banking Corporation Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "35",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "21c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e",
+    "fields": {
+      "title": "ECO Bank Kenya LTD",
+      "categories": [],
+      "phone": "",
+      "bank_code": "43",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "22d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f",
+    "fields": {
+      "title": "Spire Bank",
+      "categories": [],
+      "phone": "",
+      "bank_code": "49",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "23e4f5a6-b7c8-4d9e-0f1a-2b3c4d5e6f7a",
+    "fields": {
+      "title": "Paramount Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "50",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "24f5a6b7-c8d9-4e0f-1a2b-3c4d5e6f7a8b",
+    "fields": {
+      "title": "Kingdom Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "51",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "25a6b7c8-d9e0-4f1a-2b3c-4d5e6f7a8b9c",
+    "fields": {
+      "title": "Guaranty Trust Bank ( Kenya) Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "53",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "26b7c8d9-e0f1-4a2b-3c4d-5e6f7a8b9c0d",
+    "fields": {
+      "title": "Victoria Commercial Bank",
+      "categories": [],
+      "phone": "",
+      "bank_code": "54",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "27c8d9e0-f1a2-4b3c-4d5e-6f7a8b9c0d1e",
+    "fields": {
+      "title": "Guardian Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "55",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "28d9e0f1-a2b3-4c4d-5e6f-7a8b9c0d1e2f",
+    "fields": {
+      "title": "I&M BANK (KENYA) LTD",
+      "categories": [],
+      "phone": "",
+      "bank_code": "57",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "29e0f1a2-b3c4-4d5e-6f7a-8b9c0d1e2f3a",
+    "fields": {
+      "title": "Development Bank of Kenya Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "59",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "30f1a2b3-c4d5-4e6f-7a8b-9c0d1e2f3a4b",
+    "fields": {
+      "title": "State Bank of Mauritius Kenya",
+      "categories": [],
+      "phone": "",
+      "bank_code": "60",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "31a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d",
+    "fields": {
+      "title": "Housing Finance Bank",
+      "categories": [],
+      "phone": "",
+      "bank_code": "61",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "32b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6e",
+    "fields": {
+      "title": "Kenya Post Office Savings Bank",
+      "categories": [],
+      "phone": "",
+      "bank_code": "62",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "33c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7f",
+    "fields": {
+      "title": "Diamond Trust Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "63",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "34d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e80",
+    "fields": {
+      "title": "Mayfair CIB Bank",
+      "categories": [],
+      "phone": "",
+      "bank_code": "65",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "35e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f91",
+    "fields": {
+      "title": "Sidian Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "66",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "36f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a02",
+    "fields": {
+      "title": "Equity Bank Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "68",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "37a8b9c0-d1e2-4f3a-4b5c-6d7e8f9a0b13",
+    "fields": {
+      "title": "Family Bank Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "70",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "38b9c0d1-e2f3-4a4b-5c6d-7e8f9a0b1c24",
+    "fields": {
+      "title": "Gulf African Bank Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "72",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "39c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d35",
+    "fields": {
+      "title": "Premier Bank Kenya Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "74",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "40d1e2f3-a4b5-4c6d-7e8f-9a0b1c2d3e46",
+    "fields": {
+      "title": "DIB Bank Kenya Limited",
+      "categories": [],
+      "phone": "",
+      "bank_code": "75",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "41e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f57",
+    "fields": {
+      "title": "UBA Kenya Bank Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "76",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "42f3a4b5-c6d7-4e8f-9a0b-1c2d3e4f5a68",
+    "fields": {
+      "title": "Kenya Women Microfinance Bank",
+      "categories": [],
+      "phone": "",
+      "bank_code": "78",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "43a4b5c6-d7e8-4f9a-0b1c-2d3e4f5a6b79",
+    "fields": {
+      "title": "Faulu Microfinance Bank Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "79",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  },
+  {
+    "model": "authentication.Entities",
+    "pk": "44b5c6d7-e8f9-4a0b-1c2d-3e4f5a6b7c80",
+    "fields": {
+      "title": "Caritas Microfinance Bank Ltd",
+      "categories": [],
+      "phone": "",
+      "bank_code": "80",
+      "road": "",
+      "building": "",
+      "entity_type": "Bank",
+      "town": "",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "",
+      "created": "2026-11-14 00:00:00",
+      "updated": "2026-11-14 00:00:00"
+    }
+  }
+]

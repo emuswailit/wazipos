@@ -637,7 +637,10 @@ from entitylocations.models import Locations
 
 # ... (Keep your other imports for CategoriesSerializer, EntityImagesSerializer, etc.)
 
-class EntitySerializer(serializers.ModelSerializer):
+# Used only for UsersSerializer.favorite_entities (evaluated at import, before the
+# main EntitySerializer further down exists). Renamed from a duplicate
+# "EntitySerializer" so the two can't be confused; output is unchanged.
+class FavoriteEntitySerializer(serializers.ModelSerializer):
     categories_array = serializers.SerializerMethodField(read_only=True)
     country_title = serializers.SerializerMethodField()
     county_title = serializers.SerializerMethodField()
@@ -1608,7 +1611,7 @@ class GenericUserSerializer(serializers.ModelSerializer):
 class UsersSerializer(serializers.ModelSerializer):
     images = UserImageSerializer(many=True, read_only=True)
     documents = UserDocumentsSerializer(many=True, read_only=True)
-    favorite_entities = EntitySerializer(many=True, read_only=True)
+    favorite_entities = FavoriteEntitySerializer(many=True, read_only=True)
     password = serializers.CharField(style={"input_type": "password"}, write_only=True)
     # tokens = serializers.SerializerMethodField()
     documents_verified = serializers.SerializerMethodField(read_only=True)
@@ -2829,3 +2832,32 @@ class CollectionPointSerializer(serializers.ModelSerializer):
         if obj.location:
             return obj.location.x  # In SRID 4326, X is Longitude
         return None
+
+# ---------------------------------------------------------------------------
+# Banks (entities of type "Bank") with their branches — GetBanks.
+# ---------------------------------------------------------------------------
+
+class BankBranchSerializer(serializers.ModelSerializer):
+    """A bank branch (authentication.Branches) as listed under its bank."""
+
+    class Meta:
+        model = models.Branches
+        fields = ("id", "title", "branch_code", "is_active", "is_verified")
+
+
+class BankSerializer(EntitySerializer):
+    """
+    EntitySerializer plus the bank's branches. The view prefetches the
+    active branches into `active_branches` (one query for all banks).
+    """
+
+    branches = serializers.SerializerMethodField(read_only=True)
+
+    class Meta(EntitySerializer.Meta):
+        fields = EntitySerializer.Meta.fields + ["branches"]
+
+    def get_branches(self, obj):
+        branches = getattr(obj, "active_branches", None)
+        if branches is None:
+            branches = obj.branch_entity.filter(is_active="true").order_by("title")
+        return BankBranchSerializer(branches, many=True).data

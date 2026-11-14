@@ -166,6 +166,11 @@ class PayoutAccounts(EntityRelatedModel):
         ("WALLET", "WALLET"),
     )
     account_entity = models.ForeignKey(Entities,related_name="payout_receiving_entity", on_delete=models.CASCADE,null=True, blank=True)
+    # Bank accounts: the branch of `account_entity` (the bank) holding the account.
+    bank_branch = models.ForeignKey(
+        "authentication.Branches", related_name="payout_accounts",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
     # psp = models.ForeignKey(PaymentServicesProvider, on_delete=models.CASCADE)
     # psp_branch = models.ForeignKey(
     #     PaymentServicesProviderBranch, on_delete=models.CASCADE, null=True, blank=True

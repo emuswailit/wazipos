@@ -21,7 +21,7 @@
 from django.db import transaction
 from django.db.models import Q
 
-from authentication.models import Entities
+from authentication.models import Branches, Entities
 from payments.models import PayoutAccounts
 
 ACCOUNT_TYPES = {choice for choice, _ in PayoutAccounts.ACCOUNT_TYPE}
@@ -30,7 +30,7 @@ NEEDS_BUSINESS_NUMBER = {"PAYBILL"}
 
 TRUE_VALUES = {"true", "1", "yes", "on"}
 # Changing any of these changes where the money goes.
-DESTINATION_FIELDS = ("account_type", "account_number", "business_number", "account_code")
+DESTINATION_FIELDS = ("account_type", "account_number", "business_number", "account_code", "account_entity", "bank_branch")
 
 
 def is_platform_admin(user):
@@ -58,7 +58,7 @@ def _clean(value):
 def admin_list_payout_accounts(data, user):
     qs = (
         PayoutAccounts.objects
-        .select_related("entity", "owner", "verified_by", "account_entity")
+        .select_related("entity", "owner", "verified_by", "account_entity", "bank_branch")
         .order_by("-created")
     )
     if not is_platform_admin(user):
@@ -136,7 +136,33 @@ def _validate(details, instance=None):
         errors.append("Business (paybill) number is required for a paybill account")
     fields["business_number"] = business_number
 
-    fields["account_code"] = pick("account_code")
+    # Bank accounts: the bank is picked (an Entities row of type "Bank") and
+    # its bank_code is the account code, so the code can't be mistyped.
+    if account_type == "BANK":
+        bank_id = _clean(details.get("account_entity")) if "account_entity" in details else (
+            str(instance.account_entity_id) if instance and instance.account_entity_id else None
+        )
+        bank = Entities.objects.filter(id=bank_id, entity_type="Bank").first() if bank_id else None
+        if not bank:
+            errors.append("Pick the bank")
+        elif not bank.bank_code:
+            errors.append(f"{bank.title} has no bank code set; add it on the bank's entity first")
+        fields["account_entity"] = bank
+        fields["account_code"] = bank.bank_code if bank else None
+
+        branch_id = _clean(details.get("bank_branch")) if "bank_branch" in details else (
+            str(instance.bank_branch_id) if instance and instance.bank_branch_id else None
+        )
+        branch = None
+        if bank:
+            branch = Branches.objects.filter(id=branch_id, entity=bank).first() if branch_id else None
+            if not branch:
+                errors.append(f"Pick the {bank.title} branch that holds the account")
+        fields["bank_branch"] = branch
+    else:
+        fields["account_entity"] = None
+        fields["bank_branch"] = None
+        fields["account_code"] = pick("account_code")
     fields["description"] = pick("description")
 
     if entity and account_number:

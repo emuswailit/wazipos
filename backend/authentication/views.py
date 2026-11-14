@@ -1553,6 +1553,38 @@ def entitiesAPIView(request):
             page, many=True, context={"request": request, "user": request.user}
         )
         return paginator.get_paginated_response(serializer.data)
+    elif request.data["action"] == "GetBanks":
+        """
+        Banks (entities of type "Bank") with their active branches, for
+        picking a bank and branch (e.g. bank payout accounts).
+        Optional: "search" (bank title or bank code), "page_size" (default 100).
+        """
+        from django.db.models import Prefetch, Q
+
+        from .serializers import BankSerializer
+
+        banks = models.Entities.objects.filter(entity_type="Bank")
+        search = str(request.data.get("search") or "").strip()
+        if search:
+            banks = banks.filter(Q(title__icontains=search) | Q(bank_code__icontains=search))
+        banks = banks.prefetch_related(
+            Prefetch(
+                "branch_entity",
+                queryset=models.Branches.objects.filter(is_active="true").order_by("title"),
+                to_attr="active_branches",
+            )
+        ).order_by("title")
+
+        paginator = PageNumberPagination()
+        try:
+            paginator.page_size = max(1, min(int(request.data.get("page_size", 100)), 500))
+        except (TypeError, ValueError):
+            paginator.page_size = 100
+        page = paginator.paginate_queryset(banks, request)
+        serializer = BankSerializer(
+            page, many=True, context={"request": request, "user": request.user}
+        )
+        return paginator.get_paginated_response(serializer.data)
     elif request.data["action"] == "GetAllPlans":
         """Get all payment plans"""
 

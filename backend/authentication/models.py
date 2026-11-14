@@ -973,12 +973,15 @@ class Entities(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        if self.title:
-            self.title = self.title.upper()
-        if not self.entity_code or self.entity_code=="":
-            self.entity_code = self.generate_entity_code()
+        # 🛑 Check for raw loaddata before generating codes
+        if not kwargs.get('raw', False):
+            if self.title:
+                self.title = self.title.upper()
+            if not self.entity_code or self.entity_code == "":
+                self.entity_code = self.generate_entity_code()
 
         super(Entities, self).save(*args, **kwargs)
+
 
     def __str__(self):
         return str(self.title)
@@ -1023,6 +1026,10 @@ from core.phone_number_utils import get_telco_by_phone_number
 
 @receiver(post_save, sender=Entities)
 def create_entity_system_user(sender, instance, created, **kwargs):
+    # 🛑 ADD THIS 2-LINE CHECK
+    if kwargs.get('raw', False):
+        return
+    
     if created:
         Users = get_user_model() # Safe here
         

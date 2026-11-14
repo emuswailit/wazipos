@@ -121,6 +121,9 @@ class PayoutAccountsSerializer(serializers.ModelSerializer):
     entity_title = serializers.SerializerMethodField(read_only=True)
     owner_title = serializers.SerializerMethodField(read_only=True)
     verified_by_title = serializers.SerializerMethodField(read_only=True)
+    account_entity_title = serializers.SerializerMethodField(read_only=True)
+    bank_branch_title = serializers.SerializerMethodField(read_only=True)
+    bank_branch_code = serializers.SerializerMethodField(read_only=True)
     """Payout account serializer"""
 
     class Meta:
@@ -135,6 +138,7 @@ class PayoutAccountsSerializer(serializers.ModelSerializer):
                   "account_number","business_number","owner", 
                   "owner_title",
                   "description", "is_verified", "verified_by", "verified_by_title",
+                  "account_entity_title", "bank_branch", "bank_branch_title", "bank_branch_code",
                   "created", "updated")
         read_only_fields = ("id", "created", "updated")
   
@@ -145,6 +149,16 @@ class PayoutAccountsSerializer(serializers.ModelSerializer):
     def get_owner_title(self,obj):
         if obj.owner:
             return f"{obj.owner.first_name} {obj.owner.last_name}"
+
+    def get_bank_branch_title(self, obj):
+        return obj.bank_branch.title if obj.bank_branch else None
+
+    def get_bank_branch_code(self, obj):
+        return obj.bank_branch.branch_code if obj.bank_branch else None
+
+    def get_account_entity_title(self, obj):
+        """The bank, for bank payout accounts."""
+        return obj.account_entity.title if obj.account_entity else None
 
     def get_verified_by_title(self, obj):
         if obj.verified_by:
