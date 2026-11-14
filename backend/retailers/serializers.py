@@ -1081,14 +1081,16 @@ class RetailerIndentItemsSerializer(serializers.ModelSerializer):
             return obj.wholesale_receipt.product.title
         return ""
 
+    # The wholesaler is the receipt's owner (entity); received_from is the
+    # distributor the wholesaler bought the lot from.
     def get_wholesaler(self, obj):
-        if obj.wholesale_receipt and obj.wholesale_receipt.received_from:
-            return str(obj.wholesale_receipt.received_from.id)
+        if obj.wholesale_receipt and obj.wholesale_receipt.entity_id:
+            return str(obj.wholesale_receipt.entity_id)
         return None
 
     def get_wholesaler_title(self, obj):
-        if obj.wholesale_receipt and obj.wholesale_receipt.received_from:
-            return obj.wholesale_receipt.received_from.title
+        if obj.wholesale_receipt and obj.wholesale_receipt.entity:
+            return obj.wholesale_receipt.entity.title
         return ""
 
     def get_manufacture_date(self, obj):

@@ -1081,16 +1081,17 @@ class RetailerIndentItem(EntityRelatedModel):
 
     @property
     def wholesaler_title(self):
+        # The receipt's owner is the wholesaler (received_from is its distributor).
         r = self.wholesale_receipt
-        if r and r.received_from:
-            return r.received_from.title
+        if r and r.entity:
+            return r.entity.title
         return ""
 
     @property
     def wholesaler(self):
         r = self.wholesale_receipt
-        if r and r.received_from:
-            return str(r.received_from.id)
+        if r and r.entity_id:
+            return str(r.entity_id)
         return None
 
     @property

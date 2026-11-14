@@ -2329,6 +2329,7 @@ def close_indent(data, user):
             "wholesale_receipt",
             "wholesale_receipt__product",
             "wholesale_receipt__received_from",
+            "wholesale_receipt__entity",
             "wholesaler_price_discount",
             "wholesaler_quantity_discount",
         )
