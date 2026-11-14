@@ -2593,7 +2593,7 @@ def process_retailer_order_payment(
         try:
             retailer_order_payment = RetailerOrderPayments.objects.create(
                 payment_method=payment_method,
-                reference_number=reference_number,
+                pay_in_reference_number=reference_number,
                 status="SUCCESS",
                 amount=(
                     retailer_order.final_price_total
@@ -2620,87 +2620,43 @@ def process_retailer_order_payment(
             return errors, None
 
     elif payment_method.title == "MOBILE MONEY":
-        if not UserAccounts.objects.filter(
-            owner=retailer_order.wholesaler.administrator
-        ).exists():
-            errors.append("Entity has no collection account")
+        # Collected into the WaziPOS system till (like subscriptions) and owed
+        # onward to the wholesaler's active payout account once it succeeds.
+        # Status: RetailerOrderPaymentConsumer (live) + Celery reconcile.
+        if not mobile_money_phone:
+            errors.append("Enter the M-Pesa phone number to charge")
             return errors, None
 
-        administrator_account = UserAccounts.objects.filter(
-            owner=retailer_order.wholesaler.administrator
-        ).first()
+        from payments.utils.system_till import push_to_system_till
 
-        telco, formatted_phone_number = get_telco_by_phone_number(
-            mobile_money_phone
+        push_errors, result_json, telco = push_to_system_till(
+            reference_number, amount, mobile_money_phone,
+            description=f"Order {retailer_order.wholesaler.title}"[:60],
         )
+        if push_errors:
+            create_log("error", f"Retailer order STK push failed: {push_errors}")
+            return push_errors, None
 
-        payload = None
-
-        if telco == "MPESA":
-            payload = json.dumps({
-                "orderId": reference_number,
-                "amount": amount,
-                "callBackUrl": (
-                    "https://webhook.site/"
-                    "7911487f-fc9e-46b0-a812-3adfa008375c"
-                ),
-                "accountTo": administrator_account.account_number,
-                "description": "Merchant payment",
-                "modeOfPayment": "MOBILE_MONEY",
-                "provider": "Mpesa",
-                "data": {
-                    "phoneNumber": formatted_phone_number,
-                    "serviceType": "TOPUP",
-                },
-            })
-        elif telco == "AIRTELMONEY":
-            payload = json.dumps({
-                "orderId": reference_number,
-                "amount": amount,
-                "callBackUrl": (
-                    "https://webhook.site/"
-                    "94df1553-1b65-44c3-99ba-4ff3a32c554e"
-                ),
-                "accountTo": administrator_account.account_number,
-                "currency": "KES",
-                "description": "TOPUP",
-                "modeOfPayment": "MOBILE_MONEY",
-                "provider": "AIRTELMONEY",
-                "data": {
-                    "phoneNumber": formatted_phone_number,
-                    "serviceType": "TOPUP",
-                },
-            })
-
-        errors, result_json = jambopay_mobile_checkout(payload)
-        if result_json:
-            create_log("error", f"Errors at payment 2:{errors}")
-            retailer_order_payment = RetailerOrderPayments.objects.create(
-                payment_method=payment_method,
-                reference_number=reference_number,
-                status="INITIATED",
-                amount=float(
-                    retailer_order.final_price_total
-                    + retailer_order.shipping_amount
-                ),
-                entity=retailer_order.retailer,
-                currency="KES",
-                owner=user,
-                retailer_order=retailer_order,
-                psp_reference_number=result_json["ref"],
-                telco=telco,
-            )
-            use_reference_number(reference_number)
-            if retailer_order_payment:
-                retailer_order.payment = retailer_order_payment
-                retailer_order.save()
-                return [], retailer_order
-
-            errors.append("Customer order payment not created")
-            return errors, None
-
-        create_log("error", f"Errors at payment:{errors}")
-        return errors, None
+        retailer_order_payment = RetailerOrderPayments.objects.create(
+            payment_method=payment_method,
+            pay_in_reference_number=reference_number,
+            psp_reference_number=result_json["ref"],
+            status="PENDING",
+            description="Waiting for PIN entry.",
+            amount=amount,
+            entity=retailer_order.retailer,
+            currency="KES",
+            telco=telco or "",
+            owner=user,
+            retailer_order=retailer_order,
+            is_paid="false",
+            is_settled="false",
+        )
+        use_reference_number(reference_number)
+        retailer_order.payment = retailer_order_payment
+        # Returned to the client so it can follow the payment live.
+        retailer_order.payment_reference_number = reference_number
+        return [], retailer_order
 
     elif payment_method.title == "JAMBOPAY WALLET":
         if not UserAccounts.objects.filter(
@@ -2739,7 +2695,7 @@ def process_retailer_order_payment(
             if "statusCode" not in response and "ref" in response:
                 retailer_order_payment = RetailerOrderPayments.objects.create(
                     payment_method=payment_method,
-                    reference_number=reference_number,
+                    pay_in_reference_number=reference_number,
                     status="PENDING",
                     amount=float(
                         retailer_order.final_price_total

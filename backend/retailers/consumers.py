@@ -1456,6 +1456,82 @@ def retailer_requisitions_group(entity_id):
     return f"retailer-requisitions-{entity_id}"
 
 
+class RetailerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Live status of one requisition (retailer order) mobile-money payment,
+    by its pay-in reference. Same pattern as SubscriptionPaymentConsumer:
+    polls JamboPay every POLL_SECONDS until the payment leaves PENDING; the
+    Celery reconciler also pushes here (send_payment_status).
+    Only the paying retailer's users may follow a payment.
+    """
+
+    POLL_SECONDS = 5
+
+    async def connect(self):
+        self.user = self.scope.get("user")
+        self.group_name = None
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=self.scope.get("close_code") or 4002)
+            return
+
+        self.reference_number = self.scope["url_route"]["kwargs"]["reference_number"]
+        if not await self._may_follow():
+            await self.close(code=4003)
+            return
+
+        from wholesalers.services.retailer_order_payments import payment_group
+
+        self.group_name = payment_group(self.reference_number)
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        self.polling_task = asyncio.create_task(self.poll_loop())
+
+    async def disconnect(self, close_code):
+        task = getattr(self, "polling_task", None)
+        if task:
+            task.cancel()
+        if self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    @database_sync_to_async
+    def _may_follow(self):
+        from wholesalers.models import RetailerOrderPayments
+
+        payment = (
+            RetailerOrderPayments.objects.filter(pay_in_reference_number=self.reference_number)
+            .select_related("retailer_order")
+            .first()
+        )
+        return bool(payment) and payment.retailer_order.retailer_id == getattr(self.user, "entity_id", None)
+
+    @database_sync_to_async
+    def _refresh(self, poll):
+        from wholesalers.models import RetailerOrderPayments
+        from wholesalers.services.retailer_order_payments import payment_payload, refresh_payment
+
+        payment = (
+            refresh_payment(self.reference_number) if poll
+            else RetailerOrderPayments.objects.filter(pay_in_reference_number=self.reference_number).first()
+        )
+        return payment_payload(payment)
+
+    async def poll_loop(self):
+        try:
+            while True:
+                payload = await self._refresh(poll=True)
+                await self.send_json({"payment": payload})
+                if payload.get("status") != "PENDING":
+                    break
+                await asyncio.sleep(self.POLL_SECONDS)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            create_log("error", f"Retailer order payment socket error: {e}")
+
+    async def send_payment_status(self, event):
+        await self.send_json({"payment": await self._refresh(poll=False)})
+
+
 class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
     """
     Live retailer requisitions (RetailerOrders placed by the user's entity).

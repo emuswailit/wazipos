@@ -8,6 +8,7 @@ retailers_websocket_urlpatterns = [
     path("ws/retailers/inventory/", consumers.RetailerInventoryConsumer.as_asgi()),
     path("ws/retailers/indents/", consumers.RetailerIndentsConsumer.as_asgi()),
     path("ws/requisitions/retailers/", consumers.RetailerRequisitionsConsumer.as_asgi()),
+    path("ws/requisitions/payment/<str:reference_number>/", consumers.RetailerOrderPaymentConsumer.as_asgi()),
     path("ws/retailers/inventory/shopping/", consumers.ShopInventoryConsumer.as_asgi()),
     path("ws/retailers/discounts/", consumers.WholesaleDiscountsConsumer.as_asgi()),
     

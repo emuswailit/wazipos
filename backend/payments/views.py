@@ -13,7 +13,7 @@ from rest_framework.decorators import (
     renderer_classes,
 )
 from core import app_permissions
-from payments.utils import payment_utils, account_utils
+from payments.utils import payment_utils, account_utils, admin_payout_accounts
 from utils.logging import create_log
 
 from intergrations.jambopay import integration_utils
@@ -1110,6 +1110,31 @@ def adminsPaymentsAPIView(request):
         )
         return paginator.get_paginated_response(serializer.data)
 
+    # ---- Platform admin: payout accounts of every entity ----
+    elif request.data["action"] == "AdminGetPayoutAccounts":
+        payout_accounts = admin_payout_accounts.admin_list_payout_accounts(request.data, request.user)
+        serializer = serializers.PayoutAccountsSerializer(
+            payout_accounts, many=True, context={"request": request}
+        )
+        return custom_success_message(
+            0, "Payout accounts retrieved", serializer.data, "payout_accounts"
+        )
+    elif request.data["action"] in ("AdminCreatePayoutAccount", "AdminUpdatePayoutAccount"):
+        creating = request.data["action"] == "AdminCreatePayoutAccount"
+        handler = (
+            admin_payout_accounts.admin_create_payout_account if creating
+            else admin_payout_accounts.admin_update_payout_account
+        )
+        errors, payout_account = handler(request.data, request.user)
+        if payout_account:
+            serializer = serializers.PayoutAccountsSerializer(payout_account, many=False).data
+            return custom_success_message(
+                0, f"Payout account {'created' if creating else 'updated'}",
+                serializer, "payout_account",
+            )
+        return custom_errors_response(
+            1, f"Payout account not {'created' if creating else 'updated'}", errors
+        )
     elif request.data["action"] == "CheckJambopayProfileExistsByPhone":
         # exists = payment_utils.check_jambopay_profile_exists_by_phone( request.data)
         exists = check_user_jambopay_profile_by_phone(request.data["phone"])

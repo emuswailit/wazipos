@@ -146,6 +146,15 @@ app.conf.beat_schedule = {
         "args": None,
     },
 
+    # ── Requisition (Retailer Order) Payments Reconciliation ───────
+    # Mobile money collected into the system till; the socket handles
+    # live status, this catches the rest and expires stale payments.
+    "reconcile-retailer-order-payments": {
+        "task": "wholesalers.tasks.reconcile_retailer_order_payments",
+        "schedule": 60.0,
+        "args": None,
+    },
+
     # ── Customer Order Payments Reconciliation ─────────────────────
     # 🟢 FIXED: Changed from 5.0s to 60.0s. 
     # The WebSocket handles real-time (5s) for active users.

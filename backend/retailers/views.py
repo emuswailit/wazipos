@@ -1038,12 +1038,17 @@ def customerOrdersStaffAPIView(request):
             request.data, request.user
         )
         if retailer_order:
-            serializer = RetailerOrdersSerializer(
+            data = dict(RetailerOrdersSerializer(
                 retailer_order, many=False, context={"request": request}
+            ).data)
+            # Mobile money: the client follows this on
+            # ws/requisitions/payment/<ref>/ (RetailerOrderPaymentConsumer).
+            data["payment_reference_number"] = getattr(
+                retailer_order, "payment_reference_number", None
             )
             return custom_success_message(
                 0, "Retailer order payment made successfully",
-                serializer.data, "retailer_order",
+                data, "retailer_order",
             )
         if errors:
             return custom_errors_response(

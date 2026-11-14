@@ -33,6 +33,19 @@ def get_non_cash_today_wholesale_order_payments():
 
     return qs
 
+@shared_task
+def reconcile_retailer_order_payments():
+    """
+    Every minute: settle requisition mobile-money payments (collected into the
+    system till) that the live socket missed, and expire abandoned ones.
+    See wholesalers/services/retailer_order_payments.py.
+    """
+    from wholesalers.services.retailer_order_payments import reconcile_pending
+
+    return reconcile_pending()
+
+
+# Superseded by reconcile_retailer_order_payments (kept unscheduled).
 #@app.task
 def check_retailer_order_mobile_money_payment_status():
     food_order_mobile_money_payments =get_non_cash_today_wholesale_order_payments()

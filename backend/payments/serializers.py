@@ -120,6 +120,7 @@ class EntityPSPCollectionAccountSerializer(serializers.ModelSerializer):
 class PayoutAccountsSerializer(serializers.ModelSerializer):
     entity_title = serializers.SerializerMethodField(read_only=True)
     owner_title = serializers.SerializerMethodField(read_only=True)
+    verified_by_title = serializers.SerializerMethodField(read_only=True)
     """Payout account serializer"""
 
     class Meta:
@@ -133,6 +134,7 @@ class PayoutAccountsSerializer(serializers.ModelSerializer):
                   "account_name",
                   "account_number","business_number","owner", 
                   "owner_title",
+                  "description", "is_verified", "verified_by", "verified_by_title",
                   "created", "updated")
         read_only_fields = ("id", "created", "updated")
   
@@ -143,6 +145,11 @@ class PayoutAccountsSerializer(serializers.ModelSerializer):
     def get_owner_title(self,obj):
         if obj.owner:
             return f"{obj.owner.first_name} {obj.owner.last_name}"
+
+    def get_verified_by_title(self, obj):
+        if obj.verified_by:
+            return f"{obj.verified_by.first_name} {obj.verified_by.last_name}"
+        return None
             
 
 class PriceDiscountsSerializer(serializers.ModelSerializer):
