@@ -492,12 +492,10 @@ from django.core.serializers.json import DjangoJSONEncoder
 # from decouple import config
 
 
-class UUIDEncoder(json.JSONEncoder):
-    def default(self, obj):
-        import uuid
-        if isinstance(obj, uuid.UUID):
-            return obj.hex
-        return json.JSONEncoder.default(self, obj)
+# NOTE: UUIDEncoder comes from utils.UUIDEncoder (imported above). A local
+# UUID-only copy used to sit here and shadow it for every consumer below,
+# so payloads with Decimal / date values (retailer requisitions) crashed the
+# socket with close code 1011.
 
 
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
