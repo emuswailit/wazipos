@@ -1,9 +1,15 @@
 from django.urls import path
 from . import views
+from .discovery import wholesalerDiscoveryAPIView
 
 
 
 urlpatterns = [
+    path(
+        "discovery",
+        wholesalerDiscoveryAPIView,
+        name="wholesaler-discovery-apiview",
+    ),
     path(
         "receipts/staff",
         views.wholesalerReceiptsStaffAPIView,

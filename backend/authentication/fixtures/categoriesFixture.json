@@ -3,75 +3,329 @@
     "model": "authentication.Categories",
     "pk": "4cadab9a-a116-44b4-b25a-3aea006119f9",
     "fields": {
-      "title":"DRUGS",
-        "description":"Registered pharmacists",
-        "category_class":"PHARMACEUTICALS",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "DRUGS",
+      "description": "Registered pharmacists",
+      "category_class": "PHARMACEUTICALS",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
-  }, {
+  },
+  {
     "model": "authentication.Categories",
     "pk": "a5e4e134-e665-456b-bf25-5c3016b63691",
     "fields": {
-      "title":"DEFAULT",
-        "description":"Mobi",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "DEFAULT",
+      "description": "Mobi",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
   },
-
   {
     "model": "authentication.Categories",
     "pk": "ba886ba9-e726-4518-aa25-ca5d9fc36ebd",
     "fields": {
-        "title":"WINES AND SPIRITS",
-        "category_class":"ALCOHOL",
-        "description":"Dealers in wines and spirits",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "WINES AND SPIRITS",
+      "category_class": "ALCOHOL",
+      "description": "Dealers in wines and spirits",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
   },
   {
     "model": "authentication.Categories",
     "pk": "8c9fb75d-b617-4036-bf99-8c291970331e",
     "fields": {
-        "title":"Mobile Phone & Accesories",
-        "category_class":"TELECOMMUNICATION",
-        "description":"Dealers in wines and spirits",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "Mobile Phone & Accesories",
+      "category_class": "TELECOMMUNICATION",
+      "description": "Dealers in wines and spirits",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
-  },{
+  },
+  {
     "model": "authentication.Categories",
     "pk": "51fef43b-c4dd-40ff-a322-dd81221ff42f",
     "fields": {
-        "title":"Food and beverages",
-        "category_class":"FMCG",
-        "description":"Food and beverages",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "Food and beverages",
+      "category_class": "FMCG",
+      "description": "Packaged and ambient food and beverages (pantry, snacks, drinks)",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
-  },{
+  },
+  {
     "model": "authentication.Categories",
     "pk": "aa755d80-157e-4967-bcd6-7da17c33d354",
     "fields": {
-        "title":"Personal care and hygiene products",
-        "category_class":"HYGIENE",
-        "description":"Personal care and hygiene products",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "Personal care and hygiene products",
+      "category_class": "HYGIENE",
+      "description": "Personal care and hygiene products",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
-  },{
+  },
+  {
     "model": "authentication.Categories",
     "pk": "0b076092-449a-4441-b996-b94436f79f74",
     "fields": {
-        "title":"Household cleaning and care",
-        "category_class":"FMCG",
-        "description":"Household cleaning and care",
-        "created":"2021-11-28",
-        "updated":"2021-11-28" 
+      "title": "Household cleaning and care",
+      "category_class": "FMCG",
+      "description": "Household cleaning and care",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "7e3a9c2f-1b4d-4e8a-9c5f-2d6b8a0c1e3f",
+    "fields": {
+      "title": "Fresh produce",
+      "category_class": "GROCERY",
+      "description": "Fresh fruits, vegetables, herbs, roots and tubers",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "9d2f4a6b-8c1e-4f3a-b7d9-0e2c4a6b8d1f",
+    "fields": {
+      "title": "Dairy and eggs",
+      "category_class": "GROCERY",
+      "description": "Fresh milk, yoghurt, cheese, butter, cream and eggs",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "3c5e7a9b-2d4f-4a6c-8e1b-5d7f9a2c4e6b",
+    "fields": {
+      "title": "Meat, poultry and seafood",
+      "category_class": "GROCERY",
+      "description": "Fresh and chilled meat, poultry, fish and seafood",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "6b8d0f2a-4c6e-4a8b-9d1f-3b5d7f9a2c4e",
+    "fields": {
+      "title": "Bakery",
+      "category_class": "GROCERY",
+      "description": "Bread, cakes, pastries and fresh bakery",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "2e4a6c8b-0d2f-4b6a-8c1e-4a6c8b0d2f4a",
+    "fields": {
+      "title": "Deli and prepared foods",
+      "category_class": "GROCERY",
+      "description": "Deli meats, ready-to-eat and prepared foods",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "8f1b3d5a-7c9e-4f2b-9a4c-6e8f1b3d5a7c",
+    "fields": {
+      "title": "Frozen foods",
+      "category_class": "GROCERY",
+      "description": "Frozen vegetables, fruits, meat, meals and ice cream",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "1a3c5e7b-9d2f-4a6c-8b0d-2f4a6c8b0d2f",
+    "fields": {
+      "title": "Paper and disposables",
+      "category_class": "FMCG",
+      "description": "Tissue paper, toilet paper, wraps and foils",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "5c7e9a1b-3d5f-4a7c-9e2b-4d6f8a1c3e5b",
+    "fields": {
+      "title": "Baby care",
+      "category_class": "FMCG",
+      "description": "Diapers, baby food, formula and baby care",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "4d6f8a0c-2e4b-4a6d-8f1c-3e5b7d9f0a2c",
+    "fields": {
+      "title": "Pet care",
+      "category_class": "FMCG",
+      "description": "Pet food and pet accessories",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "9e1c3a5d-7f2b-4c8a-9d0e-1f3b5c7a9d2e",
+    "fields": {
+      "title": "Over-the-counter medicines",
+      "category_class": "PHARMACEUTICALS",
+      "description": "Non-prescription medicines: analgesics, cough and cold, antacids, laxatives, ORS",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "0f2d4b6a-8c1e-4a3f-9b5d-7e9c1a3b5d7f",
+    "fields": {
+      "title": "Medical supplies and equipment",
+      "category_class": "PHARMACEUTICALS",
+      "description": "Thermometers, BP monitors, glucometers, syringes, gloves and masks, orthopedic supports",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "7a9c1e3f-5b7d-4a9c-8e0f-2a4c6e8b0d1f",
+    "fields": {
+      "title": "First aid",
+      "category_class": "PHARMACEUTICALS",
+      "description": "Bandages, dressings, antiseptics and first aid supplies",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "3b5d7f9a-1c3e-4a6b-8d2f-0e4a6c8b1d3f",
+    "fields": {
+      "title": "Vitamins and supplements",
+      "category_class": "PHARMACEUTICALS",
+      "description": "Vitamins, minerals, tonics, herbal and dietary supplements",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "8d0f2b4a-6c8e-4a1b-9f3d-5e7a9c1b3d5f",
+    "fields": {
+      "title": "Snacks",
+      "category_class": "FMCG",
+      "description": "Chips, crackers, cookies, nuts and impulse snacks",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "2f4a6c8e-0b2d-4a3c-8e1f-4a6c8e0b2d4f",
+    "fields": {
+      "title": "Soft drinks and juices",
+      "category_class": "FMCG",
+      "description": "Non-alcoholic beverages: sodas, fruit juices and mixers",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "6e8a0c2f-4b6d-4a8e-9c1f-3b5d7f9a1c3e",
+    "fields": {
+      "title": "Confectionery and chocolates",
+      "category_class": "FMCG",
+      "description": "Chocolates, candies, sweets, gums and chewing products",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "1c3e5a7b-9d0f-4a2c-8b4e-6a8c0e2b4d6f",
+    "fields": {
+      "title": "Tobacco and cigarettes",
+      "category_class": "FMCG",
+      "description": "Cigarettes, cigars and chewing tobacco",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "5a7c9e1b-3d4f-4a6c-8e0b-2d4f6a8c0e2b",
+    "fields": {
+      "title": "Office and school supplies",
+      "category_class": "FMCG",
+      "description": "Pens, pencils, paper, notebooks and school consumables",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "9b1d3f5a-7c9e-4a0b-8d2f-4a6c8e0b2d4f",
+    "fields": {
+      "title": "Home decor and furnishings",
+      "category_class": "FMCG",
+      "description": "Candles, air fresheners and frequently purchased home items",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "4c6e8a0b-2d4f-4a6c-8e1b-3d5f7a9c1e3b",
+    "fields": {
+      "title": "Car care",
+      "category_class": "FMCG",
+      "description": "Cleaning products, polishes, waxes, detailing and motor oil",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "7d9f1b3a-5c7e-4a2d-8b4f-6e8a0c2b4d6f",
+    "fields": {
+      "title": "Sporting goods and fitness",
+      "category_class": "FMCG",
+      "description": "Gym gear, fitness supplements, sports drinks and consumable equipment",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "0a2c4e6f-8b1d-4a3e-9c5f-7a9b1d3f5a7c",
+    "fields": {
+      "title": "Beauty and cosmetics",
+      "category_class": "FMCG",
+      "description": "Makeup, perfume, hair styling products and cosmetics",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
+    }
+  },
+  {
+    "model": "authentication.Categories",
+    "pk": "3e5a7c9b-1d3f-4a5c-8e0b-2d4f6a8c0e2b",
+    "fields": {
+      "title": "Prescription medicines",
+      "category_class": "PHARMACEUTICALS",
+      "description": "Physician-prescribed and regulated medicines",
+      "created": "2021-11-28",
+      "updated": "2021-11-28"
     }
   }
-
-  
 ]

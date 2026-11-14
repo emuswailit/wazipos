@@ -20,6 +20,7 @@ from authentication.models import (
     Agents,
     Cadres,
     Categories,
+    normalize_category_title,
     SubCategories,
     Entities,
     Roles,
@@ -700,9 +701,16 @@ def create_category(data, user):
     if "icon" in data["category_details"]:
         icon = data["category_details"]["icon"]
 
+    # Titles are stored uppercase, so "Cereals" and "CEREALS" are the same category.
+    title = normalize_category_title(data["category_details"].get("title") or "")
+    if not title:
+        raise exceptions.ValidationError("Category title is required")
+    if Categories.objects.filter(title=title).exists():
+        raise exceptions.ValidationError(f"Category {title} already exists")
+
     try:
         created = Categories.objects.create(
-            title=data["category_details"]["title"],
+            title=title,
             icon_category=icon_category,
             icon=icon,
             description=description,

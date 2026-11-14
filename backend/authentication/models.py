@@ -111,8 +111,41 @@ class TrueFalseOptions(models.TextChoices):
     FALSE = "false", _("false")
 
 
+def normalize_category_title(title):
+    """Category titles are stored trimmed and in UPPERCASE."""
+    return title.strip().upper() if isinstance(title, str) else title
+
+
+class CategoriesQuerySet(models.QuerySet):
+    """
+    Keeps titles uppercase on the bulk paths that skip Model.save():
+    bulk_create(), bulk_update() and queryset.update(title=...).
+    (Raw SQL and loaddata still bypass this; see migration 0011 for
+    normalising existing rows.)
+    """
+
+    def bulk_create(self, objs, *args, **kwargs):
+        objs = list(objs)
+        for obj in objs:
+            obj.title = normalize_category_title(obj.title)
+        return super().bulk_create(objs, *args, **kwargs)
+
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        objs = list(objs)
+        if "title" in fields:
+            for obj in objs:
+                obj.title = normalize_category_title(obj.title)
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
+    def update(self, **kwargs):
+        if "title" in kwargs:
+            kwargs["title"] = normalize_category_title(kwargs["title"])
+        return super().update(**kwargs)
+
+
 class Categories(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Always UPPERCASE (save(), CategoriesQuerySet and migration 0011).
     title = models.CharField(max_length=256, unique=True)
     category_class = models.CharField(max_length=50, choices=CATEGORY_TYPE)
     icon_category = models.CharField(max_length=56,null=True, blank=True)
@@ -121,12 +154,14 @@ class Categories(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+    objects = CategoriesQuerySet.as_manager()
+
     def __str__(self) -> str:
         return self.title
 
     def save(self, *args, **kwargs):
         if self.title:
-            self.title = self.title.upper()
+            self.title = normalize_category_title(self.title)
         if self.icon_category:
             self.icon_category = self.icon_category.upper()
         if self.icon:
