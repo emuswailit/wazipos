@@ -80,6 +80,9 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
     const { categories, loading: categoriesLoading } = useCategories();
     const searchUsersApi = useApi(usersApi.searchUsers);
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+    // Categories is the last section; its list opens upward over the sections
+    // above, so it must be on top while open (sections stack by zIndex).
+    const [categoriesOpen, setCategoriesOpen] = useState(false);
 
     const handleUserSearch = useCallback(
         (query: string) => {
@@ -312,7 +315,7 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                         ) : null}
 
                         {isRetailWholesale ? (
-                            <FormSection title="Categories" hint="What the shop sells — used in the shopper directory." zIndex={20}>
+                            <FormSection title="Categories" hint="What the shop sells — used in the shopper directory." zIndex={categoriesOpen ? 100 : 20}>
                                 <CustomMultiselectAutocompletePicker
                                     name="categories"
                                     label="Categories"
@@ -323,6 +326,7 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                                     placeholder="Select categories…"
                                     loadingPlaceholder="Loading categories…"
                                     noMatchText="No categories match."
+                                    onDropdownOpenChange={setCategoriesOpen}
                                 />
                             </FormSection>
                         ) : null}

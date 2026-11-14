@@ -21,9 +21,16 @@
 // Scrolling: the dropdown owns its own scroll. Nested scroll is
 // enabled so it works when the field lives inside a parent
 // ScrollView (e.g. a modal form).
+//
+// Placement: the dropdown is absolutely positioned, so it doesn't make
+// the parent ScrollView taller — near the bottom of a sheet (above its
+// action footer) it would be clipped out of sight. On focus the field
+// measures itself and opens the dropdown UPWARD when there isn't room
+// below but there is above.
 
 import { useField } from "formik";
 import {
+    useEffect,
     useMemo,
     useRef,
     useState,
@@ -35,8 +42,13 @@ import {
     ScrollView,
     Text,
     TextInput,
+    useWindowDimensions,
     View,
 } from "react-native";
+
+/** Room kept clear at the bottom (sheet action footers) and top (headers) when choosing a side. */
+const BOTTOM_RESERVE = 96;
+const TOP_RESERVE = 72;
 
 /* =========================================================
  * Types
@@ -76,6 +88,13 @@ interface Props {
         title: string,
         option: MultiselectOption
     ) => void;
+    /**
+     * Called when the dropdown opens / closes. The dropdown's zIndex only
+     * counts inside its own stacking context, so a parent section with a
+     * lower zIndex than its siblings should raise itself while open
+     * (otherwise an upward-opening list is drawn under those siblings).
+     */
+    onDropdownOpenChange?: (open: boolean) => void;
 }
 
 /* =========================================================
@@ -116,14 +135,25 @@ export default function CustomMultiselectAutocompletePicker({
     dropdownMaxHeight = DEFAULT_DROPDOWN_MAX_HEIGHT,
     onAfterSelect,
     onAfterRemove,
+    onDropdownOpenChange,
 }: Props) {
     const [field, meta, helpers] = useField<string[]>(name);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [search, setSearch] = useState("");
     const [isFocused, setIsFocused] = useState(false);
     const inputRef = useRef<TextInput>(null);
+    const containerRef = useRef<View>(null);
+    const [openUp, setOpenUp] = useState(false);
+    const { height: windowHeight } = useWindowDimensions();
     const blurTimeout = useRef<any>(null);
     const lastAddedId = useRef<string | null>(null);
+
+    // Tell the parent when the list opens / closes (see onDropdownOpenChange).
+    const openChangeRef = useRef(onDropdownOpenChange);
+    openChangeRef.current = onDropdownOpenChange;
+    useEffect(() => {
+        openChangeRef.current?.(dropdownOpen);
+    }, [dropdownOpen]);
 
     const selectedIds: string[] = Array.isArray(field.value)
         ? field.value
@@ -223,6 +253,12 @@ export default function CustomMultiselectAutocompletePicker({
             clearTimeout(blurTimeout.current);
             blurTimeout.current = null;
         }
+        // Open upward when the list wouldn't fit below (e.g. last field above a sheet footer).
+        containerRef.current?.measureInWindow((_x, y, _w, h) => {
+            const below = windowHeight - (y + h) - BOTTOM_RESERVE;
+            const above = y - TOP_RESERVE;
+            setOpenUp(below < dynamicMaxHeight && above > below);
+        });
         setDropdownOpen(true);
     };
 
@@ -232,6 +268,7 @@ export default function CustomMultiselectAutocompletePicker({
 
     return (
         <View
+            ref={containerRef}
             className="items-start w-full"
             style={{
                 position: "relative",
@@ -386,10 +423,11 @@ export default function CustomMultiselectAutocompletePicker({
                 <View
                     style={{
                         position: "absolute",
-                        top: "100%",
+                        ...(openUp
+                            ? { bottom: "100%", marginBottom: 4 }
+                            : { top: "100%", marginTop: 4 }),
                         left: 0,
                         right: 0,
-                        marginTop: 4,
                         backgroundColor: theme.panel,
                         borderColor: baseDelimiter,
                         borderWidth: 1,

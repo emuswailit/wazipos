@@ -156,8 +156,11 @@ def discover_wholesalers(data, user, request):
     page_size = _int(data, "page_size", DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE)
 
     distances = {}
+    # Adjacent-mode hints (page 1): why the list might be short or empty.
+    unlocated_count = None
+    nearest_km = None
     if mode == "adjacent":
-        located = (
+        located = list(
             Locations.objects.filter(entity__in=qs, point__isnull=False, point__distance_lte=(here, D(km=radius_km)))
             .annotate(distance=Distance("point", here))
             .order_by("distance")
@@ -169,6 +172,21 @@ def discover_wholesalers(data, user, request):
         page_ids = ordered_ids[(page - 1) * page_size: page * page_size]
         by_id = {e.id: e for e in qs.filter(id__in=page_ids)}
         entities = [by_id[i] for i in page_ids if i in by_id]
+        if page == 1:
+            # Wholesalers with no saved map point never show under "Near me".
+            unlocated_count = qs.exclude(
+                id__in=Locations.objects.filter(point__isnull=False).values("entity_id")
+            ).count()
+            if not total:
+                # Nearest located wholesaler outside the radius, if any.
+                nearest = (
+                    Locations.objects.filter(entity__in=qs, point__isnull=False)
+                    .annotate(distance=Distance("point", here))
+                    .order_by("distance")
+                    .values_list("distance", flat=True)
+                    .first()
+                )
+                nearest_km = round(nearest.km, 1) if nearest is not None else None
     else:
         qs = qs.order_by("title")
         total = qs.count()
@@ -249,6 +267,9 @@ def discover_wholesalers(data, user, request):
         "count": total,
         "has_more": page * page_size < total,
         "allowed_types": allowed,
+        # adjacent mode, page 1 only (else null):
+        "unlocated_count": unlocated_count,  # allowed wholesalers with no saved map location
+        "nearest_km": nearest_km,            # nearest located one, when none are within the radius
         "results": results,
     }, []
 
