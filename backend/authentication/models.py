@@ -120,8 +120,8 @@ class CategoriesQuerySet(models.QuerySet):
     """
     Keeps titles uppercase on the bulk paths that skip Model.save():
     bulk_create(), bulk_update() and queryset.update(title=...).
-    (Raw SQL and loaddata still bypass this; see migration 0011 for
-    normalising existing rows.)
+    (Raw SQL and loaddata still bypass this; run
+    `python manage.py uppercase_category_titles` to normalise existing rows.)
     """
 
     def bulk_create(self, objs, *args, **kwargs):
@@ -145,7 +145,8 @@ class CategoriesQuerySet(models.QuerySet):
 
 class Categories(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Always UPPERCASE (save(), CategoriesQuerySet and migration 0011).
+    # Always UPPERCASE (save(), CategoriesQuerySet, and the
+    # uppercase_category_titles command for existing rows).
     title = models.CharField(max_length=256, unique=True)
     category_class = models.CharField(max_length=50, choices=CATEGORY_TYPE)
     icon_category = models.CharField(max_length=56,null=True, blank=True)
