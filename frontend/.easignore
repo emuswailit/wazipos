@@ -1,0 +1,39 @@
+# What EAS Build leaves out of the upload (used instead of .gitignore).
+# Keep in step with .gitignore, plus large local folders the build never needs.
+
+# dependencies (EAS installs them)
+node_modules/
+
+# Expo
+.expo/
+web-build/
+expo-env.d.ts
+
+# web export (npx expo export --platform web)
+dist/
+
+# editor / agent worktrees: full copies of the project
+.kilo/
+
+# generated native folders (EAS runs prebuild)
+/ios
+/android
+.kotlin/
+
+# secrets and signing (EAS uses the credentials stored on Expo)
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+.env*.local
+
+# Metro / debug / OS
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.tsbuildinfo
