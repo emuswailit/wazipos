@@ -21,6 +21,7 @@ import * as XLSX from 'xlsx';
 
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
+import { printHtmlDocument } from '@/services/printHtml';
 
 /* =========================================================
  * Types
@@ -127,7 +128,9 @@ export async function exportToPdf(
     options: PdfExportOptions,
 ): Promise<{ uri?: string }> {
     if (Platform.OS === 'web') {
-        await Print.printAsync({ html: options.html });
+        // expo-print ignores the HTML on web and prints the whole app window;
+        // print the document alone (hidden iframe) — "Save as PDF" from the dialog.
+        await printHtmlDocument(options.html, { title: options.filename.replace(/\.pdf$/i, '') });
         return {};
     }
 
