@@ -1,315 +1,179 @@
 // components/wholesalers/productsRequests/WholesalerProductRequestsList.tsx
 //
-// Parent list — owns state, decides between mobile/web view.
-// Wholesale inventory is sourced from WholesalerReceiptsSyncContext
-// inside WholesaleInventoryPicker (via MakeOfferModal), so this
-// container does not pass receipts down.
-//
-// -------------------------------------------------------------------
-// ERROR PROPAGATION
-//
-// When the server rejects a response with a DRF envelope
-// (`{ response_code: 1, response_message: "...", errors: {...} }`),
-// the handler used to throw a plain `Error(response_message)`, which
-// dropped `errors.detail` — the only place the actual reason lives.
-//
-// The modal's `extractErrorMessage` walks `err.response.data.errors`
-// and `err.data.errors`. To let it, we attach the full server body
-// to the thrown error under both `response.data` and `data`.
-// -------------------------------------------------------------------
-
-import React, {
-    useCallback,
-    useMemo,
-    useState,
-} from 'react';
-import { useWindowDimensions } from 'react-native';
+// Products retailers are looking for: open requests a wholesaler can make an
+// offer on. Shared list kit: cards on phones, a table on wide screens.
+// Offline-first: requests come from RetailerProductRequestsSyncContext (saved
+// on this device, live updates when online). Making an offer needs a connection.
 
 import wholesalersApi from '@/api/wholesalersApi';
+import { useAlert } from '@/components/common/AlertProvider';
+import { AdminListView, formatDateTime, type AdminListConfig, type BadgeTone } from '@/components/common/listScreen';
 import { useRetailerProductRequestsSync } from '@/context/RetailerProductRequestsSyncContext';
-
-import type { RespondPayload } from './MakeOfferModal';
-import { WholesalerProductRequestsMobileView } from './WholesalerProductRequestsMobileView';
-import { WholesalerProductRequestsWebView } from './WholesalerProductRequestsWebView';
+import { useNetworkStatus } from '@/context/NetworkMonitorContext';
+import type { ProductRequestSummary } from '@/databases/types';
+import { usePaged } from '@/hooks/useCachedList';
 import { isServerOk } from '@/utils/serverResponse';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useWindowDimensions } from 'react-native';
 
-const LARGE_SCREEN_MIN_WIDTH = 900;
+import MakeOfferModal, { type RespondPayload } from './MakeOfferModal';
+import ViewRequestDetailsModal from './ViewRequestDetailsModal';
 
-/* =========================================================
- * Logging
- * ======================================================= */
+type Filter = 'ALL' | 'PUBLISHED' | 'ACKNOWLEDGED' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CANCELLED' | 'EXPIRED';
 
-const LOG_TAG = '[WholesalerProductRequests]';
-
-const log = (...args: any[]) => {
-    if (__DEV__) console.log(LOG_TAG, ...args);
+const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
+    PUBLISHED: { label: 'Open', tone: 'success' },
+    ACKNOWLEDGED: { label: 'Acknowledged', tone: 'info' },
+    PARTIALLY_FULFILLED: { label: 'Partly filled', tone: 'warning' },
+    FULFILLED: { label: 'Filled', tone: 'primary' },
+    CANCELLED: { label: 'Cancelled', tone: 'danger' },
+    EXPIRED: { label: 'Expired', tone: 'neutral' },
 };
-const warn = (...args: any[]) => {
-    if (__DEV__) console.warn(LOG_TAG, ...args);
-};
-const error = (...args: any[]) => {
-    if (__DEV__) console.error(LOG_TAG, ...args);
+const URGENCY: Record<string, BadgeTone> = { high: 'danger', critical: 'danger', medium: 'warning', low: 'info' };
+
+const statusOf = (r: ProductRequestSummary) => String(r.status ?? '').trim().toUpperCase();
+const canOffer = (r: ProductRequestSummary) => statusOf(r) === 'PUBLISHED';
+const products = (r: ProductRequestSummary) =>
+    (r.items_preview ?? (r as any).items ?? [])
+        .map((i: any) => i?.product_title)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(', ');
+const when = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
+
+const config: AdminListConfig<ProductRequestSummary> = {
+    title: 'Product requests',
+    noun: ['request', 'requests'],
+    icon: 'search-outline',
+    searchPlaceholder: 'Search retailer, product, reference…',
+    emptyTitle: 'No product requests',
+    emptyMessage: 'When retailers ask for products they can’t find, the requests appear here for you to offer on.',
+    keyOf: (r, i) => String(r.remote_id || r.draft_id || r.request_number || i),
+    titleOf: (r) => r.entity_title || 'Retailer',
+    subtitleOf: (r) => [r.request_number, products(r)].filter(Boolean).join(' · '),
+    avatarOf: () => ({ icon: 'search-outline' }),
+    badgesOf: (r) => {
+        const s = STATUS[statusOf(r)] ?? { label: r.status_display || r.status, tone: 'neutral' as BadgeTone };
+        const u = String(r.urgency ?? '').toLowerCase();
+        return [s, ...(u ? [{ label: r.urgency_display || u, tone: URGENCY[u] ?? 'info' }] : [])];
+    },
+    metaOf: (r) => (r.expires_at ? `Expires ${when(r.expires_at)}` : r.created ? when(r.created) : null),
+    metaIcon: 'time-outline',
+    metricOf: (r) => ({ value: `${r.fulfilled_line_count ?? 0}/${r.total_line_count ?? 0}`, label: 'lines filled' }),
+    primaryColumn: { label: 'Retailer', flex: 1.8 },
+    columns: [
+        { key: 'products', label: 'Products', flex: 2, render: (r) => products(r) || '—' },
+        { key: 'urgency', label: 'Urgency', flex: 0.8, render: (r) => r.urgency_display || r.urgency || '—' },
+        { key: 'lines', label: 'Filled', flex: 0.7, align: 'right', render: (r) => `${r.fulfilled_line_count ?? 0}/${r.total_line_count ?? 0}` },
+        { key: 'status', label: 'Status', flex: 1, render: (r) => STATUS[statusOf(r)]?.label ?? r.status_display ?? r.status },
+        { key: 'expires', label: 'Expires', flex: 1.2, render: (r) => when(r.expires_at) },
+    ],
 };
 
-/* =========================================================
- * Component
- * ======================================================= */
-
-const WholesalerProductRequestsList: React.FC = () => {
+export default function WholesalerProductRequestsList() {
+    const alert = useAlert();
     const { width } = useWindowDimensions();
-    const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
+    const { isOnline } = useNetworkStatus();
+    const { requests, isSyncing, isManualRefreshing, isLiveConnected, lastSyncedTime, dataSource, reconnectLiveSync } = useRetailerProductRequestsSync();
+    const rows = requests ?? [];
 
-    const {
-        requests,
-        isSyncing,
-        isManualRefreshing,
-        isLiveConnected,
-        lastSyncedTime,
-        dataSource,
-        reconnectLiveSync,
-    } = useRetailerProductRequestsSync();
+    const [query, setQuery] = useState('');
+    const [filter, setFilter] = useState<Filter>('ALL');
+    const [viewing, setViewing] = useState<ProductRequestSummary | null>(null);
+    const [offering, setOffering] = useState<ProductRequestSummary | null>(null);
+    const [submitting, setSubmitting] = useState(false);
 
-    /* ---- filters ---- */
-    const [entityQuery, setEntityQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('ALL');
-
-    /* ---- submit state ---- */
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    /* ---- derived ---- */
-    const entityOptions = useMemo(() => {
-        const s = new Set<string>();
-        requests.forEach(
-            (r) => r.entity_title && s.add(r.entity_title)
-        );
-        return Array.from(s).sort((a, b) =>
-            a.localeCompare(b)
-        );
-    }, [requests]);
-
-    const statusCounts = useMemo(() => {
-        const m: Record<string, number> = {
-            ALL: requests.length,
-        };
-        requests.forEach((r) => {
-            const k = String(r.status ?? '')
-                .trim()
-                .toUpperCase();
-            m[k] = (m[k] ?? 0) + 1;
-        });
-        return m;
-    }, [requests]);
+    const counts = useMemo(() => {
+        const c: Record<string, number> = { ALL: rows.length };
+        for (const r of rows) c[statusOf(r)] = (c[statusOf(r)] ?? 0) + 1;
+        return c;
+    }, [rows]);
 
     const filtered = useMemo(() => {
-        const q = entityQuery.trim().toLowerCase();
-        return requests.filter((r) => {
-            if (
-                statusFilter !== 'ALL' &&
-                String(r.status ?? '')
-                    .trim()
-                    .toUpperCase() !== statusFilter
-            )
-                return false;
-            if (
-                q &&
-                !(r.entity_title ?? '')
-                    .toLowerCase()
-                    .includes(q)
-            )
-                return false;
-            return true;
-        });
-    }, [requests, entityQuery, statusFilter]);
+        const q = query.trim().toLowerCase();
+        return rows
+            .filter((r) => filter === 'ALL' || statusOf(r) === filter)
+            .filter((r) => !q || `${r.entity_title} ${r.request_number} ${products(r)} ${r.note ?? ''}`.toLowerCase().includes(q))
+            .sort((a, b) => Number(canOffer(b)) - Number(canOffer(a)) || String(b.created).localeCompare(String(a.created)));
+    }, [rows, filter, query]);
+    const paged = usePaged(filtered, `${query}|${filter}`);
 
-    const hasActiveFilter =
-        statusFilter !== 'ALL' || entityQuery.trim() !== '';
+    const openOffer = (r: ProductRequestSummary) => {
+        if (!isOnline) return alert('You’re offline', 'Making an offer needs an internet connection. The requests are still shown from this device.');
+        setOffering(r);
+    };
 
-    /* ---- actions ---- */
-    const onRefresh = useCallback(() => {
-        log('manual refresh triggered');
-        void reconnectLiveSync();
+    const submitResponse = useCallback(async (payload: RespondPayload) => {
+        setSubmitting(true);
+        try {
+            const res: any = await wholesalersApi.wholesalerProductRequestsAction(payload);
+            if (!isServerOk(res, res?.data)) {
+                // The offer sheet reads the server's errors from err.response.data / err.data.
+                const body: any = res?.data ?? res ?? {};
+                const err: any = new Error(body?.response_message ?? 'Offer not sent');
+                err.response = { data: body };
+                err.data = body;
+                throw err;
+            }
+            void reconnectLiveSync();
+        } finally {
+            setSubmitting(false);
+        }
     }, [reconnectLiveSync]);
 
-    const clearAllFilters = useCallback(() => {
-        setEntityQuery('');
-        setStatusFilter('ALL');
-    }, []);
+    const sourceTone = !isOnline ? (rows.length ? 'cache' : 'none') : isLiveConnected || dataSource === 'server' ? 'server' : dataSource === 'cache' ? 'cache' : 'none';
+    const sourceLabel = !isOnline ? 'Offline · saved copy' : isLiveConnected ? 'Live sync' : isSyncing ? 'Syncing…' : dataSource === 'cache' ? 'Saved on this device' : 'Not synced';
 
-    /* ---- submit ---- */
-    const submitResponse = useCallback(
-        async (payload: RespondPayload): Promise<void> => {
-            setIsSubmitting(true);
-
-            log(
-                '========== RESPOND — REQUEST =========='
-            );
-            log('payload:', payload);
-            log(
-                'accepted_lines:',
-                payload.accepted_lines
-            );
-            log(
-                'rejected_lines:',
-                payload.rejected_lines
-            );
-            log('note:', payload.note);
-            log('request_id:', payload.request_id);
-            log(
-                'accepted count:',
-                payload.accepted_lines.length
-            );
-            log(
-                'rejected count:',
-                payload.rejected_lines.length
-            );
-
-            try {
-                const started = Date.now();
-
-                const res =
-                    await wholesalersApi.wholesalerProductRequestsAction(
-                        payload
-                    );
-
-                const elapsed = Date.now() - started;
-
-                log(
-                    '========== RESPOND — RESPONSE =========='
-                );
-                log('elapsed ms:', elapsed);
-                log('raw response:', res);
-                log('res?.ok:', res?.ok);
-                log('res?.status:', (res as any)?.status);
-                log('res?.data:', (res as any)?.data);
-                log(
-                    'res?.data?.response_code:',
-                    (res as any)?.data?.response_code
-                );
-                log(
-                    'res?.data?.response_message:',
-                    (res as any)?.data?.response_message
-                );
-                log('res?.error:', (res as any)?.error);
-
-                if (res && typeof res === 'object') {
-                    log(
-                        'response keys:',
-                        Object.keys(res)
-                    );
-                    if ((res as any).data) {
-                        log(
-                            'data keys:',
-                            Object.keys((res as any).data)
-                        );
-                    }
-                }
-
-                const ok = isServerOk(res, res?.data);
-
-                log('interpreted as ok:', ok);
-
-                if (!ok) {
-                    warn(
-                        'wholesalerProductRequestsAction rejected',
-                        res
-                    );
-
-                    // Forward the full server body on the thrown
-                    // error so the caller's error extraction can
-                    // read `errors.detail` (or per-field messages)
-                    // rather than just the generic response_message.
-                    //
-                    // The modal's `extractErrorMessage` looks under
-                    // both `err.response.data.errors` and
-                    // `err.data.errors`, so attach the body to both
-                    // shapes. Also keep the message string on
-                    // `Error.message` as a last-resort fallback.
-                    const body: any =
-                        (res as any)?.data ?? (res as any) ?? {};
-                    const err: any = new Error(
-                        body?.response_message ??
-                        'Response rejected'
-                    );
-                    err.response = { data: body };
-                    err.data = body;
-                    throw err;
-                }
-
-                log(
-                    '========== RESPOND — SUCCESS =========='
-                );
-                return;
-            } catch (e: any) {
-                error(
-                    '========== RESPOND — ERROR =========='
-                );
-                error('thrown:', e);
-                error('message:', e?.message);
-                error('name:', e?.name);
-                error('stack:', e?.stack);
-                if (e?.response) {
-                    error(
-                        'e.response.status:',
-                        e.response.status
-                    );
-                    error(
-                        'e.response.data:',
-                        e.response.data
-                    );
-                    error(
-                        'e.response.headers:',
-                        e.response.headers
-                    );
-                }
-                throw e;
-            } finally {
-                setIsSubmitting(false);
-            }
-        },
-        []
+    return (
+        <>
+            <AdminListView<ProductRequestSummary, Filter>
+                variant={width >= 900 ? 'web' : 'mobile'}
+                config={config}
+                query={query}
+                setQuery={setQuery}
+                onRefresh={() => void reconnectLiveSync()}
+                refreshing={isManualRefreshing}
+                sourceLabel={sourceLabel}
+                sourceTone={sourceTone as any}
+                lastSyncedTime={lastSyncedTime}
+                {...paged}
+                onPressItem={setViewing}
+                rowActions={(r) => [
+                    { icon: 'eye-outline', label: 'View', onPress: () => setViewing(r) },
+                    ...(canOffer(r) ? [{ icon: 'pricetags-outline' as const, label: 'Make offer', onPress: () => openOffer(r), tone: 'primary' as const }] : []),
+                ]}
+                stats={[
+                    { label: 'Open', value: String(counts.PUBLISHED ?? 0), color: counts.PUBLISHED ? '#10b981' : undefined },
+                    { label: 'Partly filled', value: String(counts.PARTIALLY_FULFILLED ?? 0) },
+                    { label: 'Filled', value: String(counts.FULFILLED ?? 0) },
+                ]}
+                filters={{
+                    options: [
+                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: counts.ALL },
+                        { key: 'PUBLISHED', label: 'Open', icon: 'flash-outline', count: counts.PUBLISHED ?? 0 },
+                        { key: 'ACKNOWLEDGED', label: 'Acknowledged', icon: 'checkmark-outline', count: counts.ACKNOWLEDGED ?? 0 },
+                        { key: 'PARTIALLY_FULFILLED', label: 'Partly filled', icon: 'pie-chart-outline', count: counts.PARTIALLY_FULFILLED ?? 0 },
+                        { key: 'FULFILLED', label: 'Filled', icon: 'checkmark-done-outline', count: counts.FULFILLED ?? 0 },
+                        { key: 'EXPIRED', label: 'Expired', icon: 'time-outline', count: counts.EXPIRED ?? 0 },
+                        { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', count: counts.CANCELLED ?? 0 },
+                    ],
+                    value: filter,
+                    onChange: setFilter,
+                    allKey: 'ALL',
+                }}
+            />
+            <ViewRequestDetailsModal visible={!!viewing} request={viewing} onClose={() => setViewing(null)} />
+            <MakeOfferModal
+                visible={!!offering}
+                request={offering}
+                isSubmitting={submitting}
+                onClose={() => !submitting && setOffering(null)}
+                onSubmit={async (payload) => {
+                    await submitResponse(payload);
+                    setOffering(null);
+                    alert('Offer sent', 'The retailer can now accept your offer.', undefined, 'success');
+                }}
+            />
+        </>
     );
-
-    /* ---- source label / tone ---- */
-    const sourceTone: 'server' | 'cache' | 'none' =
-        dataSource === 'server'
-            ? 'server'
-            : dataSource === 'cache'
-                ? 'cache'
-                : 'none';
-    const sourceLabel =
-        sourceTone === 'server'
-            ? 'Server · Live'
-            : sourceTone === 'cache'
-                ? 'Cache'
-                : 'Offline';
-
-    /* ---- shared props ---- */
-    const common = {
-        entityQuery,
-        setEntityQuery,
-        statusFilter,
-        setStatusFilter,
-        hasActiveFilter,
-        onClearFilters: clearAllFilters,
-        isSyncing,
-        isManualRefreshing,
-        isLiveConnected,
-        sourceLabel,
-        sourceTone,
-        lastSyncedTime,
-        onRefresh,
-        items: filtered,
-        statusCounts,
-        entityOptions,
-        isSubmitting,
-        onSubmitResponse: submitResponse,
-    } as const;
-
-    return isLarge ? (
-        <WholesalerProductRequestsWebView {...common} />
-    ) : (
-        <WholesalerProductRequestsMobileView {...common} />
-    );
-};
-
-export default WholesalerProductRequestsList;
+}

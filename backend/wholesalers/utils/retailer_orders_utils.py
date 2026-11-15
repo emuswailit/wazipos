@@ -1084,12 +1084,24 @@ def get_use_retailer_orders(user):
         return RetailerOrders.objects.filter(owner=user).all()
     else:
         return []
-def get_retailer_order_payments(user,data):
-    """Get payments for orders"""
-    if RetailerOrderPayments.objects.filter(owner=user).exists():
-        return RetailerOrderPayments.objects.filter(owner=user).all()
-    else:
-        return []
+def get_retailer_order_payments(user, data):
+    """
+    Money received on this wholesaler's retailer orders (every payment, whoever
+    recorded it), newest first. Filters: status, since (ISO date / datetime,
+    for incremental sync of the device copy).
+    """
+    qs = (
+        RetailerOrderPayments.objects.filter(retailer_order__wholesaler=user.entity)
+        .select_related("retailer_order", "retailer_order__retailer", "payment_method")
+        .order_by("-created")
+    )
+    status = str((data or {}).get("status") or "").strip().upper()
+    if status:
+        qs = qs.filter(status__iexact=status)
+    since = str((data or {}).get("since") or "").strip()
+    if since:
+        qs = qs.filter(updated__gte=since)
+    return qs
 
 
 def get_entity_retailer_orders(user,data):
