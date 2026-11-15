@@ -220,6 +220,7 @@ export default function RetailerCampaignDetailsModal({
                 subtitle={campaign ? `${formatDate(campaign.start)} → ${formatDate(campaign.end)}` : null}
                 icon="megaphone-outline"
                 width={720}
+                dockable
                 footer={
                     campaign ? (
                         <View style={{ flex: 1, gap: 10 }}>

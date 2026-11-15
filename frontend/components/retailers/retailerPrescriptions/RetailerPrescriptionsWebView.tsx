@@ -32,6 +32,11 @@ export interface RetailerPrescriptionsViewProps {
     onNext: () => void;
     onPageSizeChange: (size: PageSize) => void;
     loading: boolean;
+    /** Where the list came from (hooks/useCachedList). */
+    sourceLabel?: string;
+    sourceTone?: 'server' | 'cache' | 'none';
+    lastSyncedTime?: string;
+    error?: string | null;
 }
 
 type Show = 'ALL' | 'QUEUED';
@@ -45,6 +50,10 @@ export function prescriptionsListProps(p: RetailerPrescriptionsViewProps, varian
         setQuery: p.setQuery,
         onRefresh: p.onRefresh,
         refreshing: p.refreshing || p.loading,
+        sourceLabel: p.sourceLabel,
+        sourceTone: p.sourceTone,
+        lastSyncedTime: p.lastSyncedTime,
+        error: p.error,
         items: p.items,
         allItems: p.allItems,
         onPressItem: p.onPressItem,

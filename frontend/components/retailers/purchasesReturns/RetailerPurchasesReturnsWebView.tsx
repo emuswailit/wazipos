@@ -26,6 +26,10 @@ export type RetailerPurchasesReturnsViewProps = {
     loading: boolean;
     error: string | null;
     onRefresh: () => void;
+    /** Where the list came from (hooks/useCachedList). */
+    sourceLabel?: string;
+    sourceTone?: 'server' | 'cache' | 'none';
+    lastSyncedTime?: string;
     onNewReturn: () => void;
     onViewReturn: (r: PurchasesReturn) => void;
 
@@ -51,6 +55,9 @@ export function purchasesReturnsListProps(p: RetailerPurchasesReturnsViewProps, 
         onRefresh: p.onRefresh,
         refreshing: p.loading,
         error: p.error,
+        sourceLabel: p.sourceLabel,
+        sourceTone: p.sourceTone,
+        lastSyncedTime: p.lastSyncedTime,
         items: p.returns,
         allItems: p.allReturns,
         onOpenCreate: p.onNewReturn,

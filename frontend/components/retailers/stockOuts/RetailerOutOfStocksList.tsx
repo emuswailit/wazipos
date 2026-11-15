@@ -18,14 +18,62 @@ import type { PageSize } from '@/components/common/PaginationBar';
 import { OutOfStockDetailsModal } from './OutOfStockDetailsModal';
 import { OutOfStockFormModal } from './OutOfStockFormModal';
 import { OutOfStockOffersModal, type OutOfStockFeedback } from './OutOfStockOffersModal';
-import { RetailerOutOfStocksMobileView } from './RetailerOutOfStocksMobileView';
 import {
+    formatDate,
     matchesStockOutFilter,
-    RetailerOutOfStocksWebView,
+    OffersChip,
+    StateBadge,
+    STOCKOUT_FILTER_ICONS,
+    STOCKOUT_FILTER_LABELS,
     STOCKOUT_FILTERS,
+    stockOutImageUrl,
+    stockOutState,
+    stockOutTitle,
     type StockOutCounts,
     type StockOutFilter,
 } from './RetailerOutOfStocksWebView';
+import { AdminListView, type AdminListConfig } from '@/components/common/listScreen';
+
+const STATE_BADGE = {
+    draft: { label: 'Not uploaded', tone: 'info' },
+    pending: { label: 'Waiting', tone: 'warning' },
+    ordered: { label: 'Ordered', tone: 'success' },
+} as const;
+const offersOf = (i: RetailerOutOfStockNormalized) => i.wholesaler_offers?.length ?? 0;
+
+/** Cards on phones, a table on wide screens; offers and status columns keep their chips. */
+function buildConfig(onViewOffers: (i: RetailerOutOfStockNormalized) => void): AdminListConfig<RetailerOutOfStockNormalized> {
+    return {
+        title: 'Stock outs',
+        noun: ['item', 'items'],
+        icon: 'alert-circle-outline',
+        searchPlaceholder: 'Search product, customer, offer…',
+        addLabel: 'Record stock out',
+        emptyTitle: 'Nothing out of stock',
+        emptyMessage: 'Record what customers asked for that you didn’t have; wholesalers can then offer it.',
+        keyOf: (i, idx) => `${i.remote_id || i.draft_id || 'oos'}-${idx}`,
+        titleOf: stockOutTitle,
+        subtitleOf: (i) => [i.customer_name || 'Walk-in', i.customer_phone, i.is_special_order ? 'Special order' : null].filter(Boolean).join(' · '),
+        avatarOf: (i) => ({ uri: stockOutImageUrl(i), icon: 'cube-outline' }),
+        badgesOf: (i) => {
+            const b: any[] = [STATE_BADGE[stockOutState(i)]];
+            const n = offersOf(i);
+            if (n && !i.is_ordered) b.push({ label: `${n} offer${n === 1 ? '' : 's'}`, tone: 'primary', icon: 'pricetags-outline' });
+            return b;
+        },
+        metaOf: (i) => (i.created ? formatDate(i.created) : null),
+        metaIcon: 'time-outline',
+        metricOf: (i) => ({ value: Number(i.required_quantity ?? 0).toLocaleString(), label: 'needed' }),
+        primaryColumn: { label: 'Product', flex: 3 },
+        columns: [
+            { key: 'customer', label: 'Customer', flex: 1.8, render: (i) => i.customer_name || 'Walk-in' },
+            { key: 'qty', label: 'Needed', flex: 0.8, align: 'right', render: (i) => Number(i.required_quantity ?? 0).toLocaleString() },
+            { key: 'offers', label: 'Offers', flex: 1.8, render: (i) => <OffersChip item={i} onPress={() => onViewOffers(i)} size="sm" /> },
+            { key: 'status', label: 'Status', flex: 1.1, render: (i) => <StateBadge item={i} size="sm" /> },
+            { key: 'created', label: 'Created', flex: 1.2, render: (i) => formatDate(i.created) },
+        ],
+    };
+}
 
 interface RetailerOutOfStocksListProps {
     /** Called after an offer is added to / removed from the open indent. */
@@ -112,6 +160,8 @@ export default function RetailerOutOfStocksList({ onOfferFeedback, onItemPress, 
         [onItemPress]
     );
 
+    const config = useMemo(() => buildConfig(openOffers), [openOffers]);
+
     const sharedProps = {
         query,
         setQuery,
@@ -121,7 +171,7 @@ export default function RetailerOutOfStocksList({ onOfferFeedback, onItemPress, 
         onRefresh: handleRefresh,
         refreshing,
         sourceLabel: dataSource === 'server' ? 'Server · live' : dataSource === 'cache' ? 'Local cache' : 'No data',
-        sourceTone: dataSource,
+        sourceTone: dataSource as 'server' | 'cache' | 'none',
         lastSyncedTime,
         counts,
         emptyComponent,
@@ -148,27 +198,50 @@ export default function RetailerOutOfStocksList({ onOfferFeedback, onItemPress, 
                     />
                 }
             >
-                {isLarge ? (
-                    <RetailerOutOfStocksWebView
-                        {...sharedProps}
-                        items={paginated}
-                        page={page}
-                        pageSize={pageSize}
-                        totalItems={totalItems}
-                        totalPages={totalPages}
-                        pageStart={pageStart}
-                        pageEnd={pageEnd}
-                        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-                        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        onPageSizeChange={(size) => {
-                            setPageSize(size);
-                            setPage(1);
-                        }}
-                    />
-                ) : (
-                    // No pagination on small screens: the whole filtered list
-                    <RetailerOutOfStocksMobileView {...sharedProps} items={filtered} />
-                )}
+                <AdminListView<RetailerOutOfStockNormalized, StockOutFilter>
+                    variant={isLarge ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={handleRefresh}
+                    refreshing={refreshing}
+                    sourceLabel={sharedProps.sourceLabel}
+                    sourceTone={sharedProps.sourceTone}
+                    lastSyncedTime={lastSyncedTime}
+                    emptyComponent={emptyComponent}
+                    items={paginated}
+                    allItems={filtered}
+                    onOpenCreate={sharedProps.onOpenCreate}
+                    onPressItem={handlePressItem}
+                    onEditItem={openEdit}
+                    rowActions={(i) => [
+                        { icon: 'eye-outline', label: 'View', onPress: () => handlePressItem(i) },
+                        ...(offersOf(i) && !i.is_ordered ? [{ icon: 'pricetags-outline' as const, label: 'View offers', onPress: () => openOffers(i), tone: 'primary' as const }] : []),
+                    ]}
+                    stats={[
+                        { label: 'Waiting', value: String(counts.pending), color: counts.pending ? '#f59e0b' : undefined },
+                        { label: 'With offers', value: String(counts.withOffers), color: counts.withOffers ? '#10b981' : undefined },
+                        { label: 'Ordered', value: String(counts.ordered) },
+                    ]}
+                    filters={{
+                        options: STOCKOUT_FILTERS.map((f) => ({ key: f, label: STOCKOUT_FILTER_LABELS[f], icon: STOCKOUT_FILTER_ICONS[f], count: counts.byFilter[f] })),
+                        value: activeFilter,
+                        onChange: setActiveFilter,
+                        allKey: 'ALL',
+                    }}
+                    page={page}
+                    pageSize={pageSize}
+                    totalItems={totalItems}
+                    totalPages={totalPages}
+                    pageStart={pageStart}
+                    pageEnd={pageEnd}
+                    onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    onPageSizeChange={(size) => {
+                        setPageSize(size);
+                        setPage(1);
+                    }}
+                />
             </DetailsDock>
 
             {/* Offers: add to / remove from the open indent happens inside */}

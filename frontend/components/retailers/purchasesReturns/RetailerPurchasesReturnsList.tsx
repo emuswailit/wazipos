@@ -6,6 +6,7 @@
 // "New return" opens that screen. GetPurchasesReturns takes no filters and
 // paginates server-side: we fetch one large page and filter / page locally.
 
+import { useCachedList } from '@/hooks/useCachedList';
 import { DetailsDock } from '@/components/common/listScreen';
 import { PAGE_SIZE_OPTIONS, type PageSize } from '@/components/common/PaginationBar';
 import { useRouter } from 'expo-router';
@@ -57,38 +58,16 @@ const RetailerPurchasesReturnsList: React.FC = () => {
     const { width } = useWindowDimensions();
     const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
 
-    /* ---------------- Server data ---------------- */
-    const [records, setRecords] = useState<PurchasesReturn[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshTick, setRefreshTick] = useState(0);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const res = await retailersApi.getPurchasesReturnsAction({ page: 1, page_size: FETCH_PAGE_SIZE });
-                if (cancelled) return;
-                if (!res.ok) {
-                    if (!isAuthFailure(res)) setError(`Could not load returns (${describeFailure(res)}).`);
-                    return;
-                }
-                const body = res.data as any;
-                setRecords(Array.isArray(body?.results) ? body.results : []);
-            } catch (e: any) {
-                if (!cancelled) setError(e?.message ?? 'Could not load returns.');
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [refreshTick]);
-
-    const onRefresh = useCallback(() => setRefreshTick((t) => t + 1), []);
+    /* ---------------- Data: saved on this device, refreshed when online ---------------- */
+    const list = useCachedList<PurchasesReturn>({
+        key: 'retailer_purchases_returns',
+        fetch: () => retailersApi.getPurchasesReturnsAction({ page: 1, page_size: FETCH_PAGE_SIZE }),
+        pick: (d) => (Array.isArray(d?.results) ? d.results : []),
+    });
+    const records = list.items;
+    const loading = list.refreshing || list.loading;
+    const error = list.error;
+    const onRefresh = useCallback(() => void list.refresh(), [list.refresh]);
 
     /* ---------------- Filters ---------------- */
     const [query, setQuery] = useState('');
@@ -151,6 +130,9 @@ const RetailerPurchasesReturnsList: React.FC = () => {
         loading,
         error,
         onRefresh,
+        sourceLabel: list.sourceLabel,
+        sourceTone: list.source,
+        lastSyncedTime: list.lastSynced,
         // Returns are created from Stock adjustments (decrease + "Wholesaler return").
         onNewReturn: () => router.push('/stockAdjustments?tab=stockAdjustments' as any),
         onViewReturn: setDetailsTarget,

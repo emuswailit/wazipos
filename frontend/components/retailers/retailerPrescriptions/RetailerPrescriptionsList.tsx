@@ -1,5 +1,6 @@
 // components/retailers/retailerPrescriptions/RetailerPrescriptionsList.tsx
 
+import { useCachedList } from '@/hooks/useCachedList';
 import { DetailsDock } from '@/components/common/listScreen';
 import retailerPrescriptionsApi from '@/api/retailerPrescriptionsApi';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -44,10 +45,24 @@ export default function RetailerPrescriptionsList() {
     const { width } = useWindowDimensions();
     const isLarge = width >= 900;
 
-    // --- State ---
-    const [prescriptions, setPrescriptions] = useState<PrescriptionNormalized[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+    // --- Data: saved on this device, refreshed when online (hooks/useCachedList) ---
+    const list = useCachedList<PrescriptionNormalized>({
+        key: 'retailer_prescriptions',
+        fetch: () =>
+            retailerPrescriptionsApi.retrieveEntityRetailPrescriptionsAction({
+                action: 'RetrieveEntityRetailPrescriptions',
+                page: 1,
+                page_size: 100,
+            }),
+        pick: (d) => {
+            const results = d?.results ?? d ?? [];
+            return Array.isArray(results) ? results : [];
+        },
+    });
+    const prescriptions = list.items;
+    const setPrescriptions = list.patch;
+    const loading = list.loading;
+    const refreshing = list.refreshing;
 
     const [query, setQuery] = useState('');
     const [onlyPending, setOnlyPending] = useState(false);
@@ -58,33 +73,8 @@ export default function RetailerPrescriptionsList() {
     const [detailsTarget, setDetailsTarget] = useState<PrescriptionNormalized | null>(null);
     const [digitizeTarget, setDigitizeTarget] = useState<PrescriptionNormalized | null>(null);
 
-    // --- Fetch Data ---
-    const fetchData = useCallback(async (isRefresh = false) => {
-        if (isRefresh) setRefreshing(true);
-        try {
-            const res = await retailerPrescriptionsApi.retrieveEntityRetailPrescriptionsAction({
-                action: "RetrieveEntityRetailPrescriptions",
-                page: 1,
-                page_size: 100,
-            });
-
-            if (res.ok && res.data) {
-                const results = res.data.results || res.data || [];
-                setPrescriptions(Array.isArray(results) ? results : []);
-            }
-        } catch (error) {
-            console.error("Failed to fetch prescriptions", error);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-    const handleRefresh = useCallback(() => fetchData(true), [fetchData]);
+    const fetchData = list.refresh;
+    const handleRefresh = useCallback(() => void list.refresh(), [list.refresh]);
 
     /** Swap in a freshly fetched prescription (after an item is saved/removed) everywhere it is shown. */
     const upsertPrescription = useCallback((fresh: PrescriptionNormalized) => {
@@ -216,6 +206,10 @@ export default function RetailerPrescriptionsList() {
         onNext: () => setPage(p => Math.min(totalPages, p + 1)),
         onPageSizeChange: (size: PageSize) => { setPageSize(size); setPage(1); },
         loading,
+        sourceLabel: list.sourceLabel,
+        sourceTone: list.source,
+        lastSyncedTime: list.lastSynced,
+        error: list.error,
     };
 
     return (

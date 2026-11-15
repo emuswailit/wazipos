@@ -19,18 +19,83 @@ import {
     useWindowDimensions,
 } from 'react-native';
 
-import { CustomerOrdersMobileView } from './CustomerOrdersMobileView';
 import {
-    CustomerOrdersWebView,
+    deliveryBadge,
+    formatDate,
+    formatKES,
     isPendingUpload,
+    orderItemCount,
+    orderRef,
+    PAYMENT_METHOD_ICONS,
+    PAYMENT_METHOD_LABELS,
+    PaymentPill,
+    StatusPill,
+    UploadStatus,
     matchesPaymentMethod,
     orderAmount,
     PAYMENT_METHOD_FILTERS,
     toBool,
     type CustomerOrdersCounts,
-    type CustomerOrdersViewProps,
     type PaymentMethodFilter,
 } from './CustomerOrdersWebView';
+import { AdminListView, type AdminBadge, type AdminListConfig } from '@/components/common/listScreen';
+import { usePaged } from '@/hooks/useCachedList';
+
+type OrderFilter = PaymentMethodFilter | 'UNPAID';
+
+const STATUS_TONE: Record<string, AdminBadge['tone']> = {
+    DRAFT: 'neutral', PENDING: 'warning', PROCESSING: 'violet', PACKED: 'info', READY: 'primary',
+    DISPATCHED: 'primary', DELIVERED: 'success', COLLECTED: 'success', COMPLETED: 'success', CANCELLED: 'danger',
+};
+const methodLabel = (o: CustomerOrder) => {
+    const m = String(o.selected_payment_method_title || '').trim();
+    return m ? m.charAt(0) + m.slice(1).toLowerCase() : '—';
+};
+
+/** Cards on phones, a table on wide screens (shared list kit). */
+function buildConfig(onRetryUpload: () => void, isUploading: boolean): AdminListConfig<CustomerOrder> {
+    return {
+        title: 'Customer orders',
+        noun: ['order', 'orders'],
+        icon: 'receipt-outline',
+        searchPlaceholder: 'Search order, customer, phone…',
+        emptyTitle: 'No orders yet',
+        emptyMessage: 'Sales from New Customer Order and orders customers place online appear here.',
+        keyOf: (o, i) => String((o as any).remote_id || (o as any).id || (o as any).draft_id || i),
+        titleOf: (o) => o.customer_name || 'Walk-in customer',
+        subtitleOf: (o) => [orderRef(o), `${orderItemCount(o)} item${orderItemCount(o) === 1 ? '' : 's'}`, methodLabel(o)].filter(Boolean).join(' · '),
+        avatarOf: (o) => ({ label: o.customer_name || 'W' }),
+        badgesOf: (o) => {
+            const st = String(o.status || '').toUpperCase();
+            const b: AdminBadge[] = [
+                toBool(o.is_paid) ? { label: 'Paid', tone: 'success', icon: 'checkmark-circle' } : { label: 'Not paid', tone: 'warning' },
+                deliveryBadge(o),
+            ];
+            if (st) b.unshift({ label: st.charAt(0) + st.slice(1).toLowerCase(), tone: STATUS_TONE[st] ?? 'neutral' });
+            if (isPendingUpload(o)) b.push({ label: (o as any).sync_error ? 'Upload failed' : 'Not uploaded', tone: (o as any).sync_error ? 'danger' : 'info', icon: 'cloud-upload-outline' });
+            return b;
+        },
+        metaOf: (o) => formatDate((o as any).created),
+        metaIcon: 'time-outline',
+        metricOf: (o) => ({ value: `KES ${formatKES(orderAmount(o))}`, label: toBool(o.is_paid) ? 'paid' : 'due' }),
+        primaryColumn: { label: 'Customer', flex: 2 },
+        columns: [
+            {
+                key: 'order',
+                label: 'Order',
+                flex: 1.5,
+                render: (o) => (isPendingUpload(o) ? <UploadStatus order={o} onRetry={onRetryUpload} retrying={isUploading} /> : orderRef(o)),
+            },
+            { key: 'items', label: 'Items', flex: 0.6, align: 'center', render: (o) => String(orderItemCount(o)) },
+            { key: 'method', label: 'Method', flex: 1, render: methodLabel },
+            { key: 'status', label: 'Status', flex: 1.1, render: (o) => <StatusPill status={o.status} size="sm" /> },
+            { key: 'payment', label: 'Payment', flex: 0.9, render: (o) => <PaymentPill paid={toBool(o.is_paid)} compact /> },
+            { key: 'delivery', label: 'Delivery', flex: 1, render: (o) => deliveryBadge(o).label },
+            { key: 'when', label: 'Date', flex: 1, render: (o) => formatDate((o as any).created) },
+            { key: 'amount', label: 'Amount', flex: 1, align: 'right', render: (o) => `KES ${formatKES(orderAmount(o))}` },
+        ],
+    };
+}
 import { InvoiceModal } from './InvoiceModal';
 import { useOrdersData } from './useOrdersData';
 
@@ -94,8 +159,10 @@ export default function CustomerOrdersList() {
     } = useOrdersData(token);
 
     const [query, setQuery] = useState('');
-    const [onlyUnpaid, setOnlyUnpaid] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<PaymentMethodFilter>('ALL');
+    // One filter row: payment method, or only the unpaid ones.
+    const [filter, setFilter] = useState<OrderFilter>('ALL');
+    const onlyUnpaid = filter === 'UNPAID';
+    const paymentMethod: PaymentMethodFilter = filter === 'UNPAID' ? 'ALL' : filter;
     const [selected, setSelected] =
         useState<CustomerOrder | null>(null);
 
@@ -113,6 +180,8 @@ export default function CustomerOrdersList() {
                 .sort((a, b) => orderTimestamp(b) - orderTimestamp(a)),
         [orders, onlyUnpaid, paymentMethod, query]
     );
+
+    const paged = usePaged(visible, `${query}|${filter}`);
 
     const counts: CustomerOrdersCounts = useMemo(() => {
         // Per-method counts respect the paid/unpaid toggle and search, so each chip
@@ -160,9 +229,6 @@ export default function CustomerOrdersList() {
         setQuery(q);
     }, []);
 
-    const onToggleOnlyUnpaid = useCallback(() => {
-        setOnlyUnpaid((v) => !v);
-    }, []);
 
     const onCloseDetails = useCallback(() => {
         setSelected(null);
@@ -228,24 +294,7 @@ export default function CustomerOrdersList() {
         );
     }
 
-    const common: CustomerOrdersViewProps = {
-        orders: visible,
-        counts,
-        query,
-        onQueryChange,
-        onlyUnpaid,
-        onToggleOnlyUnpaid,
-        paymentMethod,
-        onPaymentMethodChange: setPaymentMethod,
-        refreshing: isRefreshing,
-        onRefresh,
-        isConnected,
-        lastSynced: lastSynced ?? '',
-        totalValue,
-        onView,
-        onRetryUpload,
-        isUploading,
-    };
+    const config = buildConfig(onRetryUpload, isUploading);
 
     return (
         <View className="flex-1">
@@ -275,11 +324,34 @@ export default function CustomerOrdersList() {
                     />
                 }
             >
-                {isLarge ? (
-                    <CustomerOrdersWebView {...common} />
-                ) : (
-                    <CustomerOrdersMobileView {...common} />
-                )}
+                <AdminListView<CustomerOrder, OrderFilter>
+                    variant={isLarge ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={onQueryChange}
+                    onRefresh={onRefresh}
+                    refreshing={isRefreshing}
+                    sourceLabel={!isOnline ? 'Offline · on this device' : isConnected ? 'Live sync' : 'Saved on this device'}
+                    sourceTone={isConnected ? 'server' : 'cache'}
+                    lastSyncedTime={lastSynced ?? undefined}
+                    {...paged}
+                    onPressItem={onView}
+                    rowActions={(o) => [{ icon: 'document-text-outline', label: 'Invoice', onPress: () => onView(o), tone: 'primary' }]}
+                    stats={[
+                        { label: 'Orders', value: counts.total.toLocaleString() },
+                        { label: 'Not paid', value: counts.unpaid.toLocaleString(), color: counts.unpaid ? '#f59e0b' : undefined },
+                        { label: 'Value shown', value: `KES ${formatKES(totalValue)}` },
+                    ]}
+                    filters={{
+                        options: [
+                            ...PAYMENT_METHOD_FILTERS.map((m) => ({ key: m as OrderFilter, label: PAYMENT_METHOD_LABELS[m], icon: PAYMENT_METHOD_ICONS[m], count: counts.byMethod[m] })),
+                            { key: 'UNPAID' as OrderFilter, label: 'Not paid', icon: 'alert-circle-outline' as const, count: counts.unpaid },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                />
             </DetailsDock>
 
         </View>

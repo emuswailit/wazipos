@@ -20,6 +20,10 @@ export interface RetailerCampaignsViewProps {
     onOpen: (id: UUID) => void;
     onRefresh: () => void;
     refreshing: boolean;
+    /** Where the list came from (hooks/useCachedList). */
+    sourceLabel?: string;
+    sourceTone?: 'server' | 'cache' | 'none';
+    lastSyncedTime?: string;
     query: string;
     setQuery: (q: string) => void;
     page: number;
@@ -47,6 +51,9 @@ export function campaignsListProps(p: RetailerCampaignsViewProps, variant: 'mobi
         onRefresh: p.onRefresh,
         refreshing: p.refreshing || p.isLoading,
         error: p.error,
+        sourceLabel: p.sourceLabel,
+        sourceTone: p.sourceTone,
+        lastSyncedTime: p.lastSyncedTime,
         items: p.campaigns,
         allItems: p.allCampaigns,
         onPressItem: (c) => p.onOpen(c.id),

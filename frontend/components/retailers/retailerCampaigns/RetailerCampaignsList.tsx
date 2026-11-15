@@ -6,6 +6,10 @@
 //   3. Owns the detail modal's open/close state.
 //   4. Picks the table (wide) or cards (phones / narrow web) by window width.
 
+import campaignsApi from '@/api/campaignsApi';
+import type { Campaign } from '@/campaigns/types';
+import { DetailsDock } from '@/components/common/listScreen';
+import { useCachedList } from '@/hooks/useCachedList';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { useEffect, useMemo, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
@@ -27,8 +31,22 @@ export default function RetailerCampaignsList() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<PageSize>(10);
 
-    // The inbox shows only campaigns running today.
-    const { campaigns, isLoading, error, refresh } = useRetailerCampaigns({ active_only: true });
+    // The inbox shows only campaigns running today. Saved on this device, refreshed when online.
+    const list = useCachedList<Campaign>({
+        key: 'retailer_campaign_inbox',
+        fetch: () => campaignsApi.getMyCampaignsAction({ active_only: true } as any),
+        pick: (d) => {
+            if (!d) return [];
+            if (Array.isArray(d.results)) return d.results;
+            const found = Object.entries(d).find(([k, v]) => !['response_code', 'response_message', 'errors'].includes(k) && (Array.isArray(v) || (v && typeof v === 'object' && Array.isArray((v as any).results))));
+            const v: any = found?.[1];
+            return Array.isArray(v) ? v : v?.results ?? [];
+        },
+    });
+    const campaigns = list.items;
+    const isLoading = list.loading;
+    const error = list.error;
+    const refresh = list.refresh;
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -56,8 +74,11 @@ export default function RetailerCampaignsList() {
         totalCampaigns: campaigns.length,
         isLoading,
         error,
-        refreshing: false,
+        refreshing: list.refreshing,
         onRefresh: refresh,
+        sourceLabel: list.sourceLabel,
+        sourceTone: list.source,
+        lastSyncedTime: list.lastSynced,
         onOpen: (id: UUID) => setOpenId(id),
         query,
         setQuery,
@@ -77,10 +98,14 @@ export default function RetailerCampaignsList() {
 
     return (
         <>
-            {isLarge ? <RetailerCampaignsWebView {...viewProps} /> : <RetailerCampaignsMobileView {...viewProps} />}
-
-            {/* Mounted once and toggled by `visible` so its fetch state resets on open. */}
-            <RetailerCampaignDetailModal visible={!!openId} campaignId={openId} onClose={() => setOpenId(undefined)} onChanged={refresh} />
+            {/* Offer details: beside the list on wide screens, a sheet on phones. Mounted once and
+                toggled by `visible` so its fetch state resets on open. */}
+            <DetailsDock
+                placeholder="Pick an offer to see its products and opt in."
+                pane={<RetailerCampaignDetailModal visible={!!openId} campaignId={openId} onClose={() => setOpenId(undefined)} onChanged={refresh} />}
+            >
+                {isLarge ? <RetailerCampaignsWebView {...viewProps} /> : <RetailerCampaignsMobileView {...viewProps} />}
+            </DetailsDock>
         </>
     );
 }
