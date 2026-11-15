@@ -82,6 +82,7 @@ const RETAILER_ROLE_VALUES = new Set([
     'GeneralRetailerSuperAdmin',
     'PharmaceuticalRetailerSuperAdmin',
     'RestaurantSuperAdmin',
+    'HotelSuperAdmin',
     'RETAIL_ACCOUNTS',
     'RETAIL_PHARMACY',
     'RETAIL_SALES',

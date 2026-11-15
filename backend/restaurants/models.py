@@ -914,7 +914,11 @@ class Room(EntityRelatedModel):
         ])
     
     room_images = models.ManyToManyField(RoomImages, related_name="room_images", blank=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)  # per night
+    # Hotels (restaurants/services/accommodation.py)
+    room_type = models.CharField(max_length=40, null=True, blank=True)  # Single, Double, Twin, Suite…
+    max_guests = models.PositiveSmallIntegerField(default=2)
+    about = models.CharField(max_length=300, null=True, blank=True)
     owner = models.ForeignKey(
         Users,
         related_name="branch_room_owner",
@@ -1056,6 +1060,60 @@ class RoomBooking(EntityRelatedModel):
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+
+    # ---- a stay at a hotel (restaurants/services/accommodation.py)
+    # BOOKED -> CONFIRMED -> CHECKED_IN -> CHECKED_OUT; CANCELLED; NO_SHOW
+    document_number = models.CharField(max_length=20, null=True, blank=True, db_index=True)
+    status = models.CharField(max_length=20, default="BOOKED", db_index=True)
+    customer = models.ForeignKey(Users, related_name="room_bookings", on_delete=models.SET_NULL, null=True, blank=True)
+    guest_name = models.CharField(max_length=120, null=True, blank=True)
+    guest_phone = models.CharField(max_length=56, null=True, blank=True)
+    guests = models.PositiveSmallIntegerField(default=1)
+    nights = models.PositiveSmallIntegerField(default=1)
+    nightly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_paid = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="false")
+    paid_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=300, null=True, blank=True)
+    order_origin = models.CharField(max_length=20, default="CUSTOMER")  # CUSTOMER / STAFF
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    checked_out_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+
+    class Meta:
+        verbose_name_plural = "Room bookings"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.document_number or self.id} · {self.checkin_date} → {self.checkout_date}"
+
+
+class RoomBookingPayment(EntityRelatedModel):
+    """Money taken for a stay: mobile money into the system till, or cash / card at the desk."""
+
+    booking = models.ForeignKey(RoomBooking, related_name="payments", on_delete=models.CASCADE)
+    payment_method = models.ForeignKey(
+        "payments.PaymentMethods", related_name="room_booking_payments", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    reference_number = models.CharField(max_length=50, default="", db_index=True)
+    psp_reference_number = models.CharField(max_length=50, default="")
+    provider_reference_num = models.CharField(max_length=50, default="", null=True, blank=True)
+    status = models.CharField(max_length=20, default="PENDING")  # PENDING / SUCCESS / FAILED
+    description = models.CharField(max_length=256, default="", null=True, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=10, default="KES")
+    telco_name = models.CharField(max_length=28, default="", null=True, blank=True)
+    is_settled = models.BooleanField(default=False)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Room booking payments"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.reference_number} - {self.amount}"
 
 
 class AccomodationOrder(EntityRelatedModel):

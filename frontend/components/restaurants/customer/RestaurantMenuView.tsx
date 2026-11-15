@@ -14,7 +14,7 @@ import { kes, type Cart } from '../shared';
 import { CustomRecipeSheet } from './CustomRecipeSheet';
 import { FoodCheckout, Stepper } from './FoodCheckout';
 
-export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restaurant: Restaurant; onBack: () => void; onPlaced: (o: FoodOrder) => void }) {
+export function RestaurantMenuView({ restaurant, onBack, onPlaced, onRooms }: { restaurant: Restaurant; onBack: () => void; onPlaced: (o: FoodOrder) => void; /** Hotels only: open the rooms. */ onRooms?: () => void }) {
     const { theme, border, cardShadow } = useListTokens();
     const [items, setItems] = useState<MenuItem[] | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -80,6 +80,7 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
                         </Text>
                     </View>
                     <View style={{ gap: 6 }}>
+                        {restaurant.is_hotel && onRooms ? <SheetButton label={restaurant.rooms_from ? `Rooms from ${kes(restaurant.rooms_from)}` : 'Book a room'} icon="bed-outline" onPress={onRooms} /> : null}
                         <SheetButton label="Book a table" icon="calendar-outline" variant="secondary" onPress={() => setCheckout('DINE_IN')} />
                         <SheetButton label="Create your own" icon="color-wand-outline" variant="secondary" onPress={() => setRecipeOpen(true)} />
                     </View>

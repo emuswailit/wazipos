@@ -106,6 +106,7 @@ class AdminsOnlyPermissions(permissions.BasePermission):
             "GeneralDistributorSuperAdmin",
             "HospitalSuperAdmin",
             "RestaurantSuperAdmin",
+            "HotelSuperAdmin",
             "GeneralRetailerSuperAdmin",
             "PharmaceuticalRetailerSuperAdmin",
             "ClinicSuperAdmin",

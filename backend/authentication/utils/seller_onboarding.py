@@ -21,6 +21,7 @@ SELF_SERVICE_TYPES = {
     "GeneralWholesaler": "Wholesaler",
     "PharmaceuticalWholesaler": "Pharmaceutical wholesaler",
     "Restaurant": "Restaurant / eatery",
+    "Hotel": "Hotel / lodge (rooms + restaurant)",
 }
 ID_TYPES = ("NationalId", "Passport")
 

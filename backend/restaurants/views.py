@@ -1346,9 +1346,47 @@ def diningAPIView(request):
             return fail("Not accepted", errors)
         return ok("Order placed", {"recipe": rc.recipe_out(recipe), "food_order": d.order_out(order, request)}, "accepted")
 
+    # ---- accommodation, hotels only (services/accommodation.py): guests
+    from restaurants.services import accommodation as acc
+
+    if action == "GetHotelRooms":
+        errors, out = acc.hotel_rooms(request.data, request)
+        return fail("Rooms not found", errors) if errors else ok("Rooms", out, "hotel_rooms")
+    if action == "BookRoom":
+        errors, booking = acc.book_room(request.data, request.user)
+        return fail("Room not booked", errors) if errors else ok("Room booked", acc.booking_out(booking, request), "room_booking")
+    if action == "GetMyRoomBookings":
+        return ok("Bookings", [acc.booking_out(x, request) for x in acc.my_bookings(request.user)], "room_bookings")
+    if action == "CancelMyRoomBooking":
+        errors, booking = acc.cancel_my_booking(request.data, request.user)
+        return fail("Booking not cancelled", errors) if errors else ok("Booking cancelled", acc.booking_out(booking, request), "room_booking")
+    if action in ("PayRoomBooking", "RefreshRoomPayment"):
+        errors, payment = (acc.pay_mobile_money if action == "PayRoomBooking" else acc.refresh_payment)(request.data, request.user)
+        if errors:
+            return fail("Payment not started" if action == "PayRoomBooking" else "Payment not found", errors)
+        payment.booking.refresh_from_db()
+        return ok("Check your phone" if action == "PayRoomBooking" else "Payment", {
+            "reference": payment.reference_number, "status": payment.status, "description": payment.description,
+            "booking": acc.booking_out(payment.booking, request),
+        }, "payment")
+
     # ---- restaurant staff
     if not d.is_restaurant_staff(request.user):
         return fail("Not a restaurant", ["Switch to your restaurant to manage it"])
+
+    # ---- accommodation, hotels only: staff (a restaurant has no rooms)
+    if action in ("GetRooms", "SaveRoom", "GetRoomBookings", "UpdateRoomBooking", "RecordRoomPayment"):
+        if not acc.is_hotel_staff(request.user):
+            return fail("Not a hotel", ["Rooms and stays are for hotels. Switch to your hotel to manage them."])
+        if action == "GetRooms":
+            return ok("Rooms", [acc.room_out(r, request) for r in acc.list_rooms(request.user)], "rooms")
+        if action == "SaveRoom":
+            errors, room = acc.save_room(request.data, request.FILES, request.user)
+            return fail("Room not saved", errors) if errors else ok("Room saved", acc.room_out(room, request), "room")
+        if action == "GetRoomBookings":
+            return ok("Bookings", [acc.booking_out(x, request) for x in acc.hotel_bookings(request.data, request.user)], "room_bookings")
+        errors, booking = (acc.update_booking if action == "UpdateRoomBooking" else acc.record_payment)(request.data, request.user)
+        return fail("Booking not updated", errors) if errors else ok("Booking updated", acc.booking_out(booking, request), "room_booking")
     if action == "GetMyMenu":
         errors, menu = d.restaurant_menu(request.user.entity_id, request, staff=True)
         return fail("Menu not found", errors) if errors else ok("Menu", menu, "menu")

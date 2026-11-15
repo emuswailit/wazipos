@@ -27,7 +27,9 @@ from django.utils.dateparse import parse_datetime
 from authentication.models import Entities
 from restaurants import models as rm
 
-RESTAURANT_TYPES = ("Restaurant",)
+# A hotel is a restaurant with rooms: it gets everything here, plus
+# accommodation (services/accommodation.py), which restaurants never get.
+RESTAURANT_TYPES = ("Restaurant", "Hotel")
 FOOD_KG_PER_PORTION = Decimal("0.5")
 OPEN_STATUSES = ("RECEIVED", "PROCESSING", "READY", "DISPATCHED", "ASSIGNED")
 SERVICE_LABELS = {"DELIVERY": "Delivery", "PICKUP": "Pickup", "DINE_IN": "Dine in"}
@@ -80,6 +82,11 @@ def list_restaurants(data, user):
     counts = {}
     for row in rm.MenuItem.objects.filter(entity__in=entities, is_available=True, price__gt=0).values("entity_id"):
         counts[row["entity_id"]] = counts.get(row["entity_id"], 0) + 1
+    # Hotels: rooms on offer and the cheapest night.
+    rooms = {}
+    for row in rm.Room.objects.filter(entity__in=[e for e in entities if e.entity_type == "Hotel"], is_available="true", price__gt=0).values("entity_id", "price"):
+        n, low = rooms.get(row["entity_id"], (0, None))
+        rooms[row["entity_id"]] = (n + 1, row["price"] if low is None else min(low, row["price"]))
     out = []
     for e in entities:
         p = points.get(e.id)
@@ -96,8 +103,12 @@ def list_restaurants(data, user):
             "distance_km": float(km_between(here, p)) if here and p else None,
             "menu_items": counts.get(e.id, 0),
             "delivers": bool(p),
+            "entity_type": e.entity_type,
+            "is_hotel": e.entity_type == "Hotel",
+            "rooms": rooms.get(e.id, (0, None))[0],
+            "rooms_from": str(rooms[e.id][1]) if e.id in rooms else None,
         })
-    out.sort(key=lambda r: (r["menu_items"] == 0, r["distance_km"] if r["distance_km"] is not None else 1e9, r["title"]))
+    out.sort(key=lambda r: (r["menu_items"] == 0 and r["rooms"] == 0, r["distance_km"] if r["distance_km"] is not None else 1e9, r["title"]))
     return out
 
 
@@ -123,7 +134,7 @@ def restaurant_menu(entity_id, request=None, staff=False):
         items = items.filter(is_available=True, price__gt=0)
     tables = rm.Table.objects.filter(entity=entity).order_by("title")
     return [], {
-        "restaurant": {"id": str(entity.id), "title": entity.title, "town": entity.town, "road": entity.road, "building": entity.building},
+        "restaurant": {"id": str(entity.id), "title": entity.title, "town": entity.town, "road": entity.road, "building": entity.building, "is_hotel": entity.entity_type == "Hotel"},
         "items": [menu_item_out(i, request) for i in items],
         "tables": [table_out(t) for t in tables] if staff else [],
     }

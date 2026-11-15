@@ -2,7 +2,8 @@
 //
 // Restaurants dining service — POST /restaurants/dining
 // (backend restaurants/services/dining.py). A restaurant is an entity of type
-// "Restaurant".
+// "Restaurant" — or "Hotel": hotels get everything here plus rooms and stays
+// (api/hotelApi.ts), which restaurants never get.
 // Customers: browse, menu, delivery options, place / pay / follow orders,
 //   delivery, pickup, or dine in (table booking with optional pre-order).
 // Restaurant staff: menu items, tables, the orders board, cash at the counter.
@@ -31,6 +32,12 @@ export interface Restaurant {
     distance_km: number | null;
     menu_items: number;
     delivers: boolean;
+    /** "Restaurant" or "Hotel" — a hotel is a restaurant with rooms (api/hotelApi.ts). */
+    entity_type?: string;
+    is_hotel?: boolean;
+    /** Hotels: rooms on offer, and the cheapest night. */
+    rooms?: number;
+    rooms_from?: string | null;
 }
 
 export interface MenuItem {

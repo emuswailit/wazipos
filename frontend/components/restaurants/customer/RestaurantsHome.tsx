@@ -18,8 +18,10 @@ import { FoodStatusPill, kes, PaidPill, when } from '../shared';
 import { FoodPayment } from './FoodPayment';
 import { MyCustomRecipes } from './MyCustomRecipes';
 import { RestaurantMenuView } from './RestaurantMenuView';
+import { HotelStayView } from '@/components/hotels/HotelStayView';
+import { MyStays } from '@/components/hotels/MyStays';
 
-type View_ = 'DISCOVER' | 'ORDERS';
+type View_ = 'DISCOVER' | 'ORDERS' | 'STAYS';
 
 export default function RestaurantsHome() {
     const { theme } = useListTokens();
@@ -27,13 +29,18 @@ export default function RestaurantsHome() {
     const router = useRouter();
     const [tab, setTab] = useState<View_>('DISCOVER');
     const [open, setOpen] = useState<Restaurant | null>(null);
-    const runsRestaurant = String(user?.entity_type || '') === 'Restaurant';
+    // A hotel is a restaurant with rooms: same screens to run it, plus the front desk.
+    const runsHotel = String(user?.entity_type || '') === 'Hotel';
+    const runsRestaurant = runsHotel || String(user?.entity_type || '') === 'Restaurant';
+    const [rooms, setRooms] = useState(false);
 
+    if (open && rooms && open.is_hotel) return <HotelStayView hotel={open} onBack={() => setRooms(false)} />;
     if (open) {
         return (
             <RestaurantMenuView
                 restaurant={open}
-                onBack={() => setOpen(null)}
+                onRooms={() => setRooms(true)}
+                onBack={() => { setRooms(false); setOpen(null); }}
                 onPlaced={() => {
                     /* the checkout sheet shows payment; "My orders" refreshes on focus */
                 }}
@@ -47,10 +54,10 @@ export default function RestaurantsHome() {
                 <View className="flex-row items-end justify-between" style={{ gap: 8 }}>
                     <View>
                         <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26 }}>Restaurants</Text>
-                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>Order in, pick up, or book a table</Text>
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>Order in, pick up, book a table — or a room</Text>
                     </View>
                     {runsRestaurant ? (
-                        <SheetButton label="Run my restaurant" icon="restaurant-outline" variant="secondary" onPress={() => router.push('/restaurantOrders' as any)} />
+                        <SheetButton label={runsHotel ? 'Run my hotel' : 'Run my restaurant'} icon={runsHotel ? 'bed-outline' : 'restaurant-outline'} variant="secondary" onPress={() => router.push((runsHotel ? '/hotelBookings' : '/restaurantOrders') as any)} />
                     ) : null}
                 </View>
                 <SegmentedControl<View_>
@@ -59,10 +66,11 @@ export default function RestaurantsHome() {
                     options={[
                         { key: 'DISCOVER', label: 'Discover' },
                         { key: 'ORDERS', label: 'My orders' },
+                        { key: 'STAYS', label: 'My stays' },
                     ]}
                 />
             </View>
-            {tab === 'DISCOVER' ? <Discover onOpen={setOpen} /> : <MyOrders />}
+            {tab === 'DISCOVER' ? <Discover onOpen={setOpen} /> : tab === 'ORDERS' ? <MyOrders /> : <MyStays />}
         </View>
     );
 }
@@ -121,7 +129,7 @@ function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
         >
             <View className="flex-row items-center" style={{ gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                    <SearchField value={q} onChangeText={setQ} placeholder="Search restaurants…" />
+                    <SearchField value={q} onChangeText={setQ} placeholder="Search restaurants and hotels…" />
                 </View>
                 <SheetButton label={here ? 'Near me ✓' : 'Near me'} icon="navigate-outline" variant="secondary" loading={locating} loadingLabel="…" onPress={() => void nearMe()} />
             </View>
@@ -135,7 +143,7 @@ function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
                     <Pressable key={r.id} onPress={() => onOpen(r)} className="rounded-2xl p-4" style={{ flexGrow: 1, flexBasis: 280, gap: 8, backgroundColor: theme.panel, borderWidth: 1, borderColor: border, ...cardShadow }}>
                         <View className="flex-row items-center" style={{ gap: 10 }}>
                             <View className="w-11 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: `${theme.primary}14` }}>
-                                <Ionicons name="restaurant" size={20} color={theme.primary} />
+                                <Ionicons name={r.is_hotel ? 'bed' : 'restaurant'} size={20} color={theme.primary} />
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }} numberOfLines={1}>{r.title}</Text>
@@ -147,6 +155,7 @@ function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
                         </View>
                         <View className="flex-row flex-wrap" style={{ gap: 6 }}>
                             {r.distance_km != null ? <Tag icon="navigate-outline" text={`${r.distance_km.toFixed(1)} km`} /> : null}
+                            {r.is_hotel ? <Tag icon="bed-outline" text={r.rooms ? `Rooms from ${kes(r.rooms_from)}` : 'Hotel'} /> : null}
                             <Tag icon="fast-food-outline" text={r.menu_items ? `${r.menu_items} dishes` : 'Menu coming soon'} />
                             {r.delivers ? <Tag icon="bicycle-outline" text="Delivers" /> : null}
                             <Tag icon="calendar-outline" text="Bookings" />
