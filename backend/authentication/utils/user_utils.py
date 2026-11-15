@@ -6,6 +6,32 @@ from intergrations.jambopay.jambopay_get_profile_accounts import get_jambopay_ma
 from authentication.models import Users
 from django.db import transaction
 from authentication.validators.authentication_models_validators import validate_entity
+def _qr_image(text):
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(text)
+    qr.make(fit=True)
+    return qr.make_image(fill_color="black", back_color="white")
+
+
+def generate_menu_qr_code(data, user):
+    """
+    GenerateQRCode {purpose: "RESTAURANT_MENU", table?, base_url?}: a code that
+    opens the restaurant's public menu page, where guests order food and drinks
+    (restaurants/services/qr_menu.py). Returns (errors, image, url, label).
+    """
+    from restaurants.services.qr_menu import qr_target
+
+    errors, url, label = qr_target(data, user)
+    if errors:
+        return errors, None, None, None
+    return [], _qr_image(url), url, label
+
+
 def generate_qr_code(data, user):
     errors=[]
     data_to_encrypt =""

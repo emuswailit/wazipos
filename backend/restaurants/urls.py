@@ -16,6 +16,8 @@ urlpatterns = [
     ),
     path("login/", views.LoginAPIView.as_view(), name="login"),
     path("dining", views.diningAPIView, name="restaurant-dining-apiview"),
+    # Public: the page a restaurant's QR code opens (no sign-in).
+    path("menu", views.publicMenuAPIView, name="restaurant-public-menu-apiview"),
 
     path(
         "menuitem/create",

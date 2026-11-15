@@ -834,6 +834,25 @@ def usersAPIView(request):
 
         else:
             return custom_error_response(1, "User profile not retrieved")
+    elif request.data["action"] == "GenerateQRCode" and str(request.data.get("purpose") or "").upper() == "RESTAURANT_MENU":
+        # A restaurant's menu code: scanning it opens the public menu page where
+        # guests order food and drinks. format "base64" returns JSON (for the apps),
+        # otherwise the PNG itself.
+        errors, qr_code, url, label = user_utils.generate_menu_qr_code(request.data, request.user)
+        if not qr_code:
+            return custom_errors_response(1, "QR code not created", errors)
+        if str(request.data.get("format") or "").lower() == "base64":
+            import base64
+            import io
+
+            buffer = io.BytesIO()
+            qr_code.save(buffer, "PNG")
+            return custom_success_message(
+                0, "QR code created",
+                {"image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii"), "url": url, "label": label},
+                "qr_code",
+            )
+        return qr_code_response(qr_code)
     elif request.data["action"] == "GenerateQRCode":
         errors, qr_code = user_utils.generate_qr_code(request.data, request.user)
         if qr_code:

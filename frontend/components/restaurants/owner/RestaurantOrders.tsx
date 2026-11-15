@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, useWindowDimensions, View } from 'react-native';
 
 import { FoodStatusPill, kes, PaidPill, when } from '../shared';
+import StaffWalkIn from '../walkin/StaffWalkIn';
 
 type Filter = 'ALL' | 'RECEIVED' | 'PROCESSING' | 'READY' | 'OUT' | 'BOOKINGS' | 'DONE';
 
@@ -23,12 +24,13 @@ const config: AdminListConfig<FoodOrder> = {
     noun: ['order', 'orders'],
     icon: 'restaurant-outline',
     searchPlaceholder: 'Search reference, name, phone…',
+    addLabel: 'Walk-in order',
     emptyTitle: 'No orders right now',
     emptyMessage: 'New orders and table bookings appear here as they come in.',
     keyOf: (o) => o.id,
     titleOf: (o) => o.customer_name || 'Guest',
     subtitleOf: (o) =>
-        [SERVICE_META[o.service_type]?.label, o.reference, o.reservation_at ? `${when(o.reservation_at)} · ${o.party_size} ppl` : null].filter(Boolean).join(' · '),
+        [SERVICE_META[o.service_type]?.label, o.table, o.reference, o.reservation_at ? `${when(o.reservation_at)} · ${o.party_size} ppl` : null].filter(Boolean).join(' · '),
     avatarOf: (o) => ({ icon: (SERVICE_META[o.service_type]?.icon as any) ?? 'restaurant-outline' }),
     badgesOf: (o) => [
         { label: STATUS_META[o.status]?.label ?? o.status, tone: STATUS_META[o.status]?.tone ?? 'neutral' },
@@ -61,6 +63,8 @@ export default function RestaurantOrders() {
     const [pageSize, setPageSize] = useState<PageSize>(25);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [lastSynced, setLastSynced] = useState<string | undefined>();
+    // Counter service: food and drinks for a walk-in customer on one pad.
+    const [walkIn, setWalkIn] = useState(false);
 
     const load = useCallback(async () => {
         setRefreshing(true);
@@ -121,6 +125,8 @@ export default function RestaurantOrders() {
         setDone((prev) => (isOpen ? prev.filter((x) => x.id !== o.id) : [o, ...prev.filter((x) => x.id !== o.id)]));
     };
 
+    if (walkIn) return <StaffWalkIn onClose={() => { setWalkIn(false); void load(); }} onPlaced={() => void load()} />;
+
     return (
         <>
             <AdminListView<FoodOrder, Filter>
@@ -136,6 +142,7 @@ export default function RestaurantOrders() {
                 error={error}
                 items={filtered.slice(pageStart, pageEnd)}
                 allItems={filtered}
+                onOpenCreate={() => setWalkIn(true)}
                 onPressItem={(o) => setSelectedId(o.id)}
                 rowActions={(o) => [{ icon: 'open-outline', label: 'Open order', onPress: () => setSelectedId(o.id), tone: 'primary' }]}
                 stats={[

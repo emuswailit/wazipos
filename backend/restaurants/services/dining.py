@@ -368,6 +368,14 @@ def refresh_payment(data, user):
     order = payment.food_order
     if user.id not in (order.customer_id, order.owner_id) and getattr(user, "entity_id", None) != order.entity_id:
         return ["Payment not found"], None
+    return [], settle_payment(payment)
+
+
+def settle_payment(payment):
+    """Bring a pending payment up to date from the system till. Returns the payment."""
+    from payments.utils.system_till import PENDING_TIMEOUT_MINUTES, fetch_transaction
+
+    order = payment.food_order
     if payment.status == "PENDING":
         if payment.created < timezone.now() - timedelta(minutes=PENDING_TIMEOUT_MINUTES):
             payment.status, payment.description = "FAILED", "Payment expired (no PIN entered)."
@@ -385,7 +393,7 @@ def refresh_payment(data, user):
                         payment.save()
                         if payment.status == "SUCCESS":
                             _mark_paid(order)
-    return [], payment
+    return payment
 
 
 def record_cash(data, user):

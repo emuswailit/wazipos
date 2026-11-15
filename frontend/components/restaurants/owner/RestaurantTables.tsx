@@ -3,7 +3,7 @@
 // The restaurant's tables (name + seats): used when seating table bookings.
 
 import diningApi, { errorText, isOk, type RestaurantTable } from '@/api/diningApi';
-import { AdminFormSheet, AdminListView, FormRow, FormSection, type AdminListConfig } from '@/components/common/listScreen';
+import { AdminFormSheet, AdminListView, FormRow, FormSection, SheetButton, type AdminListConfig } from '@/components/common/listScreen';
 import { CustomTextField } from '@/components/common/CustomTextField';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { SwitchField } from '@/components/common/SwitchField';
@@ -12,6 +12,8 @@ import { Formik } from 'formik';
 import React, { useCallback, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import * as Yup from 'yup';
+
+import MenuQrSheet from '../walkin/MenuQrSheet';
 
 const config: AdminListConfig<RestaurantTable> = {
     title: 'Tables',
@@ -51,6 +53,8 @@ export default function RestaurantTables() {
     const [editing, setEditing] = useState<RestaurantTable | null>(null);
     const [formOpen, setFormOpen] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    // Menu QR code: undefined = closed, null = the whole restaurant, a table = that table.
+    const [qrFor, setQrFor] = useState<RestaurantTable | null | undefined>(undefined);
 
     const load = useCallback(async () => {
         setRefreshing(true);
@@ -97,6 +101,12 @@ export default function RestaurantTables() {
                 allItems={filtered}
                 onOpenCreate={() => open(null)}
                 onPressItem={open}
+                rowActions={(t) => [
+                    { icon: 'qr-code-outline', label: 'Menu QR code', onPress: () => setQrFor(t), tone: 'primary' },
+                    { icon: 'create-outline', label: 'Edit table', onPress: () => open(t) },
+                ]}
+                toolbar={<SheetButton label="Menu QR code" icon="qr-code-outline" variant="secondary" onPress={() => setQrFor(null)} />}
+                toolbarLabel="QR menu"
                 stats={[
                     { label: 'Tables', value: String(tables.length) },
                     { label: 'Seats', value: String(tables.filter((t) => t.is_available).reduce((s, t) => s + t.seats, 0)) },
@@ -147,9 +157,15 @@ export default function RestaurantTables() {
                             <CustomTextField name="description" label="Notes" placeholder="e.g. By the window" />
                             <SwitchField name="is_available" label="In use" />
                         </FormSection>
+                        {editing ? (
+                            <FormSection title="QR menu" hint="Guests scan it at the table to see the menu and order — no app needed.">
+                                <SheetButton label="Show this table’s QR code" icon="qr-code-outline" variant="secondary" onPress={() => { setFormOpen(false); setQrFor(editing); }} />
+                            </FormSection>
+                        ) : null}
                     </AdminFormSheet>
                 )}
             </Formik>
+            <MenuQrSheet visible={qrFor !== undefined} onClose={() => setQrFor(undefined)} table={qrFor ? { id: qrFor.id, title: qrFor.title } : null} />
         </>
     );
 }

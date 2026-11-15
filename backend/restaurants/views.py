@@ -1,7 +1,8 @@
 from django.db import IntegrityError
 from django.shortcuts import render
 from rest_framework import generics, permissions, response, status, exceptions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.throttling import AnonRateThrottle
 from authentication.serializers import EntityBranchSerializer, UsersSerializer
 from authentication.models import Roles
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -1421,7 +1422,88 @@ def diningAPIView(request):
         errors, stock = supply_writes[action](request.data, request.user)
         return fail("Not saved", errors) if errors else ok("Saved", sp.stock_out(stock), "supply")
 
+    # ---- walk-in customers at the counter: food and drinks on one pad (services/qr_menu.py)
+    if action in ("GetWalkInMenu", "PlaceWalkInOrder", "GetWalkInOrder"):
+        from restaurants.services import qr_menu as qm
+
+        if not d.is_restaurant_staff(request.user):
+            return fail("Not allowed", ["Switch to your restaurant to serve walk-in customers"])
+        entity = request.user.entity
+        if action == "GetWalkInMenu":
+            errors, menu = qm.menu(str(entity.id), None, request)
+            if not errors:
+                menu["tables"] = [d.table_out(t) for t in models.Table.objects.filter(entity=entity).order_by("title")]
+            return fail("Menu not found", errors) if errors else ok("Menu", menu, "menu")
+        if action == "PlaceWalkInOrder":
+            errors, token = qm.place(request.data, entity, request.user)
+            if errors:
+                return fail("Order not placed", errors)
+        else:
+            token = request.data.get("token")
+        errors, out = qm.status(token, entity)
+        return fail("Order not found", errors) if errors else ok("Order", out, "order")
+
     if action == "RecordFoodPayment":
         errors, order = d.record_cash(request.data, request.user)
         return fail("Payment not recorded", errors) if errors else ok("Payment recorded", d.order_out(order, request), "food_order")
+    raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
+class GuestMenuThrottle(AnonRateThrottle):
+    """The QR menu is open to guests: cap requests per address."""
+
+    rate = "90/min"
+
+
+class GuestOrderThrottle(AnonRateThrottle):
+    """Placing orders / asking for payment prompts from the QR menu."""
+
+    scope = "guest_order"
+    rate = "12/min"
+
+    def allow_request(self, request, view):
+        if request.data.get("action") not in ("PlaceOrder", "PayOrder"):
+            return True
+        return super().allow_request(request, view)
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([GuestMenuThrottle, GuestOrderThrottle])
+def publicMenuAPIView(request):
+    """
+    The page a restaurant's QR code opens (no sign-in) — services/qr_menu.py.
+    GetMenu {entity, table?} · PlaceOrder {entity, table?, service, customer_name,
+    customer_phone, notes, items[{menu_item, quantity}], drinks[{drink, unit, quantity}]}
+    · GetOrder {token} · PayOrder {token, bill, mobile_money_phone} · RefreshPayment {token, reference}
+    """
+    from core.responses import custom_errors_response
+    from restaurants.services import qr_menu as qm
+
+    action = request.data.get("action")
+    ok = lambda msg, data, key: custom_success_message(0, msg, data, key)
+    fail = lambda msg, errors: custom_errors_response(1, msg, errors)
+
+    if action == "GetMenu":
+        errors, menu = qm.menu(request.data.get("entity"), request.data.get("table"), request)
+        return fail("Menu not found", errors) if errors else ok("Menu", menu, "menu")
+    if action == "PlaceOrder":
+        entity = qm.restaurant(request.data.get("entity"))
+        if not entity:
+            return fail("Order not placed", ["Restaurant not found"])
+        errors, token = qm.place(request.data, entity, None)
+        if errors:
+            return fail("Order not placed", errors)
+        errors, out = qm.status(token)
+        return fail("Order not found", errors) if errors else ok("Order placed", out, "order")
+    if action == "GetOrder":
+        errors, out = qm.status(request.data.get("token"))
+        return fail("Order not found", errors) if errors else ok("Order", out, "order")
+    if action == "PayOrder":
+        errors, payment = qm.guest_pay(request.data)
+        return fail("Payment not started", errors) if errors else ok("Check your phone", payment, "payment")
+    if action == "RefreshPayment":
+        errors, payment = qm.guest_refresh_payment(request.data)
+        return fail("Payment not found", errors) if errors else ok("Payment", payment, "payment")
     raise exceptions.ValidationError(f"Action {action} is unknown")

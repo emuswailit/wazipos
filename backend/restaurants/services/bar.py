@@ -403,6 +403,13 @@ def refresh_tab_payment(data, user):
     p = rm.BarInventoryOrderPayment.objects.filter(reference_number=data.get("reference"), entity=user.entity).select_related("bar_inventory_order").first()
     if not p:
         return ["Payment not found"], None
+    return [], settle_tab_payment(p)
+
+
+def settle_tab_payment(p):
+    """Bring a pending tab payment up to date from the system till. Returns the payment."""
+    from payments.utils.system_till import PENDING_TIMEOUT_MINUTES, fetch_transaction
+
     if p.status == "PENDING":
         if p.created < timezone.now() - timedelta(minutes=PENDING_TIMEOUT_MINUTES):
             p.status, p.desc = "FAILED", "Expired: no PIN entered."
@@ -422,7 +429,7 @@ def refresh_tab_payment(data, user):
                         if p.status == "SUCCESS" and tab_due(order) <= 0:
                             order.is_paid, order.paid_at = "true", timezone.now()
                             order.save(update_fields=["is_paid", "paid_at", "updated"])
-    return [], p
+    return p
 
 
 def close_tab(data, user):
