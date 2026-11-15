@@ -207,7 +207,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Shipment
-        fields = ("id", "entity", "retailer_order", "customer_order", "method", "status", "recipient_name",
+        fields = ("id", "entity", "retailer_order", "customer_order", "food_order", "method", "status", "recipient_name",
                   "recipient_phone", "destination_collection_point", "destination_collection_point_title",
                   "chargeable_weight_kg", "distance_km", "total_cost", "tracking_number", "delivery_code",
                   "confirmed_at", "delivered_at", "notes", "legs", "created", "updated")
@@ -223,6 +223,9 @@ class ShipmentSerializer(serializers.ModelSerializer):
             return obj.delivery_code
         customer_order = obj.customer_order
         if customer_order and customer_order.owner_id == user.id and customer_order.entity_id != getattr(user, "entity_id", None):
+            return obj.delivery_code
+        food_order = obj.food_order
+        if food_order and user.id in (food_order.customer_id, food_order.owner_id) and food_order.entity_id != getattr(user, "entity_id", None):
             return obj.delivery_code
         return None
 

@@ -148,7 +148,7 @@ export interface PayableLeg extends ShipmentLeg {
 }
 
 /** Which order a shipment belongs to. */
-export type OrderLink = { retailer_order: string } | { customer_order: string };
+export type OrderLink = { retailer_order: string } | { customer_order: string } | { food_order: string };
 
 /** A delivery person's open leg (GetMyDeliveries). */
 export interface MyDeliveryLeg extends ShipmentLeg {

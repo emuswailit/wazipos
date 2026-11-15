@@ -15,6 +15,7 @@ urlpatterns = [
         name="restaurant-admin-apiview",
     ),
     path("login/", views.LoginAPIView.as_view(), name="login"),
+    path("dining", views.diningAPIView, name="restaurant-dining-apiview"),
 
     path(
         "menuitem/create",

@@ -45,6 +45,7 @@ class Menu(EntityRelatedModel):
         verbose_name_plural = "Branch Menus"
         unique_together = (
             "title",
+            "entity",
         )
     
 
@@ -143,8 +144,14 @@ class MenuItem(EntityRelatedModel):
         blank=True,
     )
     title = models.CharField(max_length=256, null=True, blank=True)
-    description = models.CharField(max_length=48, null=True, blank=True)
+    description = models.CharField(max_length=256, null=True, blank=True)
     images = models.ManyToManyField(MenuItemImages, related_name="images", blank=True)
+    # Customer-facing menu (dining service): a menu item is sold at its price
+    # while available; "category" groups the menu (e.g. Breakfast, Mains, Drinks).
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_available = models.BooleanField(default=True)
+    category = models.CharField(max_length=64, null=True, blank=True)
+    preparation_minutes = models.PositiveIntegerField(null=True, blank=True)
     owner = models.ForeignKey(
         Users,
         related_name="menu_item_creator",
@@ -439,7 +446,15 @@ class DeliveryMethodOptions(models.TextChoices):
     DELIVERY = "DELIVERY", _("DELIVERY")
     PICKUP = "PICKUP", _("PICKUP")
 
+class ServiceTypeOptions(models.TextChoices):
+    DELIVERY = "DELIVERY", _("Delivery")
+    PICKUP = "PICKUP", _("Pickup")
+    DINE_IN = "DINE_IN", _("Dine in / table booking")
+
+
 class FoodOrderStatusOptions(models.TextChoices):
+    READY = "READY", _("READY")
+    SERVED = "SERVED", _("SERVED")
     ASSIGNED = "ASSIGNED", _("ASSIGNED")
     CANCELLED = "CANCELLED", _("CANCELLED")
     COMPLETED = "COMPLETED", _("COMPLETED")
@@ -562,12 +577,23 @@ class BranchFoodOrder(EntityRelatedModel):
         blank=True,
         default=None,
     )
+    # Dining service: how the customer gets the food. DINE_IN = a table booking
+    # (when + how many), optionally with food ordered ahead.
+    service_type = models.CharField(max_length=20, choices=ServiceTypeOptions.choices, default=ServiceTypeOptions.PICKUP)
+    party_size = models.PositiveSmallIntegerField(null=True, blank=True)
+    reservation_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=300, null=True, blank=True)
+    order_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    ready_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     def save(self, *args, **kwargs):
         if self.customer:
             self.customer_name = f"{self.customer.first_name.upper()} {self.customer.last_name.upper()}"
-            self.customer_phone = f"{self.customer.phone}"
+            self.customer_phone = self.customer.phone or self.customer_phone
         super(BranchFoodOrder, self).save(*args, **kwargs)
     def __str__(self) -> str:
         return f"{self.document_number}"
@@ -595,6 +621,13 @@ class BranchFoodOrderItem(EntityRelatedModel):
         null=True,
         blank=True,
     )
+    # Dining service lines point at the menu item and keep the price paid.
+    menu_item = models.ForeignKey(
+        MenuItem, related_name="food_order_items", on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    title = models.CharField(max_length=256, null=True, blank=True)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     quantity = models.IntegerField()
     owner = models.ForeignKey(
         Users,
@@ -607,6 +640,8 @@ class BranchFoodOrderItem(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     def price(self):
+        if self.menu_item_id or not self.branch_food_item_id:
+            return self.unit_price
         return self.branch_food_item.price
 
 

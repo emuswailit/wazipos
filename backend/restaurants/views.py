@@ -1263,3 +1263,80 @@ class BranchRoomUpdateAPIView(generics.RetrieveUpdateAPIView):
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
         return obj
+
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def diningAPIView(request):
+    """
+    Dining service (restaurants/services/dining.py) — a restaurant is an entity
+    of type Restaurant.
+    Customers: GetRestaurants, GetRestaurantMenu, GetFoodDeliveryOptions,
+      PlaceFoodOrder, PayFoodOrder, RefreshFoodPayment, GetMyFoodOrders, CancelMyFoodOrder.
+    Restaurant staff (working in the restaurant): GetMyMenu, SaveMenuItem,
+      SaveTable, GetRestaurantOrders, UpdateFoodOrderStatus, RecordFoodPayment.
+    Delivery persons are assigned via logistics DispatchOrder {food_order, agent}.
+    """
+    from core.responses import custom_errors_response
+    from restaurants.services import dining as d
+
+    action = request.data.get("action")
+    ok = lambda msg, data, key: custom_success_message(0, msg, data, key)
+    fail = lambda msg, errors: custom_errors_response(1, msg, errors)
+
+    # ---- customers
+    if action == "GetRestaurants":
+        return ok("Restaurants", d.list_restaurants(request.data, request.user), "restaurants")
+    if action == "GetRestaurantMenu":
+        errors, menu = d.restaurant_menu(request.data.get("entity"), request)
+        return fail("Menu not found", errors) if errors else ok("Menu", menu, "menu")
+    if action == "GetFoodDeliveryOptions":
+        from logistics.views import _option_out
+
+        errors, options, kg = d.food_delivery_options(request.data)
+        if errors:
+            return fail("No delivery options", errors)
+        return ok("Delivery options", {"options": [_option_out(o) for o in options], "chargeable_weight_kg": str(kg)}, "delivery")
+    if action == "PlaceFoodOrder":
+        errors, order = d.place_order(request.data, request.user)
+        return fail("Order not placed", errors) if errors else ok("Order placed", d.order_out(order, request), "food_order")
+    if action == "PayFoodOrder":
+        errors, payment = d.pay_mobile_money(request.data, request.user)
+        if errors:
+            return fail("Payment not started", errors)
+        return ok("Check your phone to enter your PIN", {"reference": payment.reference_number, "status": payment.status}, "payment")
+    if action == "RefreshFoodPayment":
+        errors, payment = d.refresh_payment(request.data, request.user)
+        if errors:
+            return fail("Payment not found", errors)
+        order = payment.branch_food_order
+        order.refresh_from_db()
+        return ok("Payment", {"reference": payment.reference_number, "status": payment.status, "description": payment.description, "order": d.order_out(order, request)}, "payment")
+    if action == "GetMyFoodOrders":
+        return ok("Your orders", [d.order_out(o, request, for_customer=True) for o in d.my_orders(request.user)], "food_orders")
+    if action == "CancelMyFoodOrder":
+        errors, order = d.cancel_my_order(request.data, request.user)
+        return fail("Not cancelled", errors) if errors else ok("Order cancelled", d.order_out(order, request), "food_order")
+
+    # ---- restaurant staff
+    if not d.is_restaurant_staff(request.user):
+        return fail("Not a restaurant", ["Switch to your restaurant to manage it"])
+    if action == "GetMyMenu":
+        errors, menu = d.restaurant_menu(request.user.entity_id, request, staff=True)
+        return fail("Menu not found", errors) if errors else ok("Menu", menu, "menu")
+    if action == "SaveMenuItem":
+        errors, item = d.save_menu_item(request.data, request.FILES, request.user)
+        return fail("Dish not saved", errors) if errors else ok("Dish saved", d.menu_item_out(item, request), "menu_item")
+    if action == "SaveTable":
+        errors, table = d.save_table(request.data, request.user)
+        return fail("Table not saved", errors) if errors else ok("Table saved", d.table_out(table), "table")
+    if action == "GetRestaurantOrders":
+        return ok("Orders", [d.order_out(o, request) for o in d.restaurant_orders(request.data, request.user)], "food_orders")
+    if action == "UpdateFoodOrderStatus":
+        errors, order = d.update_status(request.data, request.user)
+        return fail("Status not changed", errors) if errors else ok("Order updated", d.order_out(order, request), "food_order")
+    if action == "RecordFoodPayment":
+        errors, order = d.record_cash(request.data, request.user)
+        return fail("Payment not recorded", errors) if errors else ok("Payment recorded", d.order_out(order, request), "food_order")
+    raise exceptions.ValidationError(f"Action {action} is unknown")

@@ -39,7 +39,7 @@ import WebTopNavbar from '@/utils/WebTopNavbar';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { ShoppingBag, Store, User } from 'lucide-react-native';
+import { ShoppingBag, Store, User, UtensilsCrossed } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   Image,
@@ -82,6 +82,7 @@ const MOBILE_TAB_BAR_HEIGHT = 56;
 
 const MOBILE_TABS = [
   { title: 'Shopping', route: '/(tabs)', icon: ShoppingBag },
+  { title: 'Restaurants', route: '/(tabs)/restaurants', icon: UtensilsCrossed },
   { title: 'Business', route: '/(tabs)/business', icon: Store },
   { title: 'Profile', route: '/(tabs)/profile', icon: User },
 ] as const;
@@ -205,6 +206,8 @@ function GlobalAppShellLayout() {
   if (inTabsGroup) {
     if (!tabSegment || tabSegment === 'index') {
       activeTabTitle = 'Shopping';
+    } else if (tabSegment === 'restaurants') {
+      activeTabTitle = 'Restaurants';
     } else if (tabSegment === 'business') {
       activeTabTitle = 'Business';
     } else if (tabSegment === 'profile') {

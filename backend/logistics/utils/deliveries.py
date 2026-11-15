@@ -500,6 +500,11 @@ def _seller_order(data, user):
     if data.get("customer_order"):
         order = CustomerOrders.objects.filter(id=data["customer_order"], entity=user.entity).first()
         return (None if order else "Customer order for provided ID does not exist"), order, "customer"
+    if data.get("food_order"):
+        from restaurants.models import BranchFoodOrder
+
+        order = BranchFoodOrder.objects.filter(id=data["food_order"], entity=user.entity).first()
+        return (None if order else "Food order for provided ID does not exist"), order, "food"
     order = RetailerOrders.objects.select_related("wholesaler", "retailer").filter(
         id=data.get("retailer_order"), wholesaler=user.entity
     ).first()
@@ -507,7 +512,7 @@ def _seller_order(data, user):
 
 
 def _order_paid(order, kind):
-    if kind == "customer":
+    if kind in ("customer", "food"):
         return str(order.is_paid).lower() == "true"
     from wholesalers.services.retailer_order_payments import heal_paid_flag
 
@@ -529,11 +534,16 @@ def dispatch_order(data, user):
         return ["The buyer chose to collect this order; there's nothing to deliver"], None
     if not _order_paid(order, kind):
         return ["Dispatch once the order is paid"], None
-    from logistics.utils.fulfilment import is_ready_for_dispatch
+    if kind == "food":
+        # The kitchen marks food READY (restaurants dining service).
+        if str(order.status).upper() != "READY":
+            return ["Mark the food ready before dispatching"], None
+    else:
+        from logistics.utils.fulfilment import is_ready_for_dispatch
 
-    if not is_ready_for_dispatch(order, kind):
-        return ["Prepare and pack the order, then mark it ready, before dispatching"], None
-    link = {"customer_order": order} if kind == "customer" else {"retailer_order": order}
+        if not is_ready_for_dispatch(order, kind):
+            return ["Prepare and pack the order, then mark it ready, before dispatching"], None
+    link = {"customer_order": order} if kind == "customer" else {"food_order": order} if kind == "food" else {"retailer_order": order}
     shipment = Shipment.objects.filter(**link).first()
     if not shipment:
         return ["The buyer hasn't chosen a delivery option for this order"], None
@@ -639,6 +649,12 @@ def _mark_delivered(shipment):
         customer_order.delivered_at = now
         customer_order.status = "DELIVERED"
         customer_order.save()
+    food_order = shipment.food_order
+    if food_order and not food_order.delivered_at:
+        food_order.delivered_at = now
+        food_order.completed_at = food_order.completed_at or now
+        food_order.status = "DELIVERED"
+        food_order.save()
 
 
 def update_leg(data, user):

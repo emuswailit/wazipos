@@ -421,6 +421,11 @@ def deliveriesAPIView(request):
                 customer_order_id=request.data["customer_order"]).first()
             co = shipment.customer_order if shipment else None
             allowed = bool(co) and (co.entity_id == entity.id or co.owner_id == request.user.id)
+        elif request.data.get("food_order"):
+            shipment = models.Shipment.objects.prefetch_related("legs").select_related("food_order").filter(
+                food_order_id=request.data["food_order"]).first()
+            fo = shipment.food_order if shipment else None
+            allowed = bool(fo) and (fo.entity_id == entity.id or request.user.id in (fo.customer_id, fo.owner_id))
         else:
             shipment = models.Shipment.objects.prefetch_related("legs").filter(retailer_order_id=request.data.get("retailer_order")).first()
             order = shipment.retailer_order if shipment else None

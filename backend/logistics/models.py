@@ -320,6 +320,10 @@ class Shipment(EntityRelatedModel):
         "retailers.CustomerOrders", related_name="shipment",
         on_delete=models.CASCADE, null=True, blank=True,
     )
+    food_order = models.OneToOneField(
+        "restaurants.BranchFoodOrder", related_name="shipment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
     method = models.CharField(max_length=20, choices=Method.choices, default=Method.LOCAL)
     status = models.CharField(max_length=20, choices=ShipmentStatus.choices, default=ShipmentStatus.QUOTED)
     origin_point = geomodels.PointField(null=True, blank=True, srid=4326)
@@ -347,10 +351,11 @@ class Shipment(EntityRelatedModel):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(retailer_order__isnull=False, customer_order__isnull=True)
-                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False)
+                    models.Q(retailer_order__isnull=False, customer_order__isnull=True, food_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False, food_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=True, food_order__isnull=False)
                 ),
-                name="shipment_exactly_one_order",
+                name="shipment_exactly_one_order_v2",
             ),
         ]
 
