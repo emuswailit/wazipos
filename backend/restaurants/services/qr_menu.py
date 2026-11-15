@@ -10,8 +10,10 @@
 #                              GetOrder {token}
 #                              PayOrder {token, bill: FOOD|DRINKS, mobile_money_phone}
 #                              RefreshPayment {token, reference}
-#   Staff serve walk-ins at the counter with the same pad:
+#   Staff serve walk-ins at the counter with the same pad (the restaurant POS):
 #     POST /restaurants/dining PlaceWalkInOrder {...same lines...}
+#                              PayWalkInOrder {token, payment_method? | mobile_money_phone}
+#                              RefreshWalkInPayment {token, reference}
 #
 # Food goes on a FoodOrder (the kitchen's orders board), drinks on a bar tab
 # (BarInventoryOrder — stock leaves as bottles / tots, see services/bar.py).
@@ -265,6 +267,98 @@ def guest_refresh_payment(data):
         p = b.settle_tab_payment(p)
         return [], {"bill": "DRINKS", "reference": p.reference_number, "status": p.status, "description": p.desc}
     return ["Payment not found"], None
+
+
+# ---------------------------------------------------------------- POS: staff take payment
+
+def staff_pay(data, user):
+    """
+    Counter payment for a walk-in order — food and drinks together.
+    {token, payment_method?, mobile_money_phone?}
+      mobile_money_phone: one M-Pesa prompt for everything due (the food and the
+        drinks payments share its reference); follow it with staff_refresh.
+      otherwise: recorded as paid now with the method picked (cash by default).
+    Returns (errors, {status, reference?, description?}).
+    """
+    from authentication.utils.utils import generate_reference_number, use_reference_number
+    from payments.models import PaymentMethods
+    from payments.utils.system_till import push_to_system_till
+
+    entity = user.entity
+    food, tab = _orders(str(data.get("token") or "").strip(), entity)
+    if not food and not tab:
+        return ["Order not found"], None
+    food_due = d.amount_due(food) if food and food.status != "CANCELLED" else Decimal("0")
+    tab_due = b.tab_due(tab) if tab and tab.status != "CANCELLED" else Decimal("0")
+    if food_due + tab_due <= 0:
+        return ["This order is already paid"], None
+
+    phone = str(data.get("mobile_money_phone") or "").strip()
+    if not phone:
+        method = PaymentMethods.objects.filter(id=data.get("payment_method")).first() if data.get("payment_method") else None
+        method = method or PaymentMethods.objects.filter(title="CASH").first()
+        if not method:
+            return ["Pick a payment method"], None
+        title = str(method.title or "").upper()
+        if title == "CREDIT":
+            return ["Credit isn't taken at the counter — leave the order unpaid instead"], None
+        if title == "MOBILE MONEY":
+            return ["Enter the customer's M-Pesa number"], None
+        with transaction.atomic():
+            if food_due > 0:
+                errors, _ = d.record_cash({"food_order": str(food.id), "payment_method": str(method.id)}, user)
+                if errors:
+                    transaction.set_rollback(True)
+                    return errors, None
+            if tab_due > 0:
+                errors = b._record(tab, user, str(method.id))
+                if errors:
+                    transaction.set_rollback(True)
+                    return errors, None
+        return [], {"status": "SUCCESS", "reference": None, "description": f"Paid by {method.title.title()}"}
+
+    method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
+    if not method:
+        return ["Mobile money isn't set up"], None
+    amount = math.ceil(food_due + tab_due)
+    reference = generate_reference_number(entity, user)
+    errors, result, telco = push_to_system_till(reference, amount, phone, description=f"{entity.title}"[:60])
+    if errors:
+        return errors, None
+    common = dict(
+        entity=entity, owner=user, payment_method=method, reference_number=reference,
+        psp_reference_number=str(result.get("ref") or "")[:50], status="PENDING", currency="KES", telco_name=(telco or "")[:28],
+    )
+    # One prompt (rounded up to a whole shilling), recorded against each bill for exactly what it owes.
+    if food_due > 0:
+        rm.FoodOrderPayment.objects.create(food_order=food, description="Waiting for PIN entry.", amount=food_due, **common)
+    if tab_due > 0:
+        rm.BarInventoryOrderPayment.objects.create(bar_inventory_order=tab, desc="Waiting for PIN entry.", amount=tab_due, **common)
+    use_reference_number(reference)
+    return [], {"status": "PENDING", "reference": reference, "description": "Waiting for the customer to enter their PIN."}
+
+
+def staff_refresh(data, user):
+    """Follow a counter M-Pesa prompt: settles the food and drinks payments behind its reference."""
+    food, tab = _orders(str(data.get("token") or "").strip(), user.entity)
+    reference = str(data.get("reference") or "").strip()
+    if not reference or (not food and not tab):
+        return ["Payment not found"], None
+    states, description = [], ""
+    fp = rm.FoodOrderPayment.objects.filter(reference_number=reference, food_order=food).select_related("food_order").first() if food else None
+    if fp:
+        fp = d.settle_payment(fp)
+        states.append(fp.status)
+        description = fp.description
+    tp = rm.BarInventoryOrderPayment.objects.filter(reference_number=reference, bar_inventory_order=tab).select_related("bar_inventory_order").first() if tab else None
+    if tp:
+        tp = b.settle_tab_payment(tp)
+        states.append(tp.status)
+        description = description or tp.desc
+    if not states:
+        return ["Payment not found"], None
+    status_ = "PENDING" if "PENDING" in states else ("SUCCESS" if all(x == "SUCCESS" for x in states) else "FAILED")
+    return [], {"status": status_, "reference": reference, "description": description}
 
 
 # ---------------------------------------------------------------- QR code

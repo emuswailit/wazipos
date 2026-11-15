@@ -1423,7 +1423,7 @@ def diningAPIView(request):
         return fail("Not saved", errors) if errors else ok("Saved", sp.stock_out(stock), "supply")
 
     # ---- walk-in customers at the counter: food and drinks on one pad (services/qr_menu.py)
-    if action in ("GetWalkInMenu", "PlaceWalkInOrder", "GetWalkInOrder"):
+    if action in ("GetWalkInMenu", "PlaceWalkInOrder", "GetWalkInOrder", "PayWalkInOrder", "RefreshWalkInPayment"):
         from restaurants.services import qr_menu as qm
 
         if not d.is_restaurant_staff(request.user):
@@ -1440,7 +1440,14 @@ def diningAPIView(request):
                 return fail("Order not placed", errors)
         else:
             token = request.data.get("token")
+        payment = None
+        if action in ("PayWalkInOrder", "RefreshWalkInPayment"):
+            errors, payment = (qm.staff_pay if action == "PayWalkInOrder" else qm.staff_refresh)(request.data, request.user)
+            if errors:
+                return fail("Payment not taken", errors)
         errors, out = qm.status(token, entity)
+        if not errors and payment:
+            out["payment"] = payment
         return fail("Order not found", errors) if errors else ok("Order", out, "order")
 
     if action == "RecordFoodPayment":

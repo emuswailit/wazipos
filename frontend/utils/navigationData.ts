@@ -441,6 +441,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         tint: TINTS.orange,
         subRoutes: [
             {
+                // The restaurant POS: food and drinks for a walk-in customer, paid at the counter.
+                id: 8,
+                title: 'New order',
+                route: '/newRestaurantOrder',
+                allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PlusCircle',
+                tint: TINTS.orange,
+            },
+            {
                 id: 1,
                 title: 'Orders & bookings',
                 route: '/restaurantOrders',

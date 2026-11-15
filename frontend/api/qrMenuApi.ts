@@ -6,7 +6,8 @@
 //   Guests (no sign-in) scan the restaurant's QR code, which opens /menu/<restaurant>:
 //     POST /restaurants/menu   GetMenu, PlaceOrder, GetOrder, PayOrder, RefreshPayment
 //   Staff serve walk-ins at the counter with the same pad:
-//     POST /restaurants/dining GetWalkInMenu, PlaceWalkInOrder, GetWalkInOrder
+//     POST /restaurants/dining GetWalkInMenu, PlaceWalkInOrder, GetWalkInOrder,
+//                              PayWalkInOrder, RefreshWalkInPayment (the restaurant POS)
 //   Staff make the QR codes:
 //     POST /authentication/users GenerateQRCode {purpose: RESTAURANT_MENU, table?, format: base64}
 
@@ -50,6 +51,7 @@ export interface WalkInTab {
     paid: string;
     due: string;
     is_paid: boolean;
+    customer_phone?: string | null;
     items: { id: string; title: string; unit: DrinkUnit; quantity: number; unit_price: string; line_total: string }[];
     last_payment: { reference: string; status: string; description: string } | null;
 }
@@ -63,6 +65,15 @@ export interface WalkInOrder {
     tab: WalkInTab | null;
     total: string;
     due: string;
+    /** Staff POS: the payment just taken / being followed. */
+    payment?: WalkInPayment;
+}
+
+/** A counter payment for the whole bill (food and drinks). */
+export interface WalkInPayment {
+    status: 'PENDING' | 'SUCCESS' | 'FAILED';
+    reference: string | null;
+    description?: string;
 }
 
 export interface WalkInOrderInput {
@@ -107,6 +118,9 @@ const qrMenuApi = {
     staffMenu: () => staff('GetWalkInMenu'),
     staffPlace: (input: WalkInOrderInput) => staff('PlaceWalkInOrder', input),
     staffOrder: (token: string) => staff('GetWalkInOrder', { token }),
+    /** Take payment at the counter: a method (cash, card…) recorded now, or one M-Pesa prompt for the whole bill. */
+    staffPay: (token: string, how: { payment_method?: string | null; mobile_money_phone?: string }) => staff('PayWalkInOrder', { token, ...how }),
+    staffRefreshPayment: (token: string, reference: string) => staff('RefreshWalkInPayment', { token, reference }),
     /** The restaurant's menu QR code (optionally for one table). */
     qrCode: (table?: string | null, base_url?: string) =>
         client.post('/authentication/users', { action: 'GenerateQRCode', purpose: 'RESTAURANT_MENU', format: 'base64', table: table || undefined, base_url }),
