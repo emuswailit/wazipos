@@ -44,6 +44,13 @@ const login = (
  * Responds in the same shape as `login`.
  * @param {string} id_token Google-signed ID token from Google Sign-In.
  */
+/** Facebook access token -> WaziPOS session (server answers "not set up yet" until configured). */
+const facebookLogin = (
+  access_token: string
+): Promise<ApiResponse<LoginResponsePayload>> => {
+  return client.post<LoginResponsePayload>("/authentication/facebook/", { access_token });
+};
+
 const googleLogin = (
   id_token: string
 ): Promise<ApiResponse<LoginResponsePayload>> => {
@@ -56,6 +63,7 @@ const googleLogin = (
 const authService = {
   login,
   googleLogin,
+  facebookLogin,
 };
 
 export default authService;

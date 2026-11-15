@@ -1,4 +1,5 @@
 import authService from '@/api/authApi';
+import FacebookSignInButton from "@/components/auth/FacebookSignInButton";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useAuth } from "@/context/AuthContext";
 import useApi from "@/hooks/useApi";
@@ -198,6 +199,9 @@ export default function LoginForm() {
                         loading={googleLoginApi.loading}
                         disabled={isSubmitting || loginApi.loading}
                     />
+                    {/* Placeholder until EXPO_PUBLIC_FACEBOOK_APP_ID is set (shows "coming soon"). */}
+                    <FacebookSignInButton onError={(message) => setAuthErrors([message])} />
+                    <View style={{ height: 4 }} />
 
                     <TouchableOpacity
                         onPress={() => router.push("/(auth)/register" as any)}

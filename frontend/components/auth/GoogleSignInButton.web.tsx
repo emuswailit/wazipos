@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import SocialPlaceholderButton from "./SocialPlaceholderButton";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GOOGLE_SIGN_IN_CONFIGURED, GOOGLE_WEB_CLIENT_ID, GoogleSignInButtonProps, noteGoogleSignInNotConfigured } from "./googleSignInTypes";
@@ -86,7 +87,7 @@ export default function GoogleSignInButton({ onIdToken, onError, loading, disabl
 
     if (!GOOGLE_SIGN_IN_CONFIGURED) {
         noteGoogleSignInNotConfigured();
-        return null;
+        return <SocialPlaceholderButton provider="google" onPress={onError} />;
     }
 
     const blocked = loading || disabled;

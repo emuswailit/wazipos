@@ -298,6 +298,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 tint: TINTS.violet,
             },
             {
+                // People on WaziPOS: create / edit, ID or passport, entity, SMS & call consent.
+                id: 22,
+                title: 'Users',
+                route: '/users?tab=users',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Users',
+                tint: TINTS.violet,
+            },
+            {
                 id: 17,
                 title: 'Subscription payments',
                 route: '/subscriptionPayments?tab=subscriptionPayments',

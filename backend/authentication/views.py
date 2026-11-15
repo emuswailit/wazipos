@@ -19,6 +19,7 @@ from authentication.utils import utils
 from payments.models import UserAccounts,PaymentServicesProvider
 from rest_framework.decorators import (
     api_view,
+    authentication_classes,
     permission_classes,
     parser_classes,
     renderer_classes,
@@ -975,6 +976,42 @@ def adminUsersAPIView(request):
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
+    # ---- user management (platform admins) ----
+    from authentication.utils import admin_users as au
+
+    if action == "AdminGetUsers":
+        users = au.admin_list_users(request.data)
+        return custom_success_message(0, "Users", [au.admin_user_out(u, request) for u in users], "users")
+    if action in ("AdminCreateUser", "AdminUpdateUser"):
+        target = None
+        if action == "AdminUpdateUser":
+            target = models.Users.objects.filter(id=request.data.get("user")).first()
+            if not target:
+                return custom_errors_response(1, "User not saved", ["User for provided ID does not exist"])
+        errors, saved, note = au.admin_save_user(request.data, request.FILES, request.user, target)
+        if errors:
+            return custom_errors_response(1, "User not saved", errors)
+        out = au.admin_user_out(saved, request)
+        out["consent_note"] = note
+        return custom_success_message(0, "User created" if target is None else "User updated", out, "user")
+    if action == "AdminSendConsent":
+        target = models.Users.objects.filter(id=request.data.get("user")).first()
+        if not target:
+            return custom_errors_response(1, "Code not sent", ["User for provided ID does not exist"])
+        errors, _ = au.request_contact_consent(target, requested_by=request.user)
+        if errors:
+            return custom_errors_response(1, "Code not sent", errors)
+        return custom_success_message(0, "Consent code sent", au.admin_user_out(target, request), "user")
+    if action == "AdminConfirmConsent":
+        # The person read the code out to the staff member: that is their consent.
+        target = models.Users.objects.filter(id=request.data.get("user")).first()
+        if not target:
+            return custom_errors_response(1, "Consent not confirmed", ["User for provided ID does not exist"])
+        errors, _ = au.confirm_contact_consent(target, request.data.get("code"), confirmed_by=request.user, via="STAFF")
+        if errors:
+            return custom_errors_response(1, "Consent not confirmed", errors)
+        return custom_success_message(0, "Consent confirmed", au.admin_user_out(target, request), "user")
     if request.data["action"] == "GetUserDetailsById":
         # get user profile
 
@@ -5183,3 +5220,98 @@ class UserMe(APIView):
     def get(self, request):
         serializer = GenericUserSerializer(request.user)
         return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+@authentication_classes([])
+def contactConsentAPIView(request):
+    """
+    The person confirms consent with the code they received by SMS:
+    {"action": "ConfirmContactConsent", "phone", "code"}.
+    """
+    from authentication.utils import admin_users as au
+
+    if request.data.get("action") != "ConfirmContactConsent":
+        raise exceptions.ValidationError("Action is unknown")
+    errors, _ = au.confirm_consent_by_phone(request.data.get("phone"), request.data.get("code"))
+    if errors:
+        return custom_errors_response(1, "Consent not confirmed", errors)
+    return custom_success_message(0, "Thank you — your consent is recorded", None, "consent")
+
+
+def get_or_create_social_user(email, first_name, last_name, method):
+    """Like get_or_create_google_user, for any social provider (e.g. Facebook)."""
+    email = email.strip().lower()
+    user = models.Users.objects.filter(email__iexact=email).first()
+    if user:
+        return user, False
+    client_role = models.Roles.objects.filter(value="Client").first()
+    default_entity = models.Entities.objects.filter(title="WAZIPOS").first()
+    if not client_role or not default_entity:
+        raise exceptions.APIException("System roles or default entity are not set up")
+    with transaction.atomic():
+        user = models.Users(email=email, first_name=first_name or email.split("@")[0], last_name=last_name or "", registration_method=method)
+        user.set_unusable_password()
+        user.entity = default_entity
+        user.country = default_entity.country
+        user.is_active = True
+        user.is_email_verified = "true"
+        user.is_verified = "true"
+        user.save()
+        user.roles.add(client_role)
+    return user, True
+
+
+class FacebookLoginAPIView(APIView):
+    """
+    Sign in with a Facebook access token. Placeholder until FACEBOOK_APP_ID and
+    FACEBOOK_APP_SECRET are set: it answers "not set up yet". When set, the
+    token is checked with Facebook (debug_token) and the account is found or
+    created under WAZIPOS like Google sign-in.
+    """
+    authentication_classes = []
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        app_id = getattr(settings, "FACEBOOK_APP_ID", "") or ""
+        app_secret = getattr(settings, "FACEBOOK_APP_SECRET", "") or ""
+        if not app_id or not app_secret:
+            return JsonResponse({"response_code": 1, "response_message": "Facebook sign-in isn't set up yet"}, status=status.HTTP_200_OK)
+        access_token = request.data.get("access_token")
+        if not access_token:
+            return JsonResponse({"response_code": 1, "response_message": "Facebook access token is required"}, status=status.HTTP_200_OK)
+        try:
+            check = requests.get(
+                "https://graph.facebook.com/debug_token",
+                params={"input_token": access_token, "access_token": f"{app_id}|{app_secret}"},
+                timeout=10,
+            ).json().get("data", {})
+            if not check.get("is_valid") or str(check.get("app_id")) != str(app_id):
+                raise ValueError("token not valid for this app")
+            me = requests.get(
+                "https://graph.facebook.com/me",
+                params={"fields": "id,email,first_name,last_name", "access_token": access_token},
+                timeout=10,
+            ).json()
+        except Exception as e:
+            create_log("info", f"Facebook sign-in rejected: {e}")
+            return JsonResponse({"response_code": 1, "response_message": "Facebook sign-in could not be verified. Please try again."}, status=status.HTTP_200_OK)
+        if not me.get("email"):
+            return JsonResponse({"response_code": 1, "response_message": "Your Facebook account has no email we can use. Sign up with email instead."}, status=status.HTTP_200_OK)
+        user, created = get_or_create_social_user(me["email"], me.get("first_name"), me.get("last_name"), "Facebook")
+        if not user.is_active:
+            return JsonResponse({"response_code": 1, "response_message": "This account is inactive. Contact support."}, status=status.HTTP_200_OK)
+        tokens = user.tokens()
+        decoded_access = jwt.decode(tokens["access"], config("SECRET_KEY"), algorithms=["HS256"])
+        return JsonResponse(
+            data={
+                "tokens": tokens,
+                "expires": decoded_access["exp"],
+                "response_code": 0,
+                "response_message": "Account created and signed in with Facebook" if created else "Log in was succesful",
+                "user": UsersSerializer(user, many=False, context={"request": request}).data,
+            },
+            safe=False,
+            status=status.HTTP_200_OK,
+        )

@@ -1674,7 +1674,9 @@ class Users(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = "Users"
     REGISTRATION_CHOICES = [
         ('Email', 'Email'),
-        ('Google', 'Google')
+        ('Google', 'Google'),
+        ('Facebook', 'Facebook'),
+        ('Admin', 'Admin'),
     ]
     GENDER_CHOICES = (
         ("Female", "Female"),
@@ -2759,3 +2761,45 @@ class PasswordResets(EntityRelatedModel):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+
+
+
+class ContactConsent(models.Model):
+    """
+    A person's consent ("handshake") to SMS and calls from WaziPOS vendors and
+    their staff on one phone number: a one-time code sent by SMS, confirmed by
+    the person (entering it, or reading it to the staff member registering them).
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", _("Waiting for the code")
+        CONFIRMED = "CONFIRMED", _("Consent given")
+        REVOKED = "REVOKED", _("Replaced / withdrawn")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey("Users", related_name="contact_consents", on_delete=models.CASCADE)
+    phone = models.CharField(max_length=32)
+    code_hash = models.CharField(max_length=128)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    sms_sent_at = models.DateTimeField(null=True, blank=True)
+    sms_error = models.CharField(max_length=255, null=True, blank=True)
+    requested_by = models.ForeignKey(
+        "Users", related_name="consents_requested", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    # USER = the person entered it; STAFF = they read it to the staff member.
+    confirmed_via = models.CharField(max_length=10, null=True, blank=True)
+    confirmed_by = models.ForeignKey(
+        "Users", related_name="consents_confirmed", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Contact consents"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.phone} ({self.status})"

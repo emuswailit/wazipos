@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import SocialPlaceholderButton from "./SocialPlaceholderButton";
 import { FontAwesome } from "@expo/vector-icons";
 import { useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity } from "react-native";
@@ -52,7 +53,7 @@ export default function GoogleSignInButton({ onIdToken, onError, loading, disabl
 
     if (!GOOGLE_SIGN_IN_CONFIGURED) {
         noteGoogleSignInNotConfigured();
-        return null;
+        return <SocialPlaceholderButton provider="google" onPress={onError} />;
     }
 
     const google = loadGoogleSignin();
