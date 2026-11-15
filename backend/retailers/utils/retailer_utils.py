@@ -3507,8 +3507,12 @@ def create_customer_order(data, user):
     # may still set a delivery fee by hand.
     delivery_choice = None
     if str(delivery_method or "").upper() in ("DELIVERY", "COURIER"):
-        from logistics.utils.deliveries import plan_customer_checkout_delivery
+        from logistics.utils.deliveries import delivery_location_errors, plan_customer_checkout_delivery
 
+        # Only shops whose location is set (entitylocations) may deliver.
+        location_errors = delivery_location_errors(entity)
+        if location_errors:
+            return location_errors, None
         option_key = details.get("delivery_option")
         seller_staff = bool(entity) and getattr(user, "entity_id", None) == entity.id
         if option_key:
@@ -3855,6 +3859,12 @@ def update_customer_order(data, user):
 
     if details.get("delivery_method"):
         delivery_method = details["delivery_method"]
+        if str(delivery_method).upper() in ("DELIVERY", "COURIER"):
+            from logistics.utils.deliveries import delivery_location_errors
+
+            location_errors = delivery_location_errors(customer_order.entity)
+            if location_errors:
+                return location_errors, None
 
     if details.get("shipping_cost") not in (None, ""):
         shipping_cost = _to_decimal(details["shipping_cost"])

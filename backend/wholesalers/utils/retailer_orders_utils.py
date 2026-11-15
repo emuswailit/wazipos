@@ -1114,6 +1114,11 @@ def update_retailer_order(data, user):
 
     if "delivery_method" in data["retailer_order_details"]:
         delivery_method = data["retailer_order_details"]["delivery_method"]
+        if retailer_order and str(delivery_method or "").upper() in ("COURIER", "DELIVERY"):
+            from logistics.utils.deliveries import delivery_location_errors
+
+            # Only a wholesaler and retailer whose locations are set may use delivery.
+            errors.extend(delivery_location_errors(retailer_order.wholesaler, retailer_order.retailer))
 
     if "shipping_amount" in data["retailer_order_details"]:
         shipping_amount = data["retailer_order_details"]["shipping_amount"]

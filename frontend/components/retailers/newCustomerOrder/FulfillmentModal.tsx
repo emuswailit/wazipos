@@ -2,6 +2,7 @@
 
 import { DateField } from '@/components/common/DateField';
 import { DeliveryLogisticsSelector } from '@/components/common/DeliveryLogisticsSelector';
+import { useDeliveryAvailability } from '@/components/deliveries/useDeliveryAvailability';
 import { useAuth } from '@/context/AuthContext';
 import React from 'react';
 import {
@@ -68,6 +69,13 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
     deliveryEmployees, deliveryEmployeesLoading, selectedDeliveryEmployeeId, onSelectDeliveryEmployee
 }) => {
     const { theme } = useAuth();
+    // DELIVERY only for shops whose location is set (entitylocations).
+    const deliveryAvailability = useDeliveryAvailability({});
+    React.useEffect(() => {
+        if (!deliveryAvailability.loading && !deliveryAvailability.available && deliveryMethod !== 'PICKUP') {
+            setDeliveryMethod('PICKUP');
+        }
+    }, [deliveryAvailability.loading, deliveryAvailability.available, deliveryMethod, setDeliveryMethod]);
     const currentMethodObj = paymentMethodsList.find((m) => m.id === selectedPaymentMethodId);
     const normalizedPaymentTitle = currentMethodObj?.title?.toUpperCase() || '';
     const containerBg = isMobileBackground ? "bg-slate-50 dark:bg-slate-955" : "bg-white dark:bg-slate-900";
@@ -78,7 +86,7 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                 <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase tracking-wider mb-1.5">Delivery Method</Text>
                 <View className={`flex-row p-1 rounded-lg border border-slate-200 dark:border-slate-800 ${isMobileBackground ? 'bg-slate-100 dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-955'}`}>
                     {['PICKUP', 'DELIVERY'].map((m) => {
-                        const isDisabled = m === 'DELIVERY';
+                        const isDisabled = m === 'DELIVERY' && !deliveryAvailability.available;
                         const isActive = deliveryMethod === m;
 
                         return (
@@ -93,6 +101,11 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                         );
                     })}
                 </View>
+                {!deliveryAvailability.loading && !deliveryAvailability.available && deliveryAvailability.reason ? (
+                    <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.textDark, marginTop: 6 }}>
+                        {deliveryAvailability.reason}
+                    </Text>
+                ) : null}
             </View>
 
             {deliveryMethod !== 'PICKUP' && onToggleRetailerDelivery && (

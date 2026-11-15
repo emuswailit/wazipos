@@ -457,6 +457,31 @@ def deliveriesAPIView(request):
         # Seller, once paid: assign a delivery person of the planned provider
         # ("retailer_order" or "customer_order").
         return _shipment_response(deliveries.dispatch_order(request.data, request.user), request, "Order dispatched")
+    if action == "GetDeliveryAvailability":
+        # Can these businesses use DELIVERY? Only when their locations are set.
+        # {"retailer_order"}: the wholesaler and the retailer; {"entity"}: that
+        # seller (a shop front); nothing: the caller's own business (POS).
+        if request.data.get("retailer_order"):
+            from wholesalers.models import RetailerOrders
+
+            order = RetailerOrders.objects.select_related("wholesaler", "retailer").filter(
+                id=request.data.get("retailer_order")
+            ).first()
+            if not order or getattr(request.user, "entity_id", None) not in (order.wholesaler_id, order.retailer_id):
+                return custom_errors_response(1, "Order not found", ["Retailer order for provided ID does not exist"])
+            reasons = deliveries.delivery_location_errors(order.wholesaler, order.retailer)
+        else:
+            seller = (
+                models.Entities.objects.filter(id=request.data.get("entity")).first()
+                if request.data.get("entity") else getattr(request.user, "entity", None)
+            )
+            if not seller:
+                return custom_errors_response(1, "Business not found", ["Business not found"])
+            reasons = deliveries.delivery_location_errors(seller)
+        return custom_success_message(0, "Delivery availability", {
+            "delivery_available": not reasons,
+            "reasons": reasons,
+        }, "availability")
     if action == "GetCustomerDeliveryOptions":
         # Shopper at checkout, before paying: "entity" (the shop), destination
         # lat/lng and "order_items" [{retailer_receipt, purchased_quantity}].

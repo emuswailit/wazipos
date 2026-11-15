@@ -4,6 +4,7 @@ import {
     type DeliveryMethod,
 } from "@/components/common/DeliveryMethodSelector";
 import { CheckoutDeliveryOptions } from "@/components/deliveries/CheckoutDeliveryOptions";
+import { useDeliveryAvailability } from "@/components/deliveries/useDeliveryAvailability";
 import { useAuth } from "@/context/AuthContext";
 import {
     ShopperCartLine,
@@ -252,6 +253,16 @@ export default function RetailerCartPanel({
         setQuantity,
         removeLine,
     } = useShopperCart();
+
+    // DELIVERY only from shops whose location is set (entitylocations).
+    const deliveryAvailability = useDeliveryAvailability(retailerId ? { entity: retailerId } : null);
+    useEffect(() => {
+        if (!deliveryAvailability.loading && !deliveryAvailability.available && deliveryMethod === "DELIVERY") {
+            onDeliveryMethodChange?.("PICKUP");
+            onDeliveryOptionChange?.(null, null);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [deliveryAvailability.loading, deliveryAvailability.available, deliveryMethod]);
 
     const [locationError, setLocationError] = useState<string | null>(null);
     const [isLocating, setIsLocating] = useState(false);
@@ -502,7 +513,7 @@ export default function RetailerCartPanel({
                             <View style={{ marginTop: 14 }}>
                                 <DeliveryMethodSelector
                                     value={deliveryMethod}
-                                    methods={["PICKUP", "DELIVERY"]}
+                                    methods={deliveryAvailability.available ? ["PICKUP", "DELIVERY"] : ["PICKUP"]}
                                     onChange={(m) => {
                                         onDeliveryMethodChange?.(m);
                                         if (m === "PICKUP") onDeliveryOptionChange?.(null, null);
@@ -510,6 +521,11 @@ export default function RetailerCartPanel({
                                     label="Fulfilment"
                                     variant="segment"
                                 />
+                                {!deliveryAvailability.loading && !deliveryAvailability.available ? (
+                                    <Text style={{ fontFamily: theme.font.medium, fontSize: 11.5, color: theme.textDark, marginTop: 6 }}>
+                                        {retailerName ? `${retailerName} doesn't deliver yet — collect your order from the shop.` : "This shop doesn't deliver yet — collect your order from the shop."}
+                                    </Text>
+                                ) : null}
                             </View>
 
                             {isDelivery && (

@@ -88,8 +88,26 @@ def km_between(a, b):
 
 
 def entity_point(entity):
-    loc = getattr(entity, "locations", None)  # entitylocations.Locations (one-to-one)
+    try:
+        loc = getattr(entity, "locations", None)  # entitylocations.Locations (one-to-one)
+    except Exception:  # RelatedObjectDoesNotExist: no location row yet
+        loc = None
     return getattr(loc, "point", None) if loc else None
+
+
+def delivery_location_errors(seller, buyer=None):
+    """
+    DELIVERY is only open to businesses whose location is set in entitylocations:
+    the seller always (deliveries are priced from it) and, for retailer orders,
+    the buying retailer too (it is where the goods go). [] when delivery is allowed.
+    """
+    errors = []
+    if not seller or not entity_point(seller):
+        name = getattr(seller, "title", None) or "The seller"
+        errors.append(f"{name} has not set its business location, so it can't deliver. Choose pickup instead.")
+    if buyer is not None and not entity_point(buyer):
+        errors.append("Set your business location to have orders delivered. Choose pickup instead.")
+    return errors
 
 
 # ---------------------------------------------------------------- weight
@@ -273,20 +291,20 @@ def delivery_options(seller, origin, destination, kg):
 def retailer_order_delivery_options(order):
     """Options for a retailer order (wholesaler -> retailer). Returns (errors, options, kg)."""
     seller, buyer = order.wholesaler, order.retailer
+    errors = delivery_location_errors(seller, buyer)
+    if errors:
+        return errors, [], Decimal("0")
     origin, destination = entity_point(seller), entity_point(buyer)
-    if not origin:
-        return [f"{seller.title} has no location set, so delivery can't be priced"], [], Decimal("0")
-    if not destination:
-        return ["Set your shop's location to see delivery options"], [], Decimal("0")
     kg = retailer_order_weight(order)
     return [], delivery_options(seller, origin, destination, kg), kg
 
 
 def checkout_delivery_options(seller, destination, items):
     """Options for a customer checkout (retailer -> customer). Returns (errors, options, kg)."""
+    errors = delivery_location_errors(seller)
+    if errors:
+        return errors, [], Decimal("0")
     origin = entity_point(seller)
-    if not origin:
-        return [f"{seller.title} has no location set, so delivery can't be priced"], [], Decimal("0")
     if not destination:
         return ["Share your delivery location to see delivery options"], [], Decimal("0")
     kg = checkout_items_weight(items)

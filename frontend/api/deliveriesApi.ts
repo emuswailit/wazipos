@@ -178,6 +178,11 @@ export function apiError(res: any, fallback: string): string {
 export const isOk = (res: any) => !!res?.ok && String(res?.data?.response_code) === '0';
 
 export default {
+    /**
+     * Can DELIVERY be used? Only when the businesses' locations are set.
+     * { entity }: a shop; { retailer_order }: wholesaler + retailer; {}: own business.
+     */
+    getDeliveryAvailability: (data: { entity?: string; retailer_order?: string } = {}) => call('GetDeliveryAvailability', data),
     // buyer
     getRetailerOrderDeliveryOptions: (retailer_order: string) => call('GetRetailerOrderDeliveryOptions', { retailer_order }),
     chooseRetailerOrderDelivery: (retailer_order: string, option: string) => call('ChooseRetailerOrderDelivery', { retailer_order, option }),
