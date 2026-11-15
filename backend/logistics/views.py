@@ -558,3 +558,61 @@ def deliveriesAPIView(request):
         return custom_success_message(0, "My deliveries", serializers.ShipmentLegSerializer(legs, many=True).data, "legs")
 
     raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
+def _fulfilment_response(result, message):
+    from .utils.fulfilment import fulfilment_out
+
+    errors, f = result
+    if errors:
+        return custom_errors_response(1, f"{message} failed", errors)
+    return custom_success_message(0, message, fulfilment_out(f), "fulfilment")
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+@renderer_classes([JSONRenderer])
+@parser_classes([JSONParser, MultiPartParser])
+def fulfilmentAPIView(request):
+    """
+    Preparing paid orders: "retailer_order" (wholesaler's) or "customer_order" (shop's).
+      GetFulfilmentQueue {kind: "retailer"|"customer", scope: "open"|"done"}  (seller)
+      GetFulfilment {retailer_order | customer_order}                       (seller or buyer)
+      StartPreparing {preparer?, notes?} / MarkPacked {packer?, package_count?, package_weight_kg?}
+      MarkReady / ConfirmCollection {collector_name, collector_phone?, collector_id_number?, pickup_code?}
+    """
+    from .utils import fulfilment as ff
+
+    action = request.data.get("action")
+    if action == "GetFulfilmentQueue":
+        kind = "customer" if request.data.get("kind") == "customer" else "retailer"
+        scope = "done" if request.data.get("scope") == "done" else "open"
+        return custom_success_message(0, "Fulfilment queue", ff.fulfilment_queue(request.user, kind, scope), "orders")
+    if action == "GetFulfilment":
+        from retailers.models import CustomerOrders
+        from wholesalers.models import RetailerOrders
+
+        me = getattr(request.user, "entity_id", None)
+        if request.data.get("customer_order"):
+            order = CustomerOrders.objects.filter(id=request.data["customer_order"]).first()
+            kind = "customer"
+            seller = bool(order) and order.entity_id == me
+            buyer = bool(order) and not seller and request.user.id in (order.customer_id, getattr(order, "user_id", None))
+        else:
+            order = RetailerOrders.objects.filter(id=request.data.get("retailer_order")).first()
+            kind = "retailer"
+            seller = bool(order) and order.wholesaler_id == me
+            buyer = bool(order) and order.retailer_id == me
+        if not (seller or buyer):
+            return custom_errors_response(1, "Order not found", ["Order for provided ID does not exist"])
+        f = ff.fulfilment_of(order, kind, create=False)
+        return custom_success_message(0, "Fulfilment", ff.fulfilment_out(f, for_buyer=buyer), "fulfilment")
+    if action == "StartPreparing":
+        return _fulfilment_response(ff.start_preparing(request.data, request.user), "Preparing")
+    if action == "MarkPacked":
+        return _fulfilment_response(ff.mark_packed(request.data, request.user), "Packed")
+    if action == "MarkReady":
+        return _fulfilment_response(ff.mark_ready(request.data, request.user), "Ready")
+    if action == "ConfirmCollection":
+        return _fulfilment_response(ff.confirm_collection(request.data, request.user), "Collected")
+    raise exceptions.ValidationError(f"Action {action} is unknown")

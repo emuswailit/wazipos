@@ -6,6 +6,7 @@
 
 import retailersApi from '@/api/retailersApi';
 import { ShipmentTracker } from '@/components/deliveries/ShipmentTracker';
+import { FulfilmentPanel } from '@/components/fulfilment/FulfilmentPanel';
 import { AdminBadgePill, formatDateTime, useListTokens } from '@/components/common/listScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -102,6 +103,9 @@ export default function MyOrders() {
                                 <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={theme.textDark} />
                             </View>
                         </Pressable>
+                        {expanded && paid ? (
+                            <FulfilmentPanel link={{ customer_order: o.id }} viewer="buyer" pickup={!delivery} paid={paid} version={`${o.updated ?? ''}|${o.status ?? ''}`} />
+                        ) : null}
                         {expanded ? (
                             delivery ? (
                                 <ShipmentTracker

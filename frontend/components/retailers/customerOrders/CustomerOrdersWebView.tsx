@@ -182,6 +182,8 @@ const STATUS_TINTS: Record<string, StatusTint> = {
     CONFIRMED: { bg: 'rgba(59,130,246,0.15)', fg: '#3b82f6' },
     PROCESSING: { bg: 'rgba(124,58,237,0.15)', fg: '#7c3aed' },
     PACKED: { bg: 'rgba(124,58,237,0.15)', fg: '#7c3aed' },
+    READY: { bg: 'rgba(59,130,246,0.15)', fg: '#3b82f6' },
+    COLLECTED: { bg: 'rgba(16,185,129,0.12)', fg: '#10b981' },
     DISPATCHED: { bg: 'rgba(3,105,161,0.15)', fg: '#0369a1' },
     DELIVERED: { bg: 'rgba(16,185,129,0.12)', fg: '#10b981' },
     COMPLETED: { bg: 'rgba(16,185,129,0.12)', fg: '#10b981' },

@@ -12,12 +12,15 @@ import { Text } from 'react-native';
 import { balanceOf, formatKES, isPaid, orderItemCount, orderRef, totalOf } from '@/components/retailers/retailerRequisitions/primitives';
 
 /** RetailerOrders.ORDER_STATUS_CHOICES (backend wholesalers/models.py). */
-export const ORDER_STATUSES = ['SUBMITTED', 'PROCESSING', 'DISPATCHED', 'RECEIVED', 'COMPLETED', 'CANCELLED'] as const;
+export const ORDER_STATUSES = ['SUBMITTED', 'PROCESSING', 'PACKED', 'READY', 'COLLECTED', 'DISPATCHED', 'RECEIVED', 'COMPLETED', 'CANCELLED'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 const STATUS_META: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
     SUBMITTED: { label: 'Submitted', tone: 'info' },
     PROCESSING: { label: 'Processing', tone: 'violet' },
+    PACKED: { label: 'Packed', tone: 'info' },
+    READY: { label: 'Ready', tone: 'primary' },
+    COLLECTED: { label: 'Collected', tone: 'success' },
     DISPATCHED: { label: 'Dispatched', tone: 'primary' },
     RECEIVED: { label: 'Received', tone: 'success' },
     COMPLETED: { label: 'Completed', tone: 'success' },

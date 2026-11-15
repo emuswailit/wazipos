@@ -30,6 +30,9 @@ const PANE_WIDTH = 420;
 const STATUS_ICONS: Record<OrderStatus, React.ComponentProps<typeof AdminListView>['config']['icon']> = {
     SUBMITTED: 'paper-plane-outline',
     PROCESSING: 'construct-outline',
+    PACKED: 'cube-outline',
+    READY: 'checkmark-done-outline',
+    COLLECTED: 'hand-left-outline',
     DISPATCHED: 'car-outline',
     RECEIVED: 'download-outline',
     COMPLETED: 'checkmark-done-outline',

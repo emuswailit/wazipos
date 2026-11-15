@@ -436,3 +436,62 @@ class ShipmentLeg(EntityRelatedModel):
 
     def __str__(self):
         return f"{self.shipment} leg {self.sequence} {self.kind} ({self.status})"
+
+
+class Fulfilment(EntityRelatedModel):
+    """
+    Getting one paid order ready: prepared -> packed -> ready, then either
+    collected by the buyer (or someone they sent) or dispatched (Shipment).
+    entity = the seller.
+    """
+
+    class Stage(models.TextChoices):
+        PENDING = "PENDING", _("Waiting")
+        PREPARING = "PREPARING", _("Preparing")
+        PACKED = "PACKED", _("Packed")
+        READY = "READY", _("Ready")
+        COLLECTED = "COLLECTED", _("Collected")
+
+    retailer_order = models.OneToOneField(
+        "wholesalers.RetailerOrders", related_name="fulfilment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
+    customer_order = models.OneToOneField(
+        "retailers.CustomerOrders", related_name="fulfilment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
+    stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.PENDING)
+    prepared_by = models.ForeignKey(User, related_name="fulfilments_prepared", on_delete=models.SET_NULL, null=True, blank=True)
+    preparing_at = models.DateTimeField(null=True, blank=True)
+    packed_by = models.ForeignKey(User, related_name="fulfilments_packed", on_delete=models.SET_NULL, null=True, blank=True)
+    packed_at = models.DateTimeField(null=True, blank=True)
+    package_count = models.PositiveIntegerField(default=1)
+    package_weight_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    ready_by = models.ForeignKey(User, related_name="fulfilments_readied", on_delete=models.SET_NULL, null=True, blank=True)
+    ready_at = models.DateTimeField(null=True, blank=True)
+    # Pickup orders: the buyer gives this code to whoever hands the goods over.
+    pickup_code = models.CharField(max_length=8, null=True, blank=True)
+    collector_name = models.CharField(max_length=256, null=True, blank=True)
+    collector_phone = models.CharField(max_length=32, null=True, blank=True)
+    collector_id_number = models.CharField(max_length=64, null=True, blank=True)
+    code_verified = models.BooleanField(default=False)
+    handed_over_by = models.ForeignKey(User, related_name="fulfilments_handed_over", on_delete=models.SET_NULL, null=True, blank=True)
+    collected_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=300, null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Fulfilments"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(retailer_order__isnull=False, customer_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False)
+                ),
+                name="fulfilment_exactly_one_order",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Fulfilment {self.pk} ({self.stage})"

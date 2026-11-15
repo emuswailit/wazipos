@@ -1684,8 +1684,11 @@ class CustomerOrders(EntityRelatedModel):
         COMPLETED = "COMPLETED", _("COMPLETED")
         DISPATCHED = "DISPATCHED", _("DISPATCHED")
         DELIVERED = "DELIVERED", _("DELIVERED")
-        PICKED = "PICKED", _("PICKED")
+        PICKED = "PICKED", _("PICKED")  # legacy; use PACKED / READY / COLLECTED
         PROCESSING = "PROCESSING", _("PROCESSING")
+        PACKED = "PACKED", _("PACKED")
+        READY = "READY", _("READY")
+        COLLECTED = "COLLECTED", _("COLLECTED")
         RECEIVED = "RECEIVED", _("RECEIVED")
 
     entity = models.ForeignKey(Entities, on_delete=models.CASCADE)

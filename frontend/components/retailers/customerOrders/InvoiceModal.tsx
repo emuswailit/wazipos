@@ -7,6 +7,7 @@
 import { AdminDetailsSheet, SheetButton, useListTokens, useSheetIsWide, webPointer } from '@/components/common/listScreen';
 import RecordPaymentModal, { CUSTOMER_ORDER_PAYMENT_CONFIG } from '@/components/common/RecordPaymentModal';
 import { ShipmentTracker } from '@/components/deliveries/ShipmentTracker';
+import { FulfilmentPanel } from '@/components/fulfilment/FulfilmentPanel';
 import type { CustomerOrder } from '@/databases/types';
 import { printHtmlDocument } from '@/services/printHtml';
 import { isTrueFlag } from '@/utils/flags';
@@ -131,6 +132,28 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onRe
                         : []),
                     { title: 'Order', icon: 'document-text-outline', fields },
                     { title: `Items (${items.length})`, icon: 'cube-outline', children: <LineItems items={items} /> },
+                    // Paid: prepare -> pack -> ready -> collected / dispatched.
+                    // (Counter sales — staff-made pickup orders — leave with the customer at once.)
+                    ...(remoteOrderId && paid && (
+                        ['DELIVERY', 'COURIER'].includes(String(o.delivery_method || '').toUpperCase()) ||
+                        String(o.order_origin || '').toUpperCase() !== 'STAFF' ||
+                        String(o.order_type || '').toUpperCase() === 'PRESCRIPTION'
+                    )
+                        ? [{
+                            title: 'Preparation',
+                            icon: 'construct-outline' as const,
+                            children: (
+                                <FulfilmentPanel
+                                    link={{ customer_order: remoteOrderId }}
+                                    viewer="seller"
+                                    pickup={!['DELIVERY', 'COURIER'].includes(String(o.delivery_method || '').toUpperCase())}
+                                    paid={paid}
+                                    version={`${o.updated ?? ''}|${order.status ?? ''}`}
+                                    onChanged={() => onRefresh?.()}
+                                />
+                            ),
+                        }]
+                        : []),
                     // Delivery the customer chose: dispatch once paid, then follow the legs.
                     ...(remoteOrderId && ['DELIVERY', 'COURIER'].includes(String(o.delivery_method || '').toUpperCase())
                         ? [{

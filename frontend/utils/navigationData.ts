@@ -345,6 +345,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 tint: TINTS.sky,
             },
             {
+                // Paid retailer orders: prepare, pack, hand over or dispatch.
+                id: 90,
+                title: 'Fulfilment',
+                route: '/retailerOrderFulfilment?tab=retailerOrderFulfilment',
+                allowedRoles: ['GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PackageCheck',
+                tint: TINTS.sky,
+            },
+            {
                 id: 3,
                 title: 'Inventory',
                 route: '/inventory?tab=inventory',
@@ -628,6 +638,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
                 showInSidebar: true,
                 icon: 'ListOrdered',
+                tint: TINTS.sky,
+            },
+            {
+                // Paid customer orders: prepare, pack, hand over or dispatch.
+                id: 90,
+                title: 'Fulfilment',
+                route: '/customerOrderFulfilment?tab=customerOrderFulfilment',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PackageCheck',
                 tint: TINTS.sky,
             },
             {

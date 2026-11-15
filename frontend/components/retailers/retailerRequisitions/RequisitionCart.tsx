@@ -14,6 +14,7 @@ import { InitialsAvatar } from '@/components/common/InitialsAvatar';
 import { exportToPdf } from '@/components/common/Exportable';
 import { DeliveryOptionsPicker } from '@/components/deliveries/DeliveryOptionsPicker';
 import { ShipmentTracker } from '@/components/deliveries/ShipmentTracker';
+import { FulfilmentPanel } from '@/components/fulfilment/FulfilmentPanel';
 import RecordPaymentModal from '@/components/common/RecordPaymentModal';
 import retailersApi from '@/api/retailersApi';
 import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
@@ -207,6 +208,20 @@ export function RequisitionCart({ order, onClose, onRefreshParentLedger, viewer 
                 {!isWholesaler && canPay ? (
                     <View className="mt-3">
                         <DeliveryOptionsPicker order={order} editable={!paymentStarted} />
+                    </View>
+                ) : null}
+                {/* Preparation: prepare -> pack -> ready -> collected / dispatched. */}
+                {paid && deliveryChosen && order.remote_id ? (
+                    <View className="mt-3" style={{ gap: 6 }}>
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.6 }}>PREPARATION</Text>
+                        <FulfilmentPanel
+                            link={{ retailer_order: order.remote_id }}
+                            viewer={isWholesaler ? 'seller' : 'buyer'}
+                            pickup={!wantsDelivery(order)}
+                            paid={paid}
+                            version={`${order.updated}|${order.status}`}
+                            onChanged={onRefreshParentLedger}
+                        />
                     </View>
                 ) : null}
                 {wantsDelivery(order) && (isWholesaler || !canPay) ? (

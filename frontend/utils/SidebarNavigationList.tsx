@@ -10,7 +10,7 @@ import {
     Layers, Layers2, LayoutDashboard, Megaphone, Package, PackageX, Pill,
     PlusCircle, Receipt, RefreshCw, Route, ShieldCheck, ShoppingBag,
     ShoppingCart, Sliders, Store, Tag, TestTube, TrendingUp, Undo2, User,
-    UserCircle, Users, Wallet, Warehouse, Truck, Bike, type LucideIcon,
+    UserCircle, Users, Wallet, Warehouse, Truck, Bike, PackageCheck, type LucideIcon,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -32,7 +32,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
     Layers, Layers2, Megaphone, Package, PackageX, Pill, PlusCircle, Receipt,
     RefreshCw, Route, ShieldCheck, ShoppingBag, ShoppingCart, Sliders, Store,
     Tag, TestTube, TrendingUp, Undo2, User, UserCircle, Users, Wallet, Warehouse,
-    Truck, Bike,
+    Truck, Bike, PackageCheck,
 };
 
 function initials(title: string): string {

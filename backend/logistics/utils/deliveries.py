@@ -461,6 +461,10 @@ def dispatch_order(data, user):
         return ["The buyer chose to collect this order; there's nothing to deliver"], None
     if not _order_paid(order, kind):
         return ["Dispatch once the order is paid"], None
+    from logistics.utils.fulfilment import is_ready_for_dispatch
+
+    if not is_ready_for_dispatch(order, kind):
+        return ["Prepare and pack the order, then mark it ready, before dispatching"], None
     link = {"customer_order": order} if kind == "customer" else {"retailer_order": order}
     shipment = Shipment.objects.filter(**link).first()
     if not shipment:
@@ -485,9 +489,10 @@ def dispatch_order(data, user):
         shipment.delivery_code = shipment.delivery_code or f"{secrets.randbelow(10**6):06d}"
         shipment.save()
         if kind == "retailer":
-            if str(order.status).upper() in ("SUBMITTED", "PROCESSING"):
+            if str(order.status).upper() in ("SUBMITTED", "PROCESSING", "PACKED", "READY"):
                 order.status = "DISPATCHED"
             order.dispatched_at = order.dispatched_at or now
+            order.dispatched_by = user
         else:
             order.status = "DISPATCHED"
         order.save()
