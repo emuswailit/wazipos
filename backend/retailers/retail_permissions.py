@@ -84,7 +84,7 @@ class RetailEmployeePermission(permissions.BasePermission):
         ]
 
         if request.user.is_authenticated:
-            if request.user.entity.entity_type == "GeneralRetailer" or  request.user.entity.entity_type == "RESTAURANT" or  request.user.entity.entity_type == "PHARMACY":
+            if request.user.entity.entity_type == "GeneralRetailer" or  request.user.entity.entity_type == "Restaurant" or  request.user.entity.entity_type == "PharmaceuticalRetailer":
                 if Employees.objects.filter(user=request.user, entity=request.user.entity, is_active='true').exists():
                     for x in request.user.roles.filter(entity=request.user.entity):
                         roles.append(x.value)
