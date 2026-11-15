@@ -1,4 +1,6 @@
 // components/admin/designations/AdminDesignationsList.tsx
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
+import { designationsConfig } from './designationsConfig';
 import designationsService from '@/api/designationsApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -65,6 +67,7 @@ export default function AdminDesignationsList() {
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<DesignationItem | null>(null);
+    const [viewingItem, setViewingItem] = useState<DesignationItem | null>(null);
 
     const [query, setQuery] = useState('');
     const [page, setPage] = useState(1);
@@ -142,7 +145,8 @@ export default function AdminDesignationsList() {
         items: paginated,
         allItems: filteredDesignations,
         onOpenCreate: () => { setEditingItem(null); setIsFormModalOpen(true); },
-        onPressItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
+        // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+        onPressItem: (item) => setViewingItem(item),
         onEditItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
         page, pageSize, totalItems, totalPages, pageStart, pageEnd,
         onPrev: () => setPage((p) => Math.max(1, p - 1)),
@@ -153,7 +157,19 @@ export default function AdminDesignationsList() {
     return (
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
             <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-            {isLargeScreen ? <AdminDesignationsWebView {...sharedProps} /> : <AdminDesignationsMobileView {...sharedProps} />}
+            <DetailsDock
+                placeholder="Pick a designation to see its details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={designationsConfig}
+                        item={viewingItem}
+                        onClose={() => setViewingItem(null)}
+                        onEdit={(item) => { setViewingItem(null); setEditingItem(item); setIsFormModalOpen(true); }}
+                    />
+                }
+            >
+                {isLargeScreen ? <AdminDesignationsWebView {...sharedProps} /> : <AdminDesignationsMobileView {...sharedProps} />}
+            </DetailsDock>
 
             <AdminDesignationEditModal
                 visible={isFormModalOpen}

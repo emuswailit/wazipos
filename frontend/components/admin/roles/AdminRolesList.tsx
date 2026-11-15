@@ -1,4 +1,6 @@
 // components/admin/roles/AdminRolesList.tsx
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
+import { rolesConfig } from './rolesConfig';
 import rolesService from '@/api/rolesApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -64,6 +66,7 @@ export default function AdminRolesList() {
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<RoleItem | null>(null);
+    const [viewingItem, setViewingItem] = useState<RoleItem | null>(null);
 
     const [query, setQuery] = useState('');
     const [page, setPage] = useState(1);
@@ -162,7 +165,8 @@ export default function AdminRolesList() {
         items: paginated,
         allItems: filteredRoles,
         onOpenCreate: () => { setEditingItem(null); setIsFormModalOpen(true); },
-        onPressItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
+        // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+        onPressItem: (item) => setViewingItem(item),
         onEditItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
         page, pageSize, totalItems, totalPages, pageStart, pageEnd,
         onPrev: () => setPage((p) => Math.max(1, p - 1)),
@@ -174,11 +178,23 @@ export default function AdminRolesList() {
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
             <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
 
-            {isLargeScreen ? (
-                <AdminRolesWebView {...sharedProps} />
-            ) : (
-                <AdminRolesMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a role to see its details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={rolesConfig}
+                        item={viewingItem}
+                        onClose={() => setViewingItem(null)}
+                        onEdit={(item) => { setViewingItem(null); setEditingItem(item); setIsFormModalOpen(true); }}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminRolesWebView {...sharedProps} />
+                ) : (
+                    <AdminRolesMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminRoleEditModal
                 visible={isFormModalOpen}

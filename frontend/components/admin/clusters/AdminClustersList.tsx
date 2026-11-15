@@ -1,4 +1,6 @@
 // components/admin/clusters/AdminClustersList.tsx
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
+import { clustersConfig } from './clustersConfig';
 import clustersService from '@/api/clustersApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -65,6 +67,7 @@ export default function AdminClustersList() {
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ClusterItem | null>(null);
+    const [viewingItem, setViewingItem] = useState<ClusterItem | null>(null);
 
     const [query, setQuery] = useState('');
     const [page, setPage] = useState(1);
@@ -152,7 +155,8 @@ export default function AdminClustersList() {
         items: paginated,
         allItems: filteredClusters,
         onOpenCreate: () => { setEditingItem(null); setIsFormModalOpen(true); },
-        onPressItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
+        // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+        onPressItem: (item) => setViewingItem(item),
         onEditItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
         page, pageSize, totalItems, totalPages, pageStart, pageEnd,
         onPrev: () => setPage((p) => Math.max(1, p - 1)),
@@ -163,7 +167,19 @@ export default function AdminClustersList() {
     return (
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
             <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-            {isLargeScreen ? <AdminClustersWebView {...sharedProps} /> : <AdminClustersMobileView {...sharedProps} />}
+            <DetailsDock
+                placeholder="Pick a cluster to see its details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={clustersConfig}
+                        item={viewingItem}
+                        onClose={() => setViewingItem(null)}
+                        onEdit={(item) => { setViewingItem(null); setEditingItem(item); setIsFormModalOpen(true); }}
+                    />
+                }
+            >
+                {isLargeScreen ? <AdminClustersWebView {...sharedProps} /> : <AdminClustersMobileView {...sharedProps} />}
+            </DetailsDock>
 
             <AdminClusterEditModal
                 visible={isFormModalOpen}

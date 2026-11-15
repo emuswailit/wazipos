@@ -2,7 +2,7 @@
 //
 // Record details beside the list, like a cart: on wide screens (>= 1100 px)
 // a details sheet (AdminDetailsSheet, or any AdminSheet marked `dockable`)
-// rendered inside <DetailsDock pane={…}> shows as a panel on the left of the
+// rendered inside <DetailsDock pane={…}> shows as a panel on the right of the
 // list instead of a popup. With nothing open the panel shows a short hint.
 // Narrower screens keep the usual bottom sheet / centred card.
 //
@@ -21,7 +21,7 @@ import { isWeb, useListTokens } from './tokens';
 export const DOCK_MIN_WIDTH = 1100;
 const PANE_WIDTH = 440;
 /** Which side the panel sits on. */
-const PANE_SIDE: 'left' | 'right' = 'left';
+const PANE_SIDE: 'left' | 'right' = 'right';
 
 interface DockState {
     docked: boolean;

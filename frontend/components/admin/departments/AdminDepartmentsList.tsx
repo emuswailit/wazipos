@@ -1,4 +1,6 @@
 // components/admin/departments/AdminDepartmentsList.tsx
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
+import { departmentsConfig } from './departmentsConfig';
 import departmentsService from '@/api/departmentsApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -65,6 +67,7 @@ export default function AdminDepartmentsList() {
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<DepartmentItem | null>(null);
+    const [viewingItem, setViewingItem] = useState<DepartmentItem | null>(null);
 
     const [query, setQuery] = useState('');
     const [page, setPage] = useState(1);
@@ -150,7 +153,8 @@ export default function AdminDepartmentsList() {
         items: paginated,
         allItems: filteredDepartments,
         onOpenCreate: () => { setEditingItem(null); setIsFormModalOpen(true); },
-        onPressItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
+        // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+        onPressItem: (item) => setViewingItem(item),
         onEditItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
         page, pageSize, totalItems, totalPages, pageStart, pageEnd,
         onPrev: () => setPage((p) => Math.max(1, p - 1)),
@@ -161,7 +165,19 @@ export default function AdminDepartmentsList() {
     return (
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
             <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-            {isLargeScreen ? <AdminDepartmentsWebView {...sharedProps} /> : <AdminDepartmentsMobileView {...sharedProps} />}
+            <DetailsDock
+                placeholder="Pick a department to see its details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={departmentsConfig}
+                        item={viewingItem}
+                        onClose={() => setViewingItem(null)}
+                        onEdit={(item) => { setViewingItem(null); setEditingItem(item); setIsFormModalOpen(true); }}
+                    />
+                }
+            >
+                {isLargeScreen ? <AdminDepartmentsWebView {...sharedProps} /> : <AdminDepartmentsMobileView {...sharedProps} />}
+            </DetailsDock>
 
             <AdminDepartmentEditModal
                 visible={isFormModalOpen}

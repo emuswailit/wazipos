@@ -4,6 +4,7 @@
 // AdminListView); tap to edit, "Add user" to create. Loaded from the server
 // (AdminGetUsers); search, filters and paging run locally.
 
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
 import adminUsersApi, { type AdminUser, type AdminUserDetails, type ConsentStatus, type PickedDocument } from '@/api/adminUsersApi';
 import { AdminListView } from '@/components/admin/kit';
 import { useAlert } from '@/components/common/AlertProvider';
@@ -124,6 +125,8 @@ export default function AdminUsersList() {
         setFormError(null);
         setFormOpen(true);
     }, []);
+    // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+    const [viewing, setViewing] = useState<AdminUser | null>(null);
     const openEdit = useCallback((u: AdminUser) => {
         setEditing(u);
         setFormError(null);
@@ -169,57 +172,69 @@ export default function AdminUsersList() {
 
     return (
         <>
-            <AdminListView<AdminUser, Filter>
-                variant={isLarge ? 'web' : 'mobile'}
-                config={usersConfig}
-                query={query}
-                setQuery={setQuery}
-                onRefresh={load}
-                refreshing={refreshing}
-                sourceLabel={loadError ? 'Not loaded' : 'Server'}
-                sourceTone={loadError ? 'none' : 'server'}
-                lastSyncedTime={lastSyncedTime}
-                error={loadError}
-                items={paginated}
-                allItems={filtered}
-                onOpenCreate={openCreate}
-                onPressItem={openEdit}
-                onEditItem={openEdit}
-                rowActions={(u) => [{ icon: 'create-outline', label: 'Edit user', onPress: () => openEdit(u), tone: 'primary' }]}
-                stats={[
-                    { label: 'Users', value: users.length.toLocaleString() },
-                    { label: 'Active', value: counts.active.toLocaleString(), color: '#10b981' },
-                    { label: 'Consented', value: counts.confirmed.toLocaleString(), color: '#10b981' },
-                    { label: 'Awaiting code', value: counts.pending.toLocaleString(), color: counts.pending ? '#f59e0b' : undefined },
-                ]}
-                filters={{
-                    options: [
-                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: users.length },
-                        { key: 'ACTIVE', label: 'Active', icon: 'ellipse', count: counts.active },
-                        { key: 'INACTIVE', label: 'Inactive', icon: 'pause-circle-outline', count: users.length - counts.active },
-                        { key: 'CONFIRMED', label: 'Consent given', icon: 'shield-checkmark-outline', count: counts.confirmed },
-                        { key: 'PENDING', label: 'Awaiting code', icon: 'chatbubble-ellipses-outline', count: counts.pending },
-                        { key: 'EXPIRED', label: 'Code expired', icon: 'time-outline', count: counts.expired },
-                        { key: 'NONE', label: 'No consent', icon: 'call-outline', count: counts.none },
-                        { key: 'WITH_ID', label: 'Has ID / passport', icon: 'id-card-outline', count: counts.withId },
-                    ],
-                    value: filter,
-                    onChange: setFilter,
-                    allKey: 'ALL',
-                }}
-                page={page}
-                pageSize={pageSize}
-                totalItems={totalItems}
-                totalPages={totalPages}
-                pageStart={pageStart}
-                pageEnd={pageEnd}
-                onPrev={() => setPage((p) => Math.max(1, p - 1))}
-                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-                onPageSizeChange={(size) => {
-                    setPageSize(size);
-                    setPage(1);
-                }}
-            />
+            <DetailsDock
+                placeholder="Pick a user to see their details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={usersConfig}
+                        item={viewing}
+                        onClose={() => setViewing(null)}
+                        onEdit={(item) => { setViewing(null); openEdit(item); }}
+                    />
+                }
+            >
+                <AdminListView<AdminUser, Filter>
+                    variant={isLarge ? 'web' : 'mobile'}
+                    config={usersConfig}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={load}
+                    refreshing={refreshing}
+                    sourceLabel={loadError ? 'Not loaded' : 'Server'}
+                    sourceTone={loadError ? 'none' : 'server'}
+                    lastSyncedTime={lastSyncedTime}
+                    error={loadError}
+                    items={paginated}
+                    allItems={filtered}
+                    onOpenCreate={openCreate}
+                    onPressItem={setViewing}
+                    onEditItem={openEdit}
+                    rowActions={(u) => [{ icon: 'create-outline', label: 'Edit user', onPress: () => openEdit(u), tone: 'primary' }]}
+                    stats={[
+                        { label: 'Users', value: users.length.toLocaleString() },
+                        { label: 'Active', value: counts.active.toLocaleString(), color: '#10b981' },
+                        { label: 'Consented', value: counts.confirmed.toLocaleString(), color: '#10b981' },
+                        { label: 'Awaiting code', value: counts.pending.toLocaleString(), color: counts.pending ? '#f59e0b' : undefined },
+                    ]}
+                    filters={{
+                        options: [
+                            { key: 'ALL', label: 'All', icon: 'apps-outline', count: users.length },
+                            { key: 'ACTIVE', label: 'Active', icon: 'ellipse', count: counts.active },
+                            { key: 'INACTIVE', label: 'Inactive', icon: 'pause-circle-outline', count: users.length - counts.active },
+                            { key: 'CONFIRMED', label: 'Consent given', icon: 'shield-checkmark-outline', count: counts.confirmed },
+                            { key: 'PENDING', label: 'Awaiting code', icon: 'chatbubble-ellipses-outline', count: counts.pending },
+                            { key: 'EXPIRED', label: 'Code expired', icon: 'time-outline', count: counts.expired },
+                            { key: 'NONE', label: 'No consent', icon: 'call-outline', count: counts.none },
+                            { key: 'WITH_ID', label: 'Has ID / passport', icon: 'id-card-outline', count: counts.withId },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                    page={page}
+                    pageSize={pageSize}
+                    totalItems={totalItems}
+                    totalPages={totalPages}
+                    pageStart={pageStart}
+                    pageEnd={pageEnd}
+                    onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    onPageSizeChange={(size) => {
+                        setPageSize(size);
+                        setPage(1);
+                    }}
+                />
+            </DetailsDock>
             <AdminUserEditModal
                 visible={formOpen}
                 onClose={closeForm}

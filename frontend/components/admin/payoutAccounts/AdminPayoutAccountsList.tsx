@@ -5,6 +5,7 @@
 // Loaded from the server (AdminGetPayoutAccounts) — the list is small, so
 // search, filters and paging run locally.
 
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
 import payoutAccountsApi, { type PayoutAccount, type PayoutAccountDetails, type PayoutAccountType } from '@/api/payoutAccountsApi';
 import { AdminListView } from '@/components/admin/kit';
 import { useAlert } from '@/components/common/AlertProvider';
@@ -122,6 +123,8 @@ export default function AdminPayoutAccountsList() {
         setFormError(null);
         setFormOpen(true);
     }, []);
+    // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+    const [viewing, setViewing] = useState<PayoutAccount | null>(null);
     const openEdit = useCallback((a: PayoutAccount) => {
         setEditing(a);
         setFormError(null);
@@ -172,7 +175,7 @@ export default function AdminPayoutAccountsList() {
         items: paginated,
         allItems: filtered,
         onOpenCreate: openCreate,
-        onPressItem: openEdit,
+        onPressItem: (a: PayoutAccount) => setViewing(a),
         onEditItem: openEdit,
         stats: [
             { label: 'Accounts', value: accounts.length.toLocaleString() },
@@ -214,7 +217,19 @@ export default function AdminPayoutAccountsList() {
 
     return (
         <>
-            <AdminListView<PayoutAccount, Filter> {...common} variant={isLarge ? 'web' : 'mobile'} />
+            <DetailsDock
+                placeholder="Pick a payout account to see its details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={payoutAccountsConfig}
+                        item={viewing}
+                        onClose={() => setViewing(null)}
+                        onEdit={(item) => { setViewing(null); openEdit(item); }}
+                    />
+                }
+            >
+                <AdminListView<PayoutAccount, Filter> {...common} variant={isLarge ? 'web' : 'mobile'} />
+            </DetailsDock>
             <AdminPayoutAccountEditModal lockedEntity={isPlatformAdmin ? null : ownEntity} canVerify={isPlatformAdmin} visible={formOpen} onClose={closeForm} initialData={editing} submitting={saving} error={formError} onSubmit={submit} />
         </>
     );

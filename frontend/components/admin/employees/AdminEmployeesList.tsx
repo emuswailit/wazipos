@@ -1,4 +1,6 @@
 // components/admin/employees/AdminEmployeesList.tsx
+import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
+import { employeesConfig } from './employeesConfig';
 import employeesApi from '@/api/employeesApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -74,6 +76,7 @@ export default function AdminEmployeesList() {
 
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<EmployeeItem | null>(null);
+    const [viewingItem, setViewingItem] = useState<EmployeeItem | null>(null);
 
     const [query, setQuery] = useState('');
     const [page, setPage] = useState(1);
@@ -174,7 +177,8 @@ export default function AdminEmployeesList() {
         items: paginated,
         allItems: filteredEmployees,
         onOpenCreate: () => { setEditingItem(null); setIsFormModalOpen(true); },
-        onPressItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
+        // Tap: details (beside the list on wide screens); Edit from there or the row's pencil.
+        onPressItem: (item) => setViewingItem(item),
         onEditItem: (item) => { setEditingItem(item); setIsFormModalOpen(true); },
         formatDateHandler: formatHumanDate,
         page, pageSize, totalItems, totalPages, pageStart, pageEnd,
@@ -186,7 +190,19 @@ export default function AdminEmployeesList() {
     return (
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
             <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-            {isLargeScreen ? <AdminEmployeesWebView {...sharedProps} /> : <AdminEmployeesMobileView {...sharedProps} />}
+            <DetailsDock
+                placeholder="Pick an employee to see their details here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={employeesConfig}
+                        item={viewingItem}
+                        onClose={() => setViewingItem(null)}
+                        onEdit={(item) => { setViewingItem(null); setEditingItem(item); setIsFormModalOpen(true); }}
+                    />
+                }
+            >
+                {isLargeScreen ? <AdminEmployeesWebView {...sharedProps} /> : <AdminEmployeesMobileView {...sharedProps} />}
+            </DetailsDock>
 
             <AdminEmployeeEditModal
                 visible={isFormModalOpen}

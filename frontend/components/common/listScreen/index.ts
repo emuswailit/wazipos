@@ -8,6 +8,7 @@
 //   Shared:  AdminSheet, tokens, controls, formatting helpers
 
 export * from './AdminDetailsSheet';
+export * from './ConfigDetailsSheet';
 export * from './AdminFormSheet';
 export * from './AdminListView';
 export * from './AdminSheet';
