@@ -90,6 +90,9 @@ export interface QuantityInputModalProps {
     visible: boolean;
     product: MarketplaceProduct | null;
     onClose: () => void;
+    /** The wholesaler whose marketplace this is: stored on the indent item (grouping, orders). */
+    wholesalerId?: string | null;
+    wholesalerTitle?: string;
     /**
      * Called after a successful add / update / remove, so the parent
      * can show a toast if it wants. Optional.
@@ -108,6 +111,8 @@ export default function QuantityInputModal({
     visible,
     product,
     onClose,
+    wholesalerId = null,
+    wholesalerTitle = '',
     onFeedback,
 }: QuantityInputModalProps) {
     const { theme, isDarkMode } = useAuth();
@@ -190,8 +195,9 @@ export default function QuantityInputModal({
                 quantity: qty,
                 meta: {
                     wholesaleReceiptTitle: product.name,
-                    wholesaler: null,
-                    wholesalerTitle: '',
+                    // Without these the item showed as "Unknown wholesaler" until synced.
+                    wholesaler: wholesalerId,
+                    wholesalerTitle: wholesalerTitle,
                     unitOfReceipt: product.unit,
                     unitSellingPrice: String(
                         product.original_price ?? product.price,

@@ -1,5 +1,13 @@
 // components/retailers/retailerIndents/RetailerIndentsList.tsx
+//
+// Indents screen.
+//   ≥ 1100 px: two panes — the cart (IndentCart) on the left showing the open
+//              indent (or the one picked from the list), the list on the right.
+//   narrower : the list (cards on phones, table from 900 px), with the open
+//              indent card on top; opening an indent shows the cart full screen.
+// The cart's ⓘ button opens the full details sheet (parameters, edit indent).
 
+import { useListTokens } from '@/components/common/listScreen';
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
 import type {
     RetailerIndent,
@@ -11,8 +19,11 @@ import React, {
     useMemo,
     useState,
 } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Modal, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { IndentCart } from './IndentCart';
 import { indentKey as indentRef, isDraftIndent, isOverBudget, toBool, type IndentFilter } from './indentsConfig';
 import { RetailerIndentDetailsModal } from './RetailerIndentDetailsModal';
 import { RetailerIndentsMobileView } from './RetailerIndentsMobileView';
@@ -23,6 +34,9 @@ import RetailerIndentEditModal from './RetailerIndentEditModal';
 import { RetailerIndentItemEditModal } from './RetailerIndentItemEditModal';
 
 const LARGE_SCREEN_MIN_WIDTH = 900;
+/** From here the cart sits beside the list instead of opening full screen. */
+const TWO_PANE_MIN_WIDTH = 1100;
+const CART_PANE_WIDTH = 420;
 
 function matchesQuery(i: RetailerIndent, q: string): boolean {
     if (!q) return true;
@@ -58,10 +72,15 @@ function matchesQuery(i: RetailerIndent, q: string): boolean {
 const RetailerIndentsList: React.FC = () => {
     const { width } = useWindowDimensions();
     const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
+    const twoPane = width >= TWO_PANE_MIN_WIDTH;
+    const { theme, border } = useListTokens();
+    const insets = useSafeAreaInsets();
 
+    const router = useRouter();
     const {
         retailerIndents,
         openIndents,
+        currentOpenIndent,
         isSyncing,
         isManualRefreshing,
         isLiveConnected,
@@ -99,6 +118,26 @@ const RetailerIndentsList: React.FC = () => {
             selected
         );
     }, [selected, retailerIndents]);
+
+    /* ---------------- Cart ---------------- */
+    // The indent shown in the cart: the one picked from the list, else the open one.
+    const [cartKey, setCartKey] = useState<string | null>(null);
+    const [cartScreenOpen, setCartScreenOpen] = useState(false);
+    const cartIndent = useMemo<RetailerIndent | null>(() => {
+        const picked = cartKey ? retailerIndents.find((i) => indentRef(i) === cartKey) : undefined;
+        return picked ?? currentOpenIndent ?? null;
+    }, [cartKey, retailerIndents, currentOpenIndent]);
+    const openCart = useCallback(
+        (indent: RetailerIndent) => {
+            setCartKey(indentRef(indent));
+            if (!twoPane) setCartScreenOpen(true);
+        },
+        [twoPane],
+    );
+    const goToMarketplace = useCallback(() => {
+        setCartScreenOpen(false);
+        router.push('/wholesaleMarketplace?tab=wholesaleMarketplace' as any);
+    }, [router]);
 
     /* ---------------- Filtering ---------------- */
     const filtered = useMemo(() => {
@@ -180,7 +219,13 @@ const RetailerIndentsList: React.FC = () => {
         } catch { }
     }, [forceManualRefresh, flushPendingOps]);
 
-    const onView = useCallback((indent: RetailerIndent) => {
+    // Opening an indent shows it in the cart (side pane, or full screen on phones).
+    const onView = openCart;
+
+    // Full details sheet (parameters, edit indent). On phones the cart screen
+    // closes first: iOS can't present a second modal over the first.
+    const onShowDetails = useCallback((indent: RetailerIndent) => {
+        setCartScreenOpen(false);
         setSelected(indent);
     }, []);
 
@@ -233,6 +278,9 @@ const RetailerIndentsList: React.FC = () => {
         lastSyncedTime,
         onView,
         onEdit,
+        openIndent: currentOpenIndent,
+        onAddProducts: goToMarketplace,
+        showOpenIndentCard: !twoPane,
         page,
         pageSize,
         totalItems,
@@ -245,13 +293,36 @@ const RetailerIndentsList: React.FC = () => {
     };
 
     /* ---------------- Render ---------------------------------- */
+    const list = isLarge ? <RetailerIndentsWebView {...sharedProps} /> : <RetailerIndentsMobileView {...sharedProps} />;
+
     return (
         <>
-            {isLarge ? (
-                <RetailerIndentsWebView {...sharedProps} />
+            {twoPane ? (
+                <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.background }}>
+                    {/* Cart pane: scrolls on its own, footer pinned */}
+                    <View style={{ width: CART_PANE_WIDTH, borderRightWidth: 1, borderRightColor: border, backgroundColor: theme.panel }}>
+                        <IndentCart indent={cartIndent} onShowDetails={onShowDetails} onAddProducts={goToMarketplace} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>{list}</View>
+                </View>
             ) : (
-                <RetailerIndentsMobileView {...sharedProps} />
+                list
             )}
+
+            {/* Phones / narrow web: the cart full screen */}
+            {!twoPane ? (
+                <Modal visible={cartScreenOpen} animationType="slide" onRequestClose={() => setCartScreenOpen(false)} presentationStyle="fullScreen">
+                    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: theme.panel }}>
+                        <IndentCart
+                            indent={cartIndent}
+                            onShowDetails={onShowDetails}
+                            onAddProducts={goToMarketplace}
+                            onDismiss={() => setCartScreenOpen(false)}
+                            bottomInset={insets.bottom}
+                        />
+                    </View>
+                </Modal>
+            ) : null}
 
             <RetailerIndentDetailsModal
                 visible={!!liveSelected && !editingItem}

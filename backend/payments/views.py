@@ -965,6 +965,18 @@ def accountPaymentsAPIView(request):
             return custom_json_response(0, "Account balance sucessfully retrieved","balance",balance)
         else:
             return custom_errors_response(1, "Accont balance not retrieved", errors)
+    elif request.data["action"] == "GetMyPayoutAccounts":
+        accounts = admin_payout_accounts.list_user_payout_accounts(request.user)
+        return custom_success_message(
+            0, "Payout accounts", serializers.UserPayoutAccountsSerializer(accounts, many=True).data, "payout_accounts"
+        )
+    elif request.data["action"] == "SaveMyPayoutAccount":
+        errors, account = admin_payout_accounts.save_user_payout_account(request.data, request.user)
+        if account:
+            return custom_success_message(
+                0, "Payout account saved", serializers.UserPayoutAccountsSerializer(account).data, "payout_account"
+            )
+        return custom_errors_response(1, "Payout account not saved", errors)
     elif request.data["action"] == "CreateEntityBankingAccount":
         errors, entity_banking_account = account_utils.create_entity_banking_account(request.data, request.user)
         if entity_banking_account:

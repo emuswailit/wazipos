@@ -1033,6 +1033,21 @@ def customerOrdersStaffAPIView(request):
                 1, "Out of stock item not updated", errors
             )
 
+    elif action == "ReceiveRetailerOrder":
+        # Paid retailer order -> RetailerReceipts in the invoice quantities.
+        errors, retailer_order = retailer_utils.receive_retailer_order(
+            request.data, request.user
+        )
+        if retailer_order:
+            serializer = RetailerOrdersSerializer(
+                retailer_order, many=False, context={"request": request}
+            )
+            return custom_success_message(
+                0, "Order received into stock",
+                serializer.data, "retailer_order",
+            )
+        return custom_errors_response(1, "Order not received", errors)
+
     elif action == "MakeRetailerOrderPayment":
         errors, retailer_order = retailer_utils.make_retailer_order_payment(
             request.data, request.user

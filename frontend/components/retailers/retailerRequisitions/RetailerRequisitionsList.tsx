@@ -19,8 +19,11 @@ import React, {
     useMemo,
     useState,
 } from 'react';
-import { Platform, useWindowDimensions } from 'react-native';
+import { useListTokens } from '@/components/common/listScreen';
+import { Modal, Platform, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { RequisitionCart } from './RequisitionCart';
 import { RetailerRequisitionsDetailsModal } from './RetailerRequisitionsDetailsModal';
 import { RetailerRequisitionsMobileView } from './RetailerRequisitionsMobileView';
 import { RetailerRequisitionsWebView } from './RetailerRequisitionsWebView';
@@ -35,6 +38,9 @@ import {
 // Same rule as the Customer Orders screen: paginated table only on wide web screens;
 // native apps and narrow web get the full card list (no pagination).
 const LARGE_SCREEN_MIN_WIDTH = 768;
+/** From here the selected requisition sits in a pane beside the table. */
+const TWO_PANE_MIN_WIDTH = 1100;
+const PANE_WIDTH = 420;
 
 /** Newest first. */
 const createdMs = (o: RetailerOrder): number => {
@@ -82,6 +88,9 @@ function matchesQuery(o: RetailerOrder, q: string): boolean {
 const RetailerRequisitionsList: React.FC = () => {
     const { width } = useWindowDimensions();
     const isLarge = Platform.OS === 'web' && width >= LARGE_SCREEN_MIN_WIDTH;
+    // From here the requisition opens in a side pane instead of a sheet.
+    const twoPane = isLarge && width >= TWO_PANE_MIN_WIDTH;
+    const { theme, border } = useListTokens();
 
     const {
         retailerOrders,
@@ -179,13 +188,32 @@ const RetailerRequisitionsList: React.FC = () => {
         forceManualRefresh();
     }, [forceManualRefresh]);
 
-    const onView = useCallback((order: RetailerOrder) => {
-        setSelected(order);
+    // Phones / narrow screens: the cart full screen; (i) opens the details sheet.
+    const insets = useSafeAreaInsets();
+    const [cartOpen, setCartOpen] = useState(false);
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const onView = useCallback(
+        (order: RetailerOrder) => {
+            setSelected(order);
+            if (!twoPane) setCartOpen(true);
+        },
+        [twoPane],
+    );
+    // iOS can't show a second modal over the first: close the cart first.
+    const showDetails = useCallback(() => {
+        setCartOpen(false);
+        setDetailsOpen(true);
     }, []);
 
-    const onCloseDetails = useCallback(() => {
-        setSelected(null);
-    }, []);
+    // The pane follows live updates (payments, status) for the picked order;
+    // with nothing picked it shows the newest unpaid one, else the newest.
+    const paneOrder = useMemo<RetailerOrder | null>(() => {
+        const id = selected?.remote_id;
+        const live = id ? retailerOrders.find((o) => o.remote_id === id) : undefined;
+        if (live) return live;
+        if (selected) return selected;
+        return visible.find((o) => !toBool(o.is_paid)) ?? visible[0] ?? null;
+    }, [selected, retailerOrders, visible]);
 
     const onQueryChange = useCallback((q: string) => {
         setQuery(q);
@@ -210,6 +238,8 @@ const RetailerRequisitionsList: React.FC = () => {
         syncStatus,
         lastSyncedTime,
         onView,
+        selectedId: twoPane ? paneOrder?.remote_id ?? null : null,
+        compact: twoPane,
 
         // pagination
         page,
@@ -225,16 +255,40 @@ const RetailerRequisitionsList: React.FC = () => {
 
     return (
         <>
-            {isLarge ? (
+            {twoPane ? (
+                <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.background }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <RetailerRequisitionsWebView {...common} />
+                    </View>
+                    {/* Cart-style pane: scrolls on its own, totals + payment pinned */}
+                    <View style={{ width: PANE_WIDTH, borderLeftWidth: 1, borderLeftColor: border, backgroundColor: theme.panel }}>
+                        <RequisitionCart order={paneOrder} onRefreshParentLedger={onRefresh} onShowDetails={paneOrder ? showDetails : undefined} />
+                    </View>
+                </View>
+            ) : isLarge ? (
                 <RetailerRequisitionsWebView {...common} />
             ) : (
                 <RetailerRequisitionsMobileView {...common} />
             )}
 
+            {!twoPane ? (
+                <Modal visible={cartOpen} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setCartOpen(false)}>
+                    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: theme.panel }}>
+                        <RequisitionCart
+                            order={paneOrder}
+                            onRefreshParentLedger={onRefresh}
+                            onShowDetails={showDetails}
+                            onClose={() => setCartOpen(false)}
+                            bottomInset={insets.bottom}
+                        />
+                    </View>
+                </Modal>
+            ) : null}
+
             <RetailerRequisitionsDetailsModal
-                order={selected}
-                visible={!!selected}
-                onClose={onCloseDetails}
+                order={paneOrder}
+                visible={detailsOpen && !!paneOrder}
+                onClose={() => setDetailsOpen(false)}
                 onRefreshParentLedger={onRefresh}
             />
         </>

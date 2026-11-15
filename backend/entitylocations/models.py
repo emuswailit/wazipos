@@ -68,7 +68,7 @@ class WifiLocations(models.Model):
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
     def __str__(self) -> str:
-        return f"{self.boda.user.first_name} {self.boda.user.phone}"
+        return f"{self.title} ({self.entity})"
 
     class Meta:
         verbose_name_plural = "Wifi Installation Locations"

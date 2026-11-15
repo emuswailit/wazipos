@@ -315,7 +315,31 @@ export function useWholesalerProducts(
  *  Product card
  * ════════════════════════════════════════════════════════════ */
 
-export const HOVER_SCALE = 1.3;
+/** Subtle lift on hover (web). Big scales made cards spill over their neighbours. */
+export const HOVER_SCALE = 1.03;
+
+/** Narrowest a grid card may get before the grid drops a column. */
+export const MIN_PRODUCT_CARD_WIDTH = 220;
+export const MAX_PRODUCT_COLUMNS = 4;
+
+/**
+ * Columns for the product grid: as many cards of at least
+ * MIN_PRODUCT_CARD_WIDTH as fit in `availableWidth`, from 1 up to
+ * MAX_PRODUCT_COLUMNS (phones and small web get one column).
+ */
+export function productGridColumns(availableWidth: number, gap: number): number {
+    const fit = Math.floor((availableWidth + gap) / (MIN_PRODUCT_CARD_WIDTH + gap));
+    return Math.max(1, Math.min(MAX_PRODUCT_COLUMNS, fit));
+}
+
+/** Show the whole title: long names get a smaller font instead of being cut off. */
+function titleFontSize(name: string): number {
+    const n = (name ?? '').length;
+    if (n <= 28) return 15;
+    if (n <= 48) return 14;
+    if (n <= 72) return 13;
+    return 12;
+}
 
 interface ProductCardProps {
     product: MarketplaceProduct;
@@ -326,6 +350,12 @@ interface ProductCardProps {
     onPress?: () => void;
     onAddPress?: () => void;
     indentQuantity?: number;
+    /**
+     * 'grid' (default): square image on top, fills its grid cell's height so
+     * cards in a row line up. 'row': thumbnail left, details right — used for
+     * the one-column list on phones.
+     */
+    layout?: 'grid' | 'row';
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -337,12 +367,231 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     onPress,
     onAddPress,
     indentQuantity,
+    layout = 'grid',
 }) => {
     const hasDiscount =
         !!product.price_discount && product.price_discount.percent > 0;
     const hasQtyDiscount = !!product.quantity_discount;
     const outOfStock = product.stock <= 0;
     const onIndent = (indentQuantity ?? 0) > 0;
+    const isRow = layout === 'row';
+    const imageBg = isDarkMode ? '#0f172a' : '#f8fafc';
+
+    const addButton = onAddPress ? (
+        <View
+            {...(isWeb
+                ? ({
+                    onClick: (e: any) => {
+                        e?.stopPropagation?.();
+                        onAddPress();
+                    },
+                } as any)
+                : {
+                    onStartShouldSetResponder: () => true,
+                    onResponderRelease: () => onAddPress(),
+                })}
+            accessibilityRole="button"
+            accessibilityLabel={
+                onIndent
+                    ? `Edit ${product.name} on indent, ${indentQuantity} units`
+                    : `Add ${product.name} to indent`
+            }
+            style={{
+                ...(isRow
+                    ? {}
+                    : { position: 'absolute' as const, bottom: 8, right: 8 }),
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: onIndent ? '#16a34a' : theme.primary,
+                borderWidth: 2,
+                borderColor: isDarkMode ? '#0f172a' : '#ffffff',
+                ...cardShadow('soft'),
+                ...webPointer,
+            }}
+        >
+            <ShoppingCart size={16} color="#fff" />
+            {onIndent && (
+                <View
+                    style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        minWidth: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        paddingHorizontal: 5,
+                        backgroundColor: '#fff',
+                        borderWidth: 1.5,
+                        borderColor: '#16a34a',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
+                >
+                    <Text
+                        style={{
+                            fontFamily: theme.font.bold,
+                            fontSize: 10,
+                            color: '#16a34a',
+                            lineHeight: 12,
+                        }}
+                    >
+                        {indentQuantity}
+                    </Text>
+                </View>
+            )}
+        </View>
+    ) : null;
+
+    // Square frame; the picture is scaled evenly to fit inside it (never cropped).
+    const imageBox = (
+        <View
+            style={{
+                ...(isRow ? { width: 104 } : { width: '100%' as const }),
+                aspectRatio: 1,
+                backgroundColor: imageBg,
+                overflow: 'hidden',
+                position: 'relative',
+                ...(isRow ? { borderRadius: 10 } : {}),
+            }}
+        >
+            {product.image ? (
+                <Image
+                    source={{ uri: product.image }}
+                    style={{ position: 'absolute', top: 8, left: 8, right: 8, bottom: 8 }}
+                    resizeMode="contain"
+                    accessibilityIgnoresInvertColors
+                />
+            ) : (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <Package size={isRow ? 22 : 28} color="rgba(148,163,184,0.6)" />
+                </View>
+            )}
+
+            {hasDiscount && (
+                <View
+                    style={{
+                        position: 'absolute',
+                        top: 6,
+                        left: 6,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        backgroundColor: '#dc2626',
+                    }}
+                >
+                    <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: '#fff', letterSpacing: 0.4 }}>
+                        -{product.price_discount!.percent}%
+                    </Text>
+                </View>
+            )}
+
+            {hasQtyDiscount && !isRow && (
+                <View
+                    style={{
+                        position: 'absolute',
+                        top: 6,
+                        right: 6,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        backgroundColor: '#16a34a',
+                        maxWidth: '58%',
+                    }}
+                >
+                    <Text numberOfLines={1} style={{ fontFamily: theme.font.bold, fontSize: 9, color: '#fff', letterSpacing: 0.3 }}>
+                        {product.quantity_discount!.title.toUpperCase()}
+                    </Text>
+                </View>
+            )}
+
+            {!isRow ? addButton : null}
+        </View>
+    );
+
+    const priceRow = (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <Text
+                    style={{
+                        fontFamily: theme.font.bold,
+                        fontSize: 15,
+                        color: hasDiscount ? '#dc2626' : theme.primary,
+                    }}
+                >
+                    KES {product.price.toFixed(2)}
+                </Text>
+                <Text style={{ fontFamily: theme.font.regular, fontSize: 11, color: theme.textDark, marginLeft: 3 }}>
+                    /{product.unit}
+                </Text>
+                {hasDiscount && product.original_price > product.price && (
+                    <Text
+                        style={{
+                            marginLeft: 6,
+                            fontFamily: theme.font.regular,
+                            fontSize: 11,
+                            color: theme.textDark,
+                            textDecorationLine: 'line-through',
+                        }}
+                    >
+                        KES {product.original_price.toFixed(2)}
+                    </Text>
+                )}
+            </View>
+            {isRow ? addButton : null}
+        </View>
+    );
+
+    const details = (
+        <View style={{ flex: 1, padding: isRow ? 0 : 12, justifyContent: 'space-between' }}>
+            <View>
+                <Text
+                    numberOfLines={1}
+                    style={{
+                        fontFamily: theme.font.medium,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                        textTransform: 'uppercase',
+                        color: theme.textDark,
+                    }}
+                >
+                    {product.category_title}
+                </Text>
+                {/* Whole title, no truncation: the font shrinks for long names. */}
+                <Text
+                    style={{
+                        fontFamily: theme.font.bold,
+                        fontSize: titleFontSize(product.name),
+                        lineHeight: Math.round(titleFontSize(product.name) * 1.3),
+                        color: theme.text,
+                        marginTop: 3,
+                    }}
+                >
+                    {product.name}
+                </Text>
+                {hasQtyDiscount && isRow ? (
+                    <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: '#16a34a', marginTop: 3 }}>
+                        {product.quantity_discount!.title.toUpperCase()}
+                    </Text>
+                ) : null}
+            </View>
+            <View>
+                {priceRow}
+                <Text
+                    style={{
+                        fontFamily: theme.font.regular,
+                        fontSize: 11,
+                        color: outOfStock ? '#dc2626' : theme.textDark,
+                        marginTop: 2,
+                    }}
+                >
+                    {outOfStock ? 'Out of stock' : `${product.stock.toLocaleString()} in stock`}
+                </Text>
+            </View>
+        </View>
+    );
 
     return (
         <Pressable
@@ -352,6 +601,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             focusable
             style={({ pressed, hovered }: any) => [
                 {
+                    flex: isRow ? undefined : 1, // fill the grid cell so a row's cards share one height
+                    flexDirection: isRow ? 'row' : 'column',
+                    gap: isRow ? 12 : 0,
+                    padding: isRow ? 10 : 0,
                     backgroundColor: theme.panel,
                     borderRadius: 14,
                     borderWidth: 1,
@@ -367,259 +620,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                         ...cardShadow('strong'),
                     }
                     : null,
-                isWeb
-                    ? ({ transitionDuration: '160ms' } as any)
-                    : null,
+                isWeb ? ({ transitionDuration: '160ms' } as any) : null,
             ]}
         >
-            <View
-                style={{
-                    aspectRatio: 1,
-                    backgroundColor: isDarkMode
-                        ? '#0f172a'
-                        : '#f1f5f9',
-                    overflow: 'hidden',
-                    position: 'relative',
-                }}
-            >
-                {product.image ? (
-                    <Image
-                        source={{ uri: product.image }}
-                        style={{ width: '100%', height: '100%' }}
-                        resizeMode="cover"
-                    />
-                ) : (
-                    <View
-                        style={{
-                            flex: 1,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >
-                        <Package
-                            size={28}
-                            color="rgba(148,163,184,0.6)"
-                        />
-                    </View>
-                )}
-
-                {hasDiscount && (
-                    <View
-                        style={{
-                            position: 'absolute',
-                            top: 6,
-                            left: 6,
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 6,
-                            backgroundColor: '#dc2626',
-                        }}
-                    >
-                        <Text
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: 10,
-                                color: '#fff',
-                                letterSpacing: 0.4,
-                            }}
-                        >
-                            -{product.price_discount!.percent}%
-                        </Text>
-                    </View>
-                )}
-
-                {hasQtyDiscount && (
-                    <View
-                        style={{
-                            position: 'absolute',
-                            top: 6,
-                            right: 6,
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 6,
-                            backgroundColor: '#16a34a',
-                            maxWidth: '58%',
-                        }}
-                    >
-                        <Text
-                            numberOfLines={1}
-                            style={{
-                                fontFamily: theme.font.bold,
-                                fontSize: 9,
-                                color: '#fff',
-                                letterSpacing: 0.3,
-                            }}
-                        >
-                            {product.quantity_discount!.title.toUpperCase()}
-                        </Text>
-                    </View>
-                )}
-
-                {onAddPress && (
-                    <View
-                        {...(isWeb
-                            ? ({
-                                onClick: (e: any) => {
-                                    e?.stopPropagation?.();
-                                    onAddPress();
-                                },
-                            } as any)
-                            : {
-                                onStartShouldSetResponder: () =>
-                                    true,
-                                onResponderRelease: () =>
-                                    onAddPress(),
-                            })}
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                            onIndent
-                                ? `Edit ${product.name} on indent, ${indentQuantity} units`
-                                : `Add ${product.name} to indent`
-                        }
-                        style={{
-                            position: 'absolute',
-                            bottom: 8,
-                            right: 8,
-                            width: 36,
-                            height: 36,
-                            borderRadius: 18,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: onIndent
-                                ? '#16a34a'
-                                : theme.primary,
-                            borderWidth: 2,
-                            borderColor: isDarkMode
-                                ? '#0f172a'
-                                : '#ffffff',
-                            ...cardShadow('soft'),
-                            ...webPointer,
-                        }}
-                    >
-                        <ShoppingCart size={16} color="#fff" />
-                        {onIndent && (
-                            <View
-                                style={{
-                                    position: 'absolute',
-                                    top: -6,
-                                    right: -6,
-                                    minWidth: 20,
-                                    height: 20,
-                                    borderRadius: 10,
-                                    paddingHorizontal: 5,
-                                    backgroundColor: '#fff',
-                                    borderWidth: 1.5,
-                                    borderColor: '#16a34a',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                <Text
-                                    style={{
-                                        fontFamily: theme.font.bold,
-                                        fontSize: 10,
-                                        color: '#16a34a',
-                                        lineHeight: 12,
-                                    }}
-                                >
-                                    {indentQuantity}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                )}
-            </View>
-
-            <View style={{ padding: 10 }}>
-                <Text
-                    numberOfLines={1}
-                    style={{
-                        fontFamily: theme.font.medium,
-                        fontSize: 10,
-                        letterSpacing: 0.5,
-                        textTransform: 'uppercase',
-                        color: theme.textDark,
-                    }}
-                >
-                    {product.category_title}
-                </Text>
-
-                <Text
-                    numberOfLines={2}
-                    style={{
-                        fontFamily: theme.font.bold,
-                        fontSize: theme.fontSize.base,
-                        color: theme.text,
-                        marginTop: 3,
-                        minHeight: 36,
-                    }}
-                >
-                    {product.name}
-                </Text>
-
-                <View
-                    style={{
-                        flexDirection: 'row',
-                        alignItems: 'baseline',
-                        marginTop: 6,
-                    }}
-                >
-                    <Text
-                        style={{
-                            fontFamily: theme.font.bold,
-                            fontSize: theme.fontSize.base,
-                            color: hasDiscount
-                                ? '#dc2626'
-                                : theme.primary,
-                        }}
-                    >
-                        KES {product.price.toFixed(2)}
-                    </Text>
-                    {hasDiscount &&
-                        product.original_price > product.price && (
-                            <Text
-                                numberOfLines={1}
-                                style={{
-                                    marginLeft: 6,
-                                    fontFamily:
-                                        theme.font.regular,
-                                    fontSize: 10,
-                                    color: theme.textDark,
-                                    textDecorationLine:
-                                        'line-through',
-                                }}
-                            >
-                                KES{' '}
-                                {product.original_price.toFixed(2)}
-                            </Text>
-                        )}
-                    <View style={{ flex: 1 }} />
-                    <Text
-                        style={{
-                            fontFamily: theme.font.regular,
-                            fontSize: 10,
-                            color: theme.textDark,
-                        }}
-                    >
-                        /{product.unit}
-                    </Text>
-                </View>
-
-                <Text
-                    style={{
-                        fontFamily: theme.font.regular,
-                        fontSize: 10,
-                        color: outOfStock
-                            ? '#dc2626'
-                            : theme.textDark,
-                        marginTop: 3,
-                    }}
-                >
-                    {outOfStock
-                        ? 'Out of stock'
-                        : `${product.stock.toLocaleString()} in stock`}
-                </Text>
-            </View>
+            {imageBox}
+            {details}
         </Pressable>
     );
 };

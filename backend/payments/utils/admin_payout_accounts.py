@@ -89,8 +89,11 @@ def admin_list_payout_accounts(data, user):
     return qs
 
 
-def _validate(details, instance=None):
-    """Returns (errors, cleaned_fields)."""
+def _validate(details, instance=None, owner_user=None):
+    """
+    Returns (errors, cleaned_fields). With owner_user: a UserPayoutAccounts
+    (no entity; duplicates checked among that user's accounts).
+    """
     errors = []
     fields = {}
 
@@ -100,17 +103,18 @@ def _validate(details, instance=None):
             return _clean(details.get(key))
         return getattr(instance, key, None) if instance else None
 
-    entity_id = pick("entity") if "entity" in details else (
-        str(instance.entity_id) if instance and instance.entity_id else None
-    )
     entity = None
-    if not entity_id:
-        errors.append("Entity is required")
-    else:
-        entity = Entities.objects.filter(id=entity_id).first()
-        if not entity:
-            errors.append("Entity does not exist")
-    fields["entity"] = entity
+    if owner_user is None:
+        entity_id = pick("entity") if "entity" in details else (
+            str(instance.entity_id) if instance and instance.entity_id else None
+        )
+        if not entity_id:
+            errors.append("Entity is required")
+        else:
+            entity = Entities.objects.filter(id=entity_id).first()
+            if not entity:
+                errors.append("Entity does not exist")
+        fields["entity"] = entity
 
     account_type = (pick("account_type") or "").upper()
     if not account_type:
@@ -165,7 +169,17 @@ def _validate(details, instance=None):
         fields["account_code"] = pick("account_code")
     fields["description"] = pick("description")
 
-    if entity and account_number:
+    if owner_user is not None and account_number:
+        from payments.models import UserPayoutAccounts
+
+        dupes = UserPayoutAccounts.objects.filter(
+            user=owner_user, account_number=account_number, business_number=business_number,
+        )
+        if instance:
+            dupes = dupes.exclude(pk=instance.pk)
+        if dupes.exists():
+            errors.append("You already have this payout account")
+    elif entity and account_number:
         dupes = PayoutAccounts.objects.filter(
             entity=entity, account_number=account_number,
             business_number=business_number,
@@ -239,3 +253,55 @@ def admin_update_payout_account(data, user):
     with transaction.atomic():
         account.save()
     return [], account
+
+
+# ---------------------------------------------------------------------------
+# User payout accounts — where an individual (e.g. a delivery person) is paid.
+# Each user manages their own; only platform admins verify. Changing the
+# destination of a verified account makes it unverified again.
+# ---------------------------------------------------------------------------
+
+def list_user_payout_accounts(user):
+    from payments.models import UserPayoutAccounts
+
+    return (
+        UserPayoutAccounts.objects.filter(user=user)
+        .select_related("account_entity", "bank_branch", "verified_by")
+        .order_by("-is_active", "-updated")
+    )
+
+
+def save_user_payout_account(data, user):
+    """Create, or update by "payout_account_id", the caller's own account. Returns (errors, account)."""
+    from payments.models import UserPayoutAccounts
+
+    details = dict(data.get("payout_account_details") or {})
+    details.pop("is_verified", None)
+    instance = None
+    account_id = _clean(data.get("payout_account_id"))
+    if account_id:
+        instance = UserPayoutAccounts.objects.filter(id=account_id, user=user).first()
+        if not instance:
+            return ["Payout account does not exist"], None
+
+    errors, fields = _validate(details, instance=instance, owner_user=user)
+    if errors:
+        return errors, None
+
+    with transaction.atomic():
+        if instance is None:
+            account = UserPayoutAccounts(user=user, **fields)
+            account.is_active = _bool_str(details.get("is_active"), default="true")
+        else:
+            account = instance
+            changed = any((fields.get(f) or None) != (getattr(account, f) or None) for f in DESTINATION_FIELDS)
+            for key, value in fields.items():
+                setattr(account, key, value)
+            if "is_active" in details:
+                account.is_active = _bool_str(details.get("is_active"))
+            if changed:
+                account.is_verified = False
+                account.verified_by = None
+        account.save()
+    return [], account
+

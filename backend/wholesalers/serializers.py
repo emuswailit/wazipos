@@ -1242,7 +1242,8 @@ class RetailerOrdersSerializer(serializers.ModelSerializer):
         # time we get here, `obj.final_price_total` is already the
         # recalculated value for stale orders. No extra fallback
         # needed here.
-        owed = float(obj.final_price_total or 0)
+        # Goods + delivery fee: what the buyer pays (same as payments' amount_due).
+        owed = float(obj.final_price_total or 0) + float(obj.shipping_amount or 0)
         return {
             "paid_total": round(paid, 2),
             "balance_due": round(max(0.0, owed - paid), 2),

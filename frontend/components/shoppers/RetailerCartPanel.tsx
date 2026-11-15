@@ -3,21 +3,19 @@ import {
     DeliveryMethodSelector,
     type DeliveryMethod,
 } from "@/components/common/DeliveryMethodSelector";
-import { EmployeePicker } from "@/components/common/EmployeePicker";
+import { CheckoutDeliveryOptions } from "@/components/deliveries/CheckoutDeliveryOptions";
 import { useAuth } from "@/context/AuthContext";
 import {
     ShopperCartLine,
     useShopperCart,
 } from "@/context/ShopperCartContext";
-import type { CustomerOrder, EmployeeNormalized } from "@/databases/types";
-import type { CollectionPoint, Courier } from "@/hooks/useLogistics";
+import type { CustomerOrder } from "@/databases/types";
 import {
     AlertCircle,
     CheckCircle2,
     Minus,
     Package,
     Plus,
-    Search,
     ShoppingCart,
     Trash2,
     X
@@ -27,7 +25,6 @@ import {
     ActivityIndicator,
     Image,
     Platform,
-    Pressable, // 🟢 FIXED: Added missing import
     ScrollView,
     Text,
     TextInput,
@@ -69,11 +66,6 @@ const emptyCustomerAddress: CustomerAddress = {
 
 /* ── Logistics normalization helpers ────────────────────────── */
 
-const getCourierName = (c: any) => c?.entity_title || c?.name || c?.title || "Unknown Transporter";
-const getCourierId = (c: any) => c?.id || c?.uuid || c?.key || "";
-const getPointName = (p: any) => p?.name || p?.title || "Unknown Point";
-const getPointAddress = (p: any) => p?.address || p?.location || "";
-const getPointId = (p: any) => p?.id || p?.uuid || p?.key || "";
 
 /* ── Image fallback ─────────────────────────────────────────── */
 
@@ -217,31 +209,19 @@ interface RetailerCartPanelProps {
     deliveryMethod?: DeliveryMethod;
     onDeliveryMethodChange?: (m: DeliveryMethod) => void;
 
-    couriers?: Courier[];
-    couriersLoading?: boolean;
-    selectedCourierId?: string | null;
-    onSelectCourier?: (id: string | null) => void;
-
-    collectionPoints?: CollectionPoint[];
-    collectionPointsLoading?: boolean;
-    selectedCollectionPoint?: CollectionPoint | null;
-    onSelectCollectionPoint?: (point: CollectionPoint | null) => void;
+    /** The shop (prices its delivery options to the shopper's location). */
+    retailerId?: string;
+    /** Chosen delivery option (logistics GetCustomerDeliveryOptions key) and its total. */
+    deliveryOptionKey?: string | null;
+    onDeliveryOptionChange?: (key: string | null, total: number | null) => void;
 
     customerAddress?: CustomerAddress | null;
     onCustomerAddressChange?: (address: CustomerAddress) => void;
 
+    /** Delivery fee of the chosen option (added to the total). */
     shippingCost?: number | null;
-    shippingLoading?: boolean;
-    shippingError?: string | null;
     retailerName?: string;
     retailerLocation?: string;
-
-    isRetailerDelivery?: boolean;
-    onToggleRetailerDelivery?: (val: boolean) => void;
-    deliveryEmployees?: EmployeeNormalized[];
-    deliveryEmployeesLoading?: boolean;
-    selectedDeliveryEmployeeId?: string | null;
-    onSelectDeliveryEmployee?: (id: string | null) => void;
 }
 
 /* ── Component ──────────────────────────────────────────────── */
@@ -252,27 +232,14 @@ export default function RetailerCartPanel({
     onRequestCloseOrder,
     deliveryMethod = "PICKUP",
     onDeliveryMethodChange,
-    couriers = [],
-    couriersLoading = false,
-    selectedCourierId,
-    onSelectCourier,
-    collectionPoints = [],
-    collectionPointsLoading = false,
-    selectedCollectionPoint,
-    onSelectCollectionPoint,
+    retailerId,
+    deliveryOptionKey,
+    onDeliveryOptionChange,
     customerAddress,
     onCustomerAddressChange,
     shippingCost,
-    shippingLoading,
-    shippingError,
     retailerName,
     retailerLocation,
-    isRetailerDelivery = false,
-    onToggleRetailerDelivery,
-    deliveryEmployees = [],
-    deliveryEmployeesLoading = false,
-    selectedDeliveryEmployeeId,
-    onSelectDeliveryEmployee,
 }: RetailerCartPanelProps) {
     const { theme, isDarkMode } = useAuth();
     const {
@@ -286,12 +253,6 @@ export default function RetailerCartPanel({
         removeLine,
     } = useShopperCart();
 
-    const [courierSearch, setCourierSearch] = useState("");
-    const [showCourierList, setShowCourierList] = useState(false);
-
-    const [pointSearch, setPointSearch] = useState("");
-    const [showPointList, setShowPointList] = useState(false);
-
     const [locationError, setLocationError] = useState<string | null>(null);
     const [isLocating, setIsLocating] = useState(false);
 
@@ -302,28 +263,11 @@ export default function RetailerCartPanel({
     const empty = lines.length === 0;
     const hasPin = Number.isFinite(customerAddress?.latitude) && Number.isFinite(customerAddress?.longitude);
 
-    const isShippingActive = deliveryMethod === "COURIER" || deliveryMethod === "DELIVERY";
-    const isShippingReady = isShippingActive
-        ? (shippingCost !== null && !shippingLoading && !shippingError)
-        : true;
-
-    const finalTotal = subtotal + (shippingCost || 0);
-
-    const canCloseOrder = (() => {
-        if (deliveryMethod === "PICKUP") return true;
-
-        if (isRetailerDelivery) {
-            if (!selectedDeliveryEmployeeId) return false;
-            if (deliveryMethod === "COURIER") return hasPin && isShippingReady;
-            return isShippingReady;
-        }
-
-        if (deliveryMethod === "DELIVERY")
-            return !!selectedCourierId && !!selectedCollectionPoint && isShippingReady;
-        if (deliveryMethod === "COURIER")
-            return !!selectedCourierId && hasPin && isShippingReady;
-        return false;
-    })();
+    // Delivery: the shopper shares their location and picks one of the shop's
+    // priced options; its total is the delivery fee.
+    const isDelivery = deliveryMethod === "DELIVERY";
+    const finalTotal = subtotal + (isDelivery ? shippingCost || 0 : 0);
+    const canCloseOrder = !isDelivery || (hasPin && !!deliveryOptionKey);
 
     const handleCloseOrder = () => {
         if (!order) return;
@@ -353,7 +297,7 @@ export default function RetailerCartPanel({
             (error) => {
                 setIsLocating(false);
                 let msg = "Could not retrieve location.";
-                if (error.code === 1) msg = "Location permission denied. Please enable it to use Courier.";
+                if (error.code === 1) msg = "Location permission denied. Allow it to get deliveries.";
                 else if (error.code === 2) msg = "Location information is unavailable on your device.";
                 else if (error.code === 3) msg = "Location request timed out. Please try again.";
                 setLocationError(msg);
@@ -363,8 +307,8 @@ export default function RetailerCartPanel({
     }, [customerAddress, onCustomerAddressChange]);
 
     useEffect(() => {
-        if (deliveryMethod === "COURIER") {
-            requestLocation();
+        if (deliveryMethod === "DELIVERY") {
+            if (!hasPin) requestLocation();
         } else {
             setLocationError(null);
         }
@@ -376,22 +320,6 @@ export default function RetailerCartPanel({
         : empty
             ? "Nothing added yet."
             : `${itemCount} item${itemCount === 1 ? "" : "s"} · ${totalUnits} unit${totalUnits === 1 ? "" : "s"}`;
-
-    const filteredCouriers = couriers.filter((c: any) =>
-        getCourierName(c).toLowerCase().includes(courierSearch.toLowerCase()),
-    );
-    const selectedCourierName = couriers.length > 0
-        ? getCourierName(couriers.find((c: any) => getCourierId(c) === selectedCourierId))
-        : undefined;
-
-    const filteredPoints = collectionPoints.filter(
-        (p: any) =>
-            getPointName(p).toLowerCase().includes(pointSearch.toLowerCase()) ||
-            getPointAddress(p).toLowerCase().includes(pointSearch.toLowerCase()),
-    );
-
-    const isCourierBased =
-        deliveryMethod === "DELIVERY" || deliveryMethod === "COURIER";
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.panel }}>
@@ -548,18 +476,14 @@ export default function RetailerCartPanel({
                             </Text>
                         </View>
 
-                        {isShippingActive && (
+                        {isDelivery && (
                             <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
                                 <Text style={{ fontFamily: theme.font.medium, fontSize: 12, color: theme.textDark }}>
-                                    Shipping
+                                    Delivery
                                 </Text>
-                                {shippingLoading && !isRetailerDelivery ? (
-                                    <ActivityIndicator size="small" color={theme.primary} />
-                                ) : (
-                                    <Text style={{ fontFamily: theme.font.medium, fontSize: 13, color: theme.text }}>
-                                        KES {formatMoney(shippingCost)}
-                                    </Text>
-                                )}
+                                <Text style={{ fontFamily: theme.font.medium, fontSize: 13, color: theme.text }}>
+                                    {deliveryOptionKey ? `KES ${formatMoney(shippingCost)}` : "Choose an option"}
+                                </Text>
                             </View>
                         )}
                     </View>
@@ -578,319 +502,20 @@ export default function RetailerCartPanel({
                             <View style={{ marginTop: 14 }}>
                                 <DeliveryMethodSelector
                                     value={deliveryMethod}
+                                    methods={["PICKUP", "DELIVERY"]}
                                     onChange={(m) => {
                                         onDeliveryMethodChange?.(m);
-                                        if (m === "PICKUP") onToggleRetailerDelivery?.(false);
-                                        setCourierSearch("");
-                                        setShowCourierList(false);
-                                        setPointSearch("");
-                                        setShowPointList(false);
+                                        if (m === "PICKUP") onDeliveryOptionChange?.(null, null);
                                     }}
                                     label="Fulfilment"
                                     variant="segment"
                                 />
                             </View>
 
-                            {isCourierBased && (
-                                <Pressable
-                                    onPress={() => onToggleRetailerDelivery?.(!isRetailerDelivery)}
-                                    className="mt-3 flex-row items-center p-3.5 rounded-xl border"
-                                    style={{
-                                        backgroundColor: isRetailerDelivery ? `${theme.primary}10` : "transparent",
-                                        borderColor: isRetailerDelivery ? theme.primary : borderColor,
-                                    }}
-                                >
-                                    <View
-                                        className="w-5 h-5 rounded border items-center justify-center mr-2.5"
-                                        style={{
-                                            borderColor: isRetailerDelivery ? theme.primary : theme.textDark,
-                                            backgroundColor: isRetailerDelivery ? theme.primary : "transparent",
-                                        }}
-                                    >
-                                        {isRetailerDelivery && <CheckCircle2 size={12} color="#fff" />}
-                                    </View>
-                                    <View className="flex-1">
-                                        <Text style={{ fontFamily: theme.font.semibold, fontSize: 13, color: theme.text }}>
-                                            Fulfilled by Retailer Staff
-                                        </Text>
-                                        <Text style={{ fontFamily: theme.font.regular, fontSize: 11, color: theme.textDark }}>
-                                            Free delivery (No third-party courier)
-                                        </Text>
-                                    </View>
-                                </Pressable>
-                            )}
-
-                            {isCourierBased && isRetailerDelivery && (
-                                <View className="mt-4" style={{ zIndex: 1000 }}>
-                                    <Text className="text-[10px] font-bold tracking-wider uppercase mb-1.5" style={{ fontFamily: theme.font.bold, color: theme.textDark }}>
-                                        Assign Store Delivery Staff
-                                    </Text>
-                                    <EmployeePicker
-                                        employees={deliveryEmployees}
-                                        isLoading={deliveryEmployeesLoading}
-                                        selectedId={selectedDeliveryEmployeeId || null}
-                                        onSelect={(id) => onSelectDeliveryEmployee?.(id)}
-                                    />
-                                </View>
-                            )}
-
-                            {isCourierBased && !isRetailerDelivery && (
-                                <View style={{ marginTop: 16 }}>
-                                    <Text style={{ fontFamily: theme.font.bold, fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase", color: theme.textDark, marginBottom: 8 }}>
-                                        1. {deliveryMethod === "DELIVERY" ? "Select Transporter" : "Select Rider"}
-                                    </Text>
-
-                                    {selectedCourierId ? (
-                                        <View
-                                            style={{
-                                                flexDirection: "row",
-                                                alignItems: "center",
-                                                justifyContent: "space-between",
-                                                paddingHorizontal: 12,
-                                                paddingVertical: 12,
-                                                borderRadius: 8,
-                                                borderWidth: 1,
-                                                borderColor: theme.primary,
-                                                backgroundColor: `${theme.primary}10`,
-                                            }}
-                                        >
-                                            <Text style={{ fontFamily: theme.font.semibold, fontSize: 13, color: theme.primary }}>
-                                                {selectedCourierName || "Selected"}
-                                            </Text>
-                                            <TouchableOpacity
-                                                onPress={() => {
-                                                    onSelectCourier?.(null);
-                                                    onSelectCollectionPoint?.(null);
-                                                }}
-                                                style={webPointer}
-                                            >
-                                                <X size={16} color={theme.primary} />
-                                            </TouchableOpacity>
-                                        </View>
-                                    ) : (
-                                        <>
-                                            <View
-                                                style={{
-                                                    flexDirection: "row",
-                                                    alignItems: "center",
-                                                    borderRadius: 8,
-                                                    borderWidth: 1,
-                                                    borderColor,
-                                                    backgroundColor: subtleBg,
-                                                    paddingHorizontal: 12,
-                                                    height: 38,
-                                                }}
-                                            >
-                                                <Search size={14} color={theme.textDark} />
-                                                <TextInput
-                                                    placeholder={
-                                                        deliveryMethod === "DELIVERY"
-                                                            ? "Search transporters…"
-                                                            : "Search riders…"
-                                                    }
-                                                    placeholderTextColor={theme.textDark}
-                                                    value={courierSearch}
-                                                    onChangeText={(t) => {
-                                                        setCourierSearch(t);
-                                                        setShowCourierList(true);
-                                                    }}
-                                                    onFocus={() => setShowCourierList(true)}
-                                                    onBlur={() => setTimeout(() => setShowCourierList(false), 200)}
-                                                    style={{
-                                                        flex: 1,
-                                                        height: "100%",
-                                                        marginLeft: 8,
-                                                        fontFamily: theme.font.regular,
-                                                        fontSize: 13,
-                                                        color: theme.text,
-                                                        ...webNoOutline,
-                                                    }}
-                                                />
-                                            </View>
-
-                                            {showCourierList && (
-                                                <>
-                                                    {couriersLoading ? (
-                                                        <ActivityIndicator
-                                                            size="small"
-                                                            color={theme.primary}
-                                                            style={{ alignSelf: "flex-start", marginTop: 8 }}
-                                                        />
-                                                    ) : filteredCouriers.length > 0 ? (
-                                                        <View
-                                                            style={{
-                                                                borderWidth: 1,
-                                                                borderColor,
-                                                                borderRadius: 8,
-                                                                marginTop: 4,
-                                                                overflow: "hidden",
-                                                            }}
-                                                        >
-                                                            {filteredCouriers.map((c: any) => (
-                                                                <TouchableOpacity
-                                                                    key={getCourierId(c)}
-                                                                    onPress={() => {
-                                                                        onSelectCourier?.(getCourierId(c));
-                                                                        setCourierSearch("");
-                                                                        setShowCourierList(false);
-                                                                    }}
-                                                                    style={{
-                                                                        padding: 12,
-                                                                        borderBottomWidth: 1,
-                                                                        borderBottomColor: borderColor,
-                                                                        backgroundColor: theme.panel,
-                                                                        ...webPointer,
-                                                                    }}
-                                                                >
-                                                                    <Text style={{ fontFamily: theme.font.medium, fontSize: 13, color: theme.text }}>
-                                                                        {getCourierName(c)}
-                                                                    </Text>
-                                                                </TouchableOpacity>
-                                                            ))}
-                                                        </View>
-                                                    ) : (
-                                                        <Text style={{ fontFamily: theme.font.regular, fontSize: 12, color: theme.textDark, marginTop: 8 }}>
-                                                            {courierSearch ? `No results matching "${courierSearch}"` : "No transporters available right now."}
-                                                        </Text>
-                                                    )}
-                                                </>
-                                            )}
-                                        </>
-                                    )}
-
-                                    {deliveryMethod === "DELIVERY" && selectedCourierId && (
-                                        <View style={{ marginTop: 16 }}>
-                                            <Text style={{ fontFamily: theme.font.bold, fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase", color: theme.textDark, marginBottom: 8 }}>
-                                                2. Select Drop-off Point
-                                            </Text>
-
-                                            {selectedCollectionPoint ? (
-                                                <View
-                                                    style={{
-                                                        flexDirection: "row",
-                                                        alignItems: "center",
-                                                        justifyContent: "space-between",
-                                                        paddingHorizontal: 12,
-                                                        paddingVertical: 12,
-                                                        borderRadius: 8,
-                                                        borderWidth: 1,
-                                                        borderColor: theme.primary,
-                                                        backgroundColor: `${theme.primary}10`,
-                                                    }}
-                                                >
-                                                    <View style={{ flex: 1 }}>
-                                                        <Text style={{ fontFamily: theme.font.semibold, fontSize: 13, color: theme.primary }}>
-                                                            {getPointName(selectedCollectionPoint)}
-                                                        </Text>
-                                                        <Text style={{ fontFamily: theme.font.regular, fontSize: 11, color: theme.primary, opacity: 0.8, marginTop: 2 }}>
-                                                            {getPointAddress(selectedCollectionPoint)}
-                                                        </Text>
-                                                    </View>
-                                                    <TouchableOpacity
-                                                        onPress={() => onSelectCollectionPoint?.(null)}
-                                                        style={webPointer}
-                                                    >
-                                                        <X size={16} color={theme.primary} />
-                                                    </TouchableOpacity>
-                                                </View>
-                                            ) : (
-                                                <>
-                                                    <View
-                                                        style={{
-                                                            flexDirection: "row",
-                                                            alignItems: "center",
-                                                            borderRadius: 8,
-                                                            borderWidth: 1,
-                                                            borderColor,
-                                                            backgroundColor: subtleBg,
-                                                            paddingHorizontal: 12,
-                                                            height: 38,
-                                                        }}
-                                                    >
-                                                        <Search size={14} color={theme.textDark} />
-                                                        <TextInput
-                                                            placeholder="Search drop-off points…"
-                                                            placeholderTextColor={theme.textDark}
-                                                            value={pointSearch}
-                                                            onChangeText={(t) => {
-                                                                setPointSearch(t);
-                                                                setShowPointList(true);
-                                                            }}
-                                                            onFocus={() => setShowPointList(true)}
-                                                            onBlur={() => setTimeout(() => setShowPointList(false), 200)}
-                                                            style={{
-                                                                flex: 1,
-                                                                height: "100%",
-                                                                marginLeft: 8,
-                                                                fontFamily: theme.font.regular,
-                                                                fontSize: 13,
-                                                                color: theme.text,
-                                                                ...webNoOutline,
-                                                            }}
-                                                        />
-                                                    </View>
-
-                                                    {showPointList && (
-                                                        <>
-                                                            {collectionPointsLoading ? (
-                                                                <ActivityIndicator
-                                                                    size="small"
-                                                                    color={theme.primary}
-                                                                    style={{ alignSelf: "flex-start", marginTop: 8 }}
-                                                                />
-                                                            ) : filteredPoints.length > 0 ? (
-                                                                <View
-                                                                    style={{
-                                                                        borderWidth: 1,
-                                                                        borderColor,
-                                                                        borderRadius: 8,
-                                                                        marginTop: 4,
-                                                                        overflow: "hidden",
-                                                                    }}
-                                                                >
-                                                                    {filteredPoints.map((p: any) => (
-                                                                        <TouchableOpacity
-                                                                            key={getPointId(p)}
-                                                                            onPress={() => {
-                                                                                onSelectCollectionPoint?.(p);
-                                                                                setPointSearch("");
-                                                                                setShowPointList(false);
-                                                                            }}
-                                                                            style={{
-                                                                                padding: 12,
-                                                                                borderBottomWidth: 1,
-                                                                                borderBottomColor: borderColor,
-                                                                                backgroundColor: theme.panel,
-                                                                                ...webPointer,
-                                                                            }}
-                                                                        >
-                                                                            <Text style={{ fontFamily: theme.font.semibold, fontSize: 13, color: theme.text }}>
-                                                                                {getPointName(p)}
-                                                                            </Text>
-                                                                            <Text style={{ fontFamily: theme.font.regular, fontSize: 11, color: theme.textDark, marginTop: 2 }}>
-                                                                                {getPointAddress(p)}
-                                                                            </Text>
-                                                                        </TouchableOpacity>
-                                                                    ))}
-                                                                </View>
-                                                            ) : (
-                                                                <Text style={{ fontFamily: theme.font.regular, fontSize: 12, color: theme.textDark, marginTop: 8 }}>
-                                                                    {pointSearch ? `No points matching "${pointSearch}"` : "No collection points available for this transporter."}
-                                                                </Text>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </>
-                                            )}
-                                        </View>
-                                    )}
-                                </View>
-                            )}
-
-                            {deliveryMethod === "COURIER" && (
-                                <View style={{ marginTop: 16 }}>
-                                    <Text style={{ fontFamily: theme.font.bold, fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase", color: theme.textDark, marginBottom: 8 }}>
-                                        2. Delivery Location
+                            {isDelivery && (
+                                <View style={{ marginTop: 16, gap: 10 }}>
+                                    <Text style={{ fontFamily: theme.font.bold, fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase", color: theme.textDark }}>
+                                        Delivery to you
                                     </Text>
 
                                     {locationError && (
@@ -900,7 +525,6 @@ export default function RetailerCartPanel({
                                             borderColor: isDarkMode ? "rgba(220,38,38,0.3)" : "#fecaca",
                                             borderRadius: 8,
                                             padding: 12,
-                                            marginBottom: 12,
                                             flexDirection: "row",
                                             alignItems: "flex-start",
                                             gap: 8,
@@ -912,73 +536,50 @@ export default function RetailerCartPanel({
                                                 </Text>
                                                 <TouchableOpacity onPress={requestLocation} style={{ marginTop: 6 }}>
                                                     <Text style={{ fontFamily: theme.font.bold, fontSize: 12, color: isDarkMode ? "#f87171" : "#dc2626" }}>
-                                                        Try Again
+                                                        Try again
                                                     </Text>
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
                                     )}
 
-                                    {isLocating && (
-                                        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 8 }}>
+                                    {isLocating ? (
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                                             <ActivityIndicator size="small" color={theme.primary} />
                                             <Text style={{ fontFamily: theme.font.regular, fontSize: 12, color: theme.textDark }}>
-                                                Fetching your current location…
+                                                Getting your location…
                                             </Text>
                                         </View>
-                                    )}
-
-                                    {shippingError && (
-                                        <View style={{
-                                            backgroundColor: isDarkMode ? "rgba(220,38,38,0.1)" : "#fef2f2",
-                                            borderWidth: 1,
-                                            borderColor: isDarkMode ? "rgba(220,38,38,0.3)" : "#fecaca",
-                                            borderRadius: 8,
-                                            padding: 12,
-                                            marginBottom: 12,
-                                        }}>
-                                            <Text style={{ fontFamily: theme.font.medium, fontSize: 12, color: isDarkMode ? "#fca5a5" : "#991b1b", lineHeight: 16 }}>
-                                                {shippingError}
+                                    ) : hasPin ? (
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                            <CheckCircle2 size={16} color={isDarkMode ? "#4ade80" : "#16a34a"} />
+                                            <Text style={{ flex: 1, fontFamily: theme.font.regular, fontSize: 12, color: theme.textDark }}>
+                                                To {customerAddress?.latitude?.toFixed(4)}, {customerAddress?.longitude?.toFixed(4)} from{" "}
+                                                <Text style={{ fontFamily: theme.font.semibold, color: theme.text }}>{retailerName || "the shop"}</Text>
+                                                {retailerLocation ? ` (${retailerLocation})` : ""}
                                             </Text>
-                                        </View>
-                                    )}
-
-                                    {hasPin ? (
-                                        <View style={{
-                                            backgroundColor: isDarkMode ? "rgba(22,163,74,0.1)" : "#f0fdf4",
-                                            borderWidth: 1,
-                                            borderColor: isDarkMode ? "rgba(22,163,74,0.3)" : "#bbf7d0",
-                                            borderRadius: 8,
-                                            padding: 16,
-                                            gap: 10,
-                                        }}>
-                                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                                <CheckCircle2 size={18} color={isDarkMode ? "#4ade80" : "#16a34a"} />
-                                                <Text style={{ fontFamily: theme.font.bold, fontSize: 14, color: isDarkMode ? "#4ade80" : "#15803d" }}>
-                                                    Location Detected
-                                                </Text>
-                                            </View>
-
-                                            <View style={{ gap: 4, marginLeft: 26 }}>
-                                                <Text style={{ fontFamily: theme.font.medium, fontSize: 13, color: theme.text }}>
-                                                    {customerAddress?.latitude?.toFixed(5) ?? "—"}, {customerAddress?.longitude?.toFixed(5) ?? "—"}
-                                                </Text>
-
-                                                <View style={{ height: 1, backgroundColor: isDarkMode ? "rgba(22,163,74,0.2)" : "#dcfce7", marginVertical: 6 }} />
-
-                                                <Text style={{ fontFamily: theme.font.regular, fontSize: 12, color: theme.textDark }}>
-                                                    Shipping from: <Text style={{ fontFamily: theme.font.semibold, color: theme.text }}>{retailerName || "Retailer"}</Text>
-                                                    {retailerLocation ? ` (${retailerLocation})` : ""}
-                                                </Text>
-                                            </View>
+                                            <TouchableOpacity onPress={requestLocation}>
+                                                <Text style={{ fontFamily: theme.font.bold, fontSize: 12, color: theme.primary }}>Update</Text>
+                                            </TouchableOpacity>
                                         </View>
                                     ) : (
-                                        !isLocating && !locationError && (
-                                            <Text style={{ fontFamily: theme.font.regular, fontSize: 12, color: theme.textDark }}>
-                                                Waiting for location detection...
-                                            </Text>
+                                        !locationError && (
+                                            <TouchableOpacity onPress={requestLocation}>
+                                                <Text style={{ fontFamily: theme.font.bold, fontSize: 12.5, color: theme.primary }}>Share my location</Text>
+                                            </TouchableOpacity>
                                         )
                                     )}
+
+                                    {retailerId ? (
+                                        <CheckoutDeliveryOptions
+                                            retailerId={retailerId}
+                                            latitude={customerAddress?.latitude}
+                                            longitude={customerAddress?.longitude}
+                                            lines={lines.map((l) => ({ receiptId: l.receiptId, quantity: l.quantity }))}
+                                            selectedKey={deliveryOptionKey ?? null}
+                                            onSelect={(key, total) => onDeliveryOptionChange?.(key, total)}
+                                        />
+                                    ) : null}
                                 </View>
                             )}
 

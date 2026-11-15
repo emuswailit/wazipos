@@ -19,7 +19,8 @@ interface Props {
     onClose: () => void;
     onRefreshParentLedger?: () => void;
     onSuccess?: (ctx: { method: PaymentMethod | null }) => void | Promise<void>;
-    onlineOnly?: boolean;
+    /** The order as the server returned it after the request (to update the screen at once). */
+    onOrderUpdated?: (rawOrder: any) => void;
 }
 
 const MOBILE_MONEY_TITLE = 'MOBILE MONEY';
@@ -32,7 +33,7 @@ export default function RecordPaymentModal({
     onClose,
     onRefreshParentLedger,
     onSuccess,
-    onlineOnly = false,
+    onOrderUpdated,
 }: Props) {
     const { theme, isDarkMode, token } = useAuth();
 
@@ -59,6 +60,7 @@ export default function RecordPaymentModal({
     const [paymentDescription, setPaymentDescription] = useState<string | null>(null);
     const [lastWsData, setLastWsData] = useState<any>(null);
     const [countdown, setCountdown] = useState(60);
+    const [promptSent, setPromptSent] = useState(false);
 
     const wsRef = useRef<WebSocket | null>(null);
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -85,6 +87,7 @@ export default function RecordPaymentModal({
                 setPaymentDescription(null);
                 setLastWsData(null);
                 setCountdown(60);
+                setPromptSent(false);
                 clearError();
             }, 300);
         }
@@ -125,6 +128,9 @@ export default function RecordPaymentModal({
             const resData = await submit();
             setLoading(false);
 
+            const returnedOrder = resData?.[config.responseKey ?? 'customer_order'];
+            if (returnedOrder && typeof onOrderUpdated === 'function') onOrderUpdated(returnedOrder);
+
             if (resData?.payment?.status === "SUCCESS") {
                 setSuccess(true);
                 if (typeof onSuccess === 'function') onSuccess({ method: selectedMethod });
@@ -142,15 +148,16 @@ export default function RecordPaymentModal({
             const isMobileMoney = titleUpper.includes('MOBILE') || titleUpper.includes('M-PESA') || titleUpper.includes('MPESA');
 
             if (isMobileMoney) {
-                const finalRefToPoll = resData?.extracted_reference_number;
-
-                if (!finalRefToPoll) {
-                    throw new Error("Payment initiated, but no reference number was returned.");
+                // Can't follow it live (no status socket for this order type, or
+                // the server sent no reference): the prompt is on the phone and
+                // the order list shows Paid once the payment is confirmed.
+                if (!config.buildPaymentStatusWsUrl || !resData?.extracted_reference_number || !token) {
+                    setPromptSent(true);
+                    if (typeof onRefreshParentLedger === 'function') onRefreshParentLedger();
+                    return;
                 }
 
-                if (!config.buildPaymentStatusWsUrl || !token) {
-                    throw new Error("Failed to initiate WebSocket. Missing token or URL builder.");
-                }
+                const finalRefToPoll = resData.extracted_reference_number;
 
                 setWaitingForPin(true);
                 startTimeout();
@@ -190,7 +197,7 @@ export default function RecordPaymentModal({
                             }
                         }
                     } catch (err) {
-                        console.error("❌ WS PARSE ERROR:", err);
+                        console.warn("[RecordPaymentModal] unreadable status message:", err);
                     }
                 };
 
@@ -211,8 +218,12 @@ export default function RecordPaymentModal({
                 if (typeof onRefreshParentLedger === 'function') onRefreshParentLedger();
             }
         } catch (err: any) {
-            console.error("💥 [RecordPaymentModal] ERROR IN handleSubmit:", err);
+            console.warn("[RecordPaymentModal] payment not started:", err?.message ?? err);
             setLoading(false);
+            // The screen was out of date (paid elsewhere): reload the list.
+            if (/already paid/i.test(String(err?.message ?? '')) && typeof onRefreshParentLedger === 'function') {
+                onRefreshParentLedger();
+            }
         }
     };
 
@@ -281,6 +292,21 @@ export default function RecordPaymentModal({
                                 </Text>
                                 <Text className="mt-2 text-center text-[13px]" style={{ fontFamily: theme.font.regular, color: theme.textDark }}>
                                     The order has been paid.
+                                </Text>
+                                <Pressable onPress={onClose} className="mt-8 px-8 py-3 rounded-xl border" style={{ borderColor }}>
+                                    <Text className="uppercase tracking-wide text-[12px] font-bold" style={{ color: theme.textDark, fontFamily: theme.font.bold }}>
+                                        Close
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        ) : promptSent ? (
+                            <View className="flex-1 items-center justify-center py-8">
+                                <Smartphone size={52} color={theme.primary} />
+                                <Text className="mt-4 text-lg font-bold" style={{ fontFamily: theme.font.bold, color: theme.text }}>
+                                    Check your phone
+                                </Text>
+                                <Text className="mt-2 text-center text-[13px]" style={{ fontFamily: theme.font.regular, color: theme.textDark }}>
+                                    Enter your PIN on the payment prompt. The order shows as Paid once the payment is confirmed (this can take a couple of minutes).
                                 </Text>
                                 <Pressable onPress={onClose} className="mt-8 px-8 py-3 rounded-xl border" style={{ borderColor }}>
                                     <Text className="uppercase tracking-wide text-[12px] font-bold" style={{ color: theme.textDark, fontFamily: theme.font.bold }}>
@@ -443,7 +469,7 @@ export default function RecordPaymentModal({
                     </ScrollView>
 
                     {/* 🟢 Footer (Fixed) */}
-                    {!waitingForPin && !success && !timedOut && !failed && (
+                    {!waitingForPin && !success && !promptSent && !timedOut && !failed && (
                         <View className="p-4 sm:p-5 border-t flex-row justify-end gap-3 flex-shrink-0" style={{ borderTopColor: borderColor }}>
                             <Pressable onPress={onClose} disabled={loading} className="px-5 py-2.5 rounded-xl border items-center justify-center" style={{ borderColor }}>
                                 <Text className="uppercase tracking-wide text-[12px] font-bold" style={{ color: theme.textDark, fontFamily: theme.font.bold }}>

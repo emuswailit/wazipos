@@ -13,7 +13,15 @@
 #
 # Status is followed live by RetailerOrderPaymentConsumer and reconciled by
 # the Celery task reconcile_retailer_order_payments (same split as subscriptions).
+#
+# Entry points (used by both sides):
+#   initiate_mobile_money()  - retailer (MakeRetailerOrderPayment) or wholesaler
+#                              staff (ProcessRetailerOrderPayment) starts an STK push;
+#   record_offline_payment() - wholesaler staff record cash / credit / any other
+#                              non-mobile method: paid at once, nothing to settle
+#                              (the wholesaler holds that money).
 
+import math
 from datetime import timedelta
 from decimal import Decimal
 
@@ -23,7 +31,8 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from payments.utils.system_till import PENDING_TIMEOUT_MINUTES, fetch_transaction, get_jambopay_token
+from authentication.utils.utils import generate_reference_number, use_reference_number
+from payments.utils.system_till import PENDING_TIMEOUT_MINUTES, fetch_transaction, get_jambopay_token, push_to_system_till
 from utils.logging import create_log
 from wholesalers.models import RetailerOrderPayments
 
@@ -69,14 +78,62 @@ def broadcast(payment):
         order = payment.retailer_order
         if order and order.retailer_id:
             async_to_sync(layer.group_send)(retailer_requisitions_group(order.retailer_id), {"type": "send_retailer_requisitions"})
+        # The wholesaler's retailer-orders list (wholesalers/consumers.py).
+        async_to_sync(layer.group_send)("retailer-orders", {"type": "send_retailer_orders"})
     except Exception as e:
         create_log("error", f"Retailer order payment broadcast failed: {e}")
 
 
-def _complete(payment):
-    """Book a successful payment. Runs once per payment (caller holds the row lock)."""
+def amount_due(order):
+    """Order total incl. shipping, minus what successful payments already cover."""
+    owed = Decimal(str(order.final_price_total or 0)) + Decimal(str(order.shipping_amount or 0))
+    paid = (
+        RetailerOrderPayments.objects.filter(retailer_order=order, status="SUCCESS")
+        .aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+    return max(Decimal("0"), owed - paid)
+
+
+def _mark_order_paid_if_covered(order):
+    """Once successful payments cover the order: mark it paid and reduce stock (once)."""
     from retailers.utils.retailer_utils import update_wholesaler_stock
 
+    if amount_due(order) <= 0 and str(order.is_paid).lower() != "true":
+        order.is_paid = "true"
+        order.save()
+        update_wholesaler_stock(order)
+
+
+def heal_paid_flag(order):
+    """
+    Successful payments already cover the order but its is_paid flag says
+    otherwise (older payment code): mark it paid now. Returns True if covered.
+    """
+    if amount_due(order) > 0:
+        return False
+    _mark_order_paid_if_covered(order)
+    broadcast_order(order)
+    return True
+
+
+def broadcast_order(order):
+    """Refresh both sides' order lists for one order."""
+    layer = get_channel_layer()
+    if not layer or not order:
+        return
+    try:
+        from retailers.consumers import retailer_requisitions_group
+
+        if order.retailer_id:
+            async_to_sync(layer.group_send)(retailer_requisitions_group(order.retailer_id), {"type": "send_retailer_requisitions"})
+        async_to_sync(layer.group_send)("retailer-orders", {"type": "send_retailer_orders"})
+    except Exception as e:
+        create_log("error", f"Retailer order broadcast failed: {e}")
+
+
+def _complete(payment):
+    """Book a successful mobile-money payment. Runs once per payment (caller holds the row lock)."""
     order = payment.retailer_order
     payout_account = active_payout_account(order.wholesaler)
     commission = Decimal(str(payment.commission_amount or 0))
@@ -87,16 +144,7 @@ def _complete(payment):
     payment.payout_amount = Decimal(str(payment.amount or 0)) - commission
     payment.save()
 
-    paid = (
-        RetailerOrderPayments.objects.filter(retailer_order=order, status="SUCCESS")
-        .aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
-    owed = Decimal(str(order.final_price_total or 0)) + Decimal(str(order.shipping_amount or 0))
-    if paid >= owed and str(order.is_paid).lower() != "true":
-        order.is_paid = "true"
-        order.save()
-        update_wholesaler_stock(order)
+    _mark_order_paid_if_covered(order)
 
     if not payout_account:
         create_log(
@@ -104,6 +152,79 @@ def _complete(payment):
             f"Retailer order payment {payment.pay_in_reference_number} succeeded but "
             f"{order.wholesaler} has no active payout account to settle to.",
         )
+
+
+def initiate_mobile_money(order, payment_method, user, phone):
+    """
+    STK push for what's still due on `order`, into the system till.
+    Returns (errors, payment); payment.pay_in_reference_number is what the
+    client follows on ws/requisitions/payment/<ref>/.
+    """
+    if not phone:
+        return ["Enter the M-Pesa phone number to charge"], None
+    due = amount_due(order)
+    if due <= 0:
+        return ["This order is already paid"], None
+    amount = math.ceil(due)  # JamboPay takes whole shillings; never under-collect
+
+    reference_number = generate_reference_number(order.retailer, user)
+    errors, result_json, telco = push_to_system_till(
+        reference_number, amount, phone,
+        description=f"Order {order.wholesaler.title if order.wholesaler else ''}"[:60],
+    )
+    if errors:
+        create_log("error", f"Retailer order STK push failed: {errors}")
+        return errors, None
+
+    payment = RetailerOrderPayments.objects.create(
+        retailer_order=order,
+        payment_method=payment_method,
+        pay_in_reference_number=reference_number,
+        psp_reference_number=result_json["ref"],
+        status="PENDING",
+        description="Waiting for PIN entry.",
+        amount=amount,
+        entity=order.retailer,
+        currency="KES",
+        telco=telco or "",
+        owner=user,
+        is_paid="false",
+        is_settled="false",
+    )
+    use_reference_number(reference_number)
+    return [], payment
+
+
+def record_offline_payment(order, payment_method, user, description=None):
+    """
+    Wholesaler staff record a non-mobile payment (cash, credit, cheque, ...).
+    The wholesaler holds that money, so it's paid and settled at once.
+    Returns (errors, payment).
+    """
+    due = amount_due(order)
+    if due <= 0:
+        return ["This order is already paid"], None
+    with transaction.atomic():
+        payment = RetailerOrderPayments.objects.create(
+            retailer_order=order,
+            payment_method=payment_method,
+            status="SUCCESS",
+            description=(description or f"{payment_method.title} recorded by the wholesaler")[:120],
+            amount=due,
+            payout_amount=Decimal("0"),
+            entity=order.retailer,
+            currency="KES",
+            telco="",
+            psp_reference_number="",
+            owner=user,
+            is_paid="true",
+            is_settled="true",
+        )
+        order.payment_method = payment_method
+        order.save()
+        _mark_order_paid_if_covered(order)
+    broadcast(payment)
+    return [], payment
 
 
 def apply_transaction(payment_id, tx):

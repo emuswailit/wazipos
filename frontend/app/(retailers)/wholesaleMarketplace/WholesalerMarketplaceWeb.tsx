@@ -17,11 +17,10 @@
 
 import { useAuth } from '@/context/AuthContext';
 import type { RetailerIndentItem } from '@/databases/types';
-import { useIndentBridge } from '@/hooks/useIndentBridge';
+import { confirmCloseIndent, useIndentBridge } from '@/hooks/useIndentBridge';
 import {
     ArrowDownUp,
     ArrowLeft,
-    Grid3x3,
     Package,
     RefreshCw,
     Search,
@@ -30,6 +29,7 @@ import {
 } from 'lucide-react-native';
 import React, {
     useCallback,
+    useEffect,
     useMemo,
     useState,
 } from 'react';
@@ -48,6 +48,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import IndentCartPanel from './IndentCartPanel';
 import {
     ProductCard,
+    productGridColumns,
     useWholesalerProducts,
     type MarketplaceProduct,
     type WholesalerMarketplaceViewProps,
@@ -61,8 +62,10 @@ const SIDEBAR_WIDTH = 280;
 const CART_WIDTH = 340;
 const MAIN_PADDING = 20;
 const GRID_GAP = 16;
-const COLUMN_OPTIONS = [2, 3, 4, 5, 6];
-const HOVER_PADDING = 30;
+/** Room around each card for the small hover lift (HOVER_SCALE). */
+const HOVER_PADDING = 6;
+/** Approximate width of the browser's vertical scrollbar. */
+const SCROLLBAR = 16;
 
 const webNoOutline = isWeb
     ? ({ outlineStyle: 'none' } as any)
@@ -105,6 +108,7 @@ export default function WholesalerMarketplaceWeb({
         findItemByReceipts,
         getQuantityByReceipts,
         removeFromIndent,
+        closeOpenIndent,
     } = useIndentBridge();
 
     /* ── UI state ──────────────────────────────────────────── */
@@ -113,7 +117,6 @@ export default function WholesalerMarketplaceWeb({
     const [category, setCategory] = useState('All');
     const [sort, setSort] = useState<SortKey>('relevance');
     const [inStockOnly, setInStockOnly] = useState(false);
-    const [columns, setColumns] = useState(4);
     const [cartOpen, setCartOpen] = useState(true);
 
     /* ── Quantity modal state ─────────────────────────────── */
@@ -122,6 +125,11 @@ export default function WholesalerMarketplaceWeb({
         useState<MarketplaceProduct | null>(null);
     const [cartBusy, setCartBusy] = useState(false);
     const [cartError, setCartError] = useState<string | null>(null);
+    const [cartSuccess, setCartSuccess] = useState<string | null>(null);
+    // A new indent was started after the last close: drop the "orders sent" note.
+    useEffect(() => {
+        if (currentOpenIndent) setCartSuccess(null);
+    }, [currentOpenIndent?.remote_id]);
 
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
     const subtleBg = isDarkMode ? '#0f172a' : '#f1f5f9';
@@ -190,7 +198,14 @@ export default function WholesalerMarketplaceWeb({
         windowWidth -
         SIDEBAR_WIDTH -
         (cartOpen ? CART_WIDTH : 0);
-    const availableForGrid = mainWidth - MAIN_PADDING * 2;
+    const availableForGrid =
+        mainWidth - (MAIN_PADDING - HOVER_PADDING) * 2 - SCROLLBAR;
+    // Responsive: as many cards (≥ MIN_PRODUCT_CARD_WIDTH) as fit, 1 to 4.
+    // Recomputed when the window resizes or the cart panel opens/closes.
+    const columns = productGridColumns(
+        availableForGrid,
+        GRID_GAP + HOVER_PADDING * 2,
+    );
     const cellWidth = Math.floor(
         (availableForGrid - GRID_GAP * (columns - 1)) / columns,
     );
@@ -236,15 +251,23 @@ export default function WholesalerMarketplaceWeb({
         })();
     }, [pendingOpCount, refresh]);
 
+    // Close the open indent = submit it to the wholesalers as orders.
     const handleCloseIndent = useCallback(async () => {
-        // Placeholder — actual close is handled by the parent screen
-        // or a dedicated flow. Kept here so the panel's CTA is wired.
-        // For now: prompt the user. In a full integration, this would
-        // call `closeIndent(currentOpenIndent.remote_id)`.
-        setCartError(
-            'Close indent is available from the main indent screen.',
-        );
-    }, []);
+        const count = currentOpenIndent?.retailer_indent_items?.length ?? 0;
+        if (!(await confirmCloseIndent(count))) return;
+        setCartBusy(true);
+        setCartError(null);
+        setCartSuccess(null);
+        try {
+            const res = await closeOpenIndent();
+            if (res.ok) setCartSuccess(res.message);
+            else setCartError(res.message);
+        } catch (e: any) {
+            setCartError(e?.message ?? 'Could not close the indent.');
+        } finally {
+            setCartBusy(false);
+        }
+    }, [closeOpenIndent, currentOpenIndent]);
 
     const cartItemCount =
         currentOpenIndent?.retailer_indent_items?.length ?? 0;
@@ -585,79 +608,6 @@ export default function WholesalerMarketplaceWeb({
                         </Text>
                     </TouchableOpacity>
 
-                    {/* Column picker */}
-                    <View
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            marginRight: 10,
-                            marginBottom: 6,
-                        }}
-                    >
-                        <View style={{ marginRight: 6 }}>
-                            <Grid3x3
-                                size={14}
-                                color={theme.textDark}
-                            />
-                        </View>
-                        <Text
-                            style={{
-                                fontFamily: theme.font.medium,
-                                fontSize: theme.fontSize.sm,
-                                color: theme.textDark,
-                                marginRight: 6,
-                            }}
-                        >
-                            Columns:
-                        </Text>
-                        <View
-                            style={{
-                                flexDirection: 'row',
-                                padding: 3,
-                                borderRadius: 8,
-                                backgroundColor: subtleBg,
-                            }}
-                        >
-                            {COLUMN_OPTIONS.map((o) => {
-                                const active = columns === o;
-                                return (
-                                    <TouchableOpacity
-                                        key={o}
-                                        onPress={() => setColumns(o)}
-                                        activeOpacity={0.8}
-                                        accessibilityRole="button"
-                                        style={{
-                                            paddingHorizontal: 10,
-                                            paddingVertical: 5,
-                                            borderRadius: 6,
-                                            backgroundColor: active
-                                                ? theme.panel
-                                                : 'transparent',
-                                            ...webPointer,
-                                        }}
-                                    >
-                                        <Text
-                                            style={{
-                                                fontFamily: active
-                                                    ? theme.font.bold
-                                                    : theme.font
-                                                        .medium,
-                                                fontSize:
-                                                    theme.fontSize
-                                                        .sm,
-                                                color: active
-                                                    ? theme.primary
-                                                    : theme.textDark,
-                                            }}
-                                        >
-                                            {o}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                    </View>
-
                     {/* Refresh */}
                     <TouchableOpacity
                         onPress={refresh}
@@ -937,6 +887,8 @@ export default function WholesalerMarketplaceWeb({
                                 style={{
                                     flexDirection: 'row',
                                     flexWrap: 'wrap',
+                                    // cards in a row share the tallest card's height
+                                    alignItems: 'stretch',
                                 }}
                             >
                                 {filtered.map((p, i) => {
@@ -974,7 +926,6 @@ export default function WholesalerMarketplaceWeb({
                                                 borderColor={
                                                     borderColor
                                                 }
-                                                hoverScale={1.3}
                                                 onPress={() =>
                                                     setModalProduct(
                                                         p,
@@ -1021,7 +972,7 @@ export default function WholesalerMarketplaceWeb({
                         onSyncNow={handleSyncNow}
                         onDismiss={() => setCartOpen(false)}
                         busy={cartBusy}
-                        errorText={cartError} syncing={false} syncTotal={0} syncDone={0} />
+                        errorText={cartError} successText={cartSuccess} syncing={false} syncTotal={0} syncDone={0} />
                 </View>
             )}
 
@@ -1030,6 +981,8 @@ export default function WholesalerMarketplaceWeb({
                 visible={!!modalProduct}
                 product={modalProduct}
                 onClose={() => setModalProduct(null)}
+                wholesalerId={wholesalerId}
+                wholesalerTitle={wholesalerTitle}
             />
         </View>
     );

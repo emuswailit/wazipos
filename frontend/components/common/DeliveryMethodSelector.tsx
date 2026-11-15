@@ -11,6 +11,8 @@ interface DeliveryMethodSelectorProps {
     onChange: (m: DeliveryMethod) => void;
     label?: string;
     variant?: "segment" | "pills";
+    /** Only offer these methods (default: all). */
+    methods?: DeliveryMethod[];
 }
 
 const OPTIONS: {
@@ -28,7 +30,9 @@ export function DeliveryMethodSelector({
     onChange,
     label,
     variant = "segment",
+    methods,
 }: DeliveryMethodSelectorProps) {
+    const options = methods ? OPTIONS.filter((o) => methods.includes(o.value)) : OPTIONS;
     const { theme, isDarkMode } = useAuth();
     const borderColor = isDarkMode ? "#1e293b" : "#e8edf2";
 
@@ -58,7 +62,7 @@ export function DeliveryMethodSelector({
                     overflow: "hidden",
                 }}
             >
-                {OPTIONS.map((opt, idx) => {
+                {options.map((opt, idx) => {
                     const active = value === opt.value;
                     return (
                         <TouchableOpacity

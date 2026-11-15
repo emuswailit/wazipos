@@ -166,6 +166,21 @@ class PayoutAccountsSerializer(serializers.ModelSerializer):
         return None
             
 
+class UserPayoutAccountsSerializer(serializers.ModelSerializer):
+    """An individual's payout account (e.g. a delivery person's earnings)."""
+
+    account_entity_title = serializers.CharField(source="account_entity.title", read_only=True, default=None)
+    bank_branch_title = serializers.CharField(source="bank_branch.title", read_only=True, default=None)
+    bank_branch_code = serializers.CharField(source="bank_branch.branch_code", read_only=True, default=None)
+
+    class Meta:
+        model = models.UserPayoutAccounts
+        fields = ("id", "user", "account_type", "account_name", "account_number", "business_number",
+                  "account_code", "account_entity", "account_entity_title", "bank_branch", "bank_branch_title",
+                  "bank_branch_code", "description", "is_active", "is_verified", "created", "updated")
+        read_only_fields = fields
+
+
 class PriceDiscountsSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.PriceDiscounts

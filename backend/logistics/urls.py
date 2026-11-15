@@ -6,4 +6,5 @@ from . import views
 
 urlpatterns = [
     path("admin", views.logisticsAdminAPIView, name="logistics=admin-api-view"),
+    path("deliveries", views.deliveriesAPIView, name="logistics-deliveries-api-view"),
 ]

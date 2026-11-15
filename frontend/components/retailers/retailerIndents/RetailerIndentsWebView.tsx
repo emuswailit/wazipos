@@ -9,6 +9,7 @@ import type { RetailerIndent } from '@/databases/types';
 import React from 'react';
 
 import { formatKES, indentsConfig, type IndentFilter } from './indentsConfig';
+import { OpenIndentCard } from './OpenIndentCard';
 
 export type IndentsCounts = {
     total: number;
@@ -34,6 +35,12 @@ export type RetailerIndentsViewProps = {
     lastSyncedTime: string;
     onView: (indent: RetailerIndent) => void;
     onEdit: (indent: RetailerIndent) => void;
+    /** The indent being built now (shown in a card above the list). */
+    openIndent: RetailerIndent | null;
+    /** Go to the wholesale marketplace to add products. */
+    onAddProducts: () => void;
+    /** False in the two-pane layout, where the cart pane already shows the open indent. */
+    showOpenIndentCard?: boolean;
 
     page: number;
     pageSize: PageSize;
@@ -68,6 +75,10 @@ export function indentsListProps(p: RetailerIndentsViewProps, variant: 'mobile' 
         items: p.indents,
         allItems: p.allIndents,
         onPressItem: p.onView,
+        header:
+            p.showOpenIndentCard === false ? undefined : (
+                <OpenIndentCard indent={p.openIndent} pendingOpCount={p.pendingIndentOpCount} onAddProducts={p.onAddProducts} onReview={p.onView} />
+            ),
         rowActions: (i) => [
             { icon: 'eye-outline', label: 'View indent', onPress: () => p.onView(i) },
             { icon: 'create-outline', label: 'Edit indent', onPress: () => p.onEdit(i), tone: 'primary' },

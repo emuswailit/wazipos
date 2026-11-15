@@ -1462,7 +1462,7 @@ class RetailerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     by its pay-in reference. Same pattern as SubscriptionPaymentConsumer:
     polls JamboPay every POLL_SECONDS until the payment leaves PENDING; the
     Celery reconciler also pushes here (send_payment_status).
-    Only the paying retailer's users may follow a payment.
+    Only the order's retailer and wholesaler may follow a payment.
     """
 
     POLL_SECONDS = 5
@@ -1502,7 +1502,11 @@ class RetailerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
             .select_related("retailer_order")
             .first()
         )
-        return bool(payment) and payment.retailer_order.retailer_id == getattr(self.user, "entity_id", None)
+        if not payment:
+            return False
+        entity_id = getattr(self.user, "entity_id", None)
+        order = payment.retailer_order
+        return entity_id is not None and entity_id in (order.retailer_id, order.wholesaler_id)
 
     @database_sync_to_async
     def _refresh(self, poll):

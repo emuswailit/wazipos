@@ -17,7 +17,21 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { budgetPct, campaignTitleOf, formatKES, hasBudgetSet, indentBadges, indentTitle, isDraftIndent, toBool } from './indentsConfig';
+import {
+    budgetPct,
+    campaignTitleOf,
+    formatKES,
+    groupItemsByWholesaler,
+    hasBudgetSet,
+    indentBadges,
+    indentTitle,
+    isDraftIndent,
+    itemLineTotal,
+    itemUnitCost,
+    pendingItems,
+    toBool,
+    type WholesalerGroup,
+} from './indentsConfig';
 
 interface Props {
     visible: boolean;
@@ -45,6 +59,7 @@ export function RetailerIndentDetailsModal({ visible, indent, onClose, onOpenEdi
     const [banner, setBanner] = useState<Banner | null>(null);
 
     const items = useMemo(() => indent?.retailer_indent_items ?? [], [indent]);
+    const groups = useMemo(() => groupItemsByWholesaler(items), [items]);
 
     useEffect(() => {
         if (!visible) return;
@@ -64,9 +79,20 @@ export function RetailerIndentDetailsModal({ visible, indent, onClose, onOpenEdi
     const pct = budgetPct(indent);
     const campaign = campaignTitleOf(indent);
 
+    const waiting = pendingItems(indent).length;
+
     const performSubmit = async () => {
         setConfirmSubmit(false);
         setBanner(null);
+        // Items still only on this device would be left out of the orders.
+        if (waiting > 0) {
+            setBanner({
+                kind: 'error',
+                title: `${waiting} item${waiting === 1 ? ' is' : 's are'} still uploading.`,
+                detail: 'Submit once everything has uploaded, so every item is included in the orders.',
+            });
+            return;
+        }
         setClosing(true);
         try {
             const result = await closeIndent({ indentId: indent.remote_id });
@@ -128,8 +154,24 @@ export function RetailerIndentDetailsModal({ visible, indent, onClose, onOpenEdi
                 { label: 'Profit', value: formatKES(indent.total_profit), color: Number(indent.total_profit) > 0 ? '#10b981' : undefined },
                 { label: 'Items', value: items.length.toLocaleString() },
             ]}
+            // What matters first: status, budget, then what will be ordered from
+            // whom (each wholesaler group becomes one order). Settings last.
             sections={[
                 ...(banner || isDraft || confirmSubmit ? [{ title: 'Status', icon: 'information-circle-outline' as const, children: notices }] : []),
+                ...(hasBudgetSet(indent)
+                    ? [{ title: 'Budget', icon: 'wallet-outline' as const, children: <BudgetBlock indent={indent} pct={pct} /> }]
+                    : []),
+                {
+                    title: `Items (${items.length}) · ${groups.length} wholesaler${groups.length === 1 ? '' : 's'}`,
+                    icon: 'cube-outline',
+                    children: (
+                        <GroupedItems
+                            groups={groups}
+                            isOpen={isOpen}
+                            onEdit={canEdit && onOpenEditItem ? (item) => onOpenEditItem(item.remote_id ?? item.draft_id ?? String(item.id ?? '')) : undefined}
+                        />
+                    ),
+                },
                 {
                     title: 'Parameters',
                     icon: 'options-outline',
@@ -138,24 +180,10 @@ export function RetailerIndentDetailsModal({ visible, indent, onClose, onOpenEdi
                         { label: 'Order days', value: `${indent.order_days ?? 0} days` },
                         { label: 'Average lead', value: `${indent.average_lead_time_days ?? '0'} days` },
                         { label: 'Pricing', value: `${indent.pricing_percentage ?? '0'}%` },
+                        { label: 'Budget', value: hasBudgetSet(indent) ? formatKES(indent.budget_amount) : 'None' },
                         { label: 'Created', value: formatDate(indent.created) },
                         { label: 'Campaign', value: campaign },
                     ],
-                },
-                {
-                    title: 'Budget',
-                    icon: 'wallet-outline',
-                    children: <BudgetBlock indent={indent} pct={pct} />,
-                },
-                {
-                    title: `Items (${items.length})`,
-                    icon: 'cube-outline',
-                    children: (
-                        <ItemList
-                            items={items}
-                            onEdit={canEdit && onOpenEditItem ? (item) => onOpenEditItem(item.remote_id ?? item.draft_id ?? String(item.id ?? '')) : undefined}
-                        />
-                    ),
                 },
             ]}
             onEdit={canEdit && onUpdateIndent ? onUpdateIndent : undefined}
@@ -247,59 +275,89 @@ function BudgetBlock({ indent, pct }: { indent: RetailerIndent; pct: number | nu
     );
 }
 
-function ItemList({ items, onEdit }: { items: RetailerIndentItem[]; onEdit?: (item: RetailerIndentItem) => void }) {
-    const { theme } = useListTokens();
-    if (items.length === 0) {
+/** Items by wholesaler, each group with its subtotal: on submit every group becomes one order. */
+function GroupedItems({ groups, isOpen, onEdit }: { groups: WholesalerGroup[]; isOpen: boolean; onEdit?: (item: RetailerIndentItem) => void }) {
+    const { theme, cardBorder, divider } = useListTokens();
+    if (groups.length === 0) {
         return <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>No items on this indent.</Text>;
     }
     return (
-        <View style={{ gap: 8 }}>
-            {items.map((item, idx) => (
-                <ItemRow key={item.remote_id ?? item.draft_id ?? String(item.id ?? idx)} item={item} onEdit={onEdit ? () => onEdit(item) : undefined} />
+        <View style={{ gap: 12 }}>
+            {groups.map((g) => (
+                <View key={g.key} style={{ borderRadius: 16, borderWidth: 1, borderColor: cardBorder, overflow: 'hidden' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: divider }}>
+                        <Ionicons name="business-outline" size={15} color={theme.primary} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }} numberOfLines={1}>
+                                {g.title}
+                            </Text>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>
+                                {g.items.length} item{g.items.length === 1 ? '' : 's'}{isOpen ? ' · one order on submit' : ''}
+                            </Text>
+                        </View>
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{formatKES(g.subtotal)}</Text>
+                    </View>
+                    {g.items.map((item, idx) => (
+                        <ItemRow
+                            key={item.remote_id ?? item.draft_id ?? String(item.id ?? idx)}
+                            item={item}
+                            last={idx === g.items.length - 1}
+                            onEdit={onEdit ? () => onEdit(item) : undefined}
+                        />
+                    ))}
+                </View>
             ))}
         </View>
     );
 }
 
-function ItemRow({ item, onEdit }: { item: RetailerIndentItem; onEdit?: () => void }) {
-    const { theme, chipBg } = useListTokens();
+function ItemRow({ item, last, onEdit }: { item: RetailerIndentItem; last: boolean; onEdit?: () => void }) {
+    const { theme, divider } = useListTokens();
     const it: any = item;
     const title = item.wholesale_receipt_title || it.product_title || 'Untitled product';
     const thumb = resolveImageUrl(it.images?.[0]);
-    const price = it.final_unit_price ?? it.cost_per_unit;
+    const unit = itemUnitCost(item);
+    const lineTotal = itemLineTotal(item);
     const pending = !item.remote_id && !!item.draft_id;
     const qty = Number(item.required_quantity ?? 0);
     const bonus = Number(item.bonus_quantity_earned ?? 0);
-    const meta = [textOr(item.wholesaler_title, ''), price !== undefined && price !== null ? `${formatKES(price)} each` : '', textOr(item.source_label, '')].filter(Boolean).join(' · ');
+    const discount = item.wholesaler_price_discount_title || item.wholesaler_quantity_discount_title;
 
     const body = (
         <>
             <AdminAvatarTile avatar={{ uri: thumb, icon: 'cube-outline' }} title={title} size={44} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text numberOfLines={2} style={{ flexShrink: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>
-                        {title}
-                    </Text>
-                    {pending ? <AdminBadgePill badge={{ label: 'Pending', tone: 'warning' }} /> : null}
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                {/* Full title: no truncation */}
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5, lineHeight: 18 }}>{title}</Text>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                    {qty.toLocaleString()} × {unit !== null ? formatKES(unit) : '—'}
+                    {it.unit_of_receipt ? ` / ${it.unit_of_receipt}` : ''}
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+                    {pending ? <AdminBadgePill badge={{ label: 'Pending upload', tone: 'warning' }} /> : null}
+                    {bonus > 0 ? <AdminBadgePill badge={{ label: `+${bonus.toLocaleString()} free`, tone: 'success' }} /> : null}
+                    {discount ? <AdminBadgePill badge={{ label: discount, tone: 'violet' }} /> : null}
+                    {item.source_label ? <AdminBadgePill badge={{ label: textOr(item.source_label, ''), tone: 'neutral' }} /> : null}
                 </View>
-                {meta ? (
-                    <Text numberOfLines={1} style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 2 }}>
-                        {meta}
-                    </Text>
-                ) : null}
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>×{qty.toLocaleString()}</Text>
-                {bonus > 0 ? <Text style={{ color: '#10b981', fontFamily: theme.font.bold, fontSize: 11.5 }}>+{bonus.toLocaleString()} free</Text> : null}
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }}>{formatKES(lineTotal)}</Text>
+                {onEdit ? <Ionicons name="create-outline" size={17} color={theme.primary} /> : null}
             </View>
-            {onEdit ? <Ionicons name="create-outline" size={18} color={theme.primary} /> : null}
         </>
     );
 
-    const rowStyle = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, borderRadius: 16, padding: 12, backgroundColor: chipBg };
+    const rowStyle = {
+        flexDirection: 'row' as const,
+        alignItems: 'flex-start' as const,
+        gap: 12,
+        padding: 12,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: divider,
+    };
     if (!onEdit) return <View style={rowStyle}>{body}</View>;
     return (
-        <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${title}`} style={({ pressed }) => ({ ...rowStyle, opacity: pressed ? 0.8 : 1, ...webPointer })}>
+        <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${title}`} style={({ pressed }) => ({ ...rowStyle, opacity: pressed ? 0.75 : 1, ...webPointer })}>
             {body}
         </Pressable>
     );

@@ -25,7 +25,7 @@
 
 import { useAuth } from '@/context/AuthContext';
 import type { RetailerIndentItem } from '@/databases/types';
-import { useIndentBridge } from '@/hooks/useIndentBridge';
+import { confirmCloseIndent, useIndentBridge } from '@/hooks/useIndentBridge';
 import {
     ArrowDownUp,
     ArrowLeft,
@@ -38,6 +38,7 @@ import {
 } from 'lucide-react-native';
 import React, {
     useCallback,
+    useEffect,
     useMemo,
     useState
 } from 'react';
@@ -59,6 +60,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import IndentCartPanel from './IndentCartPanel';
 import {
     ProductCard,
+    productGridColumns,
     useWholesalerProducts,
     type MarketplaceProduct,
     type WholesalerMarketplaceViewProps,
@@ -70,7 +72,6 @@ import QuantityInputModal from './QuantityInputModal';
 const isWeb = Platform.OS === 'web';
 const H_PADDING = 12;
 const GRID_GAP = 14;
-const COLUMNS = 2;
 const MAX_VISIBLE_CHIPS = 5;
 const FAB_SIZE = 56;
 
@@ -114,6 +115,7 @@ export default function WholesalerMarketplaceMobile({
         findItemByReceipts,
         getQuantityByReceipts,
         removeFromIndent,
+        closeOpenIndent,
     } = useIndentBridge();
 
     /* ── UI state ──────────────────────────────────────────── */
@@ -131,6 +133,11 @@ export default function WholesalerMarketplaceMobile({
         useState<MarketplaceProduct | null>(null);
     const [cartBusy, setCartBusy] = useState(false);
     const [cartError, setCartError] = useState<string | null>(null);
+    const [cartSuccess, setCartSuccess] = useState<string | null>(null);
+    // A new indent was started after the last close: drop the "orders sent" note.
+    useEffect(() => {
+        if (currentOpenIndent) setCartSuccess(null);
+    }, [currentOpenIndent?.remote_id]);
 
     const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
     const subtleBg = isDarkMode ? '#0f172a' : '#f1f5f9';
@@ -197,18 +204,20 @@ export default function WholesalerMarketplaceMobile({
     }, [products, search, category, sort, inStockOnly]);
 
     /*
-     * Card width calculation — account for:
-     *   - horizontal padding on both sides
-     *   - a single grid gap between the two columns
-     * Rounded down to avoid fractional pixel accumulation.
+     * Responsive columns: phones (and small web) get ONE column of
+     * row-style cards (thumbnail + details); tablets get 2–4 grid
+     * columns of cards at least MIN_PRODUCT_CARD_WIDTH wide.
+     * Card width accounts for the side padding and the gaps, rounded
+     * down to avoid fractional pixel accumulation.
      */
+    const columns = productGridColumns(width - H_PADDING * 2, GRID_GAP);
     const cardWidth = useMemo(
         () =>
             Math.floor(
-                (width - H_PADDING * 2 - GRID_GAP * (COLUMNS - 1)) /
-                COLUMNS,
+                (width - H_PADDING * 2 - GRID_GAP * (columns - 1)) /
+                columns,
             ),
-        [width],
+        [width, columns],
     );
 
     const showLoader = loading && products.length === 0;
@@ -251,11 +260,23 @@ export default function WholesalerMarketplaceMobile({
         })();
     }, [pendingOpCount, refresh]);
 
+    // Close the open indent = submit it to the wholesalers as orders.
     const handleCloseIndent = useCallback(async () => {
-        setCartError(
-            'Close indent is available from the main indent screen.',
-        );
-    }, []);
+        const count = currentOpenIndent?.retailer_indent_items?.length ?? 0;
+        if (!(await confirmCloseIndent(count))) return;
+        setCartBusy(true);
+        setCartError(null);
+        setCartSuccess(null);
+        try {
+            const res = await closeOpenIndent();
+            if (res.ok) setCartSuccess(res.message);
+            else setCartError(res.message);
+        } catch (e: any) {
+            setCartError(e?.message ?? 'Could not close the indent.');
+        } finally {
+            setCartBusy(false);
+        }
+    }, [closeOpenIndent, currentOpenIndent]);
 
     /* ── Category chip ─────────────────────────────────────── */
 
@@ -758,20 +779,26 @@ export default function WholesalerMarketplaceMobile({
                 </View>
             ) : (
                 <FlatList
+                    // numColumns can't change on a mounted FlatList: remount when it does.
+                    key={`cols-${columns}`}
                     data={filtered}
                     keyExtractor={(item) => item.product_id}
-                    numColumns={COLUMNS}
+                    numColumns={columns}
                     /*
-                     * `columnWrapperStyle` handles spacing between the
-                     * two columns automatically. Combined with a
-                     * bottom margin on each card wrapper, this gives
-                     * consistent vertical + horizontal spacing without
-                     * fragile per-index math.
+                     * Multi-column: `columnWrapperStyle` spaces the
+                     * columns and rows (RN only allows it when
+                     * numColumns > 1). One column: each card wrapper
+                     * carries its own bottom margin instead.
                      */
-                    columnWrapperStyle={{
-                        justifyContent: 'space-between',
-                        marginBottom: GRID_GAP,
-                    }}
+                    columnWrapperStyle={
+                        columns > 1
+                            ? {
+                                justifyContent: 'flex-start',
+                                gap: GRID_GAP,
+                                marginBottom: GRID_GAP,
+                            }
+                            : undefined
+                    }
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
                     contentContainerStyle={{
@@ -818,13 +845,19 @@ export default function WholesalerMarketplaceMobile({
                         );
 
                         return (
-                            <View style={{ width: cardWidth }}>
+                            <View
+                                style={{
+                                    width: cardWidth,
+                                    marginBottom: columns > 1 ? 0 : 10,
+                                }}
+                            >
                                 <ProductCard
                                     product={item}
                                     theme={theme}
                                     isDarkMode={isDarkMode}
                                     borderColor={borderColor}
                                     hoverScale={1}
+                                    layout={columns > 1 ? 'grid' : 'row'}
                                     onPress={() =>
                                         setModalProduct(item)
                                     }
@@ -1150,6 +1183,7 @@ export default function WholesalerMarketplaceMobile({
                                 }
                                 busy={cartBusy}
                                 errorText={cartError}
+                                successText={cartSuccess}
                                 bottomInset={insets.bottom}
                             />
                         </View>
@@ -1162,6 +1196,8 @@ export default function WholesalerMarketplaceMobile({
                 visible={!!modalProduct}
                 product={modalProduct}
                 onClose={() => setModalProduct(null)}
+                wholesalerId={wholesalerId}
+                wholesalerTitle={wholesalerTitle}
             />
         </View>
     );

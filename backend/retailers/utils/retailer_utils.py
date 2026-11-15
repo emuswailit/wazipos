@@ -269,6 +269,89 @@ def create_retailer_receipts(item, retailer_order_obj, user):
         raise_custom_exception(errors)
 
 
+def retailer_order_is_received(order):
+    """
+    RetailerOrders.is_received defaults to "true", so it can't be trusted:
+    an order counts as received once it has received_at or status RECEIVED.
+    """
+    return bool(order.received_at) or str(order.status).upper() == "RECEIVED"
+
+
+def receive_retailer_order(data, user):
+    """
+    Retailer receives a PAID retailer order into stock: one RetailerReceipts
+    row per order item, in the exact invoice quantity (total_quantity =
+    purchased + free bonus), priced and batched as invoiced
+    (create_retailer_receipts). Items already received (flag set, or a
+    receipt exists for them) are skipped, so repeating the call can't
+    double the stock. Returns (errors, order).
+    """
+    from wholesalers.services.retailer_order_payments import broadcast_order, heal_paid_flag
+
+    order_id = str(data.get("retailer_order") or "").strip()
+    if not order_id:
+        return ["Retailer order ID is required"], None
+
+    with transaction.atomic():
+        order = (
+            RetailerOrders.objects.select_for_update()
+            .filter(id=order_id, retailer=user.entity)
+            .first()
+        )
+        if not order:
+            return ["Retailer order for provided ID does not exist"], None
+        if str(order.status).upper() == "CANCELLED":
+            return ["This order was cancelled"], None
+        if retailer_order_is_received(order):
+            return ["This order has already been received"], None
+        # Paid = successful payments cover it (fixes a lagging is_paid flag).
+        if not heal_paid_flag(order):
+            return ["Pay for this order before receiving it"], None
+        # Delivery orders (the retailer chose a delivery option) must be delivered first:
+        # the last delivery leg, or collection at the courier's office with the
+        # delivery code, sets delivered_at (logistics/utils/deliveries.py).
+        # Pickup orders: the retailer has the goods, so receiving is the collection.
+        # (is_delivered defaults to "true" on the model, so it can't be used.)
+        from logistics.utils.deliveries import delivery_requested
+
+        if delivery_requested(order) and not order.delivered_at:
+            return ["This order hasn't been delivered yet"], None
+        if not order.delivered_at:
+            order.delivered_at = timezone.now()
+
+        items = list(
+            RetailerOrderItems.objects.select_related("wholesaler_receipt__product")
+            .filter(retailer_order=order)
+        )
+        if not items:
+            return ["This order has no items"], None
+
+        already = set(
+            RetailerReceipts.objects.filter(retailer_order=order)
+            .values_list("retailer_order_item_id", flat=True)
+        )
+        missing = [str(it) for it in items if not it.wholesaler_receipt_id]
+        if missing:
+            return [f"These items have no wholesaler stock record: {', '.join(missing)}"], None
+
+        for item in items:
+            if str(item.is_received).lower() == "true" or item.id in already:
+                continue
+            if (item.total_quantity or 0) <= 0:
+                continue
+            create_retailer_receipts(item, order, user)
+
+        order.is_received = "true"
+        order.received_at = timezone.now()
+        order.status = "RECEIVED"
+        order.save()
+        # Spread the delivery fee over the new receipts' landed cost.
+        order.allocate_shipping_to_receipts(save=True)
+
+    broadcast_order(order)
+    return [], order
+
+
 def confirm_item_in_retailer_order(receipt, retailer_order_obj):
     retailer_order_item_obj = None
     errors = []
@@ -2622,40 +2705,17 @@ def process_retailer_order_payment(
     elif payment_method.title == "MOBILE MONEY":
         # Collected into the WaziPOS system till (like subscriptions) and owed
         # onward to the wholesaler's active payout account once it succeeds.
-        # Status: RetailerOrderPaymentConsumer (live) + Celery reconcile.
-        if not mobile_money_phone:
-            errors.append("Enter the M-Pesa phone number to charge")
+        # Shared with wholesaler staff: wholesalers/services/retailer_order_payments.py
+        from wholesalers.services.retailer_order_payments import initiate_mobile_money
+
+        errors, retailer_order_payment = initiate_mobile_money(
+            retailer_order, payment_method, user, mobile_money_phone
+        )
+        if errors:
             return errors, None
-
-        from payments.utils.system_till import push_to_system_till
-
-        push_errors, result_json, telco = push_to_system_till(
-            reference_number, amount, mobile_money_phone,
-            description=f"Order {retailer_order.wholesaler.title}"[:60],
-        )
-        if push_errors:
-            create_log("error", f"Retailer order STK push failed: {push_errors}")
-            return push_errors, None
-
-        retailer_order_payment = RetailerOrderPayments.objects.create(
-            payment_method=payment_method,
-            pay_in_reference_number=reference_number,
-            psp_reference_number=result_json["ref"],
-            status="PENDING",
-            description="Waiting for PIN entry.",
-            amount=amount,
-            entity=retailer_order.retailer,
-            currency="KES",
-            telco=telco or "",
-            owner=user,
-            retailer_order=retailer_order,
-            is_paid="false",
-            is_settled="false",
-        )
-        use_reference_number(reference_number)
         retailer_order.payment = retailer_order_payment
         # Returned to the client so it can follow the payment live.
-        retailer_order.payment_reference_number = reference_number
+        retailer_order.payment_reference_number = retailer_order_payment.pay_in_reference_number
         return [], retailer_order
 
     elif payment_method.title == "JAMBOPAY WALLET":
@@ -2753,9 +2813,11 @@ def make_retailer_order_payment(data, user):
     if data.get("mobile_money_phone"):
         mobile_money_phone = data["mobile_money_phone"]
 
-    if RetailerOrderPayments.objects.filter(
-        retailer_order=retailer_order_id, status="SUCCESS"
-    ).exists():
+    from wholesalers.services.retailer_order_payments import heal_paid_flag
+
+    if heal_paid_flag(retailer_order):
+        # Covered by earlier payments (the flag is fixed if it lagged); the
+        # client refreshes its list on this message.
         errors.append("Order is already paid")
         return errors, None
 
@@ -2767,6 +2829,19 @@ def make_retailer_order_payment(data, user):
         errors.append(
             "Payment method with provided ID does not exist!"
         )
+        return errors, None
+
+    # Retailers pay their orders by mobile money only (collected into the
+    # system till, then paid out to the wholesaler).
+    if payment_method.title != "MOBILE MONEY":
+        errors.append("Retailer orders can only be paid by mobile money")
+        return errors, None
+
+    # The buyer picks a delivery option (which sets the delivery fee) or
+    # pickup before paying, so the payment covers everything at once
+    # (logistics/utils/deliveries.py ChooseRetailerOrderDelivery).
+    if not str(retailer_order.delivery_method or "").strip():
+        errors.append("Choose delivery or pickup before paying")
         return errors, None
 
     errors, retailer_order = process_retailer_order_payment(
@@ -3345,6 +3420,14 @@ def create_customer_order(data, user):
             errors.append("Invalid payment method provided")
             return errors, None
 
+        # The retailer's own staff may take any method (POS: cash, credit, ...);
+        # anyone else ordering from this retailer is a client (shopper) and
+        # pays by mobile money only.
+        is_seller_staff = bool(entity) and getattr(user, "entity_id", None) == entity.id
+        if not is_seller_staff and payment_method.title != "MOBILE MONEY":
+            errors.append("Online orders can only be paid by mobile money")
+            return errors, None
+
     delivery_method = details.get("delivery_method")
     if not delivery_method:
         errors.append("Delivery method is required")
@@ -3418,6 +3501,28 @@ def create_customer_order(data, user):
     if errors:
         return errors, None
 
+    # Delivery: a shopper picks one of the options priced for their location
+    # (logistics GetCustomerDeliveryOptions); it is re-priced here and its total
+    # replaces any shipping_cost sent by the app. The shop's own staff (POS)
+    # may still set a delivery fee by hand.
+    delivery_choice = None
+    if str(delivery_method or "").upper() in ("DELIVERY", "COURIER"):
+        from logistics.utils.deliveries import plan_customer_checkout_delivery
+
+        option_key = details.get("delivery_option")
+        seller_staff = bool(entity) and getattr(user, "entity_id", None) == entity.id
+        if option_key:
+            plan_errors, chosen, chosen_kg = plan_customer_checkout_delivery(
+                entity, destination_point, order_items, option_key
+            )
+            if plan_errors:
+                return plan_errors, None
+            shipping_cost = chosen["total"]
+            delivery_choice = (chosen, chosen_kg)
+        elif not seller_staff:
+            errors.append("Choose a delivery option")
+            return errors, None
+
     order_number = generate_document_number(
         entity, user, "CUSTOMERORDER",
     )
@@ -3455,6 +3560,11 @@ def create_customer_order(data, user):
         if not order_created:
             errors.append("Order could not be created")
             return errors, None
+
+        if delivery_choice:
+            from logistics.utils.deliveries import attach_customer_order_shipment
+
+            attach_customer_order_shipment(order_created, delivery_choice[0], delivery_choice[1], user)
 
         for item in order_items:
             purchased_qty = _to_int(item["purchased_quantity"])

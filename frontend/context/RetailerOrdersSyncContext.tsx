@@ -45,6 +45,12 @@ interface RetailerOrdersSyncContextType {
     lastSyncedTime: string;
     retailerOrders: RetailerOrder[];
     syncUiState: SyncUiState;
+    /**
+     * Merge one order as returned by an API response (e.g. after a payment)
+     * into the list and local storage, so the screen updates at once instead
+     * of waiting for the next socket push.
+     */
+    applyServerOrder: (raw: any) => Promise<void>;
 }
 
 const RetailerOrdersSyncContext = createContext<
@@ -69,8 +75,22 @@ const WS_URL_FOR_RETAILER_ROLE =
 const WS_URL_FOR_WHOLESALER_ROLE =
     'wss://api.wazipos.co.ke/ws/requisitions/wholesalers/';
 
-const RETAILER_ROLE_VALUE = 'GeneralRetailerSuperAdmin';
-const WHOLESALER_ROLE_VALUE = 'GeneralWholesalerSuperAdmin';
+// Every role that places requisitions (retail shops, pharmacies, restaurants
+// and their staff) vs. every role that receives them. Matching only the
+// General* admins left pharmacies on "Connecting…" with an empty list.
+const RETAILER_ROLE_VALUES = new Set([
+    'GeneralRetailerSuperAdmin',
+    'PharmaceuticalRetailerSuperAdmin',
+    'RestaurantSuperAdmin',
+    'RETAIL_ACCOUNTS',
+    'RETAIL_PHARMACY',
+    'RETAIL_SALES',
+    'RESTAURANT_SALES',
+]);
+const WHOLESALER_ROLE_VALUES = new Set([
+    'GeneralWholesalerSuperAdmin',
+    'PharmaceuticalWholesalerSuperAdmin',
+]);
 
 const WS_RECONNECT_BASE_MS = 3000;
 const WS_RECONNECT_MAX_MS = 60000;
@@ -91,10 +111,10 @@ function resolveWsUrl(
     for (const role of roles) {
         const value = role?.value;
 
-        if (value === RETAILER_ROLE_VALUE) {
+        if (RETAILER_ROLE_VALUES.has(value)) {
             return WS_URL_FOR_RETAILER_ROLE;
         }
-        if (value === WHOLESALER_ROLE_VALUE) {
+        if (WHOLESALER_ROLE_VALUES.has(value)) {
             return WS_URL_FOR_WHOLESALER_ROLE;
         }
     }
@@ -539,8 +559,8 @@ export const RetailerOrdersSyncProvider: React.FC<{
         if (!Array.isArray(roles)) return null;
         for (const role of roles) {
             if (
-                role?.value === RETAILER_ROLE_VALUE ||
-                role?.value === WHOLESALER_ROLE_VALUE
+                RETAILER_ROLE_VALUES.has(role?.value) ||
+                WHOLESALER_ROLE_VALUES.has(role?.value)
             ) {
                 return role.value;
             }
@@ -831,12 +851,6 @@ export const RetailerOrdersSyncProvider: React.FC<{
                             event.data
                         );
 
-                        // Raw WS payload — expandable in devtools.
-                        console.log(
-                            `[RetailerOrdersSync][WS:${tag}] frame`,
-                            parsed
-                        );
-
                         const incoming =
                             extractOrdersFromFrame(parsed);
 
@@ -955,6 +969,12 @@ export const RetailerOrdersSyncProvider: React.FC<{
                         wsGenerationRef.current
                     )
                         return;
+                    // Unexpected closes only: 4001-4003 = auth rejected (token
+                    // expired / missing / invalid); 1006 = dropped (route
+                    // missing, proxy, or crash); 1011 = server error.
+                    if (ev.code !== 1000) {
+                        wsWarn(tag, `socket closed code=${ev.code} reason="${ev.reason}"`);
+                    }
                     setIsLiveConnected(false);
                     wsRef.current = null;
                     setSyncStatus(
@@ -986,7 +1006,9 @@ export const RetailerOrdersSyncProvider: React.FC<{
                 };
 
                 ws.onerror = (ev) => {
-                    wsWarn(tag, 'socket error', ev);
+                    // The event carries no detail (the close log above does),
+                    // and logging it would print the URL with the token.
+                    wsWarn(tag, 'socket error (see the close code that follows)', ev?.type);
                 };
             } catch (err) {
                 wsWarn(
@@ -1008,6 +1030,31 @@ export const RetailerOrdersSyncProvider: React.FC<{
     /* ---------------------------------------------------------
      * Manual refresh
      * ------------------------------------------------------- */
+    const applyServerOrder = useCallback(
+        async (raw: any) => {
+            const rid = String(firstDefined(raw?.id, raw?.key, '') ?? '');
+            if (!rid) return;
+            const nowStr = new Date().toISOString();
+            const remote = normalizeOrder(raw, nowStr);
+            remote.remote_id = rid;
+
+            const current = ordersStateRef.current;
+            const idx = current.findIndex((o) => o.remote_id === rid);
+            const next = [...current];
+            if (idx === -1) next.unshift(remote);
+            else next[idx] = { ...current[idx], ...remote, id: current[idx].id, cached_at: nowStr };
+
+            ordersStateRef.current = next;
+            setRetailerOrders(next);
+            try {
+                await commitToStorage(next);
+            } catch (e) {
+                wsWarn(wsTag, 'applyServerOrder: storage write failed', e);
+            }
+        },
+        [commitToStorage, wsTag],
+    );
+
     const forceManualRefresh = useCallback(async () => {
         setIsManualRefreshing(true);
         try {
@@ -1152,6 +1199,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
             lastSyncedTime,
             retailerOrders,
             syncUiState,
+            applyServerOrder,
         }),
         [
             isSyncing,
@@ -1162,6 +1210,7 @@ export const RetailerOrdersSyncProvider: React.FC<{
             lastSyncedTime,
             retailerOrders,
             syncUiState,
+            applyServerOrder,
         ]
     );
 

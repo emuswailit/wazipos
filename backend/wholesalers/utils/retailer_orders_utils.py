@@ -1285,104 +1285,52 @@ def delete_retailer_order_item(data, user):
             return RetailerOrders.objects.filter(id=retailer_order_id).first()
 
 
-def process_retailer_order_payment(data,user):
-    retailer_order=None
-    payment_method=None
-    errors =[]
+def process_retailer_order_payment(data, user):
+    """
+    Wholesaler staff take or retry payment for a retailer order sent to them.
+    Any payment method: MOBILE MONEY pushes an STK prompt to the retailer's
+    phone (into the system till, followed live like the retailer's own
+    payments); anything else (cash, credit, ...) is recorded as paid at once.
+    See wholesalers/services/retailer_order_payments.py.
+    """
+    from wholesalers.services.retailer_order_payments import heal_paid_flag, initiate_mobile_money, record_offline_payment
 
-    if not data['retailer_order'] or data['retailer_order']=="":
-        errors.append("Retailer order ID is required")
+    order_id = str(data.get("retailer_order") or "").strip()
+    method_id = str(data.get("payment_method") or "").strip()
+    if not order_id:
+        return ["Retailer order ID is required"], None
+    if not method_id:
+        return ["Payment method ID is required"], None
 
-    if not data['payment_method'] or data['payment_method']=="":
-        errors.append("Payment method ID is required")
-    
+    retailer_order = RetailerOrders.objects.select_related("wholesaler", "retailer").filter(id=order_id).first()
+    # Only the wholesaler the order was sent to may take payment for it.
+    if not retailer_order or retailer_order.wholesaler_id != getattr(user, "entity_id", None):
+        return ["No order with provided ID exists"], None
+    if str(retailer_order.status).upper() == "CANCELLED":
+        return ["This order was cancelled"], None
+    if heal_paid_flag(retailer_order):
+        # Covered by earlier payments (the flag is fixed if it lagged); the
+        # client refreshes its list on this message.
+        return ["Order is already paid"], None
 
-    if RetailerOrders.objects.filter(id=data['retailer_order']).exists():
-        retailer_order = RetailerOrders.objects.filter(id=data['retailer_order']).first()
-    else:
-        errors.append("No order with provided ID exists")
-        return errors,None
+    payment_method = PaymentMethods.objects.filter(id=method_id).first()
+    if not payment_method:
+        return ["No payment method with provided ID exists"], None
 
-    if RetailerOrderPayments.objects.filter(retailer_order=retailer_order,status="SUCCESS").exists():
-        errors.append("Order is already paid")
-        return errors,None
-
-    if PaymentMethods.objects.filter(id=data['payment_method']).exists():
-        payment_method = PaymentMethods.objects.filter(id=data['payment_method']).first()
-        create_log("INFO",f"{payment_method}")
-    else:
-        errors.append("No payment method with provided ID exists")
-        return errors,None
-    
-    if payment_method.title =="CASH":
-        # reference_number = generate_reference_number(retailer_order.wholesaler, user)
-        retailer_order_payment = RetailerOrderPayments.objects.create(
-            retailer_order=retailer_order,
-            payment_method=payment_method,
-            is_paid="true",
-            is_settled="true",
-            amount=retailer_order.final_price_total,
-            entity=retailer_order.entity,
-            status="SUCCESS",
-            owner=user
+    if payment_method.title == "MOBILE MONEY":
+        errors, payment = initiate_mobile_money(
+            retailer_order, payment_method, user, str(data.get("mobile_money_phone") or "").strip()
         )
-
-        retailer_order.payment_method = payment_method
-        retailer_order.is_paid="true"
-        retailer_order.save()
-
-    elif payment_method.title=="MOBILE MONEY":
-        print("Am here")
-        if not data['mobile_money_phone'] or data['mobile_money_phone']=="":
-            errors.append("Mobile money phone is required")
-        create_log("INFO", f"mobile_money_phone: { data['mobile_money_phone']}")
-        telco, formatted_phone_number = get_telco_by_phone_number( data['mobile_money_phone'])
-        reference_number = generate_reference_number(retailer_order.wholesaler, user)
-        if not reference_number:
-            errors.append("Error generating reference number")
-            return errors,None
-        create_log("INFO", f"Reference number: {reference_number}")
-        payload_data = {
-            "orderId": reference_number, "amount": int(retailer_order.final_price_total), "accountTo": config('WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT'),
-            "description": f"Retailer order payment for  - {retailer_order}", "modeOfPayment": "MOBILE_MONEY",
-            "provider": "Mpesa" if telco == "MPESA" else "AIRTELMONEY","currency":"KES",
-            "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"}, "callBackUrl": "https://webhook.site"
-        }
-
-        create_log("INFO", f"Payload: {payload_data}")
-
-        try:
-            auth_data = {"client_id": config("JAMBOPAY_CLIENT_ID"), "client_secret": config("JAMBOPAY_CLIENT_SECRET"), "grant_type": config("JAMBOPA_GRANT_TYPE")}
-            auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=auth_data, timeout=8)
-            token = auth_res.json().get("access_token")
-            
-            checkout_res = requests.post(config("JAMBOPAY_BASE_URL") + "/checkout/express", data=json.dumps(payload_data), headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}", "Accept": "*/*"}, timeout=10)
-            result_json = checkout_res.json()
-
-            create_log("INFO", f"Retailer order: {token}: {result_json}")
-
-            if result_json and "ref" in result_json:
-                retailer_order_payment = RetailerOrderPayments.objects.create(
-                retailer_order=retailer_order,
-                payment_method=payment_method,
-                is_paid="false",
-                is_settled="false",
-                amount=retailer_order.final_price_total,
-                entity=retailer_order.entity,
-                status="PENDING",
-                owner=user
-            )
-                return [],retailer_order
-            else:
-                errors.append("Payment via mobile money not successful")
-                return errors, None
-        except Exception as e:
-            create_log("INFO", f"payment for {retailer_order} failed")
-            errors.append(str(e))
+        if errors:
             return errors, None
-    else:
-        errors.append("Payment method could not be verified")
+        retailer_order.payment_reference_number = payment.pay_in_reference_number
+        return [], retailer_order
+
+    errors, payment = record_offline_payment(retailer_order, payment_method, user)
+    if errors:
         return errors, None
+    retailer_order.payment_reference_number = None
+    return [], retailer_order
 
 
 # Process payment

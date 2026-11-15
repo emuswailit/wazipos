@@ -227,6 +227,54 @@ class PayoutAccounts(EntityRelatedModel):
         # Call the parent save method to commit changes
         super().save(*args, **kwargs)
 
+class UserPayoutAccounts(models.Model):
+    """
+    Where an individual is paid out to — e.g. a delivery person's earnings for
+    the shipment legs they deliver (logistics.ShipmentLeg). Same shape as
+    PayoutAccounts, keyed to a user instead of an entity. One active account
+    per user: saving one active switches the user's others off.
+    """
+    ACCOUNT_TYPE = PayoutAccounts.ACCOUNT_TYPE
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(Users, related_name="user_payout_accounts", on_delete=models.CASCADE)
+    account_type = models.CharField(max_length=50, choices=ACCOUNT_TYPE)
+    account_name = models.CharField(max_length=140)
+    account_number = models.CharField(max_length=140)
+    business_number = models.CharField(max_length=140, null=True, blank=True)
+    account_code = models.CharField(max_length=140, null=True, blank=True)
+    # Bank accounts: the bank (entity of type "Bank") and its branch.
+    account_entity = models.ForeignKey(
+        Entities, related_name="user_payout_receiving_entity",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    bank_branch = models.ForeignKey(
+        "authentication.Branches", related_name="user_payout_accounts",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    description = models.CharField(max_length=256, null=True, blank=True)
+    is_active = models.CharField(max_length=50, choices=TRUE_FALSE_OPTIONS, default="true")
+    is_verified = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(
+        Users, related_name="user_payout_account_verifier",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "User Payout Accounts"
+
+    def __str__(self):
+        return f"{self.user} - {self.account_number}"
+
+    def save(self, *args, **kwargs):
+        if self.is_active == "true":
+            with transaction.atomic():
+                UserPayoutAccounts.objects.filter(user=self.user, is_active="true").exclude(pk=self.pk).update(is_active="false")
+        super().save(*args, **kwargs)
+
+
 class EntityPSPSettlementAccount(models.Model):
     ACCOUNT_TYPE = (
         ("BANK ACCOUNT", "BANK ACCOUNT"),

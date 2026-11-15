@@ -13,6 +13,25 @@ import type {
     RetailerIndentItem,
 } from '@/databases/types';
 import { useCallback } from 'react';
+import { Alert, Platform } from 'react-native';
+
+/**
+ * Ask before closing the open indent: closing submits it to the wholesalers
+ * as orders and can't be undone. Cross-platform (Alert has no web version).
+ */
+export function confirmCloseIndent(itemCount: number, subtotal?: string): Promise<boolean> {
+    const title = 'Close indent and place orders?';
+    const message =
+        `${itemCount} item${itemCount === 1 ? '' : 's'}${subtotal ? ` · ${subtotal}` : ''} will be sent to the wholesaler${itemCount === 1 ? '' : 's'} as orders. ` +
+        "You can't add to this indent afterwards.";
+    if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+    return new Promise((resolve) => {
+        Alert.alert(title, message, [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Close indent', onPress: () => resolve(true) },
+        ], { cancelable: true, onDismiss: () => resolve(false) });
+    });
+}
 
 /* ── Public types ──────────────────────────────────────────── */
 
@@ -44,12 +63,21 @@ interface RemoveFromIndentResult {
     message?: string;
 }
 
+interface CloseOpenIndentResult {
+    ok: boolean;
+    message: string;
+}
+
 /* ── Constants ─────────────────────────────────────────────── */
 
 const LOCAL_DRAFT_PREFIX = 'local-';
 
+/**
+ * Draft (not yet on the server) ids. RetailerIndentsSyncContext makes them as
+ * `<userId>:<entityId>:<ts>`; the old `local-` prefix is kept for safety.
+ */
 const isDraftId = (id: string | null | undefined): boolean =>
-    typeof id === 'string' && id.startsWith(LOCAL_DRAFT_PREFIX);
+    typeof id === 'string' && (id.includes(':') || id.startsWith(LOCAL_DRAFT_PREFIX));
 
 /* ── Hook ──────────────────────────────────────────────────── */
 
@@ -65,6 +93,7 @@ export function useIndentBridge() {
         addOfferToIndent,
         addOfferToIndentLocally,
         removeOfferFromIndent,
+        closeIndent,
         flushPendingOps,
     } = useRetailerIndentsSync();
 
@@ -291,6 +320,39 @@ export function useIndentBridge() {
         [currentOpenIndent, removeOfferFromIndent],
     );
 
+    /**
+     * Close the open indent: the server turns it into one retailer order per
+     * wholesaler (paid separately, from the orders screen).
+     * Refuses while any item is still only on this device: the server would
+     * close the indent without it (that produced closed KES 0 indents). In
+     * that case the upload is retried and the user closes again once done.
+     * Callers confirm with the user first (confirmCloseIndent).
+     */
+    const closeOpenIndent = useCallback(async (): Promise<CloseOpenIndentResult> => {
+        if (!currentOpenIndent) return { ok: false, message: 'There is no open indent to close.' };
+        const items = currentOpenIndent.retailer_indent_items ?? [];
+        if (!items.length) {
+            return { ok: false, message: 'Add at least one product before closing the indent.' };
+        }
+        const waiting = items.filter((it) => !it.remote_id).length;
+        if (isDraftId(currentOpenIndent.remote_id) || waiting > 0 || pendingIndentOpCount > 0) {
+            flushPendingOps().catch(() => { });
+            const n = waiting || pendingIndentOpCount;
+            return {
+                ok: false,
+                message: `${n || 'Some'} change${n === 1 ? ' is' : 's are'} still uploading. Close the indent once everything shows as uploaded.`,
+            };
+        }
+        const res = await closeIndent({ indentId: currentOpenIndent.remote_id });
+        if (res.ok) {
+            return { ok: true, message: res.message || 'Indent closed. Your orders were sent to the wholesalers.' };
+        }
+        const headline = res.message || 'Indent was not closed.';
+        // Add the server's field errors unless the headline already is one of them.
+        const extra = (res.errors ?? []).filter((e) => e && e !== headline);
+        return { ok: false, message: [headline, ...extra].join(' ') };
+    }, [currentOpenIndent, pendingIndentOpCount, flushPendingOps, closeIndent]);
+
     /* ── Public surface ────────────────────────────────────── */
 
     return {
@@ -320,5 +382,6 @@ export function useIndentBridge() {
 
         addToIndent,
         removeFromIndent,
+        closeOpenIndent,
     };
 }

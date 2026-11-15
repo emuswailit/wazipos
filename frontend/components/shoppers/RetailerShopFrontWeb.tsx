@@ -4,7 +4,6 @@ import RecordPaymentModal from "@/components/common/RecordPaymentModal";
 import { useAuth } from "@/context/AuthContext";
 import { useShopperCart } from "@/context/ShopperCartContext";
 import type { CustomerOrder, RetailerReceipt } from "@/databases/types";
-import { useEmployees } from "@/hooks/useEmployees";
 import {
     CUSTOMER_PAYMENT_CONFIG,
     type RecordPaymentConfig,
@@ -58,10 +57,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import retailersApi from "@/api/retailersApi";
-import { useApi } from "@/hooks/useApi";
 
-import ApiResponseModal, { extractEnvelope } from "@/components/common/ApiResponseModal";
 
 import RetailerCartPanel, {
     type CustomerAddress,
@@ -70,15 +66,6 @@ import RetailerQuantityModal from "./RetailerQuantityModal";
 import type { RetailerShopFrontProps } from "./RetailerShopFront";
 
 type AppTheme = ReturnType<typeof useAuth>["theme"];
-
-type Courier = { id: string; entity_title: string };
-type CollectionPoint = {
-    id: string;
-    name: string;
-    address: string;
-    latitude: number;
-    longitude: number;
-};
 
 interface ExtendedProps extends RetailerShopFrontProps {
     retailerLat?: number;
@@ -109,18 +96,6 @@ const SORTS: { key: InventorySortKey; label: string }[] = [
     { key: "name-asc", label: "A→Z" },
     { key: "stock", label: "In stock" },
 ];
-
-const extractArray = (res: any, expectedKey: string): any[] => {
-    if (!res) return [];
-    if (Array.isArray(res)) return res;
-    if (Array.isArray(res.data)) return res.data;
-    if (Array.isArray(res.data?.[expectedKey])) return res.data[expectedKey];
-    if (Array.isArray(res.data?.results)) return res.data.results;
-    if (Array.isArray(res.data?.data)) return res.data.data;
-    if (Array.isArray(res[expectedKey])) return res[expectedKey];
-    if (Array.isArray(res.results)) return res.results;
-    return [];
-};
 
 const ProductImage: React.FC<{
     uri?: string;
@@ -594,272 +569,12 @@ export default function RetailerShopFrontWeb({
     const [payingOrder, setPayingOrder] = useState<CustomerOrder | null>(null);
 
     const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("PICKUP");
-    const [isRetailerDelivery, setIsRetailerDelivery] = useState(false);
-    const [selectedDeliveryEmployeeId, setSelectedDeliveryEmployeeId] = useState<string | null>(null);
-
-    const { employees: deliveryEmployees, isLoading: deliveryEmployeesLoading } = useEmployees(isRetailerDelivery && !!retailerId); // fetch delivery staff only when retailer delivery is chosen
-
-    const [couriers, setCouriers] = useState<Courier[]>([]);
-    const [couriersLoading, setCouriersLoading] = useState(false);
-    const [selectedCourierId, setSelectedCourierId] = useState<string | null>(null);
-
-    const [deliveryEntities, setDeliveryEntities] = useState<Courier[]>([]);
-    const [deliveryEntitiesLoading, setDeliveryEntitiesLoading] = useState(false);
-    const [selectedDeliveryEntityId, setSelectedDeliveryEntityId] =
-        useState<string | null>(null);
-
-    const [collectionPoints, setCollectionPoints] = useState<CollectionPoint[]>([]);
-    const [pointsLoading, setPointsLoading] = useState(false);
-    const [selectedCollectionPoint, setSelectedCollectionPoint] =
-        useState<CollectionPoint | null>(null);
-
-    const [customerAddress, setCustomerAddress] = useState<CustomerAddress | null>(
-        null,
-    );
-
+    // Delivery: the shopper's location and the chosen option (priced by the
+    // server for that location); its total is the delivery fee.
+    const [customerAddress, setCustomerAddress] = useState<CustomerAddress | null>(null);
+    const [deliveryOptionKey, setDeliveryOptionKey] = useState<string | null>(null);
     const [shippingCost, setShippingCost] = useState<number | null>(null);
-    const [shippingLoading, setShippingLoading] = useState(false);
-    const [shippingError, setShippingError] = useState<string | null>(null);
 
-    const [apiError, setApiError] = useState<{
-        isOpen: boolean;
-        title: string;
-        envelope: any | null;
-        fallbackMessage: string | null;
-        onRetry?: () => void;
-    }>({ isOpen: false, title: "", envelope: null, fallbackMessage: null });
-
-    const [retryKey, setRetryKey] = useState(0);
-
-    const fetchApi = useApi<any>(
-        async (payload: any) => await retailersApi.retailerReceiptsAction(payload),
-    );
-    const fetchApiRef = useRef(fetchApi);
-    fetchApiRef.current = fetchApi;
-
-    useEffect(() => {
-        if (deliveryMethod !== "COURIER") return;
-        let cancelled = false;
-        (async () => {
-            setCouriersLoading(true);
-            try {
-                const res = await fetchApiRef.current.request({
-                    action: "GetCourierEntities",
-                });
-                if (!cancelled) {
-                    const env = extractEnvelope(res);
-                    if (String(env.response_code) !== "0") {
-                        setApiError({
-                            isOpen: true,
-                            title: "Couriers Unavailable",
-                            envelope: env,
-                            fallbackMessage: null,
-                            onRetry: () => setRetryKey((k) => k + 1),
-                        });
-                    } else {
-                        const results = extractArray(res, "couriers");
-                        setCouriers(results);
-                    }
-                }
-            } catch (err: any) {
-                if (!cancelled) {
-                    setApiError({
-                        isOpen: true,
-                        title: "Connection Error",
-                        envelope: null,
-                        fallbackMessage: err?.message || "Could not reach the server to load couriers.",
-                        onRetry: () => setRetryKey((k) => k + 1),
-                    });
-                }
-            } finally {
-                if (!cancelled) setCouriersLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [deliveryMethod, retryKey]);
-
-    useEffect(() => {
-        if (deliveryMethod !== "DELIVERY") return;
-        let cancelled = false;
-        (async () => {
-            setDeliveryEntitiesLoading(true);
-            try {
-                const res = await fetchApiRef.current.request({
-                    action: "GetDeliveryEntities",
-                });
-                if (!cancelled) {
-                    const env = extractEnvelope(res);
-                    if (String(env.response_code) !== "0") {
-                        setApiError({
-                            isOpen: true,
-                            title: "Transporters Unavailable",
-                            envelope: env,
-                            fallbackMessage: null,
-                            onRetry: () => setRetryKey((k) => k + 1),
-                        });
-                    } else {
-                        const results = extractArray(res, "couriers");
-                        setDeliveryEntities(results);
-                    }
-                }
-            } catch (err: any) {
-                if (!cancelled) {
-                    setApiError({
-                        isOpen: true,
-                        title: "Connection Error",
-                        envelope: null,
-                        fallbackMessage: err?.message || "Could not reach the server to load transporters.",
-                        onRetry: () => setRetryKey((k) => k + 1),
-                    });
-                }
-            } finally {
-                if (!cancelled) setDeliveryEntitiesLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [deliveryMethod, retryKey]);
-
-    useEffect(() => {
-        if (deliveryMethod !== "DELIVERY" || !selectedDeliveryEntityId) {
-            setCollectionPoints([]);
-            return;
-        }
-        let cancelled = false;
-        (async () => {
-            setPointsLoading(true);
-            try {
-                const res = await fetchApiRef.current.request({
-                    action: "GetCollectionPoints",
-                    courier_id: selectedDeliveryEntityId,
-                });
-                if (!cancelled) {
-                    const env = extractEnvelope(res);
-                    if (String(env.response_code) !== "0") {
-                        setApiError({
-                            isOpen: true,
-                            title: "Collection Points Error",
-                            envelope: env,
-                            fallbackMessage: null,
-                            onRetry: () => setRetryKey((k) => k + 1),
-                        });
-                    } else {
-                        const results = extractArray(res, "collection_points");
-                        setCollectionPoints(results);
-                    }
-                }
-            } catch (err: any) {
-                if (!cancelled) {
-                    setApiError({
-                        isOpen: true,
-                        title: "Connection Error",
-                        envelope: null,
-                        fallbackMessage: err?.message || "Could not reach the server to load collection points.",
-                        onRetry: () => setRetryKey((k) => k + 1),
-                    });
-                }
-            } finally {
-                if (!cancelled) setPointsLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [deliveryMethod, selectedDeliveryEntityId, retryKey]);
-
-    useEffect(() => {
-        if (deliveryMethod !== "COURIER" && deliveryMethod !== "DELIVERY") {
-            setShippingCost(null);
-            setShippingError(null);
-            return;
-        }
-
-        if (isRetailerDelivery) {
-            setShippingCost(0);
-            setShippingError(null);
-            setShippingLoading(false);
-            return;
-        }
-
-        let destLat: number | null = null;
-        let destLng: number | null = null;
-
-        if (deliveryMethod === "COURIER") {
-            destLat = customerAddress?.latitude ?? null;
-            destLng = customerAddress?.longitude ?? null;
-        } else if (deliveryMethod === "DELIVERY") {
-            destLat = selectedCollectionPoint?.latitude ?? null;
-            destLng = selectedCollectionPoint?.longitude ?? null;
-        }
-
-        if (destLat == null || destLng == null) {
-            setShippingCost(null);
-            return;
-        }
-
-        let cancelled = false;
-        (async () => {
-            setShippingLoading(true);
-            setShippingError(null);
-            setShippingCost(null);
-
-            try {
-                const res = await fetchApiRef.current.request({
-                    action: "CalculateShippingRate",
-                    entity: retailerId,
-                    origin_latitude: retailerLat,
-                    origin_longitude: retailerLng,
-                    destination_latitude: destLat,
-                    destination_longitude: destLng,
-                    delivery_method: deliveryMethod,
-                    order_total: cart.subtotal || 0,
-                    is_retailer_delivery: isRetailerDelivery,
-                });
-
-                if (!cancelled) {
-                    const env = extractEnvelope(res);
-                    if (String(env.response_code) !== "0") {
-                        const msg = env.response_message || "Could not calculate shipping rate.";
-                        setShippingError(msg);
-                        setApiError({
-                            isOpen: true,
-                            title: "Shipping Calculation Failed",
-                            envelope: env,
-                            fallbackMessage: null,
-                            onRetry: () => setRetryKey((k) => k + 1),
-                        });
-                    } else {
-                        const cost = res.data?.shipping_cost ?? res.data?.cost ?? res.data?.amount ?? 0;
-                        setShippingCost(cost);
-                    }
-                }
-            } catch (err: any) {
-                if (!cancelled) {
-                    const msg = err?.message || "Could not connect to server. Please try again.";
-                    setShippingError(msg);
-                    setApiError({
-                        isOpen: true,
-                        title: "Shipping Calculation Failed",
-                        envelope: null,
-                        fallbackMessage: msg,
-                        onRetry: () => setRetryKey((k) => k + 1),
-                    });
-                }
-            } finally {
-                if (!cancelled) setShippingLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [
-        deliveryMethod,
-        isRetailerDelivery,
-        customerAddress?.latitude,
-        customerAddress?.longitude,
-        selectedCollectionPoint?.latitude,
-        selectedCollectionPoint?.longitude,
-        retailerId,
-        retailerLat,
-        retailerLng,
-        cart.subtotal,
-        retryKey
-    ]);
 
     const {
         filtered,
@@ -934,52 +649,24 @@ export default function RetailerShopFrontWeb({
         setPayingOrder(o);
     }, []);
 
-    const activeCouriers = useMemo<Courier[]>(() => {
-        if (deliveryMethod === "COURIER") return couriers;
-        if (deliveryMethod === "DELIVERY") return deliveryEntities;
-        return [];
-    }, [deliveryMethod, couriers, deliveryEntities]);
-
-    const activeCouriersLoading =
-        deliveryMethod === "COURIER"
-            ? couriersLoading
-            : deliveryMethod === "DELIVERY"
-                ? deliveryEntitiesLoading
-                : false;
-
-    const activeSelectedCourierId =
-        deliveryMethod === "COURIER"
-            ? selectedCourierId
-            : deliveryMethod === "DELIVERY"
-                ? selectedDeliveryEntityId
-                : null;
-
-    const handleSelectCourier = useCallback(
-        (id: string | null) => {
-            if (deliveryMethod === "COURIER") {
-                setSelectedCourierId(id);
-                setSelectedCollectionPoint(null);
-            } else if (deliveryMethod === "DELIVERY") {
-                setSelectedDeliveryEntityId(id);
-                setSelectedCollectionPoint(null);
-            }
-        },
-        [deliveryMethod],
-    );
-
     const handleDeliveryMethodChange = useCallback((m: DeliveryMethod) => {
         setDeliveryMethod(m);
         if (m === "PICKUP") {
-            setSelectedCourierId(null);
-            setSelectedDeliveryEntityId(null);
-            setSelectedCollectionPoint(null);
-            setIsRetailerDelivery(false);
+            setDeliveryOptionKey(null);
+            setShippingCost(null);
         }
+    }, []);
+
+    const handleDeliveryOptionChange = useCallback((key: string | null, total: number | null) => {
+        setDeliveryOptionKey(key);
+        setShippingCost(total);
     }, []);
 
     const customerConfig = useMemo<RecordPaymentConfig>(
         () => ({
             ...CUSTOMER_PAYMENT_CONFIG,
+            // Shoppers pay online orders by mobile money only.
+            allowedMethodTitles: ['MOBILE MONEY'],
             buildPaymentPayload: ({ selectedMethod, mobileNumber }) => {
                 const order = payingOrder;
                 const orderItems = (order?.order_items ?? []).map((it: any) => {
@@ -1003,40 +690,16 @@ export default function RetailerShopFrontWeb({
                     };
                 });
 
-                const isDelivery = deliveryMethod === "DELIVERY";
-                const isCourier = deliveryMethod === "COURIER";
-                const isShippingActive = isDelivery || isCourier;
-
-                const destination_latitude = isDelivery
-                    ? (selectedCollectionPoint?.latitude ?? 0.0)
-                    : isCourier
-                        ? (customerAddress?.latitude ?? 0.0)
-                        : 0.0;
-
-                const destination_longitude = isDelivery
-                    ? (selectedCollectionPoint?.longitude ?? 0.0)
-                    : isCourier
-                        ? (customerAddress?.longitude ?? 0.0)
-                        : 0.0;
-
-                const pickedEntityId = isDelivery
-                    ? selectedDeliveryEntityId
-                    : isCourier
-                        ? selectedCourierId
-                        : null;
+                const isDelivery = deliveryMethod === "DELIVERY" && !!deliveryOptionKey;
 
                 return {
                     action: CUSTOMER_PAYMENT_CONFIG.paymentAction,
                     customer_order_details: {
                         city_name: "",
-                        customer_name: isCourier
-                            ? (customerAddress?.name ?? "")
-                            : "",
-                        customer_phone: isCourier
-                            ? (customerAddress?.phone ?? mobileNumber)
-                            : "",
-                        destination_latitude,
-                        destination_longitude,
+                        customer_name: customerAddress?.name ?? "",
+                        customer_phone: customerAddress?.phone || mobileNumber,
+                        destination_latitude: isDelivery ? (customerAddress?.latitude ?? null) : null,
+                        destination_longitude: isDelivery ? (customerAddress?.longitude ?? null) : null,
                         draft_id: order?.draft_id ?? "",
                         farness: "",
                         order_channel: "ANDROID",
@@ -1047,13 +710,10 @@ export default function RetailerShopFrontWeb({
                         payment_account_number: mobileNumber,
                         payment_method: selectedMethod.id,
                         reference_number: "",
-                        shipping_cost: isShippingActive ? (shippingCost ?? 0) : 0.0,
-                        delivery_method: deliveryMethod,
-                        delivery_person: isRetailerDelivery ? selectedDeliveryEmployeeId : null,
-                        courier_id: isRetailerDelivery ? null : pickedEntityId,
-                        collection_point_id: isDelivery && !isRetailerDelivery
-                            ? (selectedCollectionPoint?.id ?? null)
-                            : null,
+                        // The server re-prices the chosen option; this is only what the shopper saw.
+                        shipping_cost: isDelivery ? (shippingCost ?? 0) : 0.0,
+                        delivery_method: isDelivery ? "DELIVERY" : "PICKUP",
+                        delivery_option: isDelivery ? deliveryOptionKey : null,
                     },
                 };
             },
@@ -1061,15 +721,11 @@ export default function RetailerShopFrontWeb({
         [
             payingOrder,
             deliveryMethod,
-            selectedCollectionPoint,
-            selectedDeliveryEntityId,
-            selectedCourierId,
+            deliveryOptionKey,
             customerAddress,
             shippingCost,
             retailerLat,
             retailerLng,
-            isRetailerDelivery,
-            selectedDeliveryEmployeeId
         ],
     );
 
@@ -1080,27 +736,14 @@ export default function RetailerShopFrontWeb({
             onRequestCloseOrder={handleRequestCloseOrder}
             deliveryMethod={deliveryMethod}
             onDeliveryMethodChange={handleDeliveryMethodChange}
-            couriers={activeCouriers}
-            couriersLoading={activeCouriersLoading}
-            selectedCourierId={activeSelectedCourierId}
-            onSelectCourier={handleSelectCourier}
-            collectionPoints={collectionPoints}
-            collectionPointsLoading={pointsLoading}
-            selectedCollectionPoint={selectedCollectionPoint}
-            onSelectCollectionPoint={setSelectedCollectionPoint}
+            retailerId={retailerId}
+            deliveryOptionKey={deliveryOptionKey}
+            onDeliveryOptionChange={handleDeliveryOptionChange}
             customerAddress={customerAddress}
             onCustomerAddressChange={setCustomerAddress}
             shippingCost={shippingCost}
-            shippingLoading={shippingLoading}
-            shippingError={shippingError}
             retailerName={retailerName}
             retailerLocation={retailerLocation}
-            isRetailerDelivery={isRetailerDelivery}
-            onToggleRetailerDelivery={setIsRetailerDelivery}
-            deliveryEmployees={deliveryEmployees}
-            deliveryEmployeesLoading={deliveryEmployeesLoading}
-            selectedDeliveryEmployeeId={selectedDeliveryEmployeeId}
-            onSelectDeliveryEmployee={setSelectedDeliveryEmployeeId}
         />
     );
 
@@ -1881,29 +1524,12 @@ export default function RetailerShopFrontWeb({
                 orderId={payingOrder?.draft_id ?? ""}
                 orderRef={payingOrder?.draft_id ?? ""}
                 config={customerConfig}
-                onlineOnly
                 onClose={() => setPayingOrder(null)}
                 onSuccess={async () => {
                     setPayingOrder(null);
                 }}
             />
 
-            <ApiResponseModal
-                isOpen={apiError.isOpen}
-                variant="error"
-                title={apiError.title}
-                envelope={apiError.envelope}
-                fallbackMessage={apiError.fallbackMessage}
-                onClose={() => setApiError((prev) => ({ ...prev, isOpen: false }))}
-                onRetry={
-                    apiError.onRetry
-                        ? () => {
-                            setApiError((prev) => ({ ...prev, isOpen: false }));
-                            apiError.onRetry?.();
-                        }
-                        : undefined
-                }
-            />
-        </View>
+</View>
     );
 }

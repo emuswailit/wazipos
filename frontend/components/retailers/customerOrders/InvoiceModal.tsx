@@ -6,6 +6,7 @@
 
 import { AdminDetailsSheet, SheetButton, useListTokens, useSheetIsWide, webPointer } from '@/components/common/listScreen';
 import RecordPaymentModal, { CUSTOMER_ORDER_PAYMENT_CONFIG } from '@/components/common/RecordPaymentModal';
+import { ShipmentTracker } from '@/components/deliveries/ShipmentTracker';
 import type { CustomerOrder } from '@/databases/types';
 import { printHtmlDocument } from '@/services/printHtml';
 import { isTrueFlag } from '@/utils/flags';
@@ -130,6 +131,22 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onRe
                         : []),
                     { title: 'Order', icon: 'document-text-outline', fields },
                     { title: `Items (${items.length})`, icon: 'cube-outline', children: <LineItems items={items} /> },
+                    // Delivery the customer chose: dispatch once paid, then follow the legs.
+                    ...(remoteOrderId && ['DELIVERY', 'COURIER'].includes(String(o.delivery_method || '').toUpperCase())
+                        ? [{
+                            title: 'Delivery',
+                            icon: 'bicycle-outline' as const,
+                            children: (
+                                <ShipmentTracker
+                                    link={{ customer_order: remoteOrderId }}
+                                    version={`${o.updated ?? ''}|${o.delivered_at ?? ''}`}
+                                    viewer="wholesaler"
+                                    paid={paid}
+                                    onOrderChanged={() => onRefresh?.()}
+                                />
+                            ),
+                        }]
+                        : []),
                     { title: 'Invoice', icon: 'receipt-outline', children: <Totals order={order} amount={amount} /> },
                 ]}
                 actions={

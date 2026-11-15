@@ -113,6 +113,10 @@ const getAllEntities = () =>
     action: "GetAllEntities",
   });
 
+/** Banks (entities of type "Bank") with their active branches. */
+const getBanks = (data: { search?: string; page_size?: number } = {}) =>
+  client.post("/authentication/entities", { action: "GetBanks", page_size: 500, ...data });
+
 const getRetailEntitiesAction = (data: any) =>
   client.post("/authentication/entities", data);
 
@@ -308,6 +312,7 @@ const createUserEntity = (data: any) => {
 
 export default {
   entitiesAction,
+  getBanks,
   searchWholesalers,
   adminUpdateEntity,
   addEntity,

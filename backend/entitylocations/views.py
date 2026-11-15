@@ -1,10 +1,8 @@
 import json
 from utils.logging import create_log
-from django.http import JsonResponse
 from rest_framework.response import Response
 from rest_framework import generics, permissions, status, exceptions
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import JSONParser
 from .models import Locations,BodaLocations,WifiLocations,PropertyLocations
 from .serializers import LocationsSerializer,LocationsGeofeatureSerializer,BodaLocationsSerializer
 from rest_framework.decorators import api_view, permission_classes, parser_classes
@@ -20,8 +18,6 @@ from retailers.models import RetailerReceipts
 from retailers.serializers import RetailerReceiptsSerializer
 from authentication.models import Entities
 from transport.models import SaccoPersonnel
-from django.db.models import Q
-from django.views.decorators.csrf import csrf_exempt
 from authentication.validators.authentication_models_validators import (
     validate_entity,
     verify_category_exists,
@@ -31,23 +27,57 @@ from products.validators.product_models_validator import validate_product, valid
 from transport.transport_validators import validate_sacco_personnel
 from . import serializers
 from properties.models import Property
-@csrf_exempt
+def _may_manage_entity_location(user, entity):
+    """
+    Entity locations price deliveries and route shoppers, so only the entity's
+    own users (or platform admins) may set them.
+    """
+    from payments.utils.admin_payout_accounts import is_platform_admin
+
+    return bool(entity) and (is_platform_admin(user) or getattr(user, "entity_id", None) == entity.id)
+
+
+def _save_entity_location(entity, latitude, longitude):
+    """Create or move the entity's single location. Returns (error, location)."""
+    try:
+        lat, lng = float(latitude), float(longitude)
+    except (TypeError, ValueError):
+        return "Enter a valid latitude and longitude", None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180) or (lat == 0 and lng == 0):
+        return "Enter a valid latitude and longitude", None
+    location, _ = Locations.objects.update_or_create(
+        entity=entity,
+        defaults={"point": Point(lng, lat, srid=4326)},
+    )
+    return None, location
+
+
+@api_view(["GET", "POST"])
+@permission_classes([permissions.IsAuthenticated])
 def locationsAPIView(request):
+    """
+    GET: entity locations as GeoJSON (signed-in users).
+    POST {"entity", "latitude", "longitude"}: set / move an entity's location
+    (its own users or platform admins only).
+    """
     if request.method == "GET":
-        locations = Locations.objects.all()
+        locations = Locations.objects.select_related("entity").all()
         serializer = LocationsGeofeatureSerializer(locations, many=True)
-        return JsonResponse(serializer.data, safe=False)
-    elif request.method == "POST":
-        data = JSONParser().parse(request)
-        serializer = LocationsGeofeatureSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-            return JsonResponse(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return JsonResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.data)
+
+    entity = Entities.objects.filter(id=request.data.get("entity")).first()
+    if not _may_manage_entity_location(request.user, entity):
+        return custom_error_response(1, "You can only set your own business location")
+    error, location = _save_entity_location(entity, request.data.get("latitude"), request.data.get("longitude"))
+    if error:
+        return custom_error_response(1, error)
+    return custom_success_message(
+        0, "Entity location saved", LocationsGeofeatureSerializer(location).data, "entity_location"
+    )
 
 
 @api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def locations_filters_api_view(request):
     stripped = 0.00
     stringified = 0.00
@@ -125,7 +155,7 @@ def locations_filters_api_view(request):
         dist = Distance("point", user_location)
        
         entities = (
-            Locations.objects.filter( Q(entity__entity_type="PHARMACY"))
+            Locations.objects.filter(entity__entity_type="PharmaceuticalRetailer")
             .annotate(distance=Distance("point", user_location))
             .order_by("distance")
         )
@@ -179,7 +209,7 @@ def locations_filters_api_view(request):
         dist = Distance("point", user_location)
        
         entities = (
-            Locations.objects.filter( Q(entity__entity_type="RETAIL"))
+            Locations.objects.filter(entity__entity_type__in=["GeneralRetailer", "PharmaceuticalRetailer"])
             .annotate(distance=Distance("point", user_location))
             .order_by("distance")
         )
@@ -440,37 +470,17 @@ def locations_filters_api_view(request):
         else:
             raise exceptions.ValidationError("No receipts")
 
-    elif request.data["action"] == "AddEntityLocation":
-        entity_location = None
-        data = request.data
-        print("data", data)
-        entity_id = request.data["entity"]
-        entity = validate_entity(entity_id)
-        
-        latitude = request.data["location"]["latitude"]
-        longitude = request.data["location"]["longitude"]
-
-        #    Check if location is already set
-        if Locations.objects.filter(entity=entity).exists():
-            return custom_error_response(1, "Entity location is already set")
-        if latitude and not latitude==None and longitude and not longitude==None:
-            point = fromstr(f"POINT({longitude} {latitude})", srid=4326)
-            print("point", point)
-            entity_location = Locations.objects.create(entity=entity, point=point)
-
-        if entity_location:
-            serializer = LocationsSerializer(
-                entity_location, many=False, context={"request": request}
-            )
-            return custom_success_message(
-                0,
-                "Entity location created successfully",
-                serializer.data,
-                "entity_location",
-            )
-
-        else:
-            return custom_error_response(1, "Entity location could not be created")
+    elif request.data["action"] in ("AddEntityLocation", "SetEntityLocation"):
+        # Create or move an entity's location: its own users or platform admins only.
+        entity = Entities.objects.filter(id=request.data.get("entity")).first()
+        if not _may_manage_entity_location(request.user, entity):
+            return custom_error_response(1, "You can only set your own business location")
+        coords = request.data.get("location") or {}
+        error, entity_location = _save_entity_location(entity, coords.get("latitude"), coords.get("longitude"))
+        if error:
+            return custom_error_response(1, error)
+        serializer = LocationsSerializer(entity_location, many=False, context={"request": request})
+        return custom_success_message(0, "Entity location saved", serializer.data, "entity_location")
 
     else:
         raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
@@ -677,7 +687,7 @@ def wifiLocationsAPIView(request):
 
         created = None
         title = None
-        if not request.user.entity.entity_type=="ISP":
+        if not request.user.entity.entity_type == "InternetServiceProvider":
             return custom_error_response(1,"You are not registered as an ISP, you cannot set wifi locations.")
         
         if not "title" in request.data or  request.data["title"]=="":
@@ -782,7 +792,7 @@ def propertiesLocationsAPIView(request):
 
         created = None
         property_id = None
-        if not request.user.entity.entity_type=="REALTY":
+        if not request.user.entity.entity_type == "Realty":
             return custom_error_response(1,"You are not registered as an Realtor, you cannot set property locations.")
         
         if not "property_id" in request.data or  request.data["property_id"]=="":

@@ -36,9 +36,9 @@ export const balanceOf = (order: RetailerOrder): number => {
     return Number.isNaN(n) ? 0 : n;
 };
 
-/** Requisition total. */
+/** What the buyer pays: goods + delivery fee (shipping_amount). */
 export const totalOf = (order: RetailerOrder): number => {
-    const n = Number(order.final_price_total ?? 0);
+    const n = Number(order.final_price_total ?? 0) + Number(order.shipping_amount ?? 0);
     return Number.isNaN(n) ? 0 : n;
 };
 
@@ -60,6 +60,10 @@ export interface RetailerRequisitionsViewProps {
     lastSyncedTime: string;
 
     onView: (order: RetailerOrder) => void;
+    /** Requisition shown in the side pane (highlighted in the table). */
+    selectedId?: string | null;
+    /** Narrower table beside the side pane: hides Origin and Payment. */
+    compact?: boolean;
 }
 
 export interface RequisitionsDetailsModalProps {
@@ -77,7 +81,7 @@ export const toBool = (v: any): boolean =>
     isTrueFlag(v); // case-insensitive: the backend sends "true" / "True" strings
 
 export const isPaid = (order: RetailerOrder): boolean =>
-    toBool(order.is_paid);
+    toBool(order.is_paid) || order.payment_summary?.is_paid === true;
 
 export const formatKES = (
     raw: string | number | null | undefined

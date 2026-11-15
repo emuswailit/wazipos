@@ -5,7 +5,6 @@ from authentication.serializers import EntitySerializer,EntityImagesSerializer,E
 from properties.serializers import PropertySerializer
 from entitylocations.models import Locations,BodaLocations
 from django.core.serializers.json import DjangoJSONEncoder
-from django.utils.six import text_type
 from rest_framework import serializers
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
 from authentication.models import Categories

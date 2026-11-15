@@ -246,6 +246,8 @@ export interface IndentCartPanelProps {
 
     busy?: boolean;
     errorText?: string | null;
+    /** Green confirmation, e.g. after the indent was closed and orders placed. */
+    successText?: string | null;
     bottomInset?: number;
 }
 
@@ -266,6 +268,7 @@ export default function IndentCartPanel({
     onDismiss,
     busy = false,
     errorText = null,
+    successText = null,
     bottomInset = 0,
 }: IndentCartPanelProps) {
     const { theme, isDarkMode } = useAuth();
@@ -845,6 +848,23 @@ export default function IndentCartPanel({
                     paddingBottom: 12 + bottomInset,
                 }}
             >
+                {successText ? (
+                    <View
+                        style={{
+                            backgroundColor: 'rgba(16,185,129,0.1)',
+                            borderColor: 'rgba(16,185,129,0.35)',
+                            borderWidth: 1,
+                            borderRadius: 8,
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            marginBottom: 10,
+                        }}
+                    >
+                        <Text style={{ fontFamily: theme.font.medium, fontSize: 11, color: '#059669' }}>
+                            {successText}
+                        </Text>
+                    </View>
+                ) : null}
                 {errorText ? (
                     <View
                         style={{

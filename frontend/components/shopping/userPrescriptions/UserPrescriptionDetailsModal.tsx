@@ -621,7 +621,6 @@ export function UserPrescriptionDetailsModal({ item, onClose, onProceedToDispens
                     orderId={payingQuotation.id}
                     orderRef={payingQuotation.entity_title}
                     config={payConfig}
-                    onlineOnly
                     onClose={() => {
                         setPayingQuotation(null);
                         // Keep the choices if nothing was paid, so the customer can retry.

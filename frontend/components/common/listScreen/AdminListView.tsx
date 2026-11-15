@@ -171,6 +171,12 @@ export interface AdminListViewProps<T, K extends string = string> extends AdminL
     error?: string | null;
     /** Sticky action bar under the list (e.g. "Submit request"). */
     footer?: React.ReactNode;
+    /**
+     * Content shown above the list, e.g. a summary card for the record the
+     * user is working on. Phones: scrolls with the cards, under the search bar.
+     * Web: above the table card.
+     */
+    header?: React.ReactNode;
     /** Hide the page controls (short lists such as baskets). */
     hidePagination?: boolean;
 }
@@ -441,6 +447,8 @@ function MobileList<T, K extends string>(props: AdminListViewProps<T, K>) {
                     <ErrorBanner message={props.error} onRetry={onRefresh} />
                 </View>
             ) : null}
+
+            {props.header ? <View style={{ marginTop: 12 }}>{props.header}</View> : null}
         </View>
     );
 
@@ -840,6 +848,8 @@ function WebList<T, K extends string>(props: AdminListViewProps<T, K>) {
                         </Text>
                     </Pressable>
                 </View>
+
+                {props.header ? <View style={{ marginBottom: 16 }}>{props.header}</View> : null}
 
                 {/* ============ Table card ============ */}
                 <View className="flex-1 rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.panel, borderColor: border, ...tableShadow }}>

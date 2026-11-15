@@ -4,7 +4,7 @@
 // in lists and details. Helpers are shared by the list views and the details sheet.
 
 import { CellText, formatDate, textOr, type AdminBadge, type AdminListConfig } from '@/components/common/listScreen';
-import type { RetailerIndent } from '@/databases/types';
+import type { RetailerIndent, RetailerIndentItem } from '@/databases/types';
 import React from 'react';
 
 export const toBool = (v: any): boolean => v === true || v === 'true' || v === 1 || v === '1';
@@ -42,6 +42,58 @@ const indentItemCount = (i: RetailerIndent): number =>
     typeof i.active_item_count === 'number' && i.active_item_count > 0 ? i.active_item_count : (i.retailer_indent_items?.length ?? 0);
 
 export const campaignTitleOf = (i: RetailerIndent): string => String((i as any).campaign_title ?? '');
+
+/* ---------------------------------------------------------------- items */
+
+/**
+ * Items saved on this device but not yet on the server. Closing an indent
+ * while any exist would leave them out of the orders (the server only sees
+ * uploaded items), so closing waits until this is empty.
+ */
+export const pendingItems = (i: RetailerIndent | null | undefined): RetailerIndentItem[] =>
+    (i?.retailer_indent_items ?? []).filter((it) => !it.remote_id);
+
+export const isPendingItem = (it: RetailerIndentItem): boolean => !it.remote_id;
+
+const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+};
+
+/** What the retailer pays per unit (wholesaler's final price, falling back to list price). */
+export function itemUnitCost(item: RetailerIndentItem): number | null {
+    const it: any = item;
+    return num(item.final_supplier_unit_selling_price) ?? num(item.supplier_unit_selling_price) ?? num(it.profit_estimate?.cost_per_unit) ?? num(item.final_unit_price);
+}
+
+/** Line total: the server's figure when present, else unit cost × quantity. */
+export function itemLineTotal(item: RetailerIndentItem): number {
+    const it: any = item;
+    const server = num(item.item_net_total_amount) ?? num(item.item_gross_total_amount) ?? num(it.profit_estimate?.total_cost);
+    if (server !== null) return server;
+    return (itemUnitCost(item) ?? 0) * Number(item.required_quantity ?? 0);
+}
+
+export interface WholesalerGroup {
+    key: string;
+    title: string;
+    items: RetailerIndentItem[];
+    subtotal: number;
+}
+
+/** Items grouped by wholesaler: on submit, each group becomes one order with that wholesaler. */
+export function groupItemsByWholesaler(items: RetailerIndentItem[]): WholesalerGroup[] {
+    const groups = new Map<string, WholesalerGroup>();
+    for (const item of items) {
+        const key = String(item.wholesaler ?? item.wholesaler_title ?? 'unknown');
+        const g = groups.get(key) ?? { key, title: item.wholesaler_title || 'Unknown wholesaler', items: [], subtotal: 0 };
+        g.items.push(item);
+        g.subtotal += itemLineTotal(item);
+        groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => b.subtotal - a.subtotal);
+}
 
 export function indentBadges(i: RetailerIndent): AdminBadge[] {
     const badges: AdminBadge[] = [toBool(i.is_open) ? { label: 'Open', tone: 'success', icon: 'ellipse' } : { label: 'Closed', tone: 'neutral' }];

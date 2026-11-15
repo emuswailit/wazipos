@@ -122,7 +122,8 @@ async function exportToExcel(
  * PDF
  * ======================================================= */
 
-async function exportToPdf(
+/** Print (web) or save + share (native) an HTML document as a PDF. */
+export async function exportToPdf(
     options: PdfExportOptions,
 ): Promise<{ uri?: string }> {
     if (Platform.OS === 'web') {

@@ -68,6 +68,8 @@ export function RetailerRequisitionsWebView({
     syncStatus,
     lastSyncedTime,
     onView,
+    selectedId,
+    compact,
     page,
     pageSize,
     totalItems,
@@ -193,9 +195,9 @@ export function RetailerRequisitionsWebView({
                         <HeaderCell flex={COLS.reference}>Reference</HeaderCell>
                         <HeaderCell flex={COLS.wholesaler}>Wholesaler</HeaderCell>
                         <HeaderCell flex={COLS.items} align="center">Items</HeaderCell>
-                        <HeaderCell flex={COLS.origin}>Origin</HeaderCell>
+                        {compact ? null : <HeaderCell flex={COLS.origin}>Origin</HeaderCell>}
                         <HeaderCell flex={COLS.status}>Status</HeaderCell>
-                        <HeaderCell flex={COLS.payment}>Payment</HeaderCell>
+                        {compact ? null : <HeaderCell flex={COLS.payment}>Payment</HeaderCell>}
                         <HeaderCell flex={COLS.balance} align="right">Balance</HeaderCell>
                         <HeaderCell flex={COLS.total} align="right">Total</HeaderCell>
                         <View style={{ flex: COLS.chevron }} />
@@ -228,7 +230,7 @@ export function RetailerRequisitionsWebView({
                                 )}
                             </View>
                         }
-                        renderItem={({ item, index }) => <Row item={item} isFirst={index === 0} onView={() => onView(item)} />}
+                        renderItem={({ item, index }) => <Row item={item} isFirst={index === 0} compact={compact} selected={!!selectedId && item.remote_id === selectedId} onView={() => onView(item)} />}
                         showsVerticalScrollIndicator={false}
                     />
 
@@ -317,7 +319,7 @@ function HeaderCell({ flex, align = 'left', children }: { flex: number; align?: 
     );
 }
 
-function Row({ item, isFirst, onView }: { item: RetailerOrder; isFirst: boolean; onView: () => void }) {
+function Row({ item, isFirst, compact, selected, onView }: { item: RetailerOrder; isFirst: boolean; compact?: boolean; selected?: boolean; onView: () => void }) {
     const { theme, isDarkMode } = useAuth();
     const [hovered, setHovered] = useState(false);
     const borderColor = isDarkMode ? '#1e293b' : '#f1f5f9';
@@ -333,9 +335,11 @@ function Row({ item, isFirst, onView }: { item: RetailerOrder; isFirst: boolean;
             accessibilityLabel={`Open requisition ${orderRef(item)}`}
             className="flex-row items-center px-5 py-3"
             style={{
-                backgroundColor: hovered ? hoverBg : 'transparent',
+                backgroundColor: selected ? `${theme.primary}12` : hovered ? hoverBg : 'transparent',
                 borderTopWidth: isFirst ? 0 : 1,
                 borderTopColor: borderColor,
+                borderLeftWidth: 3,
+                borderLeftColor: selected ? theme.primary : 'transparent',
                 ...webPointer,
             }}
         >
@@ -366,17 +370,21 @@ function Row({ item, isFirst, onView }: { item: RetailerOrder; isFirst: boolean;
                 {orderItemCount(item)}
             </Text>
 
-            <Text style={{ flex: COLS.origin, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, paddingRight: 12 }} numberOfLines={1}>
-                {item.order_origin || '—'}
-            </Text>
+            {compact ? null : (
+                <Text style={{ flex: COLS.origin, color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, paddingRight: 12 }} numberOfLines={1}>
+                    {item.order_origin || '—'}
+                </Text>
+            )}
 
             <View style={{ flex: COLS.status, paddingRight: 12 }}>
                 <StatusPill status={item.status} size="sm" />
             </View>
 
-            <View style={{ flex: COLS.payment, paddingRight: 12 }}>
-                <PaymentPill paid={toBool(item.is_paid)} compact />
-            </View>
+            {compact ? null : (
+                <View style={{ flex: COLS.payment, paddingRight: 12 }}>
+                    <PaymentPill paid={toBool(item.is_paid)} compact />
+                </View>
+            )}
 
             <Text
                 style={{ flex: COLS.balance, textAlign: 'right', color: balance > 0 ? '#f43f5e' : '#10b981', fontFamily: theme.font.bold, fontSize: 13 }}
@@ -390,7 +398,7 @@ function Row({ item, isFirst, onView }: { item: RetailerOrder; isFirst: boolean;
             </Text>
 
             <View style={{ flex: COLS.chevron, alignItems: 'flex-end' }}>
-                <Ionicons name="chevron-forward" size={16} color={hovered ? theme.primary : theme.textDark} />
+                <Ionicons name="chevron-forward" size={16} color={hovered || selected ? theme.primary : theme.textDark} />
             </View>
         </Pressable>
     );

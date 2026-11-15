@@ -6,6 +6,8 @@
 
 import { AdminDetailsSheet, SheetButton, formatDateTime, textOr, useListTokens, useSheetIsWide } from '@/components/common/listScreen';
 import RecordPaymentModal from '@/components/common/RecordPaymentModal';
+import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
+import { RETAILER_ORDER_PAYMENT_CONFIG } from '@/hooks/useRecordPayment';
 import type { RetailerOrder, RetailerOrderItem } from '@/databases/types';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -17,6 +19,7 @@ const titleCase = (s?: string | null) => (s ? s.charAt(0) + s.slice(1).toLowerCa
 export function RetailerRequisitionsDetailsModal({ order, visible, onClose, onRefreshParentLedger }: RequisitionsDetailsModalProps) {
     const wide = useSheetIsWide();
     const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+    const { applyServerOrder } = useRetailerOrdersSync();
 
     useEffect(() => {
         if (visible) setIsPaymentOpen(false);
@@ -72,7 +75,7 @@ export function RetailerRequisitionsDetailsModal({ order, visible, onClose, onRe
                 actions={!paid ? <SheetButton label="Make payment" icon="card-outline" onPress={() => setIsPaymentOpen(true)} grow={!wide} /> : null}
             />
 
-            <RecordPaymentModal isOpen={isPaymentOpen} orderId={order.remote_id} orderRef={ref} onClose={onClosePayment} onRefreshParentLedger={onRefreshParentLedger} onlineOnly />
+            <RecordPaymentModal isOpen={isPaymentOpen} orderId={order.remote_id} orderRef={ref} config={RETAILER_ORDER_PAYMENT_CONFIG} onClose={onClosePayment} onRefreshParentLedger={onRefreshParentLedger} onOrderUpdated={applyServerOrder} />
         </>
     );
 }

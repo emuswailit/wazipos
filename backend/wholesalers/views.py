@@ -336,11 +336,13 @@ def retailerOrdersAPIView(request):
             request.data, request.user)
 
         if retailer_order:
-            serializer = serializers.RetailerOrdersSerializer(
+            data = dict(serializers.RetailerOrdersSerializer(
                 retailer_order, many=False, context={"request": request}
-            )
+            ).data)
+            # Mobile money: followed on ws/requisitions/payment/<ref>/.
+            data["payment_reference_number"] = getattr(retailer_order, "payment_reference_number", None)
             return custom_success_message(
-                0, "Retailer order updated successfully", serializer.data, 'retailer_order'
+                0, "Retailer order updated successfully", data, 'retailer_order'
             )
 
         else:

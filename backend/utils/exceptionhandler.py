@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from django.db import DatabaseError, IntegrityError
+from django.db import IntegrityError, InterfaceError, OperationalError
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler, set_rollback
@@ -80,7 +80,9 @@ def _handle_unexpected_error(exc, context):
         # an existing record, or two requests racing each other.
         http_status = status.HTTP_409_CONFLICT
         message = "This couldn't be saved because it clashes with an existing record. Please try again."
-    elif isinstance(exc, DatabaseError):
+    elif isinstance(exc, (OperationalError, InterfaceError)):
+        # Connection-type failures only. Schema errors (e.g. a column whose
+        # migration hasn't run: ProgrammingError) are bugs, reported below as 500.
         http_status = status.HTTP_503_SERVICE_UNAVAILABLE
         message = "The database is temporarily unavailable. Please try again shortly."
     else:
