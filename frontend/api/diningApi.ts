@@ -223,6 +223,8 @@ export default {
     // custom recipes — restaurant staff
     myIngredients: () => call('GetMyIngredients'),
     saveIngredient: (details: Record<string, any>) => call('SaveIngredient', details),
+    /** Copy the starter catalogue (~50 common Kenyan ingredients) into your list. */
+    importStarterIngredients: () => call('ImportStarterIngredients'),
     recipeRequests: (scope: 'open' | 'done' = 'open') => call('GetRecipeRequests', { scope }),
     quoteRecipe: (recipe: string, price: string, ready_in_minutes?: string, note?: string) => call('QuoteCustomRecipe', { recipe, price, ready_in_minutes, note }),
     declineRecipe: (recipe: string, note?: string) => call('DeclineCustomRecipe', { recipe, note }),

@@ -1364,6 +1364,11 @@ def diningAPIView(request):
         return fail("Status not changed", errors) if errors else ok("Order updated", d.order_out(order, request), "food_order")
     if action == "GetMyIngredients":
         return ok("Ingredients", rc.list_ingredients(request.user.entity_id, staff=True), "ingredients")
+    if action == "ImportStarterIngredients":
+        errors, added = rc.import_starter_ingredients(request.user)
+        if errors:
+            return fail("Nothing imported", errors)
+        return ok(f"{added} ingredient{'s' if added != 1 else ''} added", rc.list_ingredients(request.user.entity_id, staff=True), "ingredients")
     if action == "SaveIngredient":
         errors, item = rc.save_ingredient(request.data, request.user)
         return fail("Ingredient not saved", errors) if errors else ok("Ingredient saved", rc.ingredient_out(item), "ingredient")

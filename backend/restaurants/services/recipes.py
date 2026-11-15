@@ -75,6 +75,32 @@ def save_ingredient(data, user):
     return [], item
 
 
+# The demo restaurant in authentication/fixtures/restaurantsFixture.json; its
+# ingredient list is the starter catalogue restaurants can copy.
+STARTER_RESTAURANT_ID = "e9ee73b5-7247-5023-b85d-e0d44aa77057"
+
+
+def import_starter_ingredients(user):
+    """Copy the starter catalogue into the caller's restaurant (skips names it has). Returns (errors, added)."""
+    if str(user.entity_id) == STARTER_RESTAURANT_ID:
+        return ["This is the starter catalogue itself"], 0
+    starter = rm.RestaurantIngredient.objects.filter(entity_id=STARTER_RESTAURANT_ID)
+    if not starter.exists():
+        return ["The starter catalogue isn't loaded on this server (loaddata restaurantsFixture)"], 0
+    have = {n.lower() for n in rm.RestaurantIngredient.objects.filter(entity=user.entity).values_list("name", flat=True)}
+    added = 0
+    with transaction.atomic():
+        for i in starter:
+            if i.name.lower() in have:
+                continue
+            rm.RestaurantIngredient.objects.create(
+                entity=user.entity, owner=user, name=i.name, category=i.category,
+                unit_label=i.unit_label, price=i.price, is_available=True,
+            )
+            added += 1
+    return [], added
+
+
 # ================================================================ requests
 
 def recipe_out(r, for_customer=True):

@@ -5,14 +5,14 @@
 // still price every custom request yourself.
 
 import diningApi, { errorText, isOk, type Ingredient } from '@/api/diningApi';
-import { AdminFormSheet, AdminListView, FormRow, FormSection, type AdminListConfig } from '@/components/common/listScreen';
+import { AdminFormSheet, AdminListView, FormRow, FormSection, SheetButton, useListTokens, type AdminListConfig } from '@/components/common/listScreen';
 import { CustomTextField } from '@/components/common/CustomTextField';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { SwitchField } from '@/components/common/SwitchField';
 import { useFocusEffect } from 'expo-router';
 import { Formik } from 'formik';
 import React, { useCallback, useState } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { Text, useWindowDimensions, View } from 'react-native';
 import * as Yup from 'yup';
 
 import { kes } from '../shared';
@@ -57,6 +57,26 @@ export default function RestaurantIngredients() {
     const [editing, setEditing] = useState<Ingredient | null>(null);
     const [formOpen, setFormOpen] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const [importing, setImporting] = useState(false);
+    const [importNote, setImportNote] = useState<string | null>(null);
+    const { theme } = useListTokens();
+
+    /** Copy the starter catalogue (common Kenyan ingredients with indicative prices). */
+    const importStarter = async () => {
+        setImporting(true);
+        setImportNote(null);
+        try {
+            const res: any = await diningApi.importStarterIngredients();
+            if (isOk(res)) {
+                setItems(res.data.ingredients ?? []);
+                setImportNote(res.data.response_message);
+            } else setImportNote(errorText(res, 'Nothing was imported.'));
+        } catch (e: any) {
+            setImportNote(e?.message || 'Could not reach the server.');
+        } finally {
+            setImporting(false);
+        }
+    };
 
     const load = useCallback(async () => {
         setRefreshing(true);
@@ -104,6 +124,14 @@ export default function RestaurantIngredients() {
                 allItems={filtered}
                 onOpenCreate={() => open(null)}
                 onPressItem={open}
+                header={
+                    <View className="flex-row flex-wrap items-center rounded-2xl p-3" style={{ gap: 10, backgroundColor: `${theme.primary}0d` }}>
+                        <Text style={{ flex: 1, minWidth: 220, color: theme.text, fontFamily: theme.font.medium, fontSize: 12.5 }}>
+                            {importNote ?? (items.length ? 'Add the starter list to fill gaps — names you already have are skipped.' : 'Start quickly: add ~50 common ingredients (proteins, starches, vegetables, sauces…) with suggested prices, then adjust.')}
+                        </Text>
+                        <SheetButton label="Add starter ingredients" icon="sparkles-outline" variant="secondary" loading={importing} loadingLabel="Adding…" onPress={() => void importStarter()} />
+                    </View>
+                }
                 stats={[
                     { label: 'Ingredients', value: String(items.length) },
                     { label: 'Available', value: String(items.filter((i) => i.is_available).length), color: '#10b981' },

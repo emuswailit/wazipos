@@ -1,0 +1,1441 @@
+[
+  {
+    "model": "authentication.Entities",
+    "pk": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+    "fields": {
+      "title": "WAZIPOS DEMO KITCHEN",
+      "categories": [],
+      "phone": "0722217348",
+      "road": "Utalii lane",
+      "building": "View Park Towers, Ground Flr",
+      "entity_type": "Restaurant",
+      "town": "Nairobi",
+      "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+      "registration": "DEMO-REST-01",
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "entitylocations.Locations",
+    "pk": "ab65ba50-4bb4-53d9-a5ef-739a2a427df9",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "point": "SRID=4326;POINT (36.8172 -1.2864)",
+      "farness": ""
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "bcddf4e7-5aa1-50f4-9d6d-573a65a5747c",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Beef (stewing)",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "250.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "e9b42bd6-311a-55dc-9896-79b98580074a",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Beef (fillet)",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "380.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "b5526907-9d8a-5674-87b2-509f968ea0e8",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Goat meat",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "320.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "0e394f5c-b9d2-5da9-896d-5c8d36f24fd1",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Chicken (broiler)",
+      "category": "Proteins",
+      "unit_label": "quarter",
+      "price": "220.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "02e3d474-99bb-5e84-9d42-7598edc8e2a4",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Kienyeji chicken",
+      "category": "Proteins",
+      "unit_label": "quarter",
+      "price": "350.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "b7d2d9f1-3bb7-581e-9508-aa47b4c9a395",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Tilapia (whole)",
+      "category": "Proteins",
+      "unit_label": "fish",
+      "price": "450.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "30b528df-eceb-5c1c-896f-659113a694a5",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Omena",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "120.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "1994a0b2-f059-5832-abe5-1ce59856841f",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Pork",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "300.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "b9a43587-aba0-57f3-b0d2-d39347e60044",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Eggs",
+      "category": "Proteins",
+      "unit_label": "egg",
+      "price": "20.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "8c1ada13-c02b-5cdd-ae1f-e7394b6146b2",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Liver",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "200.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "eb67e655-776b-5e55-9e46-639cbc0465bb",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Sausages",
+      "category": "Proteins",
+      "unit_label": "piece",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "43a1edf4-bc98-50a7-a6b8-f37cfda1e4bf",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Prawns",
+      "category": "Proteins",
+      "unit_label": "portion",
+      "price": "550.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "ea6ad29e-c948-5ff1-a0da-e5134ca5102d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Ugali (maize flour)",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "95e28c89-129c-5736-abaa-d5dbe1265973",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "White rice",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "e4e627ae-b5f4-5e1b-a9fd-94213207328c",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Pilau rice",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "90.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "0bd58917-0980-549a-86aa-8f53c24069bb",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Chapati",
+      "category": "Starches",
+      "unit_label": "piece",
+      "price": "30.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "fca26cef-2f68-5369-8ae8-a2cc85cdb80d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Potatoes / chips",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "80.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "28daf795-6052-5b69-b520-7785f842bf9a",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Sweet potatoes",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "f0910a4c-b43b-5769-88cb-264636ce1a08",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Arrow roots (nduma)",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "67974600-98b7-5162-9b54-dc194d393442",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Matoke (green bananas)",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "cf83809a-cd33-5eb0-b2c1-fd1d856d24b2",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Spaghetti",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "db3eefcb-e3bf-5db8-b7a3-5efa4084b518",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Mukimo",
+      "category": "Starches",
+      "unit_label": "portion",
+      "price": "90.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "60e8e74f-22b3-5f25-9f25-bdc777d18dac",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Githeri (maize & beans)",
+      "category": "Legumes",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "6baf5d31-4558-51f0-b1a5-8ae2b91181c3",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Kidney beans",
+      "category": "Legumes",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "2a460130-08c5-5479-8f36-63eb0d13acad",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Ndengu (green grams)",
+      "category": "Legumes",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "89f476cd-3a70-5760-8e22-332c68e44c81",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Lentils (kamande)",
+      "category": "Legumes",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "c9e6e133-ad8d-5747-ac44-2a847bd6c55b",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Peas",
+      "category": "Legumes",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "0a2d1c90-bbcf-5442-ba89-910bd4b9f474",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Sukuma wiki (kale)",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "30.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "4af90045-c22b-567f-8614-71871ab5c3c2",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Managu",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "522572dd-9e5e-52ab-ab6e-5f5692af2e9d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Terere (amaranth)",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "592bdc9e-b68e-513c-a402-5fef173ed582",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Cabbage",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "30.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "2cd619a1-ecdf-5fd3-bba8-d76d5fa964e0",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Spinach",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "40.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "17c69ded-c681-5b53-b301-277af491d9c4",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Kachumbari",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "40.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "ce2ce847-066f-5654-b312-ad0b9b1639f9",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Mixed vegetables",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "e8514672-c150-51c1-b2b9-7607145508e6",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Avocado",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "40.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "6317096d-d79f-5985-b579-6545142c142e",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Mushrooms",
+      "category": "Vegetables",
+      "unit_label": "portion",
+      "price": "120.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "de512a4d-1670-509b-bf1b-698bc753a775",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Tomato stew base",
+      "category": "Sauces & stews",
+      "unit_label": "portion",
+      "price": "40.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "99a333d6-dfd4-5fe6-bf05-ea1803046d29",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Coconut sauce",
+      "category": "Sauces & stews",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "0c3ac51e-ecd1-588c-ac32-210484e41dd0",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Peanut (groundnut) sauce",
+      "category": "Sauces & stews",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "c719b469-e1d7-5570-8089-6b3b020707be",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Wet fry",
+      "category": "Sauces & stews",
+      "unit_label": "portion",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "91762d74-48ca-58b0-a8ee-a84c65a7bc1d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Dry fry",
+      "category": "Sauces & stews",
+      "unit_label": "portion",
+      "price": "40.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "e1502316-3a89-5c5b-bc29-6ed2dbaf9829",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Curry sauce",
+      "category": "Sauces & stews",
+      "unit_label": "portion",
+      "price": "70.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "758e12ec-1268-5314-8520-4ef5f7cbdeaa",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Mala (sour milk)",
+      "category": "Sauces & stews",
+      "unit_label": "cup",
+      "price": "60.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "b8c6e60a-42b2-5bf3-9494-e62be214ffd9",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Dhania (coriander)",
+      "category": "Spices & herbs",
+      "unit_label": "handful",
+      "price": "0.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "c9bb35f4-5771-55ff-91d2-99d3ecfc0ba9",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Garlic & ginger",
+      "category": "Spices & herbs",
+      "unit_label": "dash",
+      "price": "0.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "e0296e58-188a-5a42-84d8-2f25906ef96c",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Pilau masala",
+      "category": "Spices & herbs",
+      "unit_label": "dash",
+      "price": "0.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "11c5c248-f688-56a0-9243-776625e17fdd",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Chilli (pilipili)",
+      "category": "Spices & herbs",
+      "unit_label": "dash",
+      "price": "0.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "cf32b3cd-f040-5bc5-a897-24d71c62c50e",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Onions & tomatoes",
+      "category": "Spices & herbs",
+      "unit_label": "portion",
+      "price": "0.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "73e8a6fb-dbc3-57f0-902a-315e920bab7d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Royco / stock",
+      "category": "Spices & herbs",
+      "unit_label": "dash",
+      "price": "0.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "db36d6ea-2980-5eb1-95e4-a8e3dca75740",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Lemon",
+      "category": "Spices & herbs",
+      "unit_label": "piece",
+      "price": "10.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "a62fcfa7-a447-5451-8b0a-3b1078cbccdf",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Fried eggs (2)",
+      "category": "Extras",
+      "unit_label": "portion",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "4117973c-d745-569e-9ebc-1e9dde1c7600",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Extra chapati",
+      "category": "Extras",
+      "unit_label": "piece",
+      "price": "30.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "af8e3fd2-f80e-5316-a10a-c13bd4b45bc3",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Fresh juice",
+      "category": "Extras",
+      "unit_label": "glass",
+      "price": "120.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.RestaurantIngredient",
+    "pk": "413bc6c4-334a-5a71-b614-73db211cebf8",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "name": "Chai (tea)",
+      "category": "Extras",
+      "unit_label": "cup",
+      "price": "50.00",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "2f4617bc-3726-5a8b-9ee6-a95763a20025",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "CHAI & MANDAZI (2)",
+      "description": "Spiced tea with two mandazi",
+      "images": [],
+      "price": "120.00",
+      "is_available": true,
+      "category": "Breakfast",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "e2dd9be2-5fe6-55c2-8468-e8524eede869",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "FULL KENYAN BREAKFAST",
+      "description": "Eggs, sausages, toast, fruit and chai",
+      "images": [],
+      "price": "450.00",
+      "is_available": true,
+      "category": "Breakfast",
+      "preparation_minutes": 15,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "2560cc8e-abef-529e-8904-07af82cc295a",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "SMOKIE PASUA",
+      "description": "Smokie with kachumbari",
+      "images": [],
+      "price": "80.00",
+      "is_available": true,
+      "category": "Breakfast",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "d46fd312-ca35-51e8-b3b2-49e249e2720b",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "BEEF STEW & RICE",
+      "description": "Slow-cooked beef in tomato stew with white rice",
+      "images": [],
+      "price": "450.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 20,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "ff5c08ab-da89-53f6-a46a-1fdbc0babcee",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "PILAU YA NYAMA",
+      "description": "Beef pilau with kachumbari",
+      "images": [],
+      "price": "500.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 25,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "09b7bb3d-5c3c-5c0b-95e3-694bc6a3dbec",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "UGALI, SUKUMA & BEEF FRY",
+      "description": "Classic plate with wet or dry fry",
+      "images": [],
+      "price": "480.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 20,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "0e1c45b3-80da-5a43-a03d-27449beddf16",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "KIENYEJI CHICKEN & UGALI",
+      "description": "Free-range chicken stew, ugali and managu",
+      "images": [],
+      "price": "750.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 40,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "f199ee13-2f48-5f58-b4b6-60045a3487a2",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "FRIED TILAPIA & UGALI",
+      "description": "Whole tilapia, ugali and sukuma",
+      "images": [],
+      "price": "850.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 30,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "0ced6dc9-7c5f-5c93-ab07-e225badcff3a",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "GITHERI SPECIAL",
+      "description": "Githeri with potatoes and avocado",
+      "images": [],
+      "price": "300.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 15,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "40255c5c-b8b8-5078-b783-7a41b0e1391c",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "MUKIMO & BEEF STEW",
+      "description": "Mashed peas, potatoes and greens with beef stew",
+      "images": [],
+      "price": "550.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 25,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "42e5206a-3a04-543b-ba4b-c79078d511a9",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "CHICKEN BIRYANI",
+      "description": "Fragrant rice with chicken and raita",
+      "images": [],
+      "price": "650.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 30,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "e7e6edad-2438-5c15-94f3-161e4abbeb18",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "MATOKE & BEEF",
+      "description": "Green bananas stewed with beef",
+      "images": [],
+      "price": "480.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 25,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "a890b462-67fa-5a02-a63c-e0fa52472335",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "NDENGU & CHAPATI",
+      "description": "Green grams in coconut sauce with 2 chapati",
+      "images": [],
+      "price": "320.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 15,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "8d7a0a8a-7e97-5121-bac4-0173218ed07d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "MBUZI WET FRY",
+      "description": "Goat wet fry with ugali or rice",
+      "images": [],
+      "price": "650.00",
+      "is_available": true,
+      "category": "Mains",
+      "preparation_minutes": 30,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "0cc18672-28f0-53de-a841-eb7acca6dd50",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "NYAMA CHOMA (½ KG GOAT)",
+      "description": "Roast goat with kachumbari and ugali",
+      "images": [],
+      "price": "900.00",
+      "is_available": true,
+      "category": "Grill",
+      "preparation_minutes": 45,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "e8229f1c-3480-5a93-8c11-b5033f9b1b47",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "CHIPS & CHICKEN (¼)",
+      "description": "Fries with quarter chicken",
+      "images": [],
+      "price": "550.00",
+      "is_available": true,
+      "category": "Grill",
+      "preparation_minutes": 20,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "851253b7-a9ad-5f60-a6a6-a1a4c7bd14c3",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "MUTURA",
+      "description": "Kenyan sausage, grilled",
+      "images": [],
+      "price": "150.00",
+      "is_available": true,
+      "category": "Grill",
+      "preparation_minutes": 10,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "7ba99cad-5edc-5531-a1bd-e9588169fa1d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "CHAPATI",
+      "description": "Soft layered chapati",
+      "images": [],
+      "price": "30.00",
+      "is_available": true,
+      "category": "Sides",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "1c71e09e-05dd-510d-844b-5046f41ecb12",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "KACHUMBARI",
+      "description": "Tomato, onion and dhania salad",
+      "images": [],
+      "price": "60.00",
+      "is_available": true,
+      "category": "Sides",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "d5a2fbc6-4255-558b-bb8b-9e350bd6ad8d",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "CHIPS MASALA",
+      "description": "Fries tossed in masala sauce",
+      "images": [],
+      "price": "250.00",
+      "is_available": true,
+      "category": "Sides",
+      "preparation_minutes": 15,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "04c4c07c-0643-5e85-8690-ef0c95b03b97",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "FRESH MANGO JUICE",
+      "description": "Blended to order",
+      "images": [],
+      "price": "150.00",
+      "is_available": true,
+      "category": "Drinks",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "72fd55c2-37e6-5853-9ef7-b0aa34aa0647",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "DAWA",
+      "description": "Lemon, honey and ginger",
+      "images": [],
+      "price": "150.00",
+      "is_available": true,
+      "category": "Drinks",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "aba8ac5d-9493-57eb-bf55-59ff4ad9bff5",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "MALA (SOUR MILK)",
+      "description": "Chilled",
+      "images": [],
+      "price": "80.00",
+      "is_available": true,
+      "category": "Drinks",
+      "preparation_minutes": 1,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "a70085d9-12e1-57e7-9dec-46fb844db622",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "SODA (500 ML)",
+      "description": "Assorted",
+      "images": [],
+      "price": "80.00",
+      "is_available": true,
+      "category": "Drinks",
+      "preparation_minutes": 1,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.MenuItem",
+    "pk": "2515adad-0a79-5a19-9918-210a6aa3fdfd",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "menu": null,
+      "title": "FRUIT SALAD",
+      "description": "Seasonal fruit",
+      "images": [],
+      "price": "200.00",
+      "is_available": true,
+      "category": "Desserts",
+      "preparation_minutes": 5,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "c404fc11-b746-5ad6-8ac8-14dd94107d45",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "T1",
+      "seats": 2,
+      "description": "Window",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "8073c60e-f372-5b2b-b6d5-0c9aedd663ed",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "T2",
+      "seats": 2,
+      "description": "Window",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "5848fe76-8314-5000-a304-1e7c33cc0b90",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "T3",
+      "seats": 4,
+      "description": null,
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "84581377-a86f-586b-8a76-46691d5b69b5",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "T4",
+      "seats": 4,
+      "description": null,
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "7026ecec-5024-55e3-94a6-a043160846ec",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "T5",
+      "seats": 4,
+      "description": null,
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "156f17dc-34bb-557a-8ccc-644c5a1397b3",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "T6",
+      "seats": 6,
+      "description": "Family table",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "3cf3c48b-6e8d-5431-8950-11abd325a5f4",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "TERRACE 1",
+      "seats": 4,
+      "description": "Outdoor",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  },
+  {
+    "model": "restaurants.BranchTable",
+    "pk": "271d8ab4-d667-5146-9da7-1faa2e05ba4a",
+    "fields": {
+      "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
+      "owner": null,
+      "branch": null,
+      "attendant": null,
+      "title": "TERRACE 2",
+      "seats": 8,
+      "description": "Outdoor, groups",
+      "is_available": true,
+      "created": "2026-11-15 00:00:00",
+      "updated": "2026-11-15 00:00:00"
+    }
+  }
+]
