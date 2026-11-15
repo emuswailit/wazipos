@@ -13,8 +13,8 @@ def validate_reference_number(reference_number):
     
 def validate_food_order(id):
     errors =[]
-    if models.BranchFoodOrder.objects.filter(id=id).exists():
-        return  models.BranchFoodOrder.objects.filter(id=id).first()
+    if models.FoodOrder.objects.filter(id=id).exists():
+        return  models.FoodOrder.objects.filter(id=id).first()
     else:
         raise exceptions.ValidationError("Food order with provided ID does not exist")
 
@@ -39,8 +39,8 @@ def validate_menu_item(menu_item_id):
         raise exceptions.ValidationError("Menu item with supplied ID does not exist")
 
 def validate_food_item(food_item_id):
-    if models.BranchFoodItem.objects.filter(id=food_item_id).exists():
-        return models.BranchFoodItem.objects.filter(id=food_item_id).first()
+    if models.FoodItem.objects.filter(id=food_item_id).exists():
+        return models.FoodItem.objects.filter(id=food_item_id).first()
     else:
         raise exceptions.ValidationError("Food item with supplied ID does not exist")
     
@@ -53,13 +53,13 @@ def validate_bar_inventory(inventory_id):
     
 
 def validate_branch_table(table_id):
-    if models.BranchTable.objects.filter(id=table_id).exists():
-        return models.BranchTable.objects.filter(id=table_id).first()
+    if models.Table.objects.filter(id=table_id).exists():
+        return models.Table.objects.filter(id=table_id).first()
     else:
         raise exceptions.ValidationError("Table with supplied ID does not exist")
     
 def validate_room(room_id):
-    if models.BranchRoom.objects.filter(id=room_id).exists():
-        return models.BranchRoom.objects.filter(id=room_id).first()
+    if models.Room.objects.filter(id=room_id).exists():
+        return models.Room.objects.filter(id=room_id).first()
     else:
         raise exceptions.ValidationError("Room with supplied ID does not exist")

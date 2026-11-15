@@ -39,12 +39,12 @@ class MenuItemssAdmin(admin.ModelAdmin):
     search_fields = ("title",)
 
 
-@admin.register(models.BranchFoodOrderPayment)
+@admin.register(models.FoodOrderPayment)
 class MenuItemssAdmin(admin.ModelAdmin):
     list_display = (
         "entity",
         # "entity_collection_account",
-        "branch_food_order",
+        "food_order",
         "payment_method",
         "reference_number",
         "psp_reference_number",
@@ -58,7 +58,7 @@ class MenuItemssAdmin(admin.ModelAdmin):
     # list_filter = ("provider_reference_number",)
     # search_fields = ("provider_reference_number",)
 
-@admin.register(models.BranchTable)
+@admin.register(models.Table)
 class TablesAdmin(admin.ModelAdmin):
     list_display = (
         "entity",
@@ -93,14 +93,14 @@ class TablesAdmin(admin.ModelAdmin):
 
 
 
-@admin.register(models.BranchFoodOrder)
+@admin.register(models.FoodOrder)
 class FoodOrdersAdmin(admin.ModelAdmin):
     list_display = (
         "entity",
         # "entity_collection_account",
         "amount",
         "payment_method",
-        "branch_table",
+        "table",
         "document_number",
         "order_origin",
         "owner",
@@ -111,19 +111,19 @@ class FoodOrdersAdmin(admin.ModelAdmin):
 
     def amount(self, obj):
         amount = 0.00
-        if models.BranchFoodOrderItem.objects.filter(branch_food_order=obj).exists():
-            order_items = models.BranchFoodOrderItem.objects.filter(branch_food_order=obj).all()
+        if models.FoodOrderItem.objects.filter(food_order=obj).exists():
+            order_items = models.FoodOrderItem.objects.filter(food_order=obj).all()
             for item in order_items:
-                amount = amount + (float(item.branch_food_item.price) * float(item.quantity))
+                amount = amount + (float(item.food_item.price) * float(item.quantity))
         return "{:.2f}".format(amount)
 
-@admin.register(models.BranchFoodOrderItem)
+@admin.register(models.FoodOrderItem)
 class FoodOrderItemsAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "entity",
-        "branch_food_order",
-        "branch_food_item",
+        "food_order",
+        "food_item",
         "quantity",
         "owner",
         "created",
@@ -161,8 +161,8 @@ class BarInventoryOrderPaymentsAdmin(admin.ModelAdmin):
     list_filter = ("reference_number", "owner","created")
 
 
-@admin.register(models.BranchFoodItem)
-class BranchFoodItemAdmin(admin.ModelAdmin):
+@admin.register(models.FoodItem)
+class FoodItemAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "entity",
@@ -196,13 +196,13 @@ class BranchFoodItemAdmin(admin.ModelAdmin):
 #     )
 #     list_filter = ("entity", "owner")
 
-@admin.register(models.BranchRoomBooking)
-class BranchRoomBookingAdmin(admin.ModelAdmin):
+@admin.register(models.RoomBooking)
+class RoomBookingAdmin(admin.ModelAdmin):
     list_display = (
         "entity",
         "checkin_date",
         "checkout_date",
-        "branch_room",
+        "room",
         "owner",
         "created",
     )

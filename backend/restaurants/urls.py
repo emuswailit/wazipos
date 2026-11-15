@@ -30,12 +30,12 @@ urlpatterns = [
 
     path(
         "room/create",
-        views.BranchRoomCreateAPIView.as_view(),
-        name=views.BranchRoomCreateAPIView.name,
+        views.RoomCreateAPIView.as_view(),
+        name=views.RoomCreateAPIView.name,
     ),
     path(
         "room/<uuid:pk>/update",
-        views.BranchRoomUpdateAPIView.as_view(),
-        name=views.BranchRoomUpdateAPIView.name,
+        views.RoomUpdateAPIView.as_view(),
+        name=views.RoomUpdateAPIView.name,
     ),
 ]

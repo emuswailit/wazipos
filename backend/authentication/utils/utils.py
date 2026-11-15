@@ -6,7 +6,7 @@ from payments.utils.payment_utils import create_user_account
 from retailers.models import  CustomerOrders,RetailerIndent
 from transport.models import Tickets, TicketPaymentSettlement, TransferBookings, JourneyBookings
 from wholesalers.models import WholesalerOrders,RetailerOrders
-from restaurants.models import BarInventoryOrder, BranchFoodOrder, AccomodationOrder
+from restaurants.models import BarInventoryOrder, FoodOrder, AccomodationOrder
 from employees.validators import employees_models_validators
 from employees.models import Employees
 from ..models import YearLetters,Users
@@ -3280,8 +3280,8 @@ def generate_document_number(entity, user,document):
             count = BarInventoryOrder.objects.filter(entity=entity).count()
             count = count +1 
     if document == "FOOD":
-        if BranchFoodOrder.objects.filter(entity=entity).exists():
-            count = BranchFoodOrder.objects.filter(entity=entity).count()
+        if FoodOrder.objects.filter(entity=entity).exists():
+            count = FoodOrder.objects.filter(entity=entity).count()
             count = count +1 
     if document == "ACCOMMODATION":
         if AccomodationOrder.objects.filter(entity=entity).exists():

@@ -77,6 +77,8 @@ export interface FoodOrder {
     reservation_at: string | null;
     table: string | null;
     notes: string | null;
+    /** Custom dishes cooked on this order (with the customer's instructions). */
+    custom_recipes?: { id: string; title: string; servings: number; instructions: string }[];
     has_delivery: boolean;
     shipment_status: string | null;
     last_payment: { reference: string; status: string; description: string } | null;
@@ -96,6 +98,8 @@ export interface PlaceFoodOrderInput {
     party_size?: number;
     // DELIVERY
     delivery_option?: string;
+    /** The customer's priced custom dishes to add to this order. */
+    custom_recipes?: string[];
     destination_latitude?: number;
     destination_longitude?: number;
     order_channel?: string;
@@ -159,6 +163,113 @@ export const RECIPE_STATUS_META: Record<RecipeStatus, { label: string; tone: 'in
     CANCELLED: { label: 'Cancelled', tone: 'neutral' },
 };
 
+/* ---------------- bar (drinks: bottles & tots) ---------------- */
+
+export type SaleUnit = 'BOTTLE' | 'TOT';
+
+export interface Drink {
+    id: string;
+    title: string;
+    product: string | null;
+    category: string | null;
+    bar_code: string | null;
+    volume_ml: number;
+    sells_tots: boolean;
+    tot_ml: number | null;
+    tots_per_bottle: number;
+    bottle_price: string;
+    tot_price: string;
+    bottle_cost: string;
+    /** Bottles on hand; decimals = an open bottle. */
+    stock_bottles: string;
+    full_bottles: number;
+    open_bottle_tots: number | null;
+    reorder_level: string;
+    is_low: boolean;
+    is_available: boolean;
+    updated: string | null;
+}
+
+export interface BarTabItem {
+    id: string;
+    drink: string | null;
+    title: string;
+    unit: SaleUnit;
+    quantity: number;
+    unit_price: string;
+    line_total: string;
+    is_void: boolean;
+    created: string | null;
+}
+
+export interface BarTab {
+    id: string;
+    reference: string;
+    status: 'OPEN' | 'CLOSED' | 'CANCELLED';
+    customer_name: string | null;
+    customer_phone: string | null;
+    table: string | null;
+    notes: string | null;
+    total: string;
+    paid: string;
+    due: string;
+    is_paid: boolean;
+    items: BarTabItem[];
+    last_payment: { reference: string; status: string; description: string } | null;
+    created: string | null;
+    draft_id: string;
+}
+
+export type BarLine = { drink: string; unit: SaleUnit; quantity: number };
+
+/* ---------------- supplies (food stock, cleaning, utilities) ---------------- */
+
+export type SupplyCategory = 'FOOD' | 'CLEANING' | 'UTILITY' | 'PACKAGING' | 'OTHER';
+
+export const SUPPLY_CATEGORIES: Record<SupplyCategory, { label: string; icon: string; color: string }> = {
+    FOOD: { label: 'Food & ingredients', icon: 'nutrition-outline', color: '#10b981' },
+    CLEANING: { label: 'Cleaning', icon: 'sparkles-outline', color: '#0ea5e9' },
+    UTILITY: { label: 'Utilities (gas, charcoal…)', icon: 'flame-outline', color: '#f97316' },
+    PACKAGING: { label: 'Packaging & takeaway', icon: 'cube-outline', color: '#8b5cf6' },
+    OTHER: { label: 'Other', icon: 'ellipsis-horizontal-circle-outline', color: '#64748b' },
+};
+
+export interface Supply {
+    id: string;
+    title: string;
+    product: string | null;
+    category: SupplyCategory;
+    category_label: string;
+    unit: string;
+    quantity: string;
+    unit_cost: string;
+    value: string;
+    reorder_level: string;
+    is_low: boolean;
+    supplier_name: string | null;
+    batch: string | null;
+    expiry_date: string | null;
+    bar_code: string | null;
+    updated: string | null;
+}
+
+export interface SupplyMovement {
+    id: string;
+    kind: 'RECEIVE' | 'ISSUE' | 'WASTE' | 'ADJUST';
+    quantity: string;
+    balance: string;
+    reason: string | null;
+    created: string | null;
+}
+
+export interface CatalogueProduct {
+    id: string;
+    title: string;
+    bar_code: string | null;
+    packaging: string | null;
+    units_per_pack: number | null;
+}
+
 const ENDPOINT = '/restaurants/dining';
 const call = (action: string, data: Record<string, any> = {}): Promise<ApiResponse<any>> => client.post(ENDPOINT, { action, ...data });
 
@@ -191,7 +302,7 @@ export default {
     // customers
     getRestaurants: (params: { q?: string; latitude?: number; longitude?: number } = {}) => call('GetRestaurants', params),
     getMenu: (entity: string) => call('GetRestaurantMenu', { entity }),
-    getDeliveryOptions: (data: { entity: string; destination_latitude: number; destination_longitude: number; items: { menu_item: string; quantity: number }[] }) =>
+    getDeliveryOptions: (data: { entity: string; destination_latitude: number; destination_longitude: number; items: { menu_item: string; quantity: number }[]; custom_recipes?: string[] }) =>
         call('GetFoodDeliveryOptions', data),
     placeOrder: (input: PlaceFoodOrderInput) => call('PlaceFoodOrder', input),
     pay: (food_order: string, mobile_money_phone: string) => call('PayFoodOrder', { food_order, mobile_money_phone }),
@@ -223,6 +334,16 @@ export default {
     // custom recipes — restaurant staff
     myIngredients: () => call('GetMyIngredients'),
     saveIngredient: (details: Record<string, any>) => call('SaveIngredient', details),
+    // bar — drinks & tabs
+    drinks: () => call('GetDrinks'),
+    barTabs: (scope: 'open' | 'done' = 'open') => call('GetBarTabs', { scope }),
+    refreshBarPayment: (reference: string) => call('RefreshBarPayment', { reference }),
+    // supplies
+    searchCatalogue: (q: string) => call('SearchCatalogue', { q }),
+    supplies: () => call('GetSupplies'),
+    supplyMovements: (stock: string) => call('GetSupplyMovements', { stock }),
+    /** Any dining write by action name (used by the offline outbox). */
+    write: (action: string, data: Record<string, any>) => call(action, data),
     /** Copy the starter catalogue (~50 common Kenyan ingredients) into your list. */
     importStarterIngredients: () => call('ImportStarterIngredients'),
     recipeRequests: (scope: 'open' | 'done' = 'open') => call('GetRecipeRequests', { scope }),

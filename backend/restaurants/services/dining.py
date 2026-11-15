@@ -121,7 +121,7 @@ def restaurant_menu(entity_id, request=None, staff=False):
     items = rm.MenuItem.objects.filter(entity=entity).select_related("menu").prefetch_related("images").order_by("category", "title")
     if not staff:
         items = items.filter(is_available=True, price__gt=0)
-    tables = rm.BranchTable.objects.filter(entity=entity).order_by("title")
+    tables = rm.Table.objects.filter(entity=entity).order_by("title")
     return [], {
         "restaurant": {"id": str(entity.id), "title": entity.title, "town": entity.town, "road": entity.road, "building": entity.building},
         "items": [menu_item_out(i, request) for i in items],
@@ -172,22 +172,45 @@ def food_delivery_options(data):
     errors, lines = _lines(entity, data.get("items"))
     if errors:
         return errors, [], Decimal("0")
-    kg = _food_kg(lines)
-    return [], delivery_options(entity, entity_point(entity), dest, kg), kg
+    kg = _food_kg(lines) if lines else Decimal("0")
+    # Custom dishes riding on the order weigh too (≈ one portion per serving).
+    for r in _attachable_recipes(entity, data.get("custom_recipes"), data.get("_user")):
+        kg += FOOD_KG_PER_PORTION * r.servings
+    return [], delivery_options(entity, entity_point(entity), dest, kg or FOOD_KG_PER_PORTION), kg
+
+
+def _attachable_recipes(entity, ids, user):
+    """The customer's priced (QUOTED) custom dishes for this restaurant, by id."""
+    ids = [str(i) for i in (ids or []) if i]
+    if not ids or not user:
+        return []
+    return list(rm.CustomRecipe.objects.filter(id__in=ids, entity=entity, customer=user, status="QUOTED", quoted_price__isnull=False))
 
 
 def place_order(data, user):
-    """Returns (errors, order)."""
+    """
+    Returns (errors, order). Optional "custom_recipes": ids of the customer's
+    priced custom dishes at this restaurant — added as lines at the quoted
+    price and marked accepted on this order.
+    """
     from logistics.utils.deliveries import _create_quoted_shipment, entity_point
 
     entity = Entities.objects.filter(id=data.get("entity"), entity_type__in=RESTAURANT_TYPES).first()
     if not entity:
         return ["Restaurant not found"], None
+    draft = str(data.get("draft_id") or "").strip()
+    if draft:
+        done = rm.FoodOrder.objects.filter(entity=entity, owner=user, draft_id=draft).first()
+        if done:
+            return [], done
     service = str(data.get("service_type") or "").upper()
     if service not in SERVICE_LABELS:
         return ["Choose delivery, pickup or dine in"], None
     errors, lines = _lines(entity, data.get("items"))
-    if service != "DINE_IN" and not lines:
+    recipes = _attachable_recipes(entity, data.get("custom_recipes"), user)
+    if data.get("custom_recipes") and len(recipes) != len([i for i in data["custom_recipes"] if i]):
+        errors.append("A custom dish you picked isn't priced yet (or was already ordered)")
+    if service != "DINE_IN" and not lines and not recipes:
         errors.append("Add something from the menu")
     if errors:
         return errors, None
@@ -211,7 +234,7 @@ def place_order(data, user):
 
     chosen, kg, dest = None, Decimal("0"), None
     if service == "DELIVERY":
-        errs, options, kg = food_delivery_options({**data, "entity": str(entity.id)})
+        errs, options, kg = food_delivery_options({**data, "entity": str(entity.id), "_user": user})
         if errs:
             return errs, None
         chosen = next((o for o in options if o["key"] == str(data.get("delivery_option") or "")), None)
@@ -219,11 +242,11 @@ def place_order(data, user):
             return ["That delivery option is no longer available; choose again"], None
         dest = Point(float(data["destination_longitude"]), float(data["destination_latitude"]), srid=4326)
 
-    items_cost = sum((item.price * qty for item, qty in lines), Decimal("0"))
+    items_cost = sum((item.price * qty for item, qty in lines), Decimal("0")) + sum((Decimal(r.quoted_price) for r in recipes), Decimal("0"))
     shipping = chosen["total"] if chosen else Decimal("0")
     staff = getattr(user, "entity_id", None) == entity.id
     with transaction.atomic():
-        order = rm.BranchFoodOrder.objects.create(
+        order = rm.FoodOrder.objects.create(
             entity=entity,
             owner=user,
             customer=None if staff else user,
@@ -246,10 +269,20 @@ def place_order(data, user):
             draft_id=str(data.get("draft_id") or "")[:256] or None,
         )
         for item, qty in lines:
-            rm.BranchFoodOrderItem.objects.create(
-                entity=entity, owner=user, branch_food_order=order, menu_item=item,
+            rm.FoodOrderItem.objects.create(
+                entity=entity, owner=user, food_order=order, menu_item=item,
                 title=item.title, quantity=qty, unit_price=item.price, line_total=_q(item.price * qty),
             )
+        for r in recipes:
+            rm.FoodOrderItem.objects.create(
+                entity=entity, owner=user, food_order=order, title=f"{r.title} (custom, {r.servings} servings)"[:256],
+                quantity=1, unit_price=_q(r.quoted_price), line_total=_q(r.quoted_price),
+            )
+            r.status, r.food_order = "ACCEPTED", order
+            r.save(update_fields=["status", "food_order", "updated"])
+        if recipes:
+            order.notes = ("; ".join([f"CUSTOM {r.title}: {r.instructions}" for r in recipes] + ([order.notes] if order.notes else [])))[:300]
+            order.save(update_fields=["notes", "updated"])
         if chosen:
             _create_quoted_shipment(
                 seller=entity, user=user, chosen=chosen, kg=kg, origin=entity_point(entity), destination=dest,
@@ -260,11 +293,11 @@ def place_order(data, user):
 
 
 def my_orders(user):
-    return rm.BranchFoodOrder.objects.filter(customer=user).select_related("entity").order_by("-created")[:100]
+    return rm.FoodOrder.objects.filter(customer=user).select_related("entity").order_by("-created")[:100]
 
 
 def cancel_my_order(data, user):
-    order = rm.BranchFoodOrder.objects.filter(id=data.get("food_order"), customer=user).first()
+    order = rm.FoodOrder.objects.filter(id=data.get("food_order"), customer=user).first()
     if not order:
         return ["Order not found"], None
     if order.status != "RECEIVED" or order.is_paid == "true":
@@ -278,7 +311,7 @@ def cancel_my_order(data, user):
 
 def amount_due(order):
     paid = sum(
-        (p.amount for p in rm.BranchFoodOrderPayment.objects.filter(branch_food_order=order, status="SUCCESS")),
+        (p.amount for p in rm.FoodOrderPayment.objects.filter(food_order=order, status="SUCCESS")),
         Decimal("0"),
     )
     return max(Decimal("0"), Decimal(order.order_total or 0) - paid)
@@ -297,7 +330,7 @@ def pay_mobile_money(data, user):
     from payments.models import PaymentMethods
     from payments.utils.system_till import push_to_system_till
 
-    order = rm.BranchFoodOrder.objects.filter(id=data.get("food_order")).select_related("entity").first()
+    order = rm.FoodOrder.objects.filter(id=data.get("food_order")).select_related("entity").first()
     if not order or user.id not in (order.customer_id, order.owner_id) and getattr(user, "entity_id", None) != order.entity_id:
         return ["Order not found"], None
     if order.status == "CANCELLED":
@@ -316,8 +349,8 @@ def pay_mobile_money(data, user):
     errors, result, telco = push_to_system_till(reference, math.ceil(due), phone, description=f"Food {order.entity.title}"[:60])
     if errors:
         return errors, None
-    payment = rm.BranchFoodOrderPayment.objects.create(
-        entity=order.entity, owner=user, branch_food_order=order, payment_method=method,
+    payment = rm.FoodOrderPayment.objects.create(
+        entity=order.entity, owner=user, food_order=order, payment_method=method,
         reference_number=reference, psp_reference_number=str(result.get("ref") or "")[:50],
         status="PENDING", description="Waiting for PIN entry.", amount=math.ceil(due), currency="KES", telco_name=(telco or "")[:28],
     )
@@ -329,10 +362,10 @@ def refresh_payment(data, user):
     """Poll the system till for a pending payment. Returns (errors, payment)."""
     from payments.utils.system_till import PENDING_TIMEOUT_MINUTES, fetch_transaction
 
-    payment = rm.BranchFoodOrderPayment.objects.filter(reference_number=data.get("reference")).select_related("branch_food_order").first()
+    payment = rm.FoodOrderPayment.objects.filter(reference_number=data.get("reference")).select_related("food_order").first()
     if not payment:
         return ["Payment not found"], None
-    order = payment.branch_food_order
+    order = payment.food_order
     if user.id not in (order.customer_id, order.owner_id) and getattr(user, "entity_id", None) != order.entity_id:
         return ["Payment not found"], None
     if payment.status == "PENDING":
@@ -344,7 +377,7 @@ def refresh_payment(data, user):
             status = (tx or {}).get("status")
             if status and status != "PENDING":
                 with transaction.atomic():
-                    payment = rm.BranchFoodOrderPayment.objects.select_for_update().get(id=payment.id)
+                    payment = rm.FoodOrderPayment.objects.select_for_update().get(id=payment.id)
                     if payment.status == "PENDING":
                         payment.status = "SUCCESS" if status == "SUCCESS" else "FAILED"
                         payment.description = str(tx.get("description") or payment.description)[:50]
@@ -359,7 +392,7 @@ def record_cash(data, user):
     """Restaurant staff take cash / card at the counter. Returns (errors, order)."""
     from payments.models import PaymentMethods
 
-    order = rm.BranchFoodOrder.objects.filter(id=data.get("food_order"), entity=user.entity).first()
+    order = rm.FoodOrder.objects.filter(id=data.get("food_order"), entity=user.entity).first()
     if not order:
         return ["Order not found"], None
     due = amount_due(order)
@@ -368,8 +401,8 @@ def record_cash(data, user):
     method = PaymentMethods.objects.filter(id=data.get("payment_method")).first() or PaymentMethods.objects.filter(title="CASH").first()
     if not method:
         return ["Pick a payment method"], None
-    rm.BranchFoodOrderPayment.objects.create(
-        entity=order.entity, owner=user, branch_food_order=order, payment_method=method,
+    rm.FoodOrderPayment.objects.create(
+        entity=order.entity, owner=user, food_order=order, payment_method=method,
         reference_number=f"CASH{secrets.token_hex(4).upper()}", status="SUCCESS",
         description=f"{method.title} at the restaurant"[:50], amount=due, currency="KES", is_settled=True,
     )
@@ -427,7 +460,7 @@ def save_table(data, user):
     get = lambda k: str(data.get(k) or "").strip()
     table = None
     if get("id"):
-        table = rm.BranchTable.objects.filter(id=get("id"), entity=user.entity).first()
+        table = rm.Table.objects.filter(id=get("id"), entity=user.entity).first()
         if not table:
             return ["Table not found"], None
     if not get("title"):
@@ -438,7 +471,7 @@ def save_table(data, user):
         seats = 0
     if not 1 <= seats <= 100:
         return ["How many seats? (1–100)"], None
-    table = table or rm.BranchTable(entity=user.entity, owner=user)
+    table = table or rm.Table(entity=user.entity, owner=user)
     table.title = get("title")
     table.seats = seats
     table.description = get("description")[:48] or None
@@ -449,7 +482,7 @@ def save_table(data, user):
 
 
 def restaurant_orders(data, user):
-    qs = rm.BranchFoodOrder.objects.filter(entity=user.entity).select_related("branch_table").order_by("-created")
+    qs = rm.FoodOrder.objects.filter(entity=user.entity).select_related("table").order_by("-created")
     if data.get("scope") == "done":
         return qs.exclude(status__in=OPEN_STATUSES)[:200]
     return qs.filter(status__in=OPEN_STATUSES)[:300]
@@ -457,7 +490,7 @@ def restaurant_orders(data, user):
 
 def update_status(data, user):
     """Restaurant moves an order along. Returns (errors, order)."""
-    order = rm.BranchFoodOrder.objects.filter(id=data.get("food_order"), entity=user.entity).first()
+    order = rm.FoodOrder.objects.filter(id=data.get("food_order"), entity=user.entity).first()
     if not order:
         return ["Order not found"], None
     new = str(data.get("status") or "").upper()
@@ -472,7 +505,7 @@ def update_status(data, user):
     if new == "COMPLETED" and order.service_type == "PICKUP" and order.is_paid != "true":
         return ["Take payment before handing the order over"], None
     if data.get("table") and order.service_type == "DINE_IN":
-        order.branch_table = rm.BranchTable.objects.filter(id=data["table"], entity=user.entity).first()
+        order.table = rm.Table.objects.filter(id=data["table"], entity=user.entity).first()
     now = timezone.now()
     order.status = new
     if new == "READY":
@@ -492,9 +525,9 @@ def update_status(data, user):
 def order_out(order, request=None, for_customer=False):
     from logistics.models import Shipment
 
-    items = rm.BranchFoodOrderItem.objects.filter(branch_food_order=order).select_related("menu_item")
+    items = rm.FoodOrderItem.objects.filter(food_order=order).select_related("menu_item")
     shipment = Shipment.objects.filter(food_order=order).first()
-    last_payment = rm.BranchFoodOrderPayment.objects.filter(branch_food_order=order).order_by("-created").first()
+    last_payment = rm.FoodOrderPayment.objects.filter(food_order=order).order_by("-created").first()
     return {
         "id": str(order.id),
         "reference": order.document_number,
@@ -515,8 +548,12 @@ def order_out(order, request=None, for_customer=False):
         "amount_due": str(amount_due(order)),
         "party_size": order.party_size,
         "reservation_at": order.reservation_at.isoformat() if order.reservation_at else None,
-        "table": order.branch_table.title if order.branch_table_id else None,
+        "table": order.table.title if order.table_id else None,
         "notes": order.notes,
+        "custom_recipes": [
+            {"id": str(r.id), "title": r.title, "servings": r.servings, "instructions": r.instructions}
+            for r in rm.CustomRecipe.objects.filter(food_order=order)
+        ],
         "has_delivery": bool(shipment),
         "shipment_status": shipment.status if shipment else None,
         "last_payment": {

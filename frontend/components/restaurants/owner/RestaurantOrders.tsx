@@ -233,6 +233,12 @@ function OrderSheet({ order, onClose, onChanged, onReload }: { order: FoodOrder 
                     {Number(order.shipping_cost) > 0 ? <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>Delivery {kes(order.shipping_cost)}</Text> : null}
                     <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14.5, marginTop: 4 }}>Total {kes(order.total)}</Text>
                 </View>
+                {(order.custom_recipes ?? []).map((r) => (
+                    <View key={r.id} className="rounded-2xl p-3" style={{ gap: 3, backgroundColor: 'rgba(245,158,11,0.10)' }}>
+                        <Text style={{ color: '#b45309', fontFamily: theme.font.bold, fontSize: 13 }}>Custom: {r.title} × {r.servings}</Text>
+                        <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13, lineHeight: 18 }}>{r.instructions}</Text>
+                    </View>
+                ))}
                 {order.notes ? (
                     <Text style={{ color: '#d97706', fontFamily: theme.font.bold, fontSize: 13 }}>Note: {order.notes}</Text>
                 ) : null}

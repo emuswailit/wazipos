@@ -22,6 +22,13 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
     const [cart, setCart] = useState<Cart>({});
     const [checkout, setCheckout] = useState<ServiceType | null>(null);
     const [recipeOpen, setRecipeOpen] = useState(false);
+    const [quotedCount, setQuotedCount] = useState(0);
+    useEffect(() => {
+        diningApi
+            .myRecipes()
+            .then((res: any) => setQuotedCount(isOk(res) ? (res.data.recipes ?? []).filter((r: any) => r.restaurant === restaurant.id && r.status === 'QUOTED').length : 0))
+            .catch(() => setQuotedCount(0));
+    }, [restaurant.id, checkout]);
 
     useEffect(() => {
         let alive = true;
@@ -77,6 +84,16 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
                         <SheetButton label="Create your own" icon="color-wand-outline" variant="secondary" onPress={() => setRecipeOpen(true)} />
                     </View>
                 </View>
+
+                {quotedCount ? (
+                    <Pressable onPress={() => setCheckout('PICKUP')} className="flex-row items-center rounded-2xl p-3" style={{ gap: 10, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.5)' }}>
+                        <Ionicons name="color-wand" size={18} color="#d97706" />
+                        <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>
+                            {quotedCount} custom dish{quotedCount === 1 ? ' is' : 'es are'} priced — add {quotedCount === 1 ? 'it' : 'them'} to an order
+                        </Text>
+                        <Ionicons name="chevron-forward" size={16} color="#d97706" />
+                    </Pressable>
+                ) : null}
 
                 {sections.length > 1 ? (
                     <FilterChips<string>

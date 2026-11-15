@@ -12,11 +12,12 @@ import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { uploadPendingCustomerOrders } from '@/services/customerOrderUploader';
 import { onPendingOrdersChanged } from '@/services/pendingOrdersSignal';
 import { getPendingWholesaleOrders, uploadPendingWholesaleOrders } from '@/services/wholesaleOrderUploader';
+import { flushDiningOutbox, getDiningOutbox } from '@/services/diningOutbox';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-type Kind = 'customer' | 'wholesale' | 'all';
+type Kind = 'customer' | 'wholesale' | 'dining' | 'all';
 
 export default function PendingSyncBanner({ kind = 'all' }: { kind?: Kind }) {
     const { theme } = useAuth();
@@ -28,12 +29,17 @@ export default function PendingSyncBanner({ kind = 'all' }: { kind?: Kind }) {
     const refresh = useCallback(async () => {
         let n = 0;
         let err: string | null = null;
-        if (kind !== 'wholesale') {
+        if (kind === 'dining' || kind === 'all') {
+            const pending = await getDiningOutbox();
+            n += pending.length;
+            err = err ?? (pending.find((o) => o.error)?.error ?? null);
+        }
+        if (kind === 'customer' || kind === 'all') {
             const pending = await storageService.getPendingOrders().catch(() => [] as any[]);
             n += pending.length;
             err = err ?? (pending.find((o: any) => o?.sync_error)?.sync_error ?? null);
         }
-        if (kind !== 'customer') {
+        if (kind === 'wholesale' || kind === 'all') {
             const pending = await getPendingWholesaleOrders();
             n += pending.length;
             err = err ?? (pending.find((o) => o.sync_error)?.sync_error ?? null);
@@ -50,8 +56,9 @@ export default function PendingSyncBanner({ kind = 'all' }: { kind?: Kind }) {
     const syncNow = async () => {
         setSyncing(true);
         try {
-            if (kind !== 'wholesale') await uploadPendingCustomerOrders();
-            if (kind !== 'customer') await uploadPendingWholesaleOrders();
+            if (kind === 'customer' || kind === 'all') await uploadPendingCustomerOrders();
+            if (kind === 'wholesale' || kind === 'all') await uploadPendingWholesaleOrders();
+            if (kind === 'dining' || kind === 'all') await flushDiningOutbox();
         } finally {
             setSyncing(false);
             void refresh();
@@ -70,14 +77,16 @@ export default function PendingSyncBanner({ kind = 'all' }: { kind?: Kind }) {
             <Ionicons name={isOnline ? 'cloud-upload' : 'cloud-offline'} size={26} color={tone} />
             <View className="flex-1 min-w-0" style={{ gap: 2 }}>
                 <Text style={{ color: tone, fontFamily: theme.font.bold, fontSize: 14.5 }}>
-                    {count} order{count === 1 ? '' : 's'} waiting to sync
+                    {count} {kind === 'dining' ? 'change' : 'order'}{count === 1 ? '' : 's'} waiting to sync
                 </Text>
                 <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12.5 }}>
                     {isOnline
                         ? firstError
                             ? `The server refused one: ${firstError}`
                             : 'Saved while offline — sending them to the server now.'
-                        : "You're offline. These cash orders are saved on this device and will sync automatically when the connection is back. Don't clear the app's data."}
+                        : kind === 'dining'
+                            ? "You're offline. Sales and stock changes are saved on this device and sync automatically when the connection is back."
+                            : "You're offline. These cash orders are saved on this device and will sync automatically when the connection is back. Don't clear the app's data."}
                 </Text>
             </View>
             {isOnline ? (

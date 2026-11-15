@@ -6,7 +6,7 @@
 #             typed), instructions, servings, dine in / pickup / delivery
 #   kitchen   QuoteCustomRecipe    price + time to prepare (or DeclineCustomRecipe)
 #   customer  AcceptRecipeQuote    (delivery: picks a priced option) -> becomes a
-#             BranchFoodOrder on the restaurant's board, paid like any order
+#             FoodOrder on the restaurant's board, paid like any order
 #
 # Restaurants keep their ingredient list (SaveIngredient); its prices are an
 # indicative estimate for the customer — the quote is what counts.
@@ -267,7 +267,7 @@ def accept_quote(data, user):
     price = Decimal(r.quoted_price)
     notes = f"CUSTOM RECIPE: {r.instructions}"[:300]
     with transaction.atomic():
-        order = rm.BranchFoodOrder.objects.create(
+        order = rm.FoodOrder.objects.create(
             entity=r.entity, owner=user, customer=user,
             customer_name=r.customer_name, customer_phone=r.customer_phone,
             document_number=f"FC{timezone.now():%y%m%d}{secrets.token_hex(3).upper()}",
@@ -277,8 +277,8 @@ def accept_quote(data, user):
             order_items_cost=_q(price), shipping_cost=_q(shipping), order_total=_q(price + shipping),
             origin_point=entity_point(r.entity), destination_point=r.destination_point,
         )
-        rm.BranchFoodOrderItem.objects.create(
-            entity=r.entity, owner=user, branch_food_order=order, title=f"{r.title} (custom, {r.servings} servings)"[:256],
+        rm.FoodOrderItem.objects.create(
+            entity=r.entity, owner=user, food_order=order, title=f"{r.title} (custom, {r.servings} servings)"[:256],
             quantity=1, unit_price=_q(price), line_total=_q(price),
         )
         if chosen:

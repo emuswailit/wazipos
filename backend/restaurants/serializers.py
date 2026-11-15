@@ -66,12 +66,12 @@ class MenuItemsSerializer(serializers.ModelSerializer):
         else:
             return ""
         
-class BranchFoodItemSerializer(serializers.ModelSerializer):
+class FoodItemSerializer(serializers.ModelSerializer):
     title = serializers.SerializerMethodField(read_only=True)
     menu_item_title = serializers.SerializerMethodField(read_only=True)
     images = serializers.SerializerMethodField(read_only=True)
     class Meta:
-        model = models.BranchFoodItem
+        model = models.FoodItem
         fields = (
             "id",
             "entity",
@@ -106,7 +106,7 @@ class TablesSerializer(serializers.ModelSerializer):
     attendant_title = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
-        model = models.BranchTable
+        model = models.Table
         fields = (
             "id",
             "entity",
@@ -133,27 +133,27 @@ class TablesSerializer(serializers.ModelSerializer):
         else:
             return " "
         
-class BranchRoomImageSerializer(serializers.ModelSerializer):
+class RoomImageSerializer(serializers.ModelSerializer):
     class Meta:
-        model = models.BranchRoomImages
+        model = models.RoomImages
         fields = (
             "id",
             "image",
             "thumbnail",
             "owner",
-            "branch_room",
+            "room",
             "entity",
             "created",
             "updated",
         )
         read_only_fields = ("menu_item", "thumbnail", "owner", "entity")
 
-class BranchRoomSerializer(serializers.ModelSerializer):
+class RoomSerializer(serializers.ModelSerializer):
     branch_title = serializers.SerializerMethodField(read_only=True)
     is_available = serializers.SerializerMethodField(read_only=True)
-    room_images = BranchRoomImageSerializer(many=True, read_only=True)
+    room_images = RoomImageSerializer(many=True, read_only=True)
     class Meta:
-        model = models.BranchRoom
+        model = models.Room
         fields = (
             "id",
             "entity",
@@ -188,7 +188,7 @@ class BranchRoomSerializer(serializers.ModelSerializer):
         else:
             return ""
     def get_is_available(self, obj):
-        return models.BranchRoomBooking.objects.filter(branch_room=obj, checkout_date__lte=datetime.today() ).count()<1
+        return models.RoomBooking.objects.filter(room=obj, checkout_date__lte=datetime.today() ).count()<1
 
 
 class MenusSerializer(serializers.ModelSerializer):
@@ -251,14 +251,14 @@ class FoodOrderSerializer(serializers.ModelSerializer):
  
 
     class Meta:
-        model = models.BranchFoodOrder
+        model = models.FoodOrder
         fields = (
             "id",
             "entity",
             "entity_title",
             "customer_name",
             "customer_phone",
-            "branch_table",
+            "table",
             "branch",
             "payment_method",
             "order_total_amount",
@@ -292,23 +292,23 @@ class FoodOrderSerializer(serializers.ModelSerializer):
 
     def get_items(self, obj):
         items = []
-        if models.BranchFoodOrderItem.objects.filter(branch_food_order=obj).exists():
-            items = models.BranchFoodOrderItem.objects.filter(branch_food_order=obj).all()
+        if models.FoodOrderItem.objects.filter(food_order=obj).exists():
+            items = models.FoodOrderItem.objects.filter(food_order=obj).all()
         return FoodOrderItemsSerializer(items, context=self.context, many=True).data
 
     def get_order_total_amount(self, obj):
         total_amount = 0.00
-        if models.BranchFoodOrderItem.objects.filter(branch_food_order=obj).exists():
-            items = models.BranchFoodOrderItem.objects.filter(branch_food_order=obj).all()
+        if models.FoodOrderItem.objects.filter(food_order=obj).exists():
+            items = models.FoodOrderItem.objects.filter(food_order=obj).all()
             for item in items:
                 total_amount = total_amount + (
-                    float(item.quantity) * float(item.branch_food_item.price)
+                    float(item.quantity) * float(item.food_item.price)
                 )
         return float(total_amount)
 
     def get_table_title(self, obj):
-        if obj.branch_table:
-            return obj.branch_table.title
+        if obj.table:
+            return obj.table.title
         else:
             return ""
         
@@ -340,56 +340,56 @@ class FoodOrderSerializer(serializers.ModelSerializer):
         return f"{obj.payment_method.title}"
 
     def get_psp_reference_number(self, obj):
-        if models.BranchFoodOrderPayment.objects.filter(
-            branch_food_order=obj
+        if models.FoodOrderPayment.objects.filter(
+            food_order=obj
         ).exists():
-            payment = models.BranchFoodOrderPayment.objects.filter(
-                branch_food_order=obj
+            payment = models.FoodOrderPayment.objects.filter(
+                food_order=obj
             ).first()
             return payment.psp_reference_number
         else:
             return ""
     def get_payment_status(self, obj):
-        if models.BranchFoodOrderPayment.objects.filter(
-            branch_food_order=obj,status="SUCCESS"
+        if models.FoodOrderPayment.objects.filter(
+            food_order=obj,status="SUCCESS"
         ).exists():
-            payment = models.BranchFoodOrderPayment.objects.filter(
-                branch_food_order=obj,status="SUCCESS"
+            payment = models.FoodOrderPayment.objects.filter(
+                food_order=obj,status="SUCCESS"
             ).first()
             return payment.status
-        elif models.BranchFoodOrderPayment.objects.filter(
-            branch_food_order=obj,status="FAILED"
+        elif models.FoodOrderPayment.objects.filter(
+            food_order=obj,status="FAILED"
         ).exists():
-                payment = models.BranchFoodOrderPayment.objects.filter(
-                branch_food_order=obj,status="FAILED"
+                payment = models.FoodOrderPayment.objects.filter(
+                food_order=obj,status="FAILED"
             ).first()
                 return payment.status
-        elif models.BranchFoodOrderPayment.objects.filter(
-            branch_food_order=obj,status="PENDING"
+        elif models.FoodOrderPayment.objects.filter(
+            food_order=obj,status="PENDING"
         ).exists():
-                payment = models.BranchFoodOrderPayment.objects.filter(
-                branch_food_order=obj,status="PENDING"
+                payment = models.FoodOrderPayment.objects.filter(
+                food_order=obj,status="PENDING"
             ).first()
                 return payment.status
         else:
             return "UNAVAILABLE"
             
     def get_payment_description(self, obj):
-        if models.BranchFoodOrderPayment.objects.filter(
-            branch_food_order=obj
+        if models.FoodOrderPayment.objects.filter(
+            food_order=obj
         ).exists():
-            payment = models.BranchFoodOrderPayment.objects.filter(
-                branch_food_order=obj
+            payment = models.FoodOrderPayment.objects.filter(
+                food_order=obj
             ).first()
             return payment.desc
         else:
             return ""
     def get_provider_reference_number(self, obj):
-        if models.BranchFoodOrderPayment.objects.filter(
-            branch_food_order=obj
+        if models.FoodOrderPayment.objects.filter(
+            food_order=obj
         ).exists():
-            payment = models.BranchFoodOrderPayment.objects.filter(
-                branch_food_order=obj
+            payment = models.FoodOrderPayment.objects.filter(
+                food_order=obj
             ).first()
             return payment.provider_reference_num
         else:
@@ -402,12 +402,12 @@ class FoodOrderItemsSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
-        model = models.BranchFoodOrderItem
+        model = models.FoodOrderItem
         fields = (
             "id",
             "entity",
-            "branch_food_order",
-            "branch_food_item",
+            "food_order",
+            "food_item",
             "item_total_amount",
             "price",
             "title",
@@ -421,21 +421,21 @@ class FoodOrderItemsSerializer(serializers.ModelSerializer):
 
     def get_item_total_amount(self, obj):
         item_total_amount = 0.00
-        if obj.quantity and obj.branch_food_item:
-            item_total_amount = float(obj.quantity) * float(obj.branch_food_item.price)
+        if obj.quantity and obj.food_item:
+            item_total_amount = float(obj.quantity) * float(obj.food_item.price)
         return float(item_total_amount)
 
     def get_title(self, obj):
-        return obj.branch_food_item.menu_item.title
+        return obj.food_item.menu_item.title
 
     def get_price(self, obj):
-        return obj.branch_food_item.price
+        return obj.food_item.price
         
     def get_images(self, obj):
         images =[]
-        if obj.branch_food_item.menu_item:
-            if models.MenuItemImages.objects.filter(menu_item=obj.branch_food_item.menu_item).exists():
-                images = models.MenuItemImages.objects.filter(menu_item=obj.branch_food_item.menu_item).all()
+        if obj.food_item.menu_item:
+            if models.MenuItemImages.objects.filter(menu_item=obj.food_item.menu_item).exists():
+                images = models.MenuItemImages.objects.filter(menu_item=obj.food_item.menu_item).all()
         return  MenuItemImageSerializer(
                 images, context=self.context,many=True,
             ).data
@@ -539,7 +539,7 @@ class BarInventoryOrderSerializer(serializers.ModelSerializer):
             "entity",
             "customer_name",
             "customer_phone",
-            "branch_table",
+            "table",
             "branch",
             "order_origin",
             "shipping_cost",
@@ -594,8 +594,8 @@ class BarInventoryOrderSerializer(serializers.ModelSerializer):
         return float(total_amount)
 
     def get_table_title(self, obj):
-        if obj.branch_table:
-            return obj.branch_table.title
+        if obj.table:
+            return obj.table.title
         else:
             return ""
 
@@ -671,11 +671,11 @@ class BarInventoryOrderItemsSerializer(serializers.ModelSerializer):
 
 
 
-class BranchRoomBookingSerializer(serializers.ModelSerializer):
+class RoomBookingSerializer(serializers.ModelSerializer):
     branch_title = serializers.SerializerMethodField(read_only=True)
     entity_title = serializers.SerializerMethodField(read_only=True)
     class Meta:
-        model = models.BranchRoomBooking
+        model = models.RoomBooking
         fields = (
             "id",
             "entity",
@@ -698,10 +698,10 @@ class BranchRoomBookingSerializer(serializers.ModelSerializer):
         return obj.branch.entity.title
     
 
-class BranchRoomBookingSerializer(serializers.ModelSerializer):
+class RoomBookingSerializer(serializers.ModelSerializer):
     branch_title = serializers.SerializerMethodField(read_only=True)
     class Meta:
-        model = models.BranchRoomBooking
+        model = models.RoomBooking
         fields = (
             "id",
             "entity",
@@ -817,14 +817,14 @@ class BarInventoryOrderPaymentSerializer(serializers.ModelSerializer):
 #         )
 #         read_only_fields = ("owner", "created", "updated", "entity", "id") 
     
-class BranchFoodOrderPaymentsSerializer(serializers.ModelSerializer):
+class FoodOrderPaymentsSerializer(serializers.ModelSerializer):
     payment_method_title = serializers.SerializerMethodField(read_only=True)
     class Meta:
-        model = models.BranchFoodOrderPayment
+        model = models.FoodOrderPayment
         fields = (
             "id",
             "entity",
-            "branch_food_order",
+            "food_order",
             "entity_collection_account",
             "payment_method_title",
             "reference_number",

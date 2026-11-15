@@ -172,7 +172,7 @@ class MenuItem(EntityRelatedModel):
         return f"{self.title}"
 
 
-class BranchFoodItem(EntityRelatedModel):
+class FoodItem(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Food Items"
     menu_item = models.ForeignKey(
@@ -208,7 +208,7 @@ class BranchFoodItem(EntityRelatedModel):
         return f"{self.menu_item.title} - {self.price}"
 
 
-class BranchTable(EntityRelatedModel):
+class Table(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Tables"
     title = models.CharField(max_length=256, null=True, blank=True)
@@ -244,7 +244,7 @@ class BranchTable(EntityRelatedModel):
     def save(self, *args, **kwargs):
         if self.title:
             self.title = self.title.upper()
-        super(BranchTable, self).save(*args, **kwargs)
+        super(Table, self).save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.title
@@ -252,7 +252,7 @@ class BranchTable(EntityRelatedModel):
 
 class BarInventory(EntityRelatedModel):
     class Meta:
-        verbose_name_plural = "Branch Drinks"
+        verbose_name_plural = "Bar Drinks"
 
     category = models.ForeignKey(
         DrinksCategory,
@@ -286,8 +286,22 @@ class BarInventory(EntityRelatedModel):
     )
     manufacture_date = models.DateField(default=None, null=True, blank=True)
     expiry_date = models.DateField(default=None, null=True, blank=True)
-    pack_quantity = models.IntegerField()
-    unit_quantity = models.IntegerField()
+    pack_quantity = models.IntegerField(default=0)
+    unit_quantity = models.IntegerField(default=0)
+    # Bar service: stock is counted in bottles (decimals = an open bottle).
+    # A bottle sells whole at bottle_price, and spirits can also sell by the
+    # tot (tot_ml from a volume_ml bottle) at tot_price.
+    title = models.CharField(max_length=256, null=True, blank=True)
+    volume_ml = models.PositiveIntegerField(default=750)
+    sells_tots = models.BooleanField(default=False)
+    tot_ml = models.PositiveIntegerField(null=True, blank=True)
+    bottle_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tot_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    bottle_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    stock_bottles = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    reorder_level = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_available = models.BooleanField(default=True)
+    draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
     pack_buying_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     pack_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     unit_buying_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -304,18 +318,24 @@ class BarInventory(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        self.title = self.product.title.upper()
-        if self.product.bar_code:
-            self.bar_code=self.product.bar_code
-        self.unit_buying_price = float(self.pack_buying_price)/float(self.product.units_per_pack)
-        self.unit_selling_price = float(self.pack_selling_price)/float(self.product.units_per_pack)
-        self.unit_quantity = float(self.pack_quantity) * float(self.product.units_per_pack)
+        if self.product_id:
+            self.title = self.title or self.product.title.upper()
+            if self.product.bar_code and not self.bar_code:
+                self.bar_code = self.product.bar_code
+            per_pack = float(getattr(self.product, "units_per_pack", 0) or 0)
+            if per_pack:
+                self.unit_buying_price = float(self.pack_buying_price) / per_pack
+                self.unit_selling_price = float(self.pack_selling_price) / per_pack
+                self.unit_quantity = float(self.pack_quantity) * per_pack
+        if self.title:
+            self.title = self.title.upper()
         super(BarInventory, self).save(*args, **kwargs)
 
-
+    def tots_per_bottle(self):
+        return (self.volume_ml // self.tot_ml) if self.sells_tots and self.tot_ml else 0
 
     def __str__(self) -> str:
-        return self.product.title
+        return self.title or (self.product.title if self.product_id else "Drink")
 
 
 class OrderOriginOptions(models.TextChoices):
@@ -360,8 +380,8 @@ class BarInventoryOrder(EntityRelatedModel):
         max_length=20,
         default="PICKUP"
     )
-    branch_table = models.ForeignKey(
-        BranchTable,
+    table = models.ForeignKey(
+        Table,
         related_name="bar_order_table",
         on_delete=models.CASCADE,
         null=True,
@@ -376,7 +396,14 @@ class BarInventoryOrder(EntityRelatedModel):
     )
 
     document_number = models.CharField(max_length=56)
-    draft_id = models.CharField(max_length=56)
+    draft_id = models.CharField(max_length=120, db_index=True)
+    # Bar service: an OPEN tab collects rounds until it is closed and paid.
+    status = models.CharField(max_length=20, default="OPEN")  # OPEN / CLOSED / CANCELLED
+    customer = models.ForeignKey(Users, related_name="bar_tabs", on_delete=models.SET_NULL, null=True, blank=True)
+    order_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    notes = models.CharField(max_length=300, null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
 
     description = models.CharField(max_length=48, null=True, blank=True)
     is_paid = models.CharField(
@@ -419,6 +446,13 @@ class BarInventoryOrderItem(EntityRelatedModel):
         blank=True,
     )
     quantity = models.IntegerField()
+    # BOTTLE or TOT; bottles_used is what left the stock (tots = a fraction of a bottle).
+    sale_unit = models.CharField(max_length=10, default="BOTTLE")
+    title = models.CharField(max_length=256, null=True, blank=True)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    bottles_used = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    is_void = models.BooleanField(default=False)
     owner = models.ForeignKey(
         Users,
         related_name="order_item_creator",
@@ -463,7 +497,7 @@ class FoodOrderStatusOptions(models.TextChoices):
     PICKED = "PICKED", _("PICKED")
     PROCESSING = "PROCESSING", _("PROCESSING")
     RECEIVED = "RECEIVED", _("RECEIVED")
-class BranchFoodOrder(EntityRelatedModel):
+class FoodOrder(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Food Orders"
     customer_name = models.CharField(max_length=56, null=True, blank=True)
@@ -513,8 +547,8 @@ class BranchFoodOrder(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    branch_table = models.ForeignKey(
-        BranchTable,
+    table = models.ForeignKey(
+        Table,
         related_name="food_order_branch_table",
         on_delete=models.CASCADE,
         null=True,
@@ -594,7 +628,7 @@ class BranchFoodOrder(EntityRelatedModel):
         if self.customer:
             self.customer_name = f"{self.customer.first_name.upper()} {self.customer.last_name.upper()}"
             self.customer_phone = self.customer.phone or self.customer_phone
-        super(BranchFoodOrder, self).save(*args, **kwargs)
+        super(FoodOrder, self).save(*args, **kwargs)
     def __str__(self) -> str:
         return f"{self.document_number}"
 
@@ -604,18 +638,18 @@ class BranchFoodOrder(EntityRelatedModel):
             "entity",
         )
 
-class BranchFoodOrderItem(EntityRelatedModel):
+class FoodOrderItem(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Food Order Items"
-    branch_food_order = models.ForeignKey(
-        BranchFoodOrder,
+    food_order = models.ForeignKey(
+        FoodOrder,
         related_name="branch_food_order_items_food_order",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
-    branch_food_item = models.ForeignKey(
-        BranchFoodItem,
+    food_item = models.ForeignKey(
+        FoodItem,
         related_name="branch_food_order_item_menu_item",
         on_delete=models.CASCADE,
         null=True,
@@ -640,9 +674,9 @@ class BranchFoodOrderItem(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
 
     def price(self):
-        if self.menu_item_id or not self.branch_food_item_id:
+        if self.menu_item_id or not self.food_item_id:
             return self.unit_price
-        return self.branch_food_item.price
+        return self.food_item.price
 
 
 
@@ -728,7 +762,7 @@ class BarInventoryOrderPayment(EntityRelatedModel):
 #     updated = models.DateTimeField(auto_now=True)
 
 
-class BranchFoodOrderPayment(EntityRelatedModel):
+class FoodOrderPayment(EntityRelatedModel):
     # entity_collection_account = models.ForeignKey(
     #     EntityPSPCollectionAccount,
     #     related_name="food_order_payment_entity_collection_account",
@@ -736,8 +770,8 @@ class BranchFoodOrderPayment(EntityRelatedModel):
     #     null=True,
     #     blank=True,
     # )
-    branch_food_order = models.ForeignKey(
-        BranchFoodOrder,
+    food_order = models.ForeignKey(
+        FoodOrder,
         blank=True,
         on_delete=models.CASCADE,null=True
     )
@@ -784,7 +818,7 @@ class BranchFoodOrderPayment(EntityRelatedModel):
 
 # class FoodOrderPaymentSettlement(EntityRelatedModel):
 #     branch_collection_account=models.ForeignKey(BranchCollectionAccount, related_name="settled_food_order_branch_collection_account",on_delete=models.CASCADE,null=True,blank=True)
-#     branch_food_order_payment=models.ForeignKey(BranchFoodOrderPayment, related_name="settled_accommodation_order",on_delete=models.CASCADE,null=True,blank=True)
+#     branch_food_order_payment=models.ForeignKey(FoodOrderPayment, related_name="settled_accommodation_order",on_delete=models.CASCADE,null=True,blank=True)
 #     reference_number = models.CharField(
 #         max_length=56,
 #     )
@@ -810,11 +844,11 @@ class BranchFoodOrderPayment(EntityRelatedModel):
 #     updated = models.DateTimeField(auto_now=True)
 
 
-class BranchRoomImages(EntityRelatedModel):
+class RoomImages(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Room Images"
-    branch_room = models.ForeignKey(
-        "restaurants.BranchRoom",
+    room = models.ForeignKey(
+        "restaurants.Room",
         related_name="branch_room_image_branch_room",
         on_delete=models.CASCADE,
         null=True,
@@ -842,7 +876,7 @@ class BranchRoomImages(EntityRelatedModel):
         return f"{self.owner.first_name}'s photos"
 
 
-class BranchRoom(EntityRelatedModel):
+class Room(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Accommodation Rooms"
     branch = models.ForeignKey(
@@ -879,7 +913,7 @@ class BranchRoom(EntityRelatedModel):
             MinValueValidator(0)
         ])
     
-    room_images = models.ManyToManyField(BranchRoomImages, related_name="room_images", blank=True)
+    room_images = models.ManyToManyField(RoomImages, related_name="room_images", blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     owner = models.ForeignKey(
         Users,
@@ -895,21 +929,21 @@ class BranchRoom(EntityRelatedModel):
     def save(self, *args, **kwargs):
         if self.title:
             self.title = self.title.upper()
-        super(BranchRoom, self).save(*args, **kwargs)
+        super(Room, self).save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.title} - {self.branch}"
     
 
-class BranchRoomRating(EntityRelatedModel):
+class RoomRating(EntityRelatedModel):
     class Meta:
         verbose_name_plural = "Room Ratings"
         unique_together = (
-            "branch_room",
+            "room",
             "owner",
         )
-    branch_room = models.ForeignKey(
-        BranchRoom,
+    room = models.ForeignKey(
+        Room,
         related_name="rating_branch_room",
         on_delete=models.CASCADE,
         null=True,
@@ -943,7 +977,7 @@ class GenderChoices(models.TextChoices):
     Male = "Male", _("Male")
 
 
-class BranchGuest(EntityRelatedModel):
+class Guest(EntityRelatedModel):
     first_name = models.CharField(max_length=256, null=True, blank=True)
     last_name = models.CharField(max_length=256, null=True, blank=True)
     phone = models.CharField(max_length=56, null=True, blank=True)
@@ -995,7 +1029,7 @@ class BranchGuest(EntityRelatedModel):
         return f"{self.first_name} {self.last_name} - {self.gender}"
 
 
-class BranchRoomBooking(EntityRelatedModel):
+class RoomBooking(EntityRelatedModel):
     branch= models.ForeignKey(
         EntityBranches,
         related_name="room_booking_owner",
@@ -1003,7 +1037,7 @@ class BranchRoomBooking(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    branch_guest=models.ManyToManyField(BranchGuest)
+    branch_guest=models.ManyToManyField(Guest)
     checkin_date =models.DateField()
     checkout_date =models.DateField()
     owner = models.ForeignKey(
@@ -1013,8 +1047,8 @@ class BranchRoomBooking(EntityRelatedModel):
         null=True,
         blank=True,
     )
-    branch_room = models.ForeignKey(
-        BranchRoom,
+    room = models.ForeignKey(
+        Room,
         related_name="room_booking_owner",
         on_delete=models.CASCADE,
         null=True,
@@ -1040,7 +1074,7 @@ class AccomodationOrder(EntityRelatedModel):
     #     blank=True,
     # )
     document_number = models.CharField(max_length=50, default="")
-    room_bookings = models.ManyToManyField(BranchRoomBooking)
+    room_bookings = models.ManyToManyField(RoomBooking)
     payment_method = models.ForeignKey(
         "payments.PaymentMethods",
         related_name="accommodation_order_payment_method",
@@ -1180,7 +1214,7 @@ class CustomRecipe(EntityRelatedModel):
     """
     A customer's own recipe for a restaurant to prepare: ingredients, short
     instructions, servings and how they'll eat it (dine in / pickup / delivery).
-    The restaurant quotes; on acceptance it becomes a BranchFoodOrder.
+    The restaurant quotes; on acceptance it becomes a FoodOrder.
     entity = the restaurant.
     """
 
@@ -1200,8 +1234,9 @@ class CustomRecipe(EntityRelatedModel):
     ready_in_minutes = models.PositiveIntegerField(null=True, blank=True)
     restaurant_note = models.CharField(max_length=300, null=True, blank=True)
     quoted_at = models.DateTimeField(null=True, blank=True)
-    food_order = models.OneToOneField(
-        BranchFoodOrder, related_name="custom_recipe", on_delete=models.SET_NULL, null=True, blank=True,
+    # The order it was cooked on (one order can carry several custom dishes).
+    food_order = models.ForeignKey(
+        FoodOrder, related_name="custom_recipes", on_delete=models.SET_NULL, null=True, blank=True,
     )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -1226,3 +1261,91 @@ class CustomRecipeIngredient(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.quantity or self.portions})"
+
+
+
+class BarStockMovement(EntityRelatedModel):
+    """Every change to a drink's stock, in bottles (+ in, - out)."""
+
+    class Kind(models.TextChoices):
+        RECEIVE = "RECEIVE", _("Received")
+        SALE = "SALE", _("Sold")
+        VOID = "VOID", _("Returned from a voided sale")
+        ADJUST = "ADJUST", _("Stock count")
+        WASTE = "WASTE", _("Spilled / broken")
+
+    drink = models.ForeignKey(BarInventory, related_name="movements", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    bottles = models.DecimalField(max_digits=12, decimal_places=4)
+    balance = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reason = models.CharField(max_length=200, null=True, blank=True)
+    order = models.ForeignKey(BarInventoryOrder, related_name="stock_movements", on_delete=models.SET_NULL, null=True, blank=True)
+    draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Bar stock movements"
+        ordering = ["-created"]
+
+
+class SupplyCategory(models.TextChoices):
+    FOOD = "FOOD", _("Food & ingredients")
+    CLEANING = "CLEANING", _("Cleaning materials")
+    UTILITY = "UTILITY", _("Utilities & consumables")
+    PACKAGING = "PACKAGING", _("Packaging & takeaway")
+    OTHER = "OTHER", _("Other")
+
+
+class RestaurantStock(EntityRelatedModel):
+    """
+    A restaurant's own goods (food stock, cleaning materials, gas, packaging…),
+    received from the product catalogue like a retailer receipt, and issued as
+    they're used. entity = the restaurant.
+    """
+
+    product = models.ForeignKey(Products, related_name="restaurant_stock", on_delete=models.SET_NULL, null=True, blank=True)
+    title = models.CharField(max_length=256)
+    category = models.CharField(max_length=20, choices=SupplyCategory.choices, default=SupplyCategory.FOOD)
+    unit = models.CharField(max_length=32, default="unit")  # kg, litre, piece, packet…
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=0)  # on hand
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reorder_level = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    supplier = models.ForeignKey(Entities, related_name="restaurant_supplies", on_delete=models.SET_NULL, null=True, blank=True)
+    supplier_name = models.CharField(max_length=120, null=True, blank=True)
+    batch = models.CharField(max_length=64, null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    bar_code = models.CharField(max_length=64, null=True, blank=True)
+    draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Restaurant stock"
+        ordering = ["category", "title"]
+
+    def __str__(self):
+        return f"{self.title} ({self.quantity} {self.unit})"
+
+
+class RestaurantStockMovement(EntityRelatedModel):
+    """Received (+), used / issued (-), wasted (-) or counted (set) supplies."""
+
+    class Kind(models.TextChoices):
+        RECEIVE = "RECEIVE", _("Received")
+        ISSUE = "ISSUE", _("Used / issued")
+        WASTE = "WASTE", _("Spoilt / wasted")
+        ADJUST = "ADJUST", _("Stock count")
+
+    stock = models.ForeignKey(RestaurantStock, related_name="movements", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3)  # signed change
+    balance = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reason = models.CharField(max_length=200, null=True, blank=True)
+    draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Restaurant stock movements"
+        ordering = ["-created"]

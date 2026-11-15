@@ -153,68 +153,68 @@ def restaurantsAPIView(request):
         else:
             return custom_errors_response(1, "No branch menu items retrieved", [])
     elif request.data["action"] == "CreateBranchFoodItem":
-        errors, branch_food_item = restaurant_utils.create_branch_food_item(request.data, request.user)
-        if branch_food_item:
-            serializer = serializers.BranchFoodItemSerializer(
-                branch_food_item, many=False, context={"request": request}
+        errors, food_item = restaurant_utils.create_branch_food_item(request.data, request.user)
+        if food_item:
+            serializer = serializers.FoodItemSerializer(
+                food_item, many=False, context={"request": request}
             )
             return custom_success_message(
-                0, "Branch food item created successfully", serializer.data, "branch_food_item"
+                0, "Branch food item created successfully", serializer.data, "food_item"
             )
         else:
             return custom_errors_response(1, "Branch food item not created",errors)
     elif request.data["action"] == "UpdateBranchFoodItem":
-        errors, branch_food_item = restaurant_utils.update_branch_food_item(request.data)
-        if branch_food_item:
-            serializer = serializers.BranchFoodItemSerializer(
-                branch_food_item, many=False, context={"request": request}
+        errors, food_item = restaurant_utils.update_branch_food_item(request.data)
+        if food_item:
+            serializer = serializers.FoodItemSerializer(
+                food_item, many=False, context={"request": request}
             )
             return custom_success_message(
-                0, "Branch food item updated successfully", serializer.data, "branch_food_item"
+                0, "Branch food item updated successfully", serializer.data, "food_item"
             )
         else:
             return custom_errors_response(1, "Restaurant menu item could not be updated",errors) 
     elif request.data["action"] == "GetUserBranchFoodItems":
-        branch_food_item = restaurant_utils.get_user_branch_food_items(request.user)
-        if branch_food_item:
+        food_item = restaurant_utils.get_user_branch_food_items(request.user)
+        if food_item:
             paginator = PageNumberPagination()
-            page = paginator.paginate_queryset(branch_food_item, request)
-            serializer = serializers.BranchFoodItemSerializer(
+            page = paginator.paginate_queryset(food_item, request)
+            serializer = serializers.FoodItemSerializer(
                 page, many=True, context={"request": request}
             )
             return paginator.get_paginated_response(serializer.data)
         else:
             return custom_errors_response(1, "No branch food items retrieved", [])
     elif request.data["action"] == "GetBranchFoodItems":
-        branch_food_item = restaurant_utils.get_branch_food_items(request.user)
-        if branch_food_item:
+        food_item = restaurant_utils.get_branch_food_items(request.user)
+        if food_item:
             paginator = PageNumberPagination()
-            page = paginator.paginate_queryset(branch_food_item, request)
-            serializer = serializers.BranchFoodItemSerializer(
+            page = paginator.paginate_queryset(food_item, request)
+            serializer = serializers.FoodItemSerializer(
                 page, many=True, context={"request": request}
             )
             return paginator.get_paginated_response(serializer.data)
         else:
             return custom_errors_response(1, "No branch food items retrieved", [])
     elif request.data["action"] == "CreateBranchTable":
-        errors, branch_table = restaurant_utils.create_branch_table(request.data, request.user)
-        if branch_table:
+        errors, table = restaurant_utils.create_branch_table(request.data, request.user)
+        if table:
             serializer = serializers.TablesSerializer(
-                branch_table, many=False, context={"request": request}
+                table, many=False, context={"request": request}
             )
             return custom_success_message(
-                0, "Branch table created successfully", serializer.data, "branch_table"
+                0, "Branch table created successfully", serializer.data, "table"
             )
         else:
             return custom_errors_response(1, "Branch table not created",errors)
     elif request.data["action"] == "UpdateBranchTable":
-        errors, branch_table = restaurant_utils.update_branch_table(request.data, request.user)
-        if branch_table:
+        errors, table = restaurant_utils.update_branch_table(request.data, request.user)
+        if table:
             serializer = serializers.TablesSerializer(
-                branch_table, many=False, context={"request": request}
+                table, many=False, context={"request": request}
             )
             return custom_success_message(
-                0, "Branch table updated successfully", serializer.data, "branch_table"
+                0, "Branch table updated successfully", serializer.data, "table"
             )
         else:
             return custom_errors_response(1, "Branch table not updated",errors)
@@ -256,7 +256,7 @@ def restaurantsAPIView(request):
         if branch_rooms:
             paginator = PageNumberPagination()
             page = paginator.paginate_queryset(branch_rooms, request)
-            serializer = serializers.BranchRoomSerializer(
+            serializer = serializers.RoomSerializer(
                 page, many=True, context={"request": request}
             )
             return paginator.get_paginated_response(serializer.data)
@@ -391,8 +391,8 @@ def restaurantsAPIView(request):
         food_order = None
         try:
             food_order_id = request.data["food_order_id"]
-            if models.BranchFoodOrder.objects.filter(id=food_order_id).exists():
-                food_order = models.BranchFoodOrder.objects.filter(
+            if models.FoodOrder.objects.filter(id=food_order_id).exists():
+                food_order = models.FoodOrder.objects.filter(
                     id=food_order_id
                 ).first()
                 serializer = serializers.FoodOrderSerializer(
@@ -416,7 +416,7 @@ def restaurantsAPIView(request):
         if food_order_payments:
             paginator = PageNumberPagination()
             page = paginator.paginate_queryset(food_order_payments, request)
-            serializer = serializers.BranchFoodOrderPaymentsSerializer(
+            serializer = serializers.FoodOrderPaymentsSerializer(
                 page, many=True, context={"request": request}
             )
             return paginator.get_paginated_response(serializer.data)
@@ -548,8 +548,8 @@ def restaurantsAPIView(request):
             items= request.data["food_inventory_items"]
             for item in items:
                 food_inventory_json={}
-                if models.BranchFoodItem.objects.filter(id=item).exists():
-                    food_inventory=models.BranchFoodItem.objects.filter(id=item).first()
+                if models.FoodItem.objects.filter(id=item).exists():
+                    food_inventory=models.FoodItem.objects.filter(id=item).first()
                     food_inventory_json={
                         "id":food_inventory.id,
                         "title":food_inventory.menu_item.title,
@@ -595,7 +595,7 @@ def restaurantsAPIView(request):
         if user_tickets:
             paginator = PageNumberPagination()
             page = paginator.paginate_queryset(user_tickets, request)
-            serializer = serializers.BranchRoomBookingSerializer(
+            serializer = serializers.RoomBookingSerializer(
                 page, many=True, context={"request": request}
             )
             return paginator.get_paginated_response(serializer.data)
@@ -623,7 +623,7 @@ def restaurantsAPIView(request):
         if food_order_payments:
             paginator = PageNumberPagination()
             page = paginator.paginate_queryset(food_order_payments, request)
-            serializer = serializers.BranchFoodOrderPaymentsSerializer(
+            serializer = serializers.FoodOrderPaymentsSerializer(
                 page, many=True, context={"request": request}
             )
             return paginator.get_paginated_response(serializer.data)
@@ -866,7 +866,7 @@ class MenuItemCreateAPIView(generics.GenericAPIView):
                 "request": request,
             }
 
-            serializer = serializers.BranchRoomSerializer(
+            serializer = serializers.RoomSerializer(
                 data=request.data, context=serializer_context
             )
             # serializer.is_valid(raise_exception=   True)
@@ -994,14 +994,14 @@ class MenuItemUpdateAPIView(generics.RetrieveUpdateAPIView):
         return obj
 
 
-class BranchRoomCreateAPIView(generics.GenericAPIView):
+class RoomCreateAPIView(generics.GenericAPIView):
     """
     Create new room
     """
 
     name = "room-create"
     permission_classes = (app_permissions.EntityEmployeePermission,)
-    serializer_class = serializers.BranchRoomSerializer
+    serializer_class = serializers.RoomSerializer
     parser_classes = (MultiPartParser, FormParser)
 
     def post(self, request):
@@ -1034,7 +1034,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
             pass
 
         if (
-                models.BranchRoom.objects.filter(
+                models.Room.objects.filter(
                     entity=request.user.entity,
                     branch=employee.current_branch,
                     title__icontains=title
@@ -1051,7 +1051,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                 "request": request,
             }
 
-            serializer = serializers.BranchRoomSerializer(
+            serializer = serializers.RoomSerializer(
                 data=request.data, context=serializer_context
             )
             # serializer.is_valid(raise_exception=   True)
@@ -1062,15 +1062,15 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                                     entity=request.user.entity)
                 except IntegrityError as exc:
                     raise exceptions.ValidationError(exc)
-                item = models.BranchRoom.objects.get(id=serializer.data["id"])
+                item = models.Room.objects.get(id=serializer.data["id"])
                 errors_messages = []
 
                 uploaded_files = []
                 for file in files:
-                    content = models.BranchRoomImages.objects.create(
+                    content = models.RoomImages.objects.create(
                         owner=request.user,
                         image=file,
-                        branch_room=item,
+                        room=item,
                         entity=request.user.entity,
                     )
                     uploaded_files.append(content)
@@ -1084,7 +1084,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                     data={
                         "response_code": 0,
                         "response_message": "Room succesfully created",
-                        "branch_room": serializer.data,
+                        "room": serializer.data,
                         "errors": errors_messages,
                     },
                     status=status.HTTP_201_CREATED,
@@ -1101,7 +1101,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                     data={
                         "response_code": 1,
                         "response_message": "Room not created",
-                        "branch_room": serializer.data,
+                        "room": serializer.data,
                         "errors": errors_messages,
                         "status": status.HTTP_400_BAD_REQUEST,
                     },
@@ -1113,7 +1113,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                 "request": request,
             }
 
-            serializer = serializers.BranchRoomSerializer(
+            serializer = serializers.RoomSerializer(
                 data=request.data, context=serializer_context
             )
             # serializer.is_valid(raise_exception=   True)
@@ -1134,7 +1134,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                     data={
                         "response_code": 0,
                         "response_message": "Room succesfully created",
-                        "branch_room": serializer.data,
+                        "room": serializer.data,
                         "errors": errors_messages,
                     },
                     status=status.HTTP_201_CREATED,
@@ -1151,7 +1151,7 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                     data={
                         "response_code": 1,
                         "response_message": "Room not created",
-                        "branch_room": serializer.data,
+                        "room": serializer.data,
                         "errors": errors_messages,
                         "status": status.HTTP_400_BAD_REQUEST,
                     },
@@ -1159,16 +1159,16 @@ class BranchRoomCreateAPIView(generics.GenericAPIView):
                 )
 
 
-class BranchRoomUpdateAPIView(generics.RetrieveUpdateAPIView):
+class RoomUpdateAPIView(generics.RetrieveUpdateAPIView):
     """
     Update menu item images
     """
 
     name = "branch-room-update"
     permission_classes = (app_permissions.EntityEmployeePermission,)
-    serializer_class = serializers.BranchRoomSerializer
+    serializer_class = serializers.RoomSerializer
     parser_classes = (MultiPartParser, FormParser)
-    queryset = models.BranchRoom.objects.all()
+    queryset = models.Room.objects.all()
     lookup_fields = ("pk",)
 
     def update(self, request, *args, **kwargs):
@@ -1222,8 +1222,8 @@ class BranchRoomUpdateAPIView(generics.RetrieveUpdateAPIView):
             instance.save()
 
 
-        serializer = serializers.BranchRoomSerializer(instance, context=serializer_context)
-        if models.BranchRoomImages.objects.filter(branch_room_id=room_id).count() > 5:
+        serializer = serializers.RoomSerializer(instance, context=serializer_context)
+        if models.RoomImages.objects.filter(room_id=room_id).count() > 5:
             raise exceptions.ValidationError(
                 "Not more than 5 room pictures allowed. "
             )
@@ -1232,9 +1232,9 @@ class BranchRoomUpdateAPIView(generics.RetrieveUpdateAPIView):
         else:
             uploaded_files = []
             for file in files:
-                content = models.BranchRoomImages.objects.create(
+                content = models.RoomImages.objects.create(
                     image=file,
-                    branch_room=instance,
+                    room=instance,
                     owner=request.user,
                     entity=request.user.entity
                 )
@@ -1248,7 +1248,7 @@ class BranchRoomUpdateAPIView(generics.RetrieveUpdateAPIView):
                 data={
                     "response_code": 0,
                     "response_message": "Room details updated succesfully",
-                    "branch_room": serializer.data,
+                    "room": serializer.data,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -1294,7 +1294,7 @@ def diningAPIView(request):
     if action == "GetFoodDeliveryOptions":
         from logistics.views import _option_out
 
-        errors, options, kg = d.food_delivery_options(request.data)
+        errors, options, kg = d.food_delivery_options({**request.data, "_user": request.user})
         if errors:
             return fail("No delivery options", errors)
         return ok("Delivery options", {"options": [_option_out(o) for o in options], "chargeable_weight_kg": str(kg)}, "delivery")
@@ -1310,7 +1310,7 @@ def diningAPIView(request):
         errors, payment = d.refresh_payment(request.data, request.user)
         if errors:
             return fail("Payment not found", errors)
-        order = payment.branch_food_order
+        order = payment.food_order
         order.refresh_from_db()
         return ok("Payment", {"reference": payment.reference_number, "status": payment.status, "description": payment.description, "order": d.order_out(order, request)}, "payment")
     if action == "GetMyFoodOrders":
@@ -1380,6 +1380,47 @@ def diningAPIView(request):
     if action == "DeclineCustomRecipe":
         errors, recipe = rc.decline_recipe(request.data, request.user)
         return fail("Not declined", errors) if errors else ok("Request declined", rc.recipe_out(recipe), "recipe")
+    # ---- drinks (bar): bottles & tots, bar tabs
+    from restaurants.services import bar as b
+    from restaurants.services import supplies as sp
+
+    if action == "GetDrinks":
+        return ok("Drinks", [b.drink_out(x) for x in b.list_drinks(request.user)], "drinks")
+    drink_writes = {"SaveDrink": b.save_drink, "ReceiveDrinks": b.receive_drinks, "CountDrink": b.count_drink, "WasteDrink": b.waste_drink}
+    if action in drink_writes:
+        errors, drink = drink_writes[action](request.data, request.user)
+        return fail("Not saved", errors) if errors else ok("Saved", b.drink_out(drink), "drink")
+    if action == "GetBarTabs":
+        return ok("Tabs", [b.tab_out(t) for t in b.list_tabs(request.data, request.user)], "tabs")
+    tab_writes = {"OpenBarTab": b.open_tab, "AddToBarTab": b.add_to_tab, "VoidBarItem": b.void_item, "CloseBarTab": b.close_tab, "CancelBarTab": b.cancel_tab}
+    if action in tab_writes:
+        errors, tab = tab_writes[action](request.data, request.user)
+        return fail("Not saved", errors) if errors else ok("Saved", b.tab_out(tab), "tab")
+    if action == "PayBarTab":
+        errors, tab, payment = b.pay_tab(request.data, request.user)
+        if errors:
+            return fail("Payment not taken", errors)
+        if payment:
+            return ok("Check the customer's phone for the M-Pesa prompt", {"tab": b.tab_out(tab), "reference": payment.reference_number}, "payment")
+        return ok("Payment recorded", {"tab": b.tab_out(tab), "reference": None}, "payment")
+    if action == "RefreshBarPayment":
+        errors, payment = b.refresh_tab_payment(request.data, request.user)
+        if errors:
+            return fail("Payment not found", errors)
+        return ok("Payment", {"status": payment.status, "description": payment.desc, "tab": b.tab_out(payment.bar_inventory_order)}, "payment")
+
+    # ---- supplies (food stock, cleaning, utilities, packaging)
+    if action == "SearchCatalogue":
+        return ok("Products", sp.search_catalogue(request.data.get("q")), "products")
+    if action == "GetSupplies":
+        return ok("Stock", [sp.stock_out(x) for x in sp.list_supplies(request.user)], "supplies")
+    if action == "GetSupplyMovements":
+        return ok("Movements", [sp.movement_out(m) for m in sp.movements(request.data, request.user)], "movements")
+    supply_writes = {"ReceiveSupplies": sp.receive, "UseSupplies": sp.use, "CountSupplies": sp.count, "UpdateSupply": sp.update_item}
+    if action in supply_writes:
+        errors, stock = supply_writes[action](request.data, request.user)
+        return fail("Not saved", errors) if errors else ok("Saved", sp.stock_out(stock), "supply")
+
     if action == "RecordFoodPayment":
         errors, order = d.record_cash(request.data, request.user)
         return fail("Payment not recorded", errors) if errors else ok("Payment recorded", d.order_out(order, request), "food_order")

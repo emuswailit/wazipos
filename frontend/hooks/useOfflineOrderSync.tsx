@@ -13,6 +13,7 @@
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { uploadPendingCustomerOrders, type UploadSummary } from '@/services/customerOrderUploader';
 import { uploadPendingWholesaleOrders } from '@/services/wholesaleOrderUploader';
+import { flushDiningOutbox } from '@/services/diningOutbox';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const RETRY_INTERVAL_MS = 2 * 60 * 1000;
@@ -29,6 +30,8 @@ export function useOfflineOrderSync() {
             const summary = await uploadPendingCustomerOrders();
             // Retailer orders wholesaler staff made offline (CASH) go up in the same pass.
             await uploadPendingWholesaleOrders().catch((e) => console.warn('[useOfflineOrderSync] wholesale upload failed:', e));
+            // Restaurant bar & stock writes made offline.
+            await flushDiningOutbox().catch((e) => console.warn('[useOfflineOrderSync] dining outbox failed:', e));
             if (mountedRef.current) setLastSummary(summary);
             if (__DEV__ && (summary.uploaded || summary.failed)) {
                 console.log('[useOfflineOrderSync]', summary);

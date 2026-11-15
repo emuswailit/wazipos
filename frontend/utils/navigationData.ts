@@ -486,6 +486,26 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 icon: 'Boxes',
                 tint: TINTS.orange,
             },
+            {
+                // Drinks billed apart from food: bottles & tots, tabs, bar stock (offline-first).
+                id: 6,
+                title: 'Bar',
+                route: '/restaurantBar',
+                allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ShoppingCart',
+                tint: TINTS.orange,
+            },
+            {
+                // Food stock, cleaning materials, utilities, packaging (offline-first).
+                id: 7,
+                title: 'Supplies',
+                route: '/restaurantSupplies',
+                allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Package',
+                tint: TINTS.orange,
+            },
         ],
     },
     {

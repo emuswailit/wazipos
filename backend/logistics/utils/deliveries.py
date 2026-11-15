@@ -501,9 +501,9 @@ def _seller_order(data, user):
         order = CustomerOrders.objects.filter(id=data["customer_order"], entity=user.entity).first()
         return (None if order else "Customer order for provided ID does not exist"), order, "customer"
     if data.get("food_order"):
-        from restaurants.models import BranchFoodOrder
+        from restaurants.models import FoodOrder
 
-        order = BranchFoodOrder.objects.filter(id=data["food_order"], entity=user.entity).first()
+        order = FoodOrder.objects.filter(id=data["food_order"], entity=user.entity).first()
         return (None if order else "Food order for provided ID does not exist"), order, "food"
     order = RetailerOrders.objects.select_related("wholesaler", "retailer").filter(
         id=data.get("retailer_order"), wholesaler=user.entity

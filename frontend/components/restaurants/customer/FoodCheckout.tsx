@@ -7,7 +7,7 @@
 // then mobile-money payment (FoodPayment).
 
 import { type DeliveryOption } from '@/api/deliveriesApi';
-import diningApi, { errorText, isOk, SERVICE_META, type FoodOrder, type MenuItem, type ServiceType } from '@/api/diningApi';
+import diningApi, { errorText, isOk, SERVICE_META, type CustomRecipe, type FoodOrder, type MenuItem, type ServiceType } from '@/api/diningApi';
 import { AdminSheet, ChoiceChips, FormRow, SheetButton, useListTokens } from '@/components/common/listScreen';
 import { CustomTextField } from '@/components/common/CustomTextField';
 import { DateField } from '@/components/common/DateField';
@@ -41,7 +41,12 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
     const { theme, border } = useListTokens();
     const { user } = useAuth() as any;
     const lines = useMemo(() => items.filter((i) => cart[i.id]).map((i) => ({ item: i, qty: cart[i.id] })), [items, cart]);
-    const itemsTotal = lines.reduce((s, l) => s + Number(l.item.price) * l.qty, 0);
+    // The customer's priced custom dishes here — optionally added to this order.
+    const [quoted, setQuoted] = useState<CustomRecipe[]>([]);
+    const [attached, setAttached] = useState<string[]>([]);
+    const attachedRecipes = quoted.filter((r) => attached.includes(r.id));
+    const recipesTotal = attachedRecipes.reduce((s, r) => s + Number(r.quoted_price || 0), 0);
+    const itemsTotal = lines.reduce((s, l) => s + Number(l.item.price) * l.qty, 0) + recipesTotal;
 
     const [service, setService] = useState<ServiceType>(initialService ?? 'PICKUP');
     const [name, setName] = useState('');
@@ -68,6 +73,14 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
         setPhone(String(user?.phone && user.phone !== 'None' ? user.phone : ''));
         setPlaced(null);
         setError(null);
+        diningApi
+            .myRecipes()
+            .then((res: any) => {
+                const mine: CustomRecipe[] = isOk(res) ? (res.data.recipes ?? []).filter((r: CustomRecipe) => r.restaurant === restaurant.id && r.status === 'QUOTED') : [];
+                setQuoted(mine);
+                setAttached(mine.map((r) => r.id)); // ready to go: include by default
+            })
+            .catch(() => setQuoted([]));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible]);
 
@@ -82,7 +95,7 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
         setOptError(null);
         setOptions(null);
         diningApi
-            .getDeliveryOptions({ entity: restaurant.id, destination_latitude: pin.latitude, destination_longitude: pin.longitude, items: lines.map((l) => ({ menu_item: l.item.id, quantity: l.qty })) })
+            .getDeliveryOptions({ entity: restaurant.id, destination_latitude: pin.latitude, destination_longitude: pin.longitude, items: lines.map((l) => ({ menu_item: l.item.id, quantity: l.qty })), custom_recipes: attached })
             .then((res: any) => {
                 if (!alive) return;
                 if (isOk(res)) {
@@ -99,16 +112,17 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
             alive = false;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [service, pin?.latitude, pin?.longitude, JSON.stringify(cart)]);
+    }, [service, pin?.latitude, pin?.longitude, JSON.stringify(cart), attached.join(',')]);
 
     const deliveryFee = service === 'DELIVERY' && option ? Number(option.total) : 0;
     const total = itemsTotal + deliveryFee;
 
     const place = async () => {
         setError(null);
-        if (service !== 'DINE_IN' && !lines.length) return setError('Add something from the menu first.');
+        if (service !== 'DINE_IN' && !lines.length && !attachedRecipes.length) return setError('Add something from the menu first.');
         if (!phone.trim()) return setError('Enter your phone so the restaurant can reach you.');
         if (service === 'DELIVERY' && (!pin || !option)) return setError('Pin where to deliver and pick a delivery option.');
+        if (service !== 'DINE_IN' && !lines.length && !attachedRecipes.length) return setError('Add something from the menu first.');
         let reservation_at: string | undefined;
         if (service === 'DINE_IN') {
             if (!/^\d{1,2}:\d{2}$/.test(time.trim())) return setError('Enter the time like 19:30.');
@@ -124,6 +138,7 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
                 entity: restaurant.id,
                 service_type: service,
                 items: lines.map((l) => ({ menu_item: l.item.id, quantity: l.qty })),
+                custom_recipes: attached,
                 notes: notes.trim(),
                 customer_name: name.trim(),
                 customer_phone: phone.trim(),
@@ -177,6 +192,30 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
                         onChange={setService}
                         hint={SERVICE_META[service].hint}
                     />
+
+                    {/* Priced custom dishes: add them to this order */}
+                    {quoted.length ? (
+                        <View style={{ gap: 6 }}>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.5 }}>YOUR CUSTOM DISHES</Text>
+                            {quoted.map((r) => {
+                                const on = attached.includes(r.id);
+                                return (
+                                    <Pressable
+                                        key={r.id}
+                                        onPress={() => setAttached((a) => (on ? a.filter((x) => x !== r.id) : [...a, r.id]))}
+                                        className="flex-row items-center rounded-xl p-2.5"
+                                        style={{ gap: 8, borderWidth: 1.5, borderColor: on ? theme.primary : border, backgroundColor: on ? `${theme.primary}0d` : 'transparent' }}
+                                    >
+                                        <Ionicons name={on ? 'checkbox' : 'square-outline'} size={19} color={on ? theme.primary : theme.textDark} />
+                                        <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }} numberOfLines={1}>
+                                            {r.title} × {r.servings} <Text style={{ color: theme.textDark, fontSize: 11 }}>custom</Text>
+                                        </Text>
+                                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{kes(r.quoted_price)}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+                    ) : null}
 
                     {/* What's ordered */}
                     {lines.length ? (

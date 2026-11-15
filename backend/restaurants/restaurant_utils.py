@@ -25,7 +25,7 @@ import json
 from decouple import config
 from restaurants.restaurant_validators import validate_food_item, validate_bar_inventory,validate_food_order
 from authentication.utils.utils import generate_reference_number, use_reference_number
-from restaurants.models import BranchFoodOrderPayment, BarInventoryOrderPayment,AccomodationOrderPayments
+from restaurants.models import FoodOrderPayment, BarInventoryOrderPayment,AccomodationOrderPayments
 from core.phone_number_utils import get_telco_by_phone_number
 import json
 from decouple import config
@@ -119,15 +119,15 @@ def make_food_order_payment(data,user):
         return errors,None
     else:
         food_order_id = data['food_order']
-        if models.BranchFoodOrder.objects.filter(id=food_order_id).exists():
-            food_order=models.BranchFoodOrder.objects.filter(id=food_order_id).first()
+        if models.FoodOrder.objects.filter(id=food_order_id).exists():
+            food_order=models.FoodOrder.objects.filter(id=food_order_id).first()
         else:
             errors.append("Food order for provided ID does not exist")
             return errors,None
     
     if food_order:
-        if models.BranchFoodOrderItem.objects.filter(branch_food_order=food_order).exists():
-            order_items =  models.BranchFoodOrderItem.objects.filter(branch_food_order=food_order).all()
+        if models.FoodOrderItem.objects.filter(food_order=food_order).exists():
+            order_items =  models.FoodOrderItem.objects.filter(food_order=food_order).all()
     
     if not "payment_method" in data or data['payment_method']==None:
         errors.append("Payment method ID is required")
@@ -141,7 +141,7 @@ def make_food_order_payment(data,user):
 
         
 
-    if models.BranchFoodOrderPayment.objects.filter(branch_food_order=food_order,status="SUCCESS").exists():
+    if models.FoodOrderPayment.objects.filter(food_order=food_order,status="SUCCESS").exists():
         errors.append("Order is already paid")
         return errors,None
 
@@ -170,8 +170,8 @@ def get_bodaboda_deliveries(data, user):
     if BodaLocations.objects.filter(owner=user).exists():
         bodaboda = BodaLocations.objects.filter(owner=user).first()
 
-    if models.BranchFoodOrder.objects.filter(bodaboda=bodaboda,created__lt=tommorow,created__gte=today,status="ASSIGNED").exists():
-        bodaboda_assigned_orders = models.BranchFoodOrder.objects.filter(bodaboda=bodaboda,created__lt=tommorow,created__gte=today,status="ASSIGNED").all()
+    if models.FoodOrder.objects.filter(bodaboda=bodaboda,created__lt=tommorow,created__gte=today,status="ASSIGNED").exists():
+        bodaboda_assigned_orders = models.FoodOrder.objects.filter(bodaboda=bodaboda,created__lt=tommorow,created__gte=today,status="ASSIGNED").all()
      
     return bodaboda_assigned_orders  
 
@@ -564,7 +564,7 @@ def create_branch_food_item(data,user):
         return exceptions.ValidationError("Employee is not set to a branch")
     
     hour_ago = datetime.datetime.now() - datetime.timedelta(minutes=60)
-    if models.BranchFoodItem.objects.filter(
+    if models.FoodItem.objects.filter(
                 branch=employee.current_branch,
                 menu_item=menu_item,
                 quantity=quantity,
@@ -579,7 +579,7 @@ def create_branch_food_item(data,user):
     
     
     try:
-        created = models.BranchFoodItem.objects.create(
+        created = models.FoodItem.objects.create(
             branch=employee.current_branch,
             entity=user.entity,
             owner=user,
@@ -657,7 +657,7 @@ def update_branch_food_order(data,user):
         food_order.save()
 
     if "bodaboda" in data and not data["bodaboda"]=="":
-        if not models.BranchFoodOrderPayment.objects.filter(branch_food_order=food_order,status="SUCCESS").exists():
+        if not models.FoodOrderPayment.objects.filter(food_order=food_order,status="SUCCESS").exists():
             errors.append("Order has not been paid for")
             return errors, None
         if not food_order.delivery_method=="DELIVERY":
@@ -710,16 +710,16 @@ def update_branch_food_order(data,user):
     
 def get_user_branch_food_items(user):
     employee =validate_employee(user)
-    if models.BranchFoodItem.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
-        return models.BranchFoodItem.objects.filter( entity=user.entity,branch=employee.current_branch).all()
+    if models.FoodItem.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
+        return models.FoodItem.objects.filter( entity=user.entity,branch=employee.current_branch).all()
   
     else:
         return []
     
 def get_branch_food_items(data,user):
     branch =validate_entity_branch(data["entity_branch"])
-    if models.BranchFoodItem.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
-        return models.BranchFoodItem.objects.filter( entity=user.entity,branch=employee.current_branch).all()
+    if models.FoodItem.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
+        return models.FoodItem.objects.filter( entity=user.entity,branch=employee.current_branch).all()
   
     else:
         return []
@@ -761,7 +761,7 @@ def create_branch_table(data,user):
     #         attendant=validate_employee_by_id(data["table_details"]["attendant"],user)
 
 
-    if models.BranchTable.objects.filter(title=title.upper(),branch=branch).exists():
+    if models.Table.objects.filter(title=title.upper(),branch=branch).exists():
         errors.append(f"Table with similar title exists at {branch}")
     else:
         pass
@@ -771,7 +771,7 @@ def create_branch_table(data,user):
     
     
     try:
-        created = models.BranchTable.objects.create(
+        created = models.Table.objects.create(
             entity=user.entity,
             owner=user,
             branch=employee.current_branch,
@@ -791,42 +791,42 @@ def create_branch_table(data,user):
 def update_branch_table(data,user):
     errors=[]
 
-    branch_table=None
+    table=None
     employee=None
 
-    if not "branch_table" in data["table_details"] or data["table_details"]["branch_table"]=="":
+    if not "table" in data["table_details"] or data["table_details"]["table"]=="":
         errors.append("Table ID is required")
     else:
-        branch_table = restaurant_validators.validate_branch_table(data["table_details"]["branch_table"])
+        table = restaurant_validators.validate_branch_table(data["table_details"]["table"])
     
     if "title" in data["table_details"]:
-        branch_table.title = data["table_details"]["title"]
-        branch_table.save()
+        table.title = data["table_details"]["title"]
+        table.save()
 
     if "employee" in data["table_details"] and not  data["table_details"]["employee"]=="":
         employee= validate_employee_by_id(data["table_details"]["employee"],user)
-        branch_table.employee = employee
-        branch_table.save()
+        table.employee = employee
+        table.save()
 
 
     if "seats" in data["table_details"]:
-        branch_table.seats = int(data["table_details"]["seats"])
-        branch_table.save()
+        table.seats = int(data["table_details"]["seats"])
+        table.save()
 
 
     if "description" in data["table_details"]:
-        branch_table.description = data["table_details"]["description"]
-        branch_table.save()
+        table.description = data["table_details"]["description"]
+        table.save()
     
     
-    return [],branch_table
+    return [],table
     
 def get_user_branch_tables(user):
     employee = validate_employee(user)
     if  not employee.current_branch:
         return exceptions.ValidationError("Employee is not set to a branch")
-    if models.BranchTable.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
-        return models.BranchTable.objects.filter( entity=user.entity,branch=employee.current_branch).all()
+    if models.Table.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
+        return models.Table.objects.filter( entity=user.entity,branch=employee.current_branch).all()
   
     else:
         return []
@@ -891,7 +891,7 @@ def create_branch_room(data,user):
 
 
 
-    if models.BranchRoom.objects.filter(title=title.upper(),branch=branch).exists():
+    if models.Room.objects.filter(title=title.upper(),branch=branch).exists():
         errors.append(f"Room with similar title exists at {branch}")
     else:
         pass
@@ -901,7 +901,7 @@ def create_branch_room(data,user):
     
     
     try:
-        created = models.BranchRoom.objects.create(
+        created = models.Room.objects.create(
             entity=user.entity,
             owner=user,
             branch=employee.current_branch,
@@ -970,8 +970,8 @@ def get_user_branch_rooms(user):
     employee = validate_employee(user)
     if  not employee.current_branch:
         return exceptions.ValidationError("Employee is not set to a branch")
-    if models.BranchRoom.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
-        return models.BranchRoom.objects.filter( entity=user.entity,branch=employee.current_branch).all()
+    if models.Room.objects.filter(entity=user.entity, branch=employee.current_branch).exists():
+        return models.Room.objects.filter( entity=user.entity,branch=employee.current_branch).all()
   
     else:
         return []
@@ -1140,11 +1140,11 @@ def get_branch_bar_inventory(user):
 
 
 
-def process_food_order_payment(branch_food_order, payment_method,user,mobile_money_phone,reference_number):
+def process_food_order_payment(food_order, payment_method,user,mobile_money_phone,reference_number):
    
     errors = []
 
-    if not branch_food_order.branch.administrator:
+    if not food_order.branch.administrator:
         errors.append("This business is not set up to receive remote paymenst")
         return errors, None
     
@@ -1152,42 +1152,42 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
         # cash_document_number=generate_document_number(vehicle.entity, user, "FARE")    
    
         # Cash payments
-        food_order_payment = BranchFoodOrderPayment.objects.create(
+        food_order_payment = FoodOrderPayment.objects.create(
             payment_method=payment_method,
             reference_number=reference_number,
             status="SUCCESS",
-            amount=branch_food_order.order_items_cost+ branch_food_order.shipping_cost,
+            amount=food_order.order_items_cost+ food_order.shipping_cost,
             entity=user.entity,
             currency="KES",
             owner=user,
-            branch_food_order = branch_food_order,
+            food_order = food_order,
         )
         if food_order_payment:
-            order_items =  models.BranchFoodOrderItem.objects.filter(branch_food_order=branch_food_order).all()
+            order_items =  models.FoodOrderItem.objects.filter(food_order=food_order).all()
             for item in order_items:
                     print("aAdjust by",item.quantity)
-                    item.branch_food_item.quantity=item.branch_food_item.quantity - int(item.quantity)
-                    item.branch_food_item.save()
-                    print("aAdjusted item",item.branch_food_item)
-                    print("aAdjusted item qty",item.branch_food_item.quantity)
+                    item.food_item.quantity=item.food_item.quantity - int(item.quantity)
+                    item.food_item.save()
+                    print("aAdjusted item",item.food_item)
+                    print("aAdjusted item qty",item.food_item.quantity)
 
-            return [], branch_food_order
+            return [], food_order
         else:
             errors.append("Error while creating food order payment")
             return errors, None
 
     elif payment_method.title=="MOBILE MONEY":
         administrator_account=None
-        # if not EntityPSPCollectionAccount.objects.filter(entity = branch_food_order.entity).exists():
+        # if not EntityPSPCollectionAccount.objects.filter(entity = food_order.entity).exists():
         #     errors.append("Entity has no collection account")
         #     return errors, None
         # else:
-        #     entity_collection_account =  EntityPSPCollectionAccount.objects.filter(entity = branch_food_order.entity).first()
-        if not UserAccounts.objects.filter(owner = branch_food_order.branch.administrator).exists():
+        #     entity_collection_account =  EntityPSPCollectionAccount.objects.filter(entity = food_order.entity).first()
+        if not UserAccounts.objects.filter(owner = food_order.branch.administrator).exists():
             errors.append("Branch admin has no collection account")
             return errors, None
         else:
-            administrator_account =  UserAccounts.objects.filter(owner = branch_food_order.branch.administrator).first()
+            administrator_account =  UserAccounts.objects.filter(owner = food_order.branch.administrator).first()
             print("entity_collection_account",administrator_account)
       
         payload = None
@@ -1195,7 +1195,7 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
         create_log("info",f"At food order payment : telco={telco} phone: {formatted_phone_number}")
         
    
-        print("BFO", branch_food_order.entity)
+        print("BFO", food_order.entity)
         print("FPHOME", formatted_phone_number)
 
         print("Mobile Money",reference_number)
@@ -1203,7 +1203,7 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
         if telco=="MPESA":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": int(branch_food_order.order_items_cost+ branch_food_order.shipping_cost),
+                "amount": int(food_order.order_items_cost+ food_order.shipping_cost),
                 "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
                 "accountTo": administrator_account.account_number,
                 "description": "Merchant payment",
@@ -1217,7 +1217,7 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
         elif telco=="AIRTELMONEY":
             payload = json.dumps({
                 "orderId": reference_number,
-                "amount": int(branch_food_order.order_items_cost+ branch_food_order.shipping_cost),
+                "amount": int(food_order.order_items_cost+ food_order.shipping_cost),
                 "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
                 "accountTo":administrator_account.account_number, 
                 "currency":"KES",
@@ -1235,7 +1235,7 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
         print("Ikoooo errors", errors)
         if result_json:
             print("Ikoooo rs", result_json)
-            food_order_payment = BranchFoodOrderPayment.objects.create(
+            food_order_payment = FoodOrderPayment.objects.create(
                 payment_method=payment_method,
                 reference_number=reference_number,
                 status="PENDING",
@@ -1243,35 +1243,35 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
                 entity=user.entity,
                 currency="KES",
                 owner=user,
-                branch_food_order = branch_food_order,
+                food_order = food_order,
                 psp_reference_number= result_json["ref"],
              
             )
             use_reference_number(reference_number)
 
-            return [], branch_food_order
+            return [], food_order
 
         else:
             return errors, None
     elif payment_method.title=="JAMBOPAY WALLET":
-        if not UserAccounts.objects.filter(owner = branch_food_order.entity.administrator).exists():
+        if not UserAccounts.objects.filter(owner = food_order.entity.administrator).exists():
             errors.append("Entity admin has no collection account")
             return errors, None
         else:
-            administrator_account =  UserAccounts.objects.filter(owner = branch_food_order.entity.administrator).first()
+            administrator_account =  UserAccounts.objects.filter(owner = food_order.entity.administrator).first()
             print("entity_collection_account",administrator_account)
-        # if not models.BranchCollectionAccount.objects.filter(branch = branch_food_order.branch).exists():
+        # if not models.BranchCollectionAccount.objects.filter(branch = food_order.branch).exists():
         #     errors.append("Branch has no collection account")
         #     return errors, None
         # else:
-        #     branch_collection_account =  models.BranchCollectionAccount.objects.filter(branch = branch_food_order.branch).first()
+        #     branch_collection_account =  models.BranchCollectionAccount.objects.filter(branch = food_order.branch).first()
 
 
         errors, wallet = get_account_by_phone(mobile_money_phone)
         if wallet:
             data ={
                         "orderId": reference_number,
-                        "amount":  int(branch_food_order.order_items_cost+ branch_food_order.shipping_cost),
+                        "amount":  int(food_order.order_items_cost+ food_order.shipping_cost),
                         "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
                         "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                         "description": "Test_Wallet Checkout",
@@ -1285,20 +1285,20 @@ def process_food_order_payment(branch_food_order, payment_method,user,mobile_mon
             response = jambopay_wallet_checkout(data)
 
             if not "statusCode" in response and  "ref" in response:
-                food_order_payment = BranchFoodOrderPayment.objects.create(
+                food_order_payment = FoodOrderPayment.objects.create(
                     payment_method=payment_method,
                     reference_number=reference_number,
                     status="PENDING",
-                    amount=branch_food_order.order_items_cost+ branch_food_order.shipping_cost,
+                    amount=food_order.order_items_cost+ food_order.shipping_cost,
                     entity=user.entity,
                     currency="KES",
                     owner=user,
-                    branch_food_order = branch_food_order,
+                    food_order = food_order,
                 )
                 use_reference_number(reference_number)
                 if food_order_payment:
                 
-                    return [], branch_food_order
+                    return [], food_order
                 else:
                     errors.append("Ticket payment not created")
                     return errors, [], None
@@ -1320,7 +1320,7 @@ def create_single_food_order(data, user):
     customer_phone=""
     payment_method = None
     reference_number = None
-    branch_table=None
+    table=None
     order_item = None
     employee = None
     origin_latitude=None
@@ -1341,43 +1341,43 @@ def create_single_food_order(data, user):
 
 
 
-    if not "payment_method" in data["branch_food_order"]:
+    if not "payment_method" in data["food_order"]:
         errors.append("Payment method ID is required")
         return errors, None
     else:
-        payment_method = validate_payment_method_exists(data["branch_food_order"]["payment_method"])
+        payment_method = validate_payment_method_exists(data["food_order"]["payment_method"])
     
-        # if payment_method and not payment_method.title =="CASH" and not data["branch_food_order"]["mobile_money_phone_number"] or data["branch_food_order"]["mobile_money_phone_number"]=="":
+        # if payment_method and not payment_method.title =="CASH" and not data["food_order"]["mobile_money_phone_number"] or data["food_order"]["mobile_money_phone_number"]=="":
         #     errors.append("Mobile money number is required")
         #     return errors, None
         # else:
-        #     mobile_money_phone_number= data["branch_food_order"]["mobile_money_phone_number"]
+        #     mobile_money_phone_number= data["food_order"]["mobile_money_phone_number"]
 
         #     print("PM", payment_method)
 
-    if "mobile_money_phone_number" in data["branch_food_order"] and not  data["branch_food_order"]["mobile_money_phone_number"]=="":
-        mobile_money_phone_number = data["branch_food_order"]["mobile_money_phone_number"]
+    if "mobile_money_phone_number" in data["food_order"] and not  data["food_order"]["mobile_money_phone_number"]=="":
+        mobile_money_phone_number = data["food_order"]["mobile_money_phone_number"]
     
-    if "branch_table" in data["branch_food_order"] and not data["branch_food_order"]["branch_table"]=="":
+    if "table" in data["food_order"] and not data["food_order"]["table"]=="":
  
-        branch_table = restaurant_validators.validate_branch_table(data["branch_food_order"]["branch_table"])
+        table = restaurant_validators.validate_branch_table(data["food_order"]["table"])
 
-    if "order_origin" in data["branch_food_order"] and not data["branch_food_order"]["order_origin"]=="":
+    if "order_origin" in data["food_order"] and not data["food_order"]["order_origin"]=="":
  
-        order_origin =data["branch_food_order"]["order_origin"]
+        order_origin =data["food_order"]["order_origin"]
 
-    if "customer_name" in data["branch_food_order"] and not data["branch_food_order"]["customer_name"]=="":
+    if "customer_name" in data["food_order"] and not data["food_order"]["customer_name"]=="":
  
-        customer_name =data["branch_food_order"]["customer_name"]
+        customer_name =data["food_order"]["customer_name"]
 
-    if "customer_phone" in data["branch_food_order"] and not data["branch_food_order"]["customer_phone"]=="":
+    if "customer_phone" in data["food_order"] and not data["food_order"]["customer_phone"]=="":
  
-        customer_phone =data["branch_food_order"]["customer_phone"]
+        customer_phone =data["food_order"]["customer_phone"]
 
 
     
-    if order_origin == "CUSTOMER" and "entity_branch_id" in data["branch_food_order"]:
-        entity_branch_id = data["branch_food_order"]["entity_branch_id"]
+    if order_origin == "CUSTOMER" and "entity_branch_id" in data["food_order"]:
+        entity_branch_id = data["food_order"]["entity_branch_id"]
         branch = validate_entity_branch(entity_branch_id)
     
     if order_origin=="STAFF":
@@ -1388,72 +1388,72 @@ def create_single_food_order(data, user):
         branch = employee.current_branch
         entity=employee.entity
 
-    if order_origin == "CUSTOMER" and "entity_id" in data["branch_food_order"]:
-        entity_id = data["branch_food_order"]["entity_id"]
+    if order_origin == "CUSTOMER" and "entity_id" in data["food_order"]:
+        entity_id = data["food_order"]["entity_id"]
         entity = validate_entity(entity_id)
   
 
-    if order_origin == "STAFF" and "user_id" in data["branch_food_order"]:
-        customer = authentication_models_validators.validate_user(data['branch_food_order']['user_id'])
+    if order_origin == "STAFF" and "user_id" in data["food_order"]:
+        customer = authentication_models_validators.validate_user(data['food_order']['user_id'])
     else:
         customer = user
 
-    if "origin_latitude" in data['branch_food_order'] and not  data['branch_food_order']["origin_latitude"]=="":
-        origin_latitude = float(data['branch_food_order']['origin_latitude'])
+    if "origin_latitude" in data['food_order'] and not  data['food_order']["origin_latitude"]=="":
+        origin_latitude = float(data['food_order']['origin_latitude'])
 
-    if "origin_longitude" in data['branch_food_order'] and not  data['branch_food_order']["origin_longitude"]=="":
-        origin_longitude =  float(data['branch_food_order']['origin_longitude'])
+    if "origin_longitude" in data['food_order'] and not  data['food_order']["origin_longitude"]=="":
+        origin_longitude =  float(data['food_order']['origin_longitude'])
 
     if origin_latitude and origin_longitude:
         origin_point = Point(origin_longitude, origin_latitude, srid=4326)
 
-    if "destination_latitude" in data['branch_food_order'] and not  data['branch_food_order']["destination_latitude"]=="":
-        destination_latitude = float(data['branch_food_order']['destination_latitude'])
+    if "destination_latitude" in data['food_order'] and not  data['food_order']["destination_latitude"]=="":
+        destination_latitude = float(data['food_order']['destination_latitude'])
 
-    if "destination_longitude" in data['branch_food_order']  and not  data['branch_food_order']["destination_longitude"]=="":
-        destination_longitude =  float(data['branch_food_order']['destination_longitude'])
+    if "destination_longitude" in data['food_order']  and not  data['food_order']["destination_longitude"]=="":
+        destination_longitude =  float(data['food_order']['destination_longitude'])
 
     if destination_latitude and destination_longitude:
         destination_point = Point(destination_longitude, destination_latitude, srid=4326)
 
-    if "farness" in data['branch_food_order']  and not  data['branch_food_order']["farness"]=="":
-        farness = float(data['branch_food_order']['farness'])
+    if "farness" in data['food_order']  and not  data['food_order']["farness"]=="":
+        farness = float(data['food_order']['farness'])
 
-    if "city_name" in data['branch_food_order']  and not  data['branch_food_order']["city_name"]=="":
-        city_name = data['branch_food_order']['city_name']
+    if "city_name" in data['food_order']  and not  data['food_order']["city_name"]=="":
+        city_name = data['food_order']['city_name']
     
-    if "delivery_method" in data["branch_food_order"]:
-        delivery_method = data["branch_food_order"]["delivery_method"]
+    if "delivery_method" in data["food_order"]:
+        delivery_method = data["food_order"]["delivery_method"]
     else:
        errors.append("Delivery method is required")
     
     if delivery_method == "DELIVERY":
-        if "shipping_cost" in data["branch_food_order"]:
-            shipping_cost = float(data["branch_food_order"]["shipping_cost"])
+        if "shipping_cost" in data["food_order"]:
+            shipping_cost = float(data["food_order"]["shipping_cost"])
     else:
         shipping_cost = 0.00
 
 
-    if "items" in data["branch_food_order"] and not len(data["branch_food_order"]["items"])<1:
-        order_items = data["branch_food_order"]["items"]
+    if "items" in data["food_order"] and not len(data["food_order"]["items"])<1:
+        order_items = data["food_order"]["items"]
     else:
         errors.append("Order has no items")
         return errors, None
 
 
     for item in order_items:
-        branch_food_item = validate_food_item(item["branch_food_item"])
+        food_item = validate_food_item(item["food_item"])
 
-        items_cost = float(branch_food_item.price) * float(item["quantity"])
+        items_cost = float(food_item.price) * float(item["quantity"])
         order_items_cost = float(order_items_cost)+float(items_cost)
    
 
     document_number = generate_document_number(entity, user,"FOOD")
-    branch_food_order = models.BranchFoodOrder.objects.create(
+    food_order = models.FoodOrder.objects.create(
         document_number=document_number,
     branch=branch,
-        branch_table=branch_table,
-        payment_method_id=data["branch_food_order"]["payment_method"],
+        table=table,
+        payment_method_id=data["food_order"]["payment_method"],
         entity=entity,
         order_items_cost= order_items_cost,
         owner=user,
@@ -1470,23 +1470,23 @@ def create_single_food_order(data, user):
         
     )
 
-    if branch_food_order:
-        print("bfo",branch_food_order)
+    if food_order:
+        print("bfo",food_order)
 
         for item in order_items:
-            branch_food_item = validate_food_item(item["branch_food_item"])
-            order_item = models.BranchFoodOrderItem.objects.create(
-                    branch_food_order=branch_food_order,
-                    branch_food_item=branch_food_item,
+            food_item = validate_food_item(item["food_item"])
+            order_item = models.FoodOrderItem.objects.create(
+                    food_order=food_order,
+                    food_item=food_item,
                     quantity=int(item["quantity"]),
                     entity=entity,
                     owner=user,
                 )
-            print("Just created", order_item.branch_food_item)
+            print("Just created", order_item.food_item)
                 # if order_item:
                 #     print("Adjusting food qty")
-                #     branch_food_item.quantity=branch_food_item.quantity - order_item.quantity
-                #     branch_food_item.save()
+                #     food_item.quantity=food_item.quantity - order_item.quantity
+                #     food_item.save()
                 #     print("oi",order_item)
             
             # print("errors1", errors)
@@ -1495,7 +1495,7 @@ def create_single_food_order(data, user):
             
             
         reference_number =generate_reference_number(entity, user)
-        errors, order = process_food_order_payment(branch_food_order, payment_method, user, mobile_money_phone_number, reference_number)
+        errors, order = process_food_order_payment(food_order, payment_method, user, mobile_money_phone_number, reference_number)
         print("errors", errors)
         print("order2", order)
         return errors, order
@@ -1504,8 +1504,8 @@ def create_single_food_order(data, user):
         errors.append("Order not created")
         return errors, None
     
-    # if "reference_number" in data["branch_food_order"] and not data["branch_food_order"]["reference_number"]=="":
-    #     reference_number = data["branch_food_order"]["reference_number"] 
+    # if "reference_number" in data["food_order"] and not data["food_order"]["reference_number"]=="":
+    #     reference_number = data["food_order"]["reference_number"] 
     # else:
     #     reference_number=generate_reference_number(user.entity,user)
     # print("RN", reference_number)
@@ -1517,7 +1517,7 @@ def create_single_food_order(data, user):
  
 
     # try:
-    #     branch_food_order = None
+    #     food_order = None
 
 
             
@@ -1526,11 +1526,11 @@ def create_single_food_order(data, user):
             
     #         for item in order_items:
     #             item_quantity=int(item["quantity"])
-    #             if not item["branch_food_item"]=="":
-    #                 branch_food_item = models.BranchFoodItem.objects.get(id=item["branch_food_item"])
-    #                 order_item = models.BranchFoodOrderItem.objects.create(
-    #                     branch_food_order=branch_food_order,
-    #                     branch_food_item=branch_food_item,
+    #             if not item["food_item"]=="":
+    #                 food_item = models.FoodItem.objects.get(id=item["food_item"])
+    #                 order_item = models.FoodOrderItem.objects.create(
+    #                     food_order=food_order,
+    #                     food_item=food_item,
     #                     quantity=item_quantity,
     #                     entity=user.entity,
     #                     owner=user,
@@ -1538,12 +1538,12 @@ def create_single_food_order(data, user):
 
     #                 if order_item:
     #                     print("Adjusting food qty")
-    #                     branch_food_item.quantity=branch_food_item.quantity - item_quantity
-    #                     branch_food_item.save()
+    #                     food_item.quantity=food_item.quantity - item_quantity
+    #                     food_item.save()
 
-            # if branch_food_order:
-            #     print("Ammmm gere", branch_food_order)
-            #     errors, order = process_food_order_payment(branch_food_order, payment_method,mobile_money_phone_number)
+            # if food_order:
+            #     print("Ammmm gere", food_order)
+            #     errors, order = process_food_order_payment(food_order, payment_method,mobile_money_phone_number)
             #     print("Ammmm gere2", errors)
             #     print("Ammmm gere3", order)
             #     return errors, order
@@ -1559,17 +1559,17 @@ def create_single_food_order(data, user):
     
     # else:
     #     try:
-    #         branch_food_order = None
-    #         branch_table=None
+    #         food_order = None
+    #         table=None
     #         mobile_money_phone_number=""
     #         branch_collection_account=None
     #         amount =0.00
             
-    #         if not "branch_table" in data["branch_food_order"] or data["branch_food_order"]["branch_table"]=="":
+    #         if not "table" in data["food_order"] or data["food_order"]["table"]=="":
     #             errors.append("Table ID is required")
     #             return errors, None
     #         else:
-    #             branch_table = restaurant_validators.validate_branch_table(data["branch_food_order"]["branch_table"])
+    #             table = restaurant_validators.validate_branch_table(data["food_order"]["table"])
 
     #         if BranchCollectionAccount.objects.filter(branch=employee.current_branch).exists():
     #             branch_collection_account=BranchCollectionAccount.objects.filter(branch=employee.current_branch).first()
@@ -1577,41 +1577,41 @@ def create_single_food_order(data, user):
     #             errors.append(f"No collection account exists for this {employee.current_branch}")
     #             return errors, None
 
-    #         if not "mobile_money_phone_number" in data["branch_food_order"] or data["branch_food_order"]["mobile_money_phone_number"]=="":
+    #         if not "mobile_money_phone_number" in data["food_order"] or data["food_order"]["mobile_money_phone_number"]=="":
     #             errors.append("Mobile money phone number is required for non cash payments")
     #             return errors, None
     #         else:
-    #             mobile_money_phone_number=data["branch_food_order"]["mobile_money_phone_number"]
+    #             mobile_money_phone_number=data["food_order"]["mobile_money_phone_number"]
 
     #         # Calculate amout prior
-    #         if "items" in data["branch_food_order"]:
-    #             items = data["branch_food_order"]["items"]
+    #         if "items" in data["food_order"]:
+    #             items = data["food_order"]["items"]
     #             for item in items:
-    #                 branch_food_item = models.BranchFoodItem.objects.get(id=item["branch_food_item"])
-    #                 if branch_food_item:
-    #                     amount= amount + (float(branch_food_item.price)* float(item["quantity"]))
+    #                 food_item = models.FoodItem.objects.get(id=item["food_item"])
+    #                 if food_item:
+    #                     amount= amount + (float(food_item.price)* float(item["quantity"]))
             
     
     #         reference_number = generate_reference_number(user.entity,user)
            
-    #         branch_food_order = models.BranchFoodOrder.objects.create(
+    #         food_order = models.FoodOrder.objects.create(
     #             reference_number=reference_number,
     #             branch=employee.current_branch,
-    #             branch_table=branch_table,
+    #             table=table,
     #             payment_method=payment_method,
     #             entity=user.entity,
     #             owner=user,
     #         )
     #         use_reference_number(reference_number)
-    #         if "items" in data["branch_food_order"]:
-    #             items = data["branch_food_order"]["items"]
+    #         if "items" in data["food_order"]:
+    #             items = data["food_order"]["items"]
     #             if len(items) > 0:
     #                 for item in items:
-    #                     if not item["branch_food_item"]=="":
-    #                         branch_food_item = models.BranchFoodItem.objects.get(id=item["branch_food_item"])
-    #                         order_item = models.BranchFoodOrderItem.objects.create(
-    #                             branch_food_order=branch_food_order,
-    #                             branch_food_item=branch_food_item,
+    #                     if not item["food_item"]=="":
+    #                         food_item = models.FoodItem.objects.get(id=item["food_item"])
+    #                         order_item = models.FoodOrderItem.objects.create(
+    #                             food_order=food_order,
+    #                             food_item=food_item,
     #                             quantity=int(item["quantity"]),
     #                             entity=user.entity,
     #                             owner=user,
@@ -1619,11 +1619,11 @@ def create_single_food_order(data, user):
     #                     else:
     #                         raise exceptions.ValidationError("Food item  ID is required")
 
-    #         if branch_food_order:
-    #             return [], branch_food_order
-    #         # if branch_food_order and branch_collection_account and mobile_money_phone_number:
+    #         if food_order:
+    #             return [], food_order
+    #         # if food_order and branch_collection_account and mobile_money_phone_number:
     #             # data = json.dumps({
-    #             #     "orderId": branch_food_order.reference_number,
+    #             #     "orderId": food_order.reference_number,
     #             #     "amount": int(amount),
     #             #     "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
     #             #     "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
@@ -1640,10 +1640,10 @@ def create_single_food_order(data, user):
     #             # if result_json:
     #             #     print("JSON", result_json)
     #             #     try:
-    #             #         food_order_payment=models.BranchFoodOrderPayment.objects.create(
+    #             #         food_order_payment=models.FoodOrderPayment.objects.create(
     #             #             branch_collection_account=branch_collection_account,
-    #             #             payment_method=branch_food_order.payment_method,
-    #             #             reference_number=branch_food_order.reference_number,
+    #             #             payment_method=food_order.payment_method,
+    #             #             reference_number=food_order.reference_number,
     #             #             psp_reference_number=result_json["ref"],
     #             #             currency=result_json["currency"],
     #             #             amount=amount,
@@ -1652,9 +1652,9 @@ def create_single_food_order(data, user):
     #             #             owner=user
     #             #         )
     #             #         if food_order_payment:
-    #             #             return [], branch_food_order
+    #             #             return [], food_order
     #             #         else:
-    #             #             branch_food_order.delete()
+    #             #             food_order.delete()
     #             #             errors.append("Food order payment not created")
     #             #             return errors, None
     #             #     except Exception as e:
@@ -1669,7 +1669,7 @@ def get_user_food_orders(user, data):
     #     raise exceptions.ValidationError("Employee is not set to a branch")
     
     
-    qs = models.BranchFoodOrder.objects.filter(
+    qs = models.FoodOrder.objects.filter(
         order_origin="CUSTOMER"
     ).filter(Q(created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)))
 
@@ -1822,7 +1822,7 @@ def process_bar_order_payment(bar_order, payment_method,user,mobile_money_phone,
             response = jambopay_wallet_checkout(data)
 
             if not "statusCode" in response and  "ref" in response:
-                food_order_payment = BranchFoodOrderPayment.objects.create(
+                food_order_payment = FoodOrderPayment.objects.create(
                     payment_method=payment_method,
                     reference_number=reference_number,
                     status="PENDING",
@@ -1856,7 +1856,7 @@ def create_bar_inventory_order(data, user):
     branch =None
     entity_collection_account=None
     payment_method=None
-    branch_table=None
+    table=None
     mobile_money_phone_number="",
     quantity=0
     amount =0.00
@@ -1870,8 +1870,8 @@ def create_bar_inventory_order(data, user):
     else:
         branch=employee.current_branch
 
-    if  "branch_table" in data["bar_inventory_order"] and not data["bar_inventory_order"]["branch_table"]=="":
-        branch_table= restaurant_validators.validate_branch_table(data["bar_inventory_order"]["branch_table"])
+    if  "table" in data["bar_inventory_order"] and not data["bar_inventory_order"]["table"]=="":
+        table= restaurant_validators.validate_branch_table(data["bar_inventory_order"]["table"])
     else:
         pass
 
@@ -1951,7 +1951,7 @@ def create_bar_inventory_order(data, user):
         bar_inventory_order = models.BarInventoryOrder.objects.create(
             document_number=document_number,
             branch=employee.current_branch,
-            branch_table=branch_table,
+            table=table,
             payment_method=payment_method,
             entity=user.entity,
             order_items_cost=order_items_cost,
@@ -2032,7 +2032,7 @@ def get_food_order_payments(user, data):
     
     qs = []
 
-    qs = models.BranchFoodOrderPayment.objects.filter(
+    qs = models.FoodOrderPayment.objects.filter(
             entity=user.entity, 
         ).filter(Q(created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)))
 
@@ -2317,7 +2317,7 @@ def create_branch_accommodation_order(user,data):
         if  "guests" in room_data and len(room_data["guests"])==room_obj.occupancy:
             room_obj = restaurant_validators.validate_room(room_data["id"])
             for guest in room_data["guests"]:
-                guest = models.BranchGuest.objects.create(
+                guest = models.Guest.objects.create(
                     entity=employee.entity,
                     branch=employee.current_branch,
                     first_name=guest["first_name"],
@@ -2334,10 +2334,10 @@ def create_branch_accommodation_order(user,data):
                 branch_guests.append(guest)
 
         
-        branch_room=restaurant_validators.validate_room(room_data["id"])
-        if branch_room.is_available=="true":
-            room_booking = models.BranchRoomBooking.objects.create(
-                branch_room=branch_room,
+        room=restaurant_validators.validate_room(room_data["id"])
+        if room.is_available=="true":
+            room_booking = models.RoomBooking.objects.create(
+                room=room,
                 checkin_date=room_data["checkin_date"],
                 checkout_date=room_data["checkout_date"],
                 owner =user,
@@ -2351,7 +2351,7 @@ def create_branch_accommodation_order(user,data):
                 room_bookings.append(room_booking)
 
         else:
-            errors.append(f"Room {branch_room}is already booked")
+            errors.append(f"Room {room}is already booked")
             return errors, None
     
     if len(room_bookings)>0:
@@ -2400,7 +2400,7 @@ def get_branch_room_bookings(user, data):
     
     qs = []
 
-    qs = models.BranchRoomBooking.objects.filter(
+    qs = models.RoomBooking.objects.filter(
             entity=user.entity, owner=user, branch=employee.current_branch
         ).filter(Q(created__gte=get_formatted_from_date(data), created__lte=get_formatted_to_date(data)))
 

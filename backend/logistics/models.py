@@ -321,7 +321,7 @@ class Shipment(EntityRelatedModel):
         on_delete=models.CASCADE, null=True, blank=True,
     )
     food_order = models.OneToOneField(
-        "restaurants.BranchFoodOrder", related_name="shipment",
+        "restaurants.FoodOrder", related_name="shipment",
         on_delete=models.CASCADE, null=True, blank=True,
     )
     method = models.CharField(max_length=20, choices=Method.choices, default=Method.LOCAL)

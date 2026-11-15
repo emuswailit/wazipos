@@ -7,7 +7,7 @@ from intergrations.jambopay.jambopay_wallet import initiate_jambopay_settlement
 from intergrations.jambopay.jambopay_check_payment_status import jambopay_check_payment_status
 from decouple import config
 from authentication.utils.utils import generate_reference_number
-from restaurants.models import BarInventoryOrderItem,BranchFoodOrderItem
+from restaurants.models import BarInventoryOrderItem,FoodOrderItem
 
 
 
@@ -162,7 +162,7 @@ def settle_cashless_bar_order_payments():
 
 #### FOOD ORDERS
 def get_non_cash_today_food_order_payments():
-    qs = models.BranchFoodOrderPayment.objects.filter(
+    qs = models.FoodOrderPayment.objects.filter(
             is_settled=False, 
             status="PENDING"
         ).all().order_by("-created").exclude(payment_method__title="CASH")
@@ -186,16 +186,16 @@ def check_food_order_mobile_money_payment_status():
                     payment.save()
                     print("Ticket Payment success")
 
-                    payment.branch_food_order.is_paid ="true"
-                    payment.branch_food_order.save()
+                    payment.food_order.is_paid ="true"
+                    payment.food_order.save()
                     # Adjust inventory for succesfull cashless food payments
-                    order_items =  BranchFoodOrderItem.objects.filter(branch_food_order=payment.branch_food_order).all()
+                    order_items =  FoodOrderItem.objects.filter(food_order=payment.food_order).all()
                     for item in order_items:
                             print("aAdjust by",item.quantity)
-                            item.branch_food_item.quantity=item.branch_food_item.quantity - int(item.quantity)
-                            item.branch_food_item.save()
-                            print("aAdjusted item",item.branch_food_item)
-                            print("aAdjusted item qty",item.branch_food_item.quantity)
+                            item.food_item.quantity=item.food_item.quantity - int(item.quantity)
+                            item.food_item.save()
+                            print("aAdjusted item",item.food_item)
+                            print("aAdjusted item qty",item.food_item.quantity)
 
 
                 elif result_json and result_json["status"]=="FAILED":
@@ -203,8 +203,8 @@ def check_food_order_mobile_money_payment_status():
                     payment.desc=result_json['description']
                     payment.save()
 
-                    payment.branch_food_order.is_paid ="false"
-                    payment.branch_food_order.save()
+                    payment.food_order.is_paid ="false"
+                    payment.food_order.save()
             
                     return 
                 else:
@@ -216,7 +216,7 @@ def check_food_order_mobile_money_payment_status():
 
 
 def get_succesful_unsynced_today_food_order_payments():
-    qs = models.BranchFoodOrderPayment.objects.filter(
+    qs = models.FoodOrderPayment.objects.filter(
             is_settled=False, 
             status="SUCCESS"
         ).all().order_by("-created").exclude(payment_method__title="CASH")

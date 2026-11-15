@@ -1311,7 +1311,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "c404fc11-b746-5ad6-8ac8-14dd94107d45",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1327,7 +1327,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "8073c60e-f372-5b2b-b6d5-0c9aedd663ed",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1343,7 +1343,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "5848fe76-8314-5000-a304-1e7c33cc0b90",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1359,7 +1359,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "84581377-a86f-586b-8a76-46691d5b69b5",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1375,7 +1375,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "7026ecec-5024-55e3-94a6-a043160846ec",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1391,7 +1391,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "156f17dc-34bb-557a-8ccc-644c5a1397b3",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1407,7 +1407,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "3cf3c48b-6e8d-5431-8950-11abd325a5f4",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
@@ -1423,7 +1423,7 @@
     }
   },
   {
-    "model": "restaurants.BranchTable",
+    "model": "restaurants.Table",
     "pk": "271d8ab4-d667-5146-9da7-1faa2e05ba4a",
     "fields": {
       "entity": "e9ee73b5-7247-5023-b85d-e0d44aa77057",
