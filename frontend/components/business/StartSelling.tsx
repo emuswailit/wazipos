@@ -4,10 +4,11 @@
 // their own shop in two steps:
 //   1. Seller profile — phone, National ID / passport number and a copy of it
 //      (the copy is mandatory). A new phone gets the SMS consent code.
-//   2. Business — name, kind, where it is (and optionally a map pin).
+//   2. Business — name, kind, address and the location (mandatory; best taken
+//      on the premises with the device's GPS — advised for shops/pharmacies).
 // The server makes them the owner + super admin and returns a fresh session, so
-// the new business menus appear straight away. People who already run a shop
-// see it here instead.
+// the new business menus appear straight away. Owners see their businesses
+// here and can add more (branches / new ventures) at any time.
 
 import sellerApi, { type SellerReadiness } from '@/api/sellerOnboardingApi';
 import { ChoiceChips, FormRow, SheetButton, useListTokens } from '@/components/common/listScreen';
@@ -53,6 +54,8 @@ export default function StartSelling() {
     const [readiness, setReadiness] = useState<SellerReadiness | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [editProfile, setEditProfile] = useState(false);
+    /** Owners adding one more business. */
+    const [adding, setAdding] = useState(false);
 
     const load = useCallback(async () => {
         setLoadError(null);
@@ -93,21 +96,42 @@ export default function StartSelling() {
         );
     }
 
-    // ---- already running a shop
-    if (readiness.business) {
+    // ---- the businesses they run (they can always add another)
+    const owned = readiness.businesses ?? [];
+    if (owned.length > 0 && !adding) {
         return (
-            <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ padding: 16, alignItems: 'center' }}>
-                <View className="w-full rounded-3xl p-6" style={[cardStyle, { maxWidth: 560, gap: 12 }]}>
-                    <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: `${theme.primary}14` }}>
-                        <Ionicons name="storefront" size={24} color={theme.primary} />
+            <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ padding: 16, alignItems: 'center', paddingBottom: 40 }}>
+                <View className="w-full" style={{ maxWidth: 620, gap: 14 }}>
+                    <View className="flex-row items-end justify-between" style={{ gap: 12 }}>
+                        <View style={{ flex: 1, gap: 4 }}>
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26 }}>Your businesses</Text>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13.5 }}>
+                                You own {owned.length} business{owned.length === 1 ? '' : 'es'}. Open another branch or a new venture any time.
+                            </Text>
+                        </View>
                     </View>
-                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 22 }}>{readiness.business.title}</Text>
-                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 14 }}>
-                        {readiness.business_types.find((t) => t.value === readiness.business!.entity_type)?.label ?? readiness.business.entity_type} · you are the owner
-                    </Text>
-                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>
-                        Use the menu to receive stock, sell and manage orders.
-                    </Text>
+                    {owned.map((b) => (
+                        <View key={b.id} className="flex-row items-center rounded-2xl p-4" style={[cardStyle, { gap: 12 }]}>
+                            <View className="w-11 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: `${theme.primary}14` }}>
+                                <Ionicons name="storefront" size={21} color={theme.primary} />
+                            </View>
+                            <View style={{ flex: 1, gap: 2 }}>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }} numberOfLines={1}>{b.title}</Text>
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
+                                    {[b.type_label, b.town].filter(Boolean).join(' · ')}
+                                </Text>
+                                {!b.has_location ? (
+                                    <Text style={{ color: '#d97706', fontFamily: theme.font.bold, fontSize: 11.5 }}>No location set — buyers and deliveries can't find it</Text>
+                                ) : null}
+                            </View>
+                            {b.current ? (
+                                <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: 'rgba(16,185,129,0.12)' }}>
+                                    <Text style={{ color: '#10b981', fontFamily: theme.font.bold, fontSize: 10.5 }}>WORKING IN</Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    ))}
+                    <SheetButton label="Add another business" icon="add-circle-outline" onPress={() => setAdding(true)} />
                 </View>
             </ScrollView>
         );
@@ -120,9 +144,17 @@ export default function StartSelling() {
             <View className="w-full" style={{ maxWidth: 620, gap: 16 }}>
                 {/* Hero */}
                 <View style={{ gap: 6 }}>
-                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26 }}>Start selling on WaziPOS</Text>
+                    {owned.length > 0 ? (
+                        <Pressable onPress={() => setAdding(false)} hitSlop={8} className="flex-row items-center self-start" style={{ gap: 4 }}>
+                            <Ionicons name="chevron-back" size={16} color={theme.primary} />
+                            <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 13 }}>Your businesses</Text>
+                        </Pressable>
+                    ) : null}
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26 }}>{owned.length > 0 ? 'Add a business' : 'Start selling on WaziPOS'}</Text>
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 14, lineHeight: 20 }}>
-                        Shopping needs only your email. To open a shop we need to know who you are — it keeps buyers and sellers safe.
+                        {owned.length > 0
+                            ? 'Open another branch or business under your name.'
+                            : 'Shopping needs only your email. To open a shop we need to know who you are — it keeps buyers and sellers safe.'}
                     </Text>
                 </View>
 
@@ -159,6 +191,7 @@ export default function StartSelling() {
                             onEditProfile={() => setEditProfile(true)}
                             onCreated={async (token) => {
                                 await login(token);
+                                setAdding(false);
                                 router.replace('/(tabs)/business' as any);
                                 void load();
                             }}
@@ -276,6 +309,64 @@ function ProfileStep({ readiness, onSaved }: { readiness: SellerReadiness; onSav
 
 /* ------------------------------------------------------------ step 2 */
 
+/** Businesses customers walk into: their pin should be taken on the premises. */
+const RETAIL_TYPES = new Set(['GeneralRetailer', 'PharmaceuticalRetailer']);
+
+/**
+ * Required business location. Best taken on the premises with the device's
+ * GPS ("Use my current location"); otherwise a pin on the map.
+ */
+function BusinessLocation({ pin, onChange, retail }: { pin: LatLng | null; onChange: (p: LatLng) => void; retail: boolean }) {
+    const { theme } = useListTokens();
+    const [locating, setLocating] = useState(false);
+    const [accuracy, setAccuracy] = useState<number | null>(null);
+    const [locError, setLocError] = useState<string | null>(null);
+
+    const useHere = async () => {
+        setLocating(true);
+        setLocError(null);
+        try {
+            const Location = await import('expo-location');
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                setLocError('Location permission was declined — drop a pin on the map instead.');
+                return;
+            }
+            const here = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            onChange({ latitude: here.coords.latitude, longitude: here.coords.longitude });
+            setAccuracy(here.coords.accuracy ?? null);
+        } catch (e: any) {
+            setLocError(e?.message ? `Couldn't get your location: ${e.message}` : "Couldn't get your location — drop a pin on the map instead.");
+        } finally {
+            setLocating(false);
+        }
+    };
+
+    return (
+        <View style={{ gap: 8 }}>
+            <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.5 }}>BUSINESS LOCATION *</Text>
+            <View className="flex-row rounded-2xl p-3" style={{ gap: 10, backgroundColor: `${theme.primary}0d`, borderWidth: 1, borderColor: `${theme.primary}33` }}>
+                <Ionicons name="location" size={18} color={theme.primary} style={{ marginTop: 1 }} />
+                <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12.5, lineHeight: 18 }}>
+                    {retail
+                        ? 'Create a shop or pharmacy while you are standing in it, then tap "Use my current location". Buyers nearby, the shop front and deliveries all find you by this pin.'
+                        : 'Set where the business operates from — ideally while you are there, using "Use my current location". Deliveries are priced from this pin.'}
+                </Text>
+            </View>
+            <SheetButton label={pin && accuracy !== null ? 'Update to my current location' : 'Use my current location'} icon="navigate-outline" variant="secondary" loading={locating} loadingLabel="Locating…" onPress={() => void useHere()} />
+            {pin && accuracy !== null ? (
+                <Text style={{ color: accuracy > 100 ? '#d97706' : '#10b981', fontFamily: theme.font.medium, fontSize: 11.5 }}>
+                    {accuracy > 100
+                        ? `Accurate to about ${Math.round(accuracy)} m — move closer to a window or outdoors and try again, or adjust the pin.`
+                        : `Located to within about ${Math.round(accuracy)} m.`}
+                </Text>
+            ) : null}
+            {locError ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 11.5 }}>{locError}</Text> : null}
+            <LocationPinPicker value={pin} onChange={(p) => { setAccuracy(null); onChange(p); }} height={200} />
+        </View>
+    );
+}
+
 function BusinessStep({ readiness, onEditProfile, onCreated }: { readiness: SellerReadiness; onEditProfile: () => void; onCreated: (token: string) => Promise<void> }) {
     const { theme } = useListTokens();
     const [pin, setPin] = useState<LatLng | null>(null);
@@ -287,6 +378,10 @@ function BusinessStep({ readiness, onEditProfile, onCreated }: { readiness: Sell
             validationSchema={businessSchema}
             onSubmit={async (v) => {
                 setErrors([]);
+                if (!pin) {
+                    setErrors(['Set the business location — tap "Use my current location" at the premises, or drop a pin on the map.']);
+                    return;
+                }
                 try {
                     const res: any = await sellerApi.createBusiness({
                         title: v.title.trim(),
@@ -295,7 +390,8 @@ function BusinessStep({ readiness, onEditProfile, onCreated }: { readiness: Sell
                         road: v.road.trim(),
                         building: v.building.trim(),
                         description: v.description.trim(),
-                        ...(pin ? { latitude: pin.latitude, longitude: pin.longitude } : {}),
+                        latitude: pin.latitude,
+                        longitude: pin.longitude,
                     });
                     const token = res.data?.business?.tokens?.access;
                     if (res.ok && String(res.data?.response_code) === '0' && token) await onCreated(token);
@@ -332,10 +428,7 @@ function BusinessStep({ readiness, onEditProfile, onCreated }: { readiness: Sell
                         <CustomTextField name="road" label="Road / street" required placeholder="e.g. Moi Avenue" autoCapitalize="words" />
                     </FormRow>
                     <CustomTextField name="building" label="Building" required placeholder="e.g. Imenti House, 2nd floor" autoCapitalize="words" />
-                    <View style={{ gap: 6 }}>
-                        <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.5 }}>LOCATION ON THE MAP (OPTIONAL — NEEDED FOR DELIVERY)</Text>
-                        <LocationPinPicker value={pin} onChange={setPin} height={190} />
-                    </View>
+                    <BusinessLocation pin={pin} onChange={setPin} retail={RETAIL_TYPES.has(f.values.entity_type)} />
                     <CustomTextField name="description" label="About the business" placeholder="Optional" multiline />
                     {errors.length ? (
                         <View className="rounded-xl px-3 py-2.5" style={{ backgroundColor: 'rgba(244,63,94,0.10)', gap: 3 }}>

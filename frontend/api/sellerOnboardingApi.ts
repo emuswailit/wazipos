@@ -23,7 +23,8 @@ export interface SellerReadiness {
     identifier_number: string | null;
     document_url: string | null;
     consent_status: string;
-    business: { id: string; title: string; entity_type: string } | null;
+    /** Every business the user owns; `current` is the one they're working in. */
+    businesses: { id: string; title: string; entity_type: string; type_label: string; town: string | null; current: boolean; has_location: boolean }[];
     business_types: { value: string; label: string }[];
     consent_note?: string | null;
 }
@@ -41,8 +42,9 @@ export interface MyBusinessInput {
     road: string;
     building: string;
     description?: string;
-    latitude?: number;
-    longitude?: number;
+    /** Required: where buyers and deliveries find the business. */
+    latitude: number;
+    longitude: number;
 }
 
 const ENDPOINT = '/authentication/users';

@@ -55,7 +55,23 @@ def seller_readiness(user, request=None):
             doc_url = request.build_absolute_uri(doc.document.url) if request else doc.document.url
         except Exception:
             doc_url = None
-    owns_business = user.entity_id is not None and user.entity.entity_type in SELF_SERVICE_TYPES and user.entity.owner_id == user.id
+    # Every business the user owns (they can run several; the current one is user.entity).
+    from entitylocations.models import Locations
+
+    owned = list(models.Entities.objects.filter(owner=user).exclude(entity_type__in=["Default", "Bank"]).order_by("title"))
+    located = set(Locations.objects.filter(entity__in=owned, point__isnull=False).values_list("entity_id", flat=True))
+    businesses = [
+        {
+            "id": str(e.id),
+            "title": e.title,
+            "entity_type": e.entity_type,
+            "type_label": SELF_SERVICE_TYPES.get(e.entity_type, e.entity_type),
+            "town": e.town,
+            "current": e.id == user.entity_id,
+            "has_location": e.id in located,
+        }
+        for e in owned
+    ]
     return {
         "ready": not missing,
         "missing": missing,
@@ -64,7 +80,7 @@ def seller_readiness(user, request=None):
         "identifier_number": user.identifier_number,
         "document_url": doc_url,
         "consent_status": consent_status(user),
-        "business": {"id": str(user.entity_id), "title": user.entity.title, "entity_type": user.entity.entity_type} if owns_business else None,
+        "businesses": businesses,
         "business_types": [{"value": k, "label": v} for k, v in SELF_SERVICE_TYPES.items()],
     }
 
@@ -117,7 +133,7 @@ def complete_seller_profile(data, files, user):
 
 
 def create_my_business(data, user):
-    """Open the user's own shop. Returns (errors, entity)."""
+    """Open one of the user's shops (they may own several). Returns (errors, entity)."""
     from authentication.utils import utils
 
     readiness = seller_readiness(user)
@@ -129,6 +145,15 @@ def create_my_business(data, user):
     entity_type = str(details.get("entity_type") or "")
     if entity_type not in SELF_SERVICE_TYPES:
         return ["Pick what kind of business this is"], None
+    # The location is mandatory: buyers, the shop front and deliveries find the
+    # business by it. (Best set on the premises with the device's location.)
+    try:
+        lat, lng = float(details.get("latitude")), float(details.get("longitude"))
+    except (TypeError, ValueError):
+        return ["Set the business location on the map"], None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180) or (lat == 0 and lng == 0):
+        return ["Set a valid business location on the map"], None
+    details["latitude"], details["longitude"] = lat, lng
     details["owner"] = None  # always the caller
     details.setdefault("entity_ownership", "PRIVATE")
     details["entity_type"] = entity_type
