@@ -2439,6 +2439,11 @@ def retailerOrdersCommitAPIView(request):
         order.cancelled_at = now
         order.save(update_fields=["status", "cancelled_at", "updated"])
 
+        # Put back any stock already taken for it (a no-op if none was).
+        from products.stock_service import restore_retailer_order
+
+        restore_retailer_order(order)
+
         from analytics.realtime import push_order_rejected
         push_order_rejected(str(order.retailer_id), {
             "order_id": str(order.id),

@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { useInventorySync } from '@/context/InventorySyncContext';
 import { useProductsSync } from '@/context/ProductsSyncContext';
+import { partLabel, sellsInParts } from '@/utils/parts';
 import { useApi } from '@/hooks/useApi';
 import { Camera } from 'expo-camera';
 import { FormikProvider, useFormik } from 'formik';
@@ -383,6 +384,7 @@ const INITIAL_VALUES = {
     unit_of_receipt: '',
     unit_buying_price: '',
     unit_selling_price: '',
+    part_selling_price: '',
     unit_price_discount: '0.00',
     bar_code: '',
     batch: '',
@@ -476,6 +478,13 @@ function ModalBody({
     const isSuperAdmin = hasPricingRole(user);
     const canEditPricing = !isEdit || isSuperAdmin;
 
+    // Sold in parts (utils/parts.ts): the picked product, or the receipt being edited.
+    const partsSource = (productId: string) => {
+        if (inventoryToEdit?.parts?.sold_in_parts) return inventoryToEdit;
+        const p = (products || []).find((x: any) => String(x?.remote_id ?? x?.id) === String(productId));
+        return p && sellsInParts(p) ? p : null;
+    };
+
     const [isSaving, setIsSaving] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const sheetWide = useSheetIsWide();
@@ -514,6 +523,9 @@ function ModalBody({
                     ),
                     unit_selling_price: String(
                         inventoryToEdit.unit_selling_price ?? ''
+                    ),
+                    part_selling_price: String(
+                        inventoryToEdit.part_selling_price ?? ''
                     ),
                     unit_price_discount: String(
                         inventoryToEdit.unit_price_discount ??
@@ -611,6 +623,10 @@ function ModalBody({
                         unit_selling_price: String(
                             values.unit_selling_price || ''
                         ),
+                        // Sold in parts: price of one part (tot, kg …)
+                        part_selling_price: String(
+                            values.part_selling_price || ''
+                        ),
                         unit_price_discount: String(
                             values.unit_price_discount ||
                             '0.00'
@@ -623,6 +639,10 @@ function ModalBody({
                         ),
                         unit_selling_price: String(
                             inventoryToEdit?.unit_selling_price ??
+                            ''
+                        ),
+                        part_selling_price: String(
+                            inventoryToEdit?.part_selling_price ??
                             ''
                         ),
                         unit_price_discount: String(
@@ -1083,6 +1103,26 @@ function ModalBody({
                                 />
                             </Locked>
                         </View>
+
+                        {partsSource(formik.values.product) ? (
+                            <View className="w-full md:flex-1">
+                                <Locked
+                                    isEdit={isEdit}
+                                    allow={canEditPricing}
+                                >
+                                    <UniversalInput
+                                        name="part_selling_price"
+                                        formik={formik}
+                                        theme={theme}
+                                        isDarkMode={isDarkMode}
+                                        label={`Price per ${partLabel(partsSource(formik.values.product))}`}
+                                        mode="decimal"
+                                        editable={canEditPricing}
+                                        placeholder="0.00"
+                                    />
+                                </Locked>
+                            </View>
+                        ) : null}
 
                         <View className="w-full md:flex-1">
                             <Locked

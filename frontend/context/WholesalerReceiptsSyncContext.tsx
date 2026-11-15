@@ -1,5 +1,6 @@
 // context/WholesalerReceiptsSyncContext.tsx
 
+import { SaleUnit, takeLocal } from '@/utils/parts';
 import wholesalersApi from '@/api/wholesalersApi';
 import { useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
@@ -70,7 +71,7 @@ interface WholesalerReceiptsSyncContextType {
     ) => Promise<void>;
     /** Offline sales: take sold packs off the local stock (the server does it on upload). */
     deductLocalStock: (
-        items: { wholesaler_receipt: string; purchased_quantity: number }[]
+        items: { wholesaler_receipt: string; purchased_quantity: number; sale_unit?: SaleUnit; part_quantity?: number }[]
     ) => Promise<void>;
     syncUiState: SyncUiState;
 }
@@ -515,6 +516,11 @@ function normalizeReceipt(
             item.unit_price_discount ?? '0.00'
         ),
 
+        // Sold in parts (utils/parts.ts): part price, what's left in the opened unit, breakdown.
+        part_selling_price: String(item.part_selling_price ?? '0.00'),
+        open_content: String(item.open_content ?? '0'),
+        parts: item.parts ?? null,
+
         current_unit_quantity: Number(
             item.current_unit_quantity ?? 0
         ),
@@ -570,6 +576,8 @@ function areReceiptsEqual(
             x.product_id !== y.product_id ||
             x.product_title !== y.product_title ||
             x.current_unit_quantity !== y.current_unit_quantity ||
+            x.open_content !== y.open_content ||
+            x.part_selling_price !== y.part_selling_price ||
             x.received_unit_quantity !== y.received_unit_quantity ||
             x.unit_selling_price !== y.unit_selling_price ||
             x.final_unit_selling_price !==
@@ -623,6 +631,8 @@ function buildReceiptDetails(
             record.final_unit_selling_price ??
             ''
         ),
+        // Sold in parts: price of one part (tot, kg …)
+        part_selling_price: String(record.part_selling_price ?? ''),
 
         manufacture_date: String(
             record.manufacture_date ?? ''
@@ -1693,18 +1703,22 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
      * Offline sales: deduct sold packs locally until the server's stock arrives
      * ------------------------------------------------------- */
     const deductLocalStock = useCallback(
-        async (items: { wholesaler_receipt: string; purchased_quantity: number }[]) => {
-            const sold = new Map<string, number>();
+        async (items: { wholesaler_receipt: string; purchased_quantity: number; sale_unit?: SaleUnit; part_quantity?: number }[]) => {
+            // Whole units or parts per receipt (utils/parts.ts takeLocal).
+            const sold = new Map<string, { unit: SaleUnit; qty: number }[]>();
             for (const i of items ?? []) {
                 const key = String(i?.wholesaler_receipt ?? '');
-                const qty = Number(i?.purchased_quantity) || 0;
-                if (key && qty > 0) sold.set(key, (sold.get(key) ?? 0) + qty);
+                const unit: SaleUnit = i?.sale_unit === 'PART' ? 'PART' : 'FULL';
+                const qty = Number(unit === 'PART' ? i?.part_quantity : i?.purchased_quantity) || 0;
+                if (key && qty > 0) sold.set(key, [...(sold.get(key) ?? []), { unit, qty }]);
             }
             if (!sold.size) return;
             const next = receiptsStateRef.current.map((r: any) => {
                 const key = [r.remote_id, r.remote_key, r.id].map((k) => (k == null ? '' : String(k))).find((k) => k && sold.has(k));
                 if (!key) return r;
-                return { ...r, current_unit_quantity: Math.max(0, (Number(r.current_unit_quantity) || 0) - sold.get(key)!) };
+                let out = r;
+                for (const line of sold.get(key)!) out = takeLocal(out, line.unit, line.qty);
+                return out;
             });
             receiptsStateRef.current = next;
             setWholesalerReceipts(next);

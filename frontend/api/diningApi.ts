@@ -251,6 +251,8 @@ export interface Supply {
     expiry_date: string | null;
     bar_code: string | null;
     updated: string | null;
+    /** Issued in parts (a 50 kg bag used by the kg) — utils/parts.ts */
+    parts?: import('@/utils/parts').PartsInfo | null;
 }
 
 export interface SupplyMovement {

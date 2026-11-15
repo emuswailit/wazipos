@@ -40,31 +40,17 @@ from payments.validators.payments_models_validators import (
     validate_payment_method_exists,
 )
 
-@transaction.atomic
 def update_stock(items):
-    current_unit_quantity = 0
-    sold_packs = 0
-    loose = 0
-    for item in items:
-        # sold_packs = item.total_quantity % item.wholesaler_receipt.product.units_per_pack
-        current_unit_quantity = item.wholesaler_receipt.current_unit_quantity
-        item.wholesaler_receipt.current_unit_quantity = (
-            current_unit_quantity - item.total_quantity
-        )
+    """
+    Take retailer-order lines off the wholesaler's stock — once per order
+    (products/stock_service.py). The old version overwrote stock with a pack
+    count (stock / units_per_pack).
+    """
+    from products.stock_service import deduct_retailer_order
 
-        packs_updated = (
-            int(current_unit_quantity - item.total_quantity)
-            / item.wholesaler_receipt.product.units_per_pack
-        )
-
-        try:
-            item.wholesaler_receipt.current_unit_quantity = packs_updated
-            item.wholesaler_receipt.save()
-        except Exception as e:
-            print("Error", e)
-
-        item.wholesaler_receipt.save()
-    return True  
+    for order in {item.retailer_order for item in items if item.retailer_order_id}:
+        deduct_retailer_order(order)
+    return True
 
 
 def process_customer_order_payment(retailer_order, payment_method, user, mobile_money_phone, reference_number):
@@ -876,6 +862,23 @@ def create_retailer_order(data, user):
                     product = WholesalerReceipts.objects.get(id=item['wholesaler_receipt'])
                     purchased_quantity = 0
                     unit_of_issue = None
+                    if str(item.get("sale_unit") or "FULL").upper() == "PART":
+                        # Parts (e.g. 2.5 kg, 3 tots) — products/units.py
+                        from products.stock_service import check_available
+                        from products.units import D as _units_D, sells_in_parts
+
+                        part_qty = _units_D(item.get("part_quantity") or item.get("purchased_quantity") or 0)
+                        if part_qty <= 0:
+                            errors.append(f"Enter how much {product.product.title} to sell")
+                        elif not sells_in_parts(product.product):
+                            errors.append(f"{product.product.title} isn't sold in parts")
+                        elif (product.part_selling_price or 0) <= 0:
+                            errors.append(f"Set a part price for {product.product.title} before selling it in parts")
+                        else:
+                            short = check_available(product, "PART", part_qty)
+                            if short:
+                                errors.append(short)
+                        continue
                     # try:
                     #     if "unit_of_issue" not in item:
                     #         errors.append("Unit of issue is required")
@@ -942,6 +945,15 @@ def create_retailer_order(data, user):
     order_gross_price_total = _D("0")
     order_discount_total = _D("0")
     for item in order_items:
+        if str(item.get("sale_unit") or "FULL").upper() == "PART":
+            # Part lines are priced from the receipt's part price, server side.
+            part_receipt = WholesalerReceipts.objects.get(id=item["wholesaler_receipt"])
+            part_qty = _D(str(item.get("part_quantity") or item.get("purchased_quantity") or 0))
+            item["_part_price"] = _D(str(part_receipt.part_selling_price or 0))
+            item["_part_qty"] = part_qty
+            order_gross_price_total += part_qty * item["_part_price"]
+            order_discount_total += _D(str(item.get("item_price_discount") or 0))
+            continue
         qty = _D(str(item.get("purchased_quantity") or 0))
         order_gross_price_total += qty * _D(str(item.get("item_price") or 0))
         order_discount_total += _D(str(item.get("item_price_discount") or 0))
@@ -989,7 +1001,29 @@ def create_retailer_order(data, user):
             if not wholesaler_receipt:
                 errors.append("Item non existes")
                 return errors, None
-           
+            if "_part_qty" in item:
+                part_qty = item["_part_qty"]
+                part_price = item["_part_price"]
+                part_discount = _D(str(item.get("item_price_discount") or 0))
+                part_total = part_price * part_qty - part_discount
+                RetailerOrderItems.objects.create(
+                    retailer_order=retailer_order,
+                    sale_unit="PART",
+                    part_quantity=part_qty,
+                    purchased_quantity=0,
+                    total_quantity=0,
+                    discount_quantity=0,
+                    item_price=part_price,
+                    item_price_total=round(part_total, 2),
+                    item_net_price=round(part_total / part_qty, 2) if part_qty else 0,
+                    item_price_discount=part_discount,
+                    unit_of_issue=wholesaler_receipt.unit_of_receipt,
+                    wholesaler_receipt=wholesaler_receipt,
+                    owner=user,
+                    entity=user.entity,
+                )
+                continue
+
             if WholesalerQuantityDiscounts.objects.filter(wholesaler_receipt_id=item['wholesaler_receipt'],end__gte=today).exists():
                 wholesaler_quantity_discount = WholesalerQuantityDiscounts.objects.filter(
                     wholesaler_receipt_id=item['wholesaler_receipt'],end__gte=today).first()

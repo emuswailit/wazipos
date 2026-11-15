@@ -196,6 +196,13 @@ function normalizeProduct(i: any): ProductItem {
         is_vatable: String(i.is_vatable ?? 'false'),
         is_pom: !!i.is_pom,
 
+        // Sold in parts (utils/parts.ts)
+        sold_in_parts: !!i.sold_in_parts,
+        measure: i.measure ?? null,
+        content_per_unit: i.content_per_unit ?? null,
+        part_size: i.part_size ?? null,
+        part_label: i.part_label ?? null,
+
         images,
 
         description: String(i.description ?? ''),

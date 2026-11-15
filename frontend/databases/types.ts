@@ -51,6 +51,12 @@ export interface ProductCategoryDetails {
 }
 
 export interface ProductItem {
+    /** Sold in parts (utils/parts.ts) */
+    sold_in_parts?: boolean;
+    measure?: string | null;
+    content_per_unit?: string | null;
+    part_size?: string | null;
+    part_label?: string | null;
     id?: number;
     cached_at?: string;
 
@@ -126,6 +132,10 @@ export interface RetailerReceiptImage {
 }
 
 export interface RetailerReceipt {
+    /** Sold in parts (utils/parts.ts) */
+    part_selling_price?: string;
+    open_content?: string;
+    parts?: import('@/utils/parts').PartsInfo | null;
     id?: number;
     cached_at?: string;
     local_created_at?: string;
@@ -1285,6 +1295,10 @@ export interface WholesalerReceiptPriceDiscount {
 }
 
 export interface WholesalerReceipt {
+    /** Sold in parts (utils/parts.ts) */
+    part_selling_price?: string;
+    open_content?: string;
+    parts?: import('@/utils/parts').PartsInfo | null;
     id?: number;
     cached_at: string;
     synced: boolean;

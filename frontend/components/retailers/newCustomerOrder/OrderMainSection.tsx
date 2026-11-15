@@ -1,6 +1,7 @@
 // components/retailers/newCustomerOrder/OrderMainSection.tsx
 
 import { RetailerReceipt } from '@/databases/types';
+import { SaleUnit, partLabel, plural, sellsInParts, stockLabel, totalParts } from '@/utils/parts';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -8,6 +9,8 @@ interface OrderMainSectionProps {
     theme: any; lineItems: any[]; retailerReceipts: RetailerReceipt[]; isBlankRowPresent: boolean;
     handleUpdateRow: (id: string, updates: any) => void; handleDeleteRow: (id: string) => void;
     handleSelectProduct: (rowId: string, prod: any) => void; handleAddRow: () => void;
+    /** Whole units or parts (tots, kg, pieces) for a line — products sold in parts only. */
+    handleSetSaleUnit?: (rowId: string, unit: SaleUnit) => void;
     setIsScannerOpen: (open: boolean) => void; totals: any;
     onRowLayout?: (id: string, y: number) => void; onSearchFocused?: (rowId: string) => void;
 }
@@ -53,7 +56,7 @@ export const OrderMainSection = (props: OrderMainSectionProps) => {
 // 🟢 LineItemRow - Fixed Overlaps
 // =====================================================================
 const LineItemRow: React.FC<OrderMainSectionProps & { item: any; index: number }> = ({
-    item, index, theme, retailerReceipts, handleUpdateRow, handleDeleteRow, handleSelectProduct, onSearchFocused
+    item, index, theme, retailerReceipts, handleUpdateRow, handleDeleteRow, handleSelectProduct, handleSetSaleUnit, onSearchFocused
 }) => {
     const qtyRef = useRef<TextInput>(null);
     const searchRef = useRef<View>(null);
@@ -61,6 +64,28 @@ const LineItemRow: React.FC<OrderMainSectionProps & { item: any; index: number }
     const [dropTop, setDropTop] = useState(40);
 
     const onUpdate = (updates: any) => handleUpdateRow(item.id, updates);
+
+    // Sold in parts: this line's receipt, and whether it's selling whole units or parts.
+    const receipt: any = useMemo(
+        () => (item.selectedProduct ? retailerReceipts?.find((r: any) => String(r.remote_id ?? r.remote_key ?? '') === String(item.selectedProduct)) : null),
+        [item.selectedProduct, retailerReceipts]
+    );
+    const canPart = !!receipt && sellsInParts(receipt);
+    const inParts = item.saleUnit === 'PART';
+    const part = canPart ? partLabel(receipt) : 'part';
+    const inStock = receipt ? (inParts ? totalParts(receipt) : Number(receipt.current_unit_quantity) || 0) : null;
+    const overStock = inStock !== null && Number(item.quantity) > inStock;
+
+    // Quantity text (parts can be decimals, e.g. 2.5 kg — keep what's typed).
+    const [qtyText, setQtyText] = useState(String(item.quantity));
+    useEffect(() => {
+        setQtyText((prev) => (Number(prev) === Number(item.quantity) ? prev : String(item.quantity)));
+    }, [item.quantity]);
+    const onQty = (t: string) => {
+        const clean = inParts ? t.replace(',', '.').replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1') : t.replace(/[^0-9]/g, '');
+        setQtyText(clean);
+        onUpdate({ quantity: clean === '' ? 0 : (inParts ? parseFloat(clean) : parseInt(clean, 10)) || 0 });
+    };
 
     const filtered = useMemo(() => {
         const q = (item.searchQuery || '').trim().toLowerCase();
@@ -124,7 +149,8 @@ const LineItemRow: React.FC<OrderMainSectionProps & { item: any; index: number }
                                     <Text className="text-[10px] text-slate-500 mt-0.5">
                                         KES {Number(p.unit_selling_price || 0).toFixed(2)}
                                         {' • '}
-                                        Available: {p.current_unit_quantity ?? 0}
+                                        Available: {stockLabel(p, 'unit')}
+                                        {sellsInParts(p) && Number((p as any).part_selling_price) > 0 ? ` • KES ${Number((p as any).part_selling_price).toFixed(2)} per ${partLabel(p)}` : ''}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -141,15 +167,37 @@ const LineItemRow: React.FC<OrderMainSectionProps & { item: any; index: number }
                 )}
             </View>
 
+            {/* 2b. Whole units or parts (products sold in parts) */}
+            {canPart && handleSetSaleUnit ? (
+                <View className="flex-row items-center gap-1.5 w-full lg:w-auto">
+                    {([['FULL', 'Whole'], ['PART', `By ${part}`]] as [SaleUnit, string][]).map(([unit, label]) => {
+                        const active = (item.saleUnit || 'FULL') === unit;
+                        return (
+                            <TouchableOpacity
+                                key={unit}
+                                onPress={() => handleSetSaleUnit(item.id, unit)}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: active }}
+                                style={{ backgroundColor: active ? theme.primary : 'transparent', borderColor: active ? theme.primary : '#cbd5e1' }}
+                                className="flex-1 lg:flex-none h-[32px] px-3 rounded-full border items-center justify-center"
+                            >
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: 11, color: active ? '#fff' : '#475569' }}>{label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            ) : null}
+
             {/* 3. Quantity + Discount */}
             <View className="flex-row items-center w-full lg:w-auto gap-3">
                 <View className="flex-1 lg:w-[60px]">
-                    <Text className="text-[10px] text-slate-500 text-center mb-0.5">Qty</Text>
+                    <Text className="text-[10px] text-slate-500 text-center mb-0.5">{inParts ? plural(part, 2) : 'Qty'}</Text>
                     <TextInput
                         ref={qtyRef}
-                        keyboardType="numeric"
-                        value={String(item.quantity)}
-                        onChangeText={(t) => onUpdate({ quantity: t === '' ? 0 : parseInt(t) || 0 })}
+                        keyboardType={inParts ? 'decimal-pad' : 'numeric'}
+                        value={qtyText}
+                        onChangeText={onQty}
+                        style={overStock ? { borderColor: '#ef4444' } : undefined}
                         className="h-[38px] border rounded-lg text-center text-sm w-full"
                     />
                 </View>
@@ -163,6 +211,13 @@ const LineItemRow: React.FC<OrderMainSectionProps & { item: any; index: number }
                     />
                 </View>
             </View>
+
+            {receipt && (canPart || overStock) ? (
+                <Text style={{ color: overStock ? '#ef4444' : '#64748b', fontFamily: theme.font.medium, fontSize: 10 }} className="w-full lg:w-auto">
+                    {overStock ? 'Only ' : 'In stock: '}{stockLabel(receipt, 'unit')}
+                    {inParts ? ` · KES ${Number(item.price || 0).toFixed(2)} per ${part}` : ''}
+                </Text>
+            ) : null}
         </View>
     );
 };

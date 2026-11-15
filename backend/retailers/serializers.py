@@ -271,6 +271,7 @@ class CustomerOrderItemsSerializer(serializers.ModelSerializer):
             "id", "title",
             "customer_order", "retailer_receipt",
             "purchased_quantity", "discount_quantity", "total_quantity",
+            "sale_unit", "part_quantity",
             "unit_of_issue", "quantity",
 
             "item_price", "item_price_total",
@@ -334,6 +335,7 @@ class DuplicateCustomerOrderItemsSerializer(serializers.ModelSerializer):
             "id", "title", "customer_order", "customer_order_number",
             "retailer_receipt",
             "purchased_quantity", "discount_quantity", "total_quantity",
+            "sale_unit", "part_quantity",
             "unit_of_issue", "quantity",
             "item_price", "item_price_total",
             "item_tax", "item_tax_total",
@@ -1245,6 +1247,7 @@ class MiniRetailerReceiptsSerializer(serializers.ModelSerializer):
 
 
 class RetailerReceiptsSerializer(serializers.ModelSerializer):
+    parts = serializers.SerializerMethodField(read_only=True)
     final_unit_selling_price = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True,
     )
@@ -1322,6 +1325,7 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
             "created", "updated", "employee", "owner",
             "days_to_expiry", "expiry_status",
             "packaging", "units_per_pack",
+            "open_content", "part_selling_price", "parts",
             "manufacturer", "manufacturer_title",
             "category", "category_title",
         )
@@ -1433,6 +1437,15 @@ class RetailerReceiptsSerializer(serializers.ModelSerializer):
         elif expiry_days > 56:
             return f"EXPIRES IN {expiry_days} DAY(S)"
         return None
+
+    def get_parts(self, obj):
+        """Whole units + what's left in the opened unit (products/units.py)."""
+        from products.units import breakdown, product_parts_out
+
+        product = getattr(obj, "product", None)
+        out = product_parts_out(product)
+        out.update(breakdown(obj.current_unit_quantity or 0, getattr(obj, "open_content", 0) or 0, product))
+        return out
 
     
 # ===========================================================================

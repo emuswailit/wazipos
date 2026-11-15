@@ -235,6 +235,8 @@ def custom_error_message(message):
 def create_retailer_receipts(item, retailer_order_obj, user):
     errors = []
     try:
+        if str(getattr(item, "sale_unit", "FULL") or "FULL").upper() == "PART":
+            return _create_part_receipt(item, retailer_order_obj, user)
         receipt = RetailerReceipts.objects.create(
             product=item.wholesaler_receipt.product,
             received_from=retailer_order_obj.wholesaler,
@@ -267,6 +269,49 @@ def create_retailer_receipts(item, retailer_order_obj, user):
     except IntegrityError as e:
         errors.append(str(e))
         raise_custom_exception(errors)
+
+
+def _create_part_receipt(item, retailer_order_obj, user):
+    """
+    A line bought in parts (e.g. 30 kg of a 50 kg sack, 5 tots) goes on the
+    shelf as whole units + an opened unit: the content is split with
+    products/units.py. Prices: part price as bought; the whole-unit price is
+    the part price x parts per unit (the shop can change both later).
+    """
+    from products.units import D, content_per_unit, part_size, parts_per_unit
+
+    product = item.wholesaler_receipt.product
+    content = D(item.part_quantity) * part_size(product)
+    per_unit = content_per_unit(product)
+    full = int(content // per_unit) if per_unit > 0 else 0
+    open_content = content - (per_unit * full)
+    part_cost = D(item.item_net_price or item.item_price)
+    unit_cost = (part_cost * parts_per_unit(product)).quantize(Decimal("0.01"))
+    receipt = RetailerReceipts.objects.create(
+        product=product,
+        received_from=retailer_order_obj.wholesaler,
+        entity=user.entity,
+        owner=user,
+        retailer_order=retailer_order_obj,
+        retailer_order_item=item,
+        wholesaler_receipt=item.wholesaler_receipt,
+        unit_buying_price=unit_cost,
+        unit_selling_price=item.intended_retail_unit_price or unit_cost,
+        part_selling_price=part_cost,
+        received_unit_quantity=full,
+        current_unit_quantity=full,
+        open_content=open_content,
+        units_per_pack=product.units_per_pack,
+        unit_of_receipt=item.unit_of_issue or "Pack",
+        batch=item.wholesaler_receipt.batch,
+        manufacture_date=item.wholesaler_receipt.manufacture_date,
+        expiry_date=item.wholesaler_receipt.expiry_date,
+        in_placement=False,
+    )
+    if item.is_received != "true":
+        item.is_received = "true"
+        item.save(update_fields=["is_received", "updated"])
+    return receipt
 
 
 def retailer_order_is_received(order):
@@ -712,6 +757,8 @@ def create_retailer_receipt_directly(data, user):
             unit_selling_price=unit_selling_price,
             units_per_pack=product.units_per_pack,
             unit_price_discount=unit_price_discount,
+            # Sold in parts: price of one part (tot, kg ...) - products/units.py
+            part_selling_price=_to_decimal(details.get("part_selling_price") or 0),
         )
 
         if retailer_order_item:
@@ -784,6 +831,21 @@ def update_retailer_receipt_directly(data, user):
             details["unit_buying_price"]
         )
         changed.append("unit_buying_price")
+
+    # Sold in parts: part price, and a count of what's left in the opened unit.
+    if details.get("part_selling_price") not in (None, ""):
+        receipt.part_selling_price = _to_decimal(details["part_selling_price"])
+        changed.append("part_selling_price")
+
+    if details.get("open_content") not in (None, ""):
+        from products.units import content_per_unit
+
+        open_content = _to_decimal(details["open_content"])
+        cap = content_per_unit(receipt.product)
+        if open_content < 0 or (cap > 0 and open_content >= cap):
+            raise exceptions.ValidationError("What's left in the opened unit must be less than a whole unit")
+        receipt.open_content = open_content
+        changed.append("open_content")
 
     if details.get("unit_price_discount"):
         receipt.unit_price_discount = _to_decimal(
@@ -2632,22 +2694,10 @@ def retrieve_retailer_order_items(data):
 # ===========================================================================
 
 def update_wholesaler_stock(retailer_order):
-    retailer_order_items = RetailerOrderItems.objects.filter(
-        retailer_order=retailer_order,
-    )
-    for roi in retailer_order_items:
-        wholesaler_receipt = WholesalerReceipts.objects.filter(
-            id=roi.wholesaler_receipt_id,
-        ).first()
-        if wholesaler_receipt:
-            wholesaler_receipt.current_unit_quantity = max(
-                0,
-                (wholesaler_receipt.current_unit_quantity or 0)
-                - roi.total_quantity,
-            )
-            wholesaler_receipt.save(
-                update_fields=["current_unit_quantity"]
-            )
+    """Take a paid retailer order off the wholesaler's stock — once (products/stock_service.py)."""
+    from products.stock_service import deduct_retailer_order
+
+    deduct_retailer_order(retailer_order)
 
 
 def process_retailer_order_payment(
@@ -3445,6 +3495,31 @@ def create_customer_order(data, user):
     create_log("info", f"Data items: {order_items}")
 
     for item in order_items:
+        # Whole units (FULL) or parts (PART: e.g. 2.5 kg, 3 tots) — products/units.py
+        sale_unit = str(item.get("sale_unit") or "FULL").upper()
+        if sale_unit == "PART":
+            part_qty = _to_decimal(item.get("part_quantity") or item.get("purchased_quantity") or 0)
+            if part_qty <= 0:
+                errors.append("Enter how much to sell")
+                return errors, None
+            part_receipt = RetailerReceipts.objects.select_related("product").filter(id=item.get("retailer_receipt")).first()
+            if not part_receipt:
+                errors.append("Item with provided ID does not exist in inventory")
+                return errors, None
+            from products.stock_service import check_available
+            from products.units import sells_in_parts
+
+            if not sells_in_parts(part_receipt.product):
+                errors.append(f"{part_receipt.product.title} isn't sold in parts")
+                return errors, None
+            if (part_receipt.part_selling_price or 0) <= 0:
+                errors.append(f"Set a part price for {part_receipt.product.title} before selling it in parts")
+                return errors, None
+            short = check_available(part_receipt, "PART", part_qty)
+            if short:
+                errors.append(short)
+                return errors, None
+            continue
         purchased_quantity = _to_int(item.get("purchased_quantity"))
         if purchased_quantity <= 0:
             errors.append("Purchased quantity must be greater than zero")
@@ -3584,6 +3659,37 @@ def create_customer_order(data, user):
                     return [agent_error], None
 
         for item in order_items:
+            sale_unit = str(item.get("sale_unit") or "FULL").upper()
+            if sale_unit == "PART":
+                # Parts (e.g. 2.5 kg, 3 tots): priced from the receipt's part price, server side.
+                part_qty = _to_decimal(item.get("part_quantity") or item.get("purchased_quantity") or 0)
+                part_receipt = RetailerReceipts.objects.select_related("product").get(id=item["retailer_receipt"])
+                part_price = _to_decimal(part_receipt.part_selling_price)
+                part_discount = _to_decimal(item.get("item_price_discount") or item.get("item_discount") or 0)
+                vat = str(getattr(part_receipt.product, "is_vatable", "false")).lower() == "true"
+                part_tax = _q(part_price * Decimal("0.16")) if vat else Decimal("0.00")
+                CustomerOrderItems.objects.create(
+                    customer_order=order_created,
+                    retailer_receipt=part_receipt,
+                    unit_of_issue=part_receipt.unit_of_receipt,
+                    sale_unit="PART",
+                    part_quantity=part_qty,
+                    purchased_quantity=0,
+                    discount_quantity=0,
+                    total_quantity=0,
+                    quantity=0,
+                    item_price=part_price,
+                    item_price_total=_q(part_price * part_qty),
+                    item_price_discount=part_discount,
+                    item_price_discount_total=_q(part_discount * part_qty),
+                    item_net_price=_q(part_price - part_discount),
+                    item_net_price_total=_q((part_price - part_discount) * part_qty),
+                    item_tax=part_tax,
+                    item_tax_total=_q(part_tax * part_qty),
+                    entity=user.entity,
+                    owner=user,
+                )
+                continue
             purchased_qty = _to_int(item["purchased_quantity"])
             discount_quantity = _to_int(item.get("discount_quantity", 0))
             final_unit = _to_decimal(item["final_unit_selling_price"])
@@ -3608,7 +3714,7 @@ def create_customer_order(data, user):
             item_net_price = _q(final_unit - discount_unit)
             item_net_price_total = _q(item_net_price * purchased_qty)
 
-            if retailer_receipt.product.is_vatable:
+            if str(retailer_receipt.product.is_vatable).lower() == "true":
                 item_tax = _q(final_unit * Decimal("0.16"))
                 item_tax_total = _q(item_tax * purchased_qty)
             else:
@@ -3763,7 +3869,7 @@ def create_express_customer_order_data(data, user):
             item_net_price = _q(final_unit - discount_unit)
             item_net_price_total = _q(item_net_price * purchased_qty)
 
-            if retailer_receipt.product.is_vatable:
+            if str(retailer_receipt.product.is_vatable).lower() == "true":
                 item_tax = _q(final_unit * Decimal("0.16"))
                 item_tax_total = _q(item_tax * purchased_qty)
             else:

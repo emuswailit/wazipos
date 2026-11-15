@@ -6,21 +6,14 @@ from retailers.models import CustomerOrderItems,RetailerReceipts
 
 from django.db import transaction
 
-@transaction.atomic
 def update_stock(customer_order):
-    create_log("error", "Am updating stock...")
-    
-    # select_related avoids making a separate database query for every single loop iteration
-    items = CustomerOrderItems.objects.filter(customer_order=customer_order).select_related('retailer_receipt')
-    
-    for item in items:
-        receipt = item.retailer_receipt
-        
-        # Directly deduct the sold quantity from the current unit stock
-        receipt.current_unit_quantity -= item.quantity
-        receipt.save()
+    """
+    Take a sale off the shop's stock — once per order, whole units (incl. free
+    bonus units) and parts alike. See products/stock_service.py.
+    """
+    from products.stock_service import deduct_customer_order
 
-    # Function returns True only after all items have updated successfully
+    deduct_customer_order(customer_order)
     return True
 
 

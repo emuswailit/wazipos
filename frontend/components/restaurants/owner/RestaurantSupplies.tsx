@@ -10,11 +10,14 @@ import { AdminSheet, ChoiceChips, FilterChips, FormRow, SearchField, SheetButton
 import { CustomTextField } from '@/components/common/CustomTextField';
 import { DateField } from '@/components/common/DateField';
 import PendingSyncBanner from '@/components/common/PendingSyncBanner';
+import PartsSettingsFields from '@/components/common/soldInParts/PartsSettingsFields';
 import { useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { cacheGet, cacheSet, newDraftId, submitDining } from '@/services/diningOutbox';
 import { onPendingOrdersChanged } from '@/services/pendingOrdersSignal';
+import { partsInitialValues, partsPayload, partsPerUnit, plural, sellsInParts } from '@/utils/parts';
 import { Ionicons } from '@expo/vector-icons';
+import { Formik } from 'formik';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
@@ -121,7 +124,7 @@ export default function RestaurantSupplies() {
                                 </Text>
                             </View>
                             <View className="items-end">
-                                <Text style={{ color: i.is_low ? '#d97706' : theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{num(i.quantity)} {i.unit}</Text>
+                                <Text style={{ color: i.is_low ? '#d97706' : theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{sellsInParts(i) && i.parts?.label ? i.parts.label : `${num(i.quantity)} ${i.unit}`}</Text>
                                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>{kes(i.value)}</Text>
                             </View>
                         </Pressable>
@@ -145,6 +148,26 @@ function SupplySheet({ item, write, onSaved, onClose, online }: { item: Supply; 
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
     const [history, setHistory] = useState<SupplyMovement[] | null>(null);
+    // Issued in parts (3 kg off a 50 kg bag): whole units or parts when using / wasting.
+    const canPart = sellsInParts(item);
+    const part = item.parts?.part_label || 'part';
+    const [byPart, setByPart] = useState(canPart);
+    const [setup, setSetup] = useState(false);
+    const inParts = canPart && byPart && (mode === 'ISSUE' || mode === 'WASTE');
+
+    const saveParts = async (values: any) => {
+        setBusy(true);
+        setMsg(null);
+        try {
+            const r = await write('UpdateSupply', { stock: item.id, ...partsPayload(values) }, `Parts for ${item.title}`);
+            if (!r.ok) return setMsg({ text: r.error || 'Not saved.', ok: false });
+            if (r.res?.data?.supply) onSaved(r.res.data.supply);
+            setMsg({ text: r.queued ? 'Saved offline — syncs when you’re back online.' : 'Saved.', ok: true });
+            setSetup(false);
+        } finally {
+            setBusy(false);
+        }
+    };
 
     useEffect(() => {
         if (!online) return;
@@ -161,7 +184,7 @@ function SupplySheet({ item, write, onSaved, onClose, online }: { item: Supply; 
                     ? ['ReceiveSupplies', { stock: item.id, quantity: qty, unit_cost: cost, supplier_name: reason }, Number(item.quantity) + amount]
                     : mode === 'COUNT'
                       ? ['CountSupplies', { stock: item.id, counted: qty, reason: reason || 'Stock count' }, amount]
-                      : ['UseSupplies', { stock: item.id, kind: mode, quantity: qty, reason }, Number(item.quantity) - amount];
+                      : ['UseSupplies', { stock: item.id, kind: mode, quantity: qty, reason, ...(inParts ? { sale_unit: 'PART' } : {}) }, Number(item.quantity) - (inParts ? amount / partsPerUnit(item) : amount)];
             const r = await write(action as string, payload as any, `${mode.toLowerCase()} ${item.title}`);
             if (!r.ok) return setMsg({ text: r.error || 'Not saved.', ok: false });
             onSaved(r.res?.data?.supply ?? { ...item, quantity: String(Math.max(0, local as number)) });
@@ -176,7 +199,7 @@ function SupplySheet({ item, write, onSaved, onClose, online }: { item: Supply; 
     const KIND_LABEL: Record<string, string> = { RECEIVE: 'Received', ISSUE: 'Used', WASTE: 'Wasted', ADJUST: 'Counted' };
 
     return (
-        <AdminSheet visible onClose={onClose} title={item.title} subtitle={`${num(item.quantity)} ${item.unit} on hand · ${kes(item.unit_cost)} / ${item.unit}`} icon="cube-outline" width={560}>
+        <AdminSheet visible onClose={onClose} title={item.title} subtitle={`${canPart && item.parts?.label ? item.parts.label : `${num(item.quantity)} ${item.unit}`} on hand · ${kes(item.unit_cost)} / ${item.unit}`} icon="cube-outline" width={560}>
             <View style={{ gap: 14 }}>
                 <ChoiceChips<'ISSUE' | 'WASTE' | 'RECEIVE' | 'COUNT'>
                     options={[
@@ -188,13 +211,41 @@ function SupplySheet({ item, write, onSaved, onClose, online }: { item: Supply; 
                     value={mode}
                     onChange={(m) => { setMode(m); setMsg(null); }}
                 />
+                {canPart && (mode === 'ISSUE' || mode === 'WASTE') ? (
+                    <ChoiceChips<'PART' | 'FULL'>
+                        label="Measured in"
+                        options={[
+                            { value: 'PART', label: plural(part, 2) },
+                            { value: 'FULL', label: `Whole ${item.unit}` },
+                        ]}
+                        value={byPart ? 'PART' : 'FULL'}
+                        onChange={(v) => setByPart(v === 'PART')}
+                    />
+                ) : null}
                 <FormRow>
-                    <CustomTextField label={mode === 'COUNT' ? `Counted (${item.unit})` : `Quantity (${item.unit})`} value={qty} onChangeText={setQty} keyboardType="decimal-pad" />
+                    <CustomTextField label={mode === 'COUNT' ? `Counted (${item.unit})` : `Quantity (${inParts ? plural(part, 2) : item.unit})`} value={qty} onChangeText={setQty} keyboardType="decimal-pad" />
                     {mode === 'RECEIVE' ? <CustomTextField label={`Cost per ${item.unit}`} value={cost} onChangeText={setCost} keyboardType="decimal-pad" /> : null}
                 </FormRow>
                 <CustomTextField label={mode === 'RECEIVE' ? 'Supplier (optional)' : 'Note (optional)'} value={reason} onChangeText={setReason} placeholder={mode === 'ISSUE' ? 'e.g. Kitchen, lunch service' : mode === 'WASTE' ? 'e.g. Spoilt' : ''} />
                 {msg ? <Text style={{ color: msg.ok ? '#10b981' : '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>{msg.text}</Text> : null}
                 <SheetButton label="Save" icon="checkmark" loading={busy} loadingLabel="Saving…" disabled={!Number(qty) && mode !== 'COUNT'} onPress={() => void save()} />
+                {setup ? (
+                    <Formik initialValues={partsInitialValues(item)} onSubmit={(v) => saveParts(v)}>
+                        {(f) => (
+                            <View style={{ gap: 10 }}>
+                                <PartsSettingsFields unitWord={item.unit} hint={`Use ${item.title} bit by bit — e.g. a 50 kg bag by the kg, a 20 litre jerrycan by the litre.`} />
+                                <SheetButton label="Save parts" icon="checkmark" variant="secondary" loading={busy} loadingLabel="Saving…" onPress={() => f.handleSubmit()} />
+                            </View>
+                        )}
+                    </Formik>
+                ) : (
+                    <Pressable onPress={() => setSetup(true)} className="flex-row items-center" style={{ gap: 6 }} accessibilityRole="button">
+                        <Ionicons name="pie-chart-outline" size={15} color={theme.primary} />
+                        <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12.5 }}>
+                            {canPart ? `Used by the ${part} · ${partsPerUnit(item)} in a ${item.unit} — change` : 'Use this item in parts (kg, litres, pieces…)'}
+                        </Text>
+                    </Pressable>
+                )}
                 <View style={{ gap: 6 }}>
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.5 }}>HISTORY</Text>
                     {!online ? <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>Available when online.</Text> : history === null ? <ActivityIndicator color={theme.primary} /> : null}

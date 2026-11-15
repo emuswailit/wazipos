@@ -11,12 +11,15 @@ import { useApi } from '@/hooks/useApi';
 import deliveriesApi from '@/api/deliveriesApi';
 import { useStaffDelivery } from '@/components/deliveries/StaffDeliveryPlanner';
 import type { LatLng } from '@/components/common/locationPinShared';
+import { SaleUnit, partLabel, sellsInParts } from '@/utils/parts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 interface OrderLineItem {
     id: string; selectedProduct: string | null; selectedProductTitle: string;
     quantity: number; price: number; discount: number; searchQuery: string; isDropdownOpen: boolean; calculatedLineAmount: number;
+    /** Whole units (default) or parts — tots, kg, pieces (utils/parts.ts). quantity is then in parts. */
+    saleUnit?: SaleUnit;
 }
 
 const formatPhoneForJamboPay = (phone: string) => {
@@ -31,9 +34,29 @@ const formatPhoneForJamboPay = (phone: string) => {
 // Offline orders are saved via storageService.addPendingOrder; anything left under the old
 // 'wazipos_offline_customer_orders' key is migrated by services/customerOrderUploader.ts.
 
+/** What to take off the device's stock for a line (whole units or parts). */
+function toDeduction(item: any) {
+    const qty = Number(item.quantity || 1);
+    return item.saleUnit === 'PART'
+        ? { retailer_receipt: String(item.selectedProduct), purchased_quantity: 0, sale_unit: 'PART' as SaleUnit, part_quantity: qty }
+        : { retailer_receipt: String(item.selectedProduct), purchased_quantity: qty };
+}
+
 /** One line for CreateCustomerOrder: the line discount is sent per unit (the server multiplies by quantity). */
 function toOrderItem(item: any) {
     const qty = Number(item.quantity || 1);
+    if (item.saleUnit === 'PART') {
+        // Parts: the server prices the line from the receipt's part price.
+        return {
+            retailer_receipt: String(item.selectedProduct),
+            sale_unit: 'PART',
+            part_quantity: qty,
+            purchased_quantity: 0,
+            unit_selling_price: Number(item.price || 0),
+            final_unit_selling_price: Number(item.price || 0),
+            item_discount: qty > 0 ? Number(item.discount || 0) / qty : 0,
+        };
+    }
     return {
         retailer_receipt: String(item.selectedProduct),
         purchased_quantity: qty,
@@ -64,7 +87,7 @@ export function useCreateOrder() {
     const [wsStatus, setWsStatus] = useState<string | null>(null);
     const [wsDescription, setWsDescription] = useState<string | null>(null);
 
-    const pendingOrderItemsRef = useRef<{ retailer_receipt: string; purchased_quantity: number }[]>([]);
+    const pendingOrderItemsRef = useRef<{ retailer_receipt: string; purchased_quantity: number; sale_unit?: SaleUnit; part_quantity?: number }[]>([]);
 
     // Local calendar date (toISOString() is UTC, which is "yesterday" in Nairobi before 3am).
     const getTodayString = () => {
@@ -138,7 +161,7 @@ export function useCreateOrder() {
     const pricedLines = useMemo(
         () => processedLineItems
             .filter((i) => i.selectedProduct && Number(i.quantity) > 0)
-            .map((i) => ({ retailer_receipt: String(i.selectedProduct), purchased_quantity: Number(i.quantity) || 1 })),
+            .map((i) => ({ retailer_receipt: String(i.selectedProduct), purchased_quantity: i.saleUnit === 'PART' ? 1 : Number(i.quantity) || 1 })),
         [processedLineItems]
     );
     const deliveryOptionsKey = `${destination ? `${destination.latitude.toFixed(5)},${destination.longitude.toFixed(5)}` : ''}|${pricedLines.map((l) => `${l.retailer_receipt}x${l.purchased_quantity}`).join(',')}`;
@@ -233,8 +256,27 @@ export function useCreateOrder() {
     const handleSelectProduct = useCallback((id: string, prod: RetailerReceipt) => {
         const receiptId = prod?.remote_id ?? prod?.remote_key ?? '';
         const productSellingPrice = Number(prod?.unit_selling_price ?? (prod as any)?.price ?? 0);
-        setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, selectedProduct: receiptId ? String(receiptId) : null, selectedProductTitle: prod?.title || '', searchQuery: prod?.title || '', price: productSellingPrice, quantity: 1, discount: 0, isDropdownOpen: false } : item));
+        setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, selectedProduct: receiptId ? String(receiptId) : null, selectedProductTitle: prod?.title || '', searchQuery: prod?.title || '', price: productSellingPrice, quantity: 1, discount: 0, isDropdownOpen: false, saleUnit: 'FULL' as SaleUnit } : item));
     }, []);
+
+    /** Switch a line between whole units and parts; the price follows the receipt. */
+    const handleSetSaleUnit = useCallback((id: string, unit: SaleUnit) => {
+        setLineItems((prev) => prev.map((item) => {
+            if (item.id !== id) return item;
+            const receipt: any = retailerReceipts.find((r) => String(r.remote_id ?? (r as any).remote_key ?? '') === String(item.selectedProduct));
+            if (!receipt) return item;
+            if (unit === 'PART') {
+                if (!sellsInParts(receipt)) return item;
+                const partPrice = Number(receipt.part_selling_price) || 0;
+                if (partPrice <= 0) {
+                    setErrorMessage(`Set a price per ${partLabel(receipt)} for ${receipt.title} in Inventory before selling it in parts.`);
+                    return item;
+                }
+                return { ...item, saleUnit: 'PART', price: partPrice, quantity: 1, discount: 0 };
+            }
+            return { ...item, saleUnit: 'FULL', price: Number(receipt.unit_selling_price ?? 0), quantity: 1, discount: 0 };
+        }));
+    }, [retailerReceipts]);
 
     const handleAddRow = useCallback(() => {
         setLineItems((prev) => [...prev, { id: Date.now().toString(), selectedProduct: null, selectedProductTitle: '', quantity: 1, price: 0, discount: 0, searchQuery: '', isDropdownOpen: false, calculatedLineAmount: 0 }]);
@@ -252,7 +294,7 @@ export function useCreateOrder() {
         if (!receiptId) return;
         const price = Number(prod.unit_selling_price ?? (prod as any)?.price ?? 0);
         setLineItems((prev) => {
-            const idx = prev.findIndex((item) => item.selectedProduct === receiptId);
+            const idx = prev.findIndex((item) => item.selectedProduct === receiptId && item.saleUnit !== 'PART');
             if (idx !== -1) {
                 return prev.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item);
             }
@@ -333,10 +375,7 @@ export function useCreateOrder() {
             if (!isOnline && isOfflineAllowed) {
                 const itemsToDeduct = processedLineItems
                     .filter(item => item.selectedProduct)
-                    .map((item: any) => ({
-                        retailer_receipt: String(item.selectedProduct),
-                        purchased_quantity: Number(item.quantity || 1),
-                    }));
+                    .map((item: any) => toDeduction(item));
 
                 const draftId = `draft-${Date.now()}`;
                 const nowIso = new Date().toISOString();
@@ -373,7 +412,9 @@ export function useCreateOrder() {
                     total_amount: String(totals.total),
                     order_items: lines.map((item: any) => ({
                         title: item.selectedProductTitle || 'Product',
-                        purchased_quantity: Number(item.quantity || 1),
+                        purchased_quantity: item.saleUnit === 'PART' ? 0 : Number(item.quantity || 1),
+                        sale_unit: item.saleUnit === 'PART' ? 'PART' : 'FULL',
+                        part_quantity: item.saleUnit === 'PART' ? Number(item.quantity || 1) : 0,
                         item_price_total: String(item.calculatedLineAmount ?? 0),
                     })),
                     created: nowIso,
@@ -489,10 +530,9 @@ export function useCreateOrder() {
                     if (newOrder) {
                         setOrderToRetry(newOrder);
 
-                        const itemsToDeduct = orderItemsPayload.map((i: any) => ({
-                            retailer_receipt: i.retailer_receipt,
-                            purchased_quantity: i.purchased_quantity
-                        }));
+                        const itemsToDeduct = processedLineItems
+                            .filter(item => item.selectedProduct)
+                            .map((item: any) => toDeduction(item));
 
                         if (isMobileMoney && newOrder.reference_number) {
                             pendingOrderItemsRef.current = itemsToDeduct;
@@ -537,7 +577,7 @@ export function useCreateOrder() {
         paymentDetails, setPaymentDetails,
         lineItems: processedLineItems, isBlankRowPresent, totals,
         errorMessage, setErrorMessage, successMessage, setSuccessMessage, isSaving,
-        handleUpdateRow, handleSelectProduct, handleAddRow, handleDeleteRow, handleSearchFocused,
+        handleUpdateRow, handleSelectProduct, handleSetSaleUnit, handleAddRow, handleDeleteRow, handleSearchFocused,
         handleSaveOrder, handleBarcodeScannedContinuously,
 
         // Fulfilment

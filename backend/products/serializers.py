@@ -185,6 +185,7 @@ class ProductsWolesalerReceiptsSerializer(serializers.ModelSerializer):
             "expiry_date",
             "manufacture_date",
             "units_per_pack",
+            "sold_in_parts", "measure", "content_per_unit", "part_size", "part_label",
             "preparation",
             "preparation_title",
             "pack_selling_price",
@@ -308,6 +309,7 @@ class ProductsSerializer(serializers.ModelSerializer):
             "description",
             "owner",
             "units_per_pack",
+            "sold_in_parts", "measure", "content_per_unit", "part_size", "part_label",
             
             # --- Weight & Dimensions ---
             "weight_kg",

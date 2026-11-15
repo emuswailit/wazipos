@@ -33,7 +33,7 @@ export default function CreateOrderScreen() {
         isPaymentSyncing, selectedPaymentMethodId,
         setSelectedPaymentMethodId, isBottomSheetVisible, setIsBottomSheetVisible,
         isScannerOpen, setIsScannerOpen, paymentDetails, setPaymentDetails,
-        lineItems, isBlankRowPresent, handleUpdateRow, handleSelectProduct,
+        lineItems, isBlankRowPresent, handleUpdateRow, handleSelectProduct, handleSetSaleUnit,
         handleAddRow, handleDeleteRow, handleSaveOrder, handleBarcodeScannedContinuously,
         handleSearchFocused, totals, errorMessage, successMessage, setErrorMessage,
         setSuccessMessage, isSaving, wsStatus, wsDescription, resetWsState,
@@ -119,7 +119,7 @@ export default function CreateOrderScreen() {
                                 <OrderMainSection
                                     theme={theme} lineItems={lineItems} retailerReceipts={retailerReceipts}
                                     isBlankRowPresent={isBlankRowPresent} handleUpdateRow={handleUpdateRow}
-                                    handleDeleteRow={handleDeleteRow} handleSelectProduct={handleSelectProduct}
+                                    handleDeleteRow={handleDeleteRow} handleSelectProduct={handleSelectProduct} handleSetSaleUnit={handleSetSaleUnit}
                                     handleAddRow={handleAddRow} setIsScannerOpen={setIsScannerOpen}
                                     onSearchFocused={handleSearchFocused}
                                     totals={totals} onRowLayout={handleRowLayout}

@@ -59,6 +59,9 @@ export interface CreateStaffRetailerOrderPayload {
         final_price_total: number;
         order_items: Array<{
             wholesaler_receipt: string;
+            /** Whole units (default) or parts — utils/parts.ts */
+            sale_unit?: 'FULL' | 'PART';
+            part_quantity?: number;
             purchased_quantity: number;
             discount_quantity: number;
             total_quantity: number;

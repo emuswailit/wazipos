@@ -215,6 +215,11 @@ class WholesalerReceipts(EntityRelatedModel):
         on_delete=models.CASCADE,
     )
 
+    # ---- sold in parts (products/units.py): content left in the opened unit
+    # (ml / g / pieces) and the price of one part.
+    open_content = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    part_selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     def __str__(self):
         return self.product.title
 
@@ -1157,6 +1162,9 @@ class RetailerOrders(EntityRelatedModel):
     )
     cancelled_at = models.DateTimeField(null=True, blank=True)
 
+    # Stock leaves once per order (products/units.py helpers); set when it did.
+    stock_deducted_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name_plural = "Retailer Orders"
 
@@ -1373,6 +1381,10 @@ class RetailerOrderItems(EntityRelatedModel):
         related_name="wholesaler_order_item_owner",
         on_delete=models.CASCADE,
     )
+
+    # ---- whole unit or parts (products/units.py)
+    sale_unit = models.CharField(max_length=4, default="FULL")  # FULL / PART
+    part_quantity = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
     class Meta:
         verbose_name_plural = "Retailer Order Items"

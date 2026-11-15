@@ -1,5 +1,6 @@
 // components/wholesalers/inventory/WholesalerReceiptEditModal.tsx
 
+import { partLabel, partsPerUnit, sellsInParts } from '@/utils/parts';
 import {
     BarcodeScannerInput,
     CustomTextField,
@@ -76,6 +77,8 @@ export interface WholesalerReceiptDraft {
     received_unit_quantity: number;
     unit_buying_price: number;
     final_unit_selling_price: number;
+    /** Sold in parts: price of one part (utils/parts.ts) */
+    part_selling_price: number;
     manufacture_date: string;
     expiry_date: string;
 }
@@ -237,6 +240,7 @@ function toDraft(
                 (receipt as any)?.unit_selling_price ??
                 0
             ) || 0,
+        part_selling_price: Number((receipt as any)?.part_selling_price ?? 0) || 0,
         manufacture_date:
             (receipt as any)?.manufacture_date ?? '',
         expiry_date: receipt?.expiry_date ?? '',
@@ -361,6 +365,7 @@ function buildReceiptFromDraft(
         unit_buying_price: buyingPrice,
         unit_selling_price: sellingPrice,
         final_unit_selling_price: sellingPrice,
+        part_selling_price: String(values.part_selling_price ?? existing?.part_selling_price ?? '0.00'),
         discount_unit_selling_price:
             existing?.discount_unit_selling_price ??
             '0.00',
@@ -972,6 +977,18 @@ export function WholesalerReceiptEditModal({
                                             />
                                         </View>
                                     </View>
+
+                                    {/* Sold in parts: price of one part */}
+                                    {sellsInParts(receipt) ? (
+                                        <CustomTextField
+                                            name="part_selling_price"
+                                            label={`Price per ${partLabel(receipt)} (KES) · ${partsPerUnit(receipt)} in a unit`}
+                                            placeholder="0"
+                                            keyboardType="numeric"
+                                            transform={toNum}
+                                            format={fmtNum}
+                                        />
+                                    ) : null}
 
                                     {/* Margin preview */}
                                     {values.final_unit_selling_price >

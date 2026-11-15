@@ -22,6 +22,12 @@ export interface ProductItem {
     pack_tag: string;
     bar_code: string;
     is_vatable: string;
+    /** Sold in parts (utils/parts.ts) */
+    sold_in_parts?: boolean;
+    measure?: string | null;
+    content_per_unit?: string | null;
+    part_size?: string | null;
+    part_label?: string | null;
     allowed_entities: string[];
     allowed_entities_titles: string[];
     active: boolean;

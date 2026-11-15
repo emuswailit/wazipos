@@ -45,9 +45,34 @@ export function isExpired(item: any): boolean {
     return (typeof item?.days_to_expiry === 'number' && item.days_to_expiry <= 0) || item?.expiry_status === 'EXPIRED';
 }
 
+/**
+ * Stock in whole units. Products sold in parts (utils/parts.ts) also count what's
+ * left in the opened unit, as a fraction — so half a bottle isn't "out of stock"
+ * and is still valued.
+ */
 export function stockQty(item: any): number {
     const n = Number(item?.current_unit_quantity ?? 0);
-    return Number.isFinite(n) ? n : 0;
+    const whole = Number.isFinite(n) ? n : 0;
+    const p = item?.parts;
+    if (!p?.sold_in_parts) return whole;
+    const per = Number(p.parts_per_unit) || 0;
+    const open = Number(p.open_parts) || 0;
+    return per > 0 && open > 0 ? whole + open / per : whole;
+}
+
+/** "11 bottles + 14 tots" for products sold in parts, else null. */
+export function partsStockLabel(item: any): string | null {
+    return item?.parts?.sold_in_parts && item.parts.label ? String(item.parts.label) : null;
+}
+
+/** "+ 14 tots" — what's left in the opened unit, else null. */
+export function openPartsLabel(item: any): string | null {
+    const p = item?.parts;
+    const open = Number(p?.open_parts) || 0;
+    if (!p?.sold_in_parts || open <= 0) return null;
+    const label = String(p.part_label || 'part');
+    const many = open !== 1 && !label.endsWith('s') && !['ml', 'g', 'kg', 'l', 'cl'].includes(label);
+    return `+ ${open} ${label}${many ? 's' : ''}`;
 }
 
 export function isOutOfStock(item: any): boolean {

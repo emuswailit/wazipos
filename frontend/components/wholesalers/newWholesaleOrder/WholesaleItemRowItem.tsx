@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SaleUnit, partLabel, plural, sellsInParts, stockLabel, totalParts } from '@/utils/parts';
 import type { WholesaleItemRow } from './useWholesaleOrderForm';
 
 interface WholesaleItemRowItemProps {
@@ -64,6 +65,35 @@ export default function WholesaleItemRowItem({
             }),
     });
 
+    /* -------- Whole units or parts (products sold in parts) -------- */
+    const receipt: any = row.selectedReceipt;
+    const canPart = !!receipt && sellsInParts(receipt);
+    const inParts = row.sale_unit === 'PART';
+    const part = canPart ? partLabel(receipt) : 'part';
+    const [partsNote, setPartsNote] = React.useState<string | null>(null);
+
+    const setSaleUnit = (unit: SaleUnit) => {
+        if (!receipt) return;
+        if (unit === 'PART') {
+            const partPrice = Number(receipt.part_selling_price) || 0;
+            if (partPrice <= 0) {
+                setPartsNote(`Set a price per ${part} in Inventory first.`);
+                return;
+            }
+            setPartsNote(null);
+            onUpdateRow(row.id, { sale_unit: 'PART', item_price: partPrice, purchased_quantity: '1', item_price_discount: '0.00', available: totalParts(receipt) });
+        } else {
+            setPartsNote(null);
+            onUpdateRow(row.id, {
+                sale_unit: 'FULL',
+                item_price: Number(receipt.final_unit_selling_price ?? receipt.unit_selling_price ?? 0),
+                purchased_quantity: '1',
+                item_price_discount: '0.00',
+                available: Number(receipt.current_unit_quantity ?? 0),
+            });
+        }
+    };
+
     /* -------- Stepper -------- */
     const bump = (delta: number) => {
         const next = Math.max(0, qty + delta);
@@ -88,8 +118,10 @@ export default function WholesaleItemRowItem({
             );
         }
 
+        setPartsNote(null);
         onUpdateRow(row.id, {
             selectedReceipt: r,
+            sale_unit: 'FULL',
             wholesaler_receipt_id: resolvedId,
             item_price: Number(
                 r.final_unit_selling_price ??
@@ -105,6 +137,7 @@ export default function WholesaleItemRowItem({
     const handleClear = () => {
         onUpdateRow(row.id, {
             selectedReceipt: null,
+            sale_unit: 'FULL',
             wholesaler_receipt_id: undefined,
             item_price: 0,
             available: undefined,
@@ -177,6 +210,33 @@ export default function WholesaleItemRowItem({
             </View>
 
             {/* =============================================
+             * Row 1b: whole units or parts
+             * ============================================= */}
+            {canPart ? (
+                <View className="px-3 pb-2 flex-row items-center flex-wrap gap-1.5">
+                    {([['FULL', 'Whole units'], ['PART', `By the ${part}`]] as [SaleUnit, string][]).map(([unit, label]) => {
+                        const active = (row.sale_unit || 'FULL') === unit;
+                        return (
+                            <TouchableOpacity
+                                key={unit}
+                                onPress={() => setSaleUnit(unit)}
+                                activeOpacity={0.7}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: active }}
+                                className="rounded-full border px-3 items-center justify-center"
+                                style={{ height: 30, backgroundColor: active ? theme.primary : 'transparent', borderColor: active ? theme.primary : borderColor }}
+                            >
+                                <Text style={{ color: active ? '#fff' : theme.text, fontFamily: theme.font.bold, fontSize: 11 }}>{label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                    <Text style={{ color: partsNote ? '#ef4444' : theme.textDark, fontFamily: theme.font.medium, fontSize: 10, flexShrink: 1 }}>
+                        {partsNote ?? `${stockLabel(receipt)}${inParts ? ` · quantity in ${plural(part, 2)}` : ''}`}
+                    </Text>
+                </View>
+            ) : null}
+
+            {/* =============================================
              * Row 2a: qty | price | disc
              * ============================================= */}
             <View
@@ -223,7 +283,7 @@ export default function WholesaleItemRowItem({
                             onChangeText={qtyFocus.onChange}
                             onFocus={qtyFocus.onFocus}
                             onBlur={qtyFocus.onBlur}
-                            keyboardType="numeric"
+                            keyboardType={inParts ? 'decimal-pad' : 'numeric'}
                             placeholder="0"
                             placeholderTextColor="#94a3b8"
                             className="flex-1 h-full"
@@ -394,7 +454,7 @@ export default function WholesaleItemRowItem({
                                         theme.font.bold,
                                 }}
                             >
-                                Stock
+                                {inParts ? plural(part, 2) : 'Stock'}
                             </Text>
                             <Text
                                 style={{

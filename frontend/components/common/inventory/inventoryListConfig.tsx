@@ -17,6 +17,8 @@ import {
     itemImageUrl,
     preparationTitle,
     productTitle,
+    openPartsLabel,
+    partsStockLabel,
     stockBadge,
     stockQty,
     stockValue,
@@ -30,15 +32,20 @@ const keyOf = (r: any, i: number) => String(r?.remote_id || r?.draft_id || r?.id
 function StockCell({ item }: { item: any }) {
     const { theme, chipBg } = useListTokens();
     const qty = stockQty(item);
+    const whole = Math.floor(qty);
+    const openParts = openPartsLabel(item);
     const received = Math.max(qty, Number(item?.received_unit_quantity) || 0);
     const pct = received > 0 ? Math.min(1, qty / received) : 0;
     const color = healthColor(item);
     return (
         <View style={{ gap: 4, alignItems: 'flex-end' }}>
             <Text style={{ color: qty > 0 ? theme.text : '#f43f5e', fontFamily: theme.font.bold, fontSize: 13 }}>
-                {qty.toLocaleString()}
+                {whole.toLocaleString()}
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}> {String(item?.unit_of_receipt || 'units').toLowerCase()}</Text>
             </Text>
+            {openParts ? (
+                <Text style={{ color: '#0ea5e9', fontFamily: theme.font.bold, fontSize: 10 }}>{openParts}</Text>
+            ) : null}
             <View style={{ width: 64, height: 4, borderRadius: 2, backgroundColor: chipBg, overflow: 'hidden' }}>
                 <View style={{ width: `${Math.round(pct * 100)}%`, height: 4, backgroundColor: color }} />
             </View>
@@ -76,7 +83,7 @@ export function buildInventoryConfig(opts: { title: string; addLabel?: string; e
         metaOf: (r) => (r?.expiry_date ? `Expires ${formatDate(r.expiry_date)}` : null),
         metaIcon: 'calendar-outline',
         metricOf: (r) => ({
-            value: `${stockQty(r).toLocaleString()} ${String(r?.unit_of_receipt || '').toLowerCase()}`.trim(),
+            value: partsStockLabel(r) ?? `${stockQty(r).toLocaleString()} ${String(r?.unit_of_receipt || '').toLowerCase()}`.trim(),
             label: `KES ${formatKES(unitPrice(r))} each`,
             color: healthColor(r),
         }),

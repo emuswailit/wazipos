@@ -512,6 +512,7 @@ class CampaignAudienceBulkWriteSerializer(serializers.Serializer):
 
 
 class WholesalerReceiptsSerializer(serializers.ModelSerializer):
+    parts = serializers.SerializerMethodField(read_only=True)
     category = serializers.SerializerMethodField(read_only=True)
     category_title = serializers.SerializerMethodField(read_only=True)
     title = serializers.SerializerMethodField(read_only=True)
@@ -546,6 +547,7 @@ class WholesalerReceiptsSerializer(serializers.ModelSerializer):
             "in_placement", "description", "created", "updated", "expiry_status",
             "received_from_details", "manufacturer", "manufacturer_title",
             "origin_country", "packaging", "units_per_pack",
+            "open_content", "part_selling_price", "parts",
             "quantity_discounts", "price_discount", "images", "owner","category","category_title"
         )
         read_only_fields = (
@@ -675,6 +677,15 @@ class WholesalerReceiptsSerializer(serializers.ModelSerializer):
                 elif expiry_days > 56:
                     return f"EXPIRES IN {expiry_days} DAY(S)"
         return None
+
+    def get_parts(self, obj):
+        """Whole units + what's left in the opened unit (products/units.py)."""
+        from products.units import breakdown, product_parts_out
+
+        product = getattr(obj, "product", None)
+        out = product_parts_out(product)
+        out.update(breakdown(obj.current_unit_quantity or 0, getattr(obj, "open_content", 0) or 0, product))
+        return out
 
 
 def get_current_retailer_stock(retailer, instance):
@@ -1564,6 +1575,8 @@ class RetailerOrderItemsSerializer(serializers.ModelSerializer):
             "entity",
             "title",
             "units_per_pack",
+            "sale_unit",
+            "part_quantity",
             "retailer_order",
             "retailer_indent_item",
             "product_title",

@@ -1,5 +1,6 @@
 // components/wholesalers/newWholesaleOrder/useWholesaleOrderForm.ts
 
+import type { SaleUnit } from '@/utils/parts';
 import wholesalersApi, {
     type CreateStaffRetailerOrderPayload,
     type CreateStaffRetailerOrderResponse,
@@ -43,6 +44,8 @@ export interface WholesaleItemRow {
     item_price: number;
     item_price_total: number;
     available?: number;
+    /** Whole units (default) or parts — purchased_quantity is then in parts (utils/parts.ts). */
+    sale_unit?: SaleUnit;
 }
 
 /* =========================================================
@@ -281,7 +284,7 @@ export function useWholesaleOrderForm(
 
             setFormRows((prev) => {
                 const existing = prev.findIndex(
-                    (r) => r.wholesaler_receipt_id === receiptId
+                    (r) => r.wholesaler_receipt_id === receiptId && r.sale_unit !== 'PART'
                 );
                 if (existing !== -1) {
                     return prev.map((r, i) =>
@@ -333,7 +336,8 @@ export function useWholesaleOrderForm(
                 .filter((r) => r.selectedReceipt && Number(r.purchased_quantity) > 0)
                 .map((r) => ({
                     wholesaler_receipt: String(r.wholesaler_receipt_id || resolveReceiptId(r.selectedReceipt)),
-                    purchased_quantity: Number(r.purchased_quantity) || 0,
+                    // A line in parts weighs at most one unit for delivery pricing.
+                    purchased_quantity: r.sale_unit === 'PART' ? 1 : Number(r.purchased_quantity) || 0,
                 })),
         [formRows, resolveReceiptId]
     );
@@ -369,18 +373,22 @@ export function useWholesaleOrderForm(
                 const qty = Number(r.purchased_quantity) || 0;
                 const price = Number(r.item_price) || 0;
                 const discount = Number(r.item_price_discount) || 0;
+                const inParts = r.sale_unit === 'PART';
                 return {
                     wholesaler_receipt: String(r.wholesaler_receipt_id || resolveReceiptId(r.selectedReceipt)),
-                    purchased_quantity: qty,
+                    // Parts (tots, kg …): the server prices the line from the receipt's part price.
+                    sale_unit: (inParts ? 'PART' : 'FULL') as SaleUnit,
+                    part_quantity: inParts ? qty : 0,
+                    purchased_quantity: inParts ? 0 : qty,
                     discount_quantity: 0,
-                    total_quantity: qty,
+                    total_quantity: inParts ? 0 : qty,
                     item_price: price,
                     item_price_discount: discount,
                     item_net_price: price,
                     item_price_total: qty * price - discount,
                 };
             });
-            const gross = order_items.reduce((s, i) => s + i.purchased_quantity * i.item_price, 0);
+            const gross = order_items.reduce((s, i) => s + (i.purchased_quantity || i.part_quantity) * i.item_price, 0);
             const discountTotal = order_items.reduce((s, i) => s + i.item_price_discount, 0);
 
             const payload: CreateStaffRetailerOrderPayload = {
@@ -416,7 +424,7 @@ export function useWholesaleOrderForm(
                     items: order_items.length,
                     created: new Date().toISOString(),
                 });
-                await deductLocalStock(order_items.map((i) => ({ wholesaler_receipt: i.wholesaler_receipt, purchased_quantity: i.purchased_quantity })));
+                await deductLocalStock(order_items.map((i) => ({ wholesaler_receipt: i.wholesaler_receipt, purchased_quantity: i.purchased_quantity, sale_unit: i.sale_unit, part_quantity: i.part_quantity })));
                 draftIdRef.current = null;
                 return { ok: true, orderId: '', offline: true };
             }

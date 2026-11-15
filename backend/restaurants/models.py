@@ -1320,6 +1320,12 @@ class RestaurantStock(EntityRelatedModel):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+    # ---- issued in parts: e.g. a 50 kg bag used by the kg (products/units.py terms)
+    measure = models.CharField(max_length=10, null=True, blank=True)
+    content_per_unit = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    part_size = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    part_label = models.CharField(max_length=32, null=True, blank=True)
+
     class Meta:
         verbose_name_plural = "Restaurant stock"
         ordering = ["category", "title"]

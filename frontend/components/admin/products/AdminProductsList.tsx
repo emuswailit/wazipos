@@ -15,6 +15,7 @@ import {
 
 import drugsApi from "@/api/drugs/productsApi";
 import { ProductDetails } from "@/api/productsApi";
+import { partsPayload } from "@/utils/parts";
 import { useAlert } from "@/components/common/AlertProvider";
 import ApiErrorModal, {
     FlatFieldError,
@@ -130,6 +131,11 @@ export default function AdminProductsList() {
                 pack_tag: item.pack_tag || "",
                 bar_code: item.bar_code || "",
                 is_vatable: item.is_vatable ? String(item.is_vatable) : "false",
+                sold_in_parts: !!item.sold_in_parts,
+                measure: item.measure ?? null,
+                content_per_unit: item.content_per_unit ?? null,
+                part_size: item.part_size ?? null,
+                part_label: item.part_label ?? null,
                 allowed_entities: Array.isArray(item.allowed_entities) ? item.allowed_entities : [],
                 allowed_entities_titles: Array.isArray(item.allowed_entities_titles) ? item.allowed_entities_titles : [],
                 active: !!item.active,
@@ -239,6 +245,8 @@ export default function AdminProductsList() {
                     : [],
                 bar_code: String(values.bar_code ?? "").trim(),
                 images: Array.isArray(values.images) ? values.images : [],
+                // Sold in parts (backend/products/units_admin.py)
+                ...partsPayload(values),
             };
 
             const response: any = editingItem

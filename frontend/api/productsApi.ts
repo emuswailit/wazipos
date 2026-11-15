@@ -15,4 +15,12 @@ export interface ProductDetails {
     allowed_entities: string[];
     bar_code: string;
     images: string[];
+    // Sold in parts (backend/products/units_admin.py)
+    sold_in_parts?: string;
+    measure?: string;
+    content_per_unit?: string;
+    content_unit?: string;
+    part_size?: string;
+    part_unit?: string;
+    part_label?: string;
 }

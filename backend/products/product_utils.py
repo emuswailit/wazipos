@@ -131,9 +131,18 @@ def create_product(data, user):
             entity=user.entity,
         )
         if created:
+            # Sold in parts (e.g. by the tot / kg): products/units.py
+            from products.units_admin import apply_parts_settings
+
+            errors = apply_parts_settings(created, data["product_details"])
+            if errors:
+                raise exceptions.ValidationError(errors)
+            created.save()
             return created
         else:
             return None
+    except exceptions.ValidationError:
+        raise
     except Exception as e:
         raise exceptions.ValidationError(e)
 
@@ -233,11 +242,20 @@ def update_product(data, user=None):
                 # If the list is empty or invalid, clear the array completely
                 product.allowed_entities = []
 
+        # Sold in parts (e.g. by the tot / kg): products/units.py
+        from products.units_admin import apply_parts_settings
+
+        parts_errors = apply_parts_settings(product, product_details)
+        if parts_errors:
+            raise exceptions.ValidationError(parts_errors)
+
         # Save the product once at the end
         product.save()
 
         return product
 
+    except exceptions.ValidationError:
+        raise
     except Exception as e:
         # Catch specific error so the frontend knows exactly what broke
         raise exceptions.ValidationError(f"Product not updated: {str(e)}")

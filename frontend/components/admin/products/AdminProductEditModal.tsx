@@ -8,12 +8,14 @@ import { BarcodeScannerInput } from '@/components/common/BarcodeScannerInput';
 import CustomAutocompletePicker from '@/components/common/CustomAutocompletePicker';
 import CustomMultiselectAutocompletePicker from '@/components/common/CustomMultiselectAutocompletePicker';
 import { CustomTextField } from '@/components/common/CustomTextField';
+import PartsSettingsFields from '@/components/common/soldInParts/PartsSettingsFields';
 import ProductImagesPicker from '@/components/common/ProductImagesPicker';
 import { SelectDropdown } from '@/components/common/SelectDropdown';
 import { SwitchField } from '@/components/common/SwitchField';
 import { useAuth } from '@/context/AuthContext';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { useCategories } from '@/hooks/useCategories';
+import { partsInitialValues } from '@/utils/parts';
 import { Formik } from 'formik';
 import { useMemo } from 'react';
 import * as Yup from 'yup';
@@ -56,6 +58,8 @@ const schema = Yup.object({
     category: Yup.string().required('Pick a category'),
     is_vatable: Yup.string().required(),
     allowed_entities: Yup.array().of(Yup.string()).min(1, 'Pick at least one entity type'),
+    content_per_unit: Yup.string().when('sold_in_parts', { is: 'true', then: (s) => s.required('What does one whole unit hold?') }),
+    part_size: Yup.string().when('sold_in_parts', { is: 'true', then: (s) => s.required('How big is one part?') }),
 });
 
 export default function AdminProductEditModal({ visible, onClose, isSubmittingRemote, onSubmitTrigger, initialData }: Props) {
@@ -101,6 +105,7 @@ export default function AdminProductEditModal({ visible, onClose, isSubmittingRe
                 allowed_entities: Array.isArray(initialData?.allowed_entities) ? initialData.allowed_entities : [],
                 bar_code: initialData?.bar_code || '',
                 images: Array.isArray(initialData?.images) ? initialData.images : [],
+                ...partsInitialValues(initialData),
             }}
             validationSchema={schema}
             onSubmit={(values, helpers) => onSubmitTrigger(values, helpers)}
@@ -152,6 +157,10 @@ export default function AdminProductEditModal({ visible, onClose, isSubmittingRe
                             <CustomTextField name="pack_tag" label="Pack tag" required placeholder="100'S" />
                         </FormRow>
                         <BarcodeScannerInput name="bar_code" label="Barcode (SKU / GTIN)" placeholder="Scan or type…" />
+                    </FormSection>
+
+                    <FormSection title="Sold in parts" hint="Stock is counted as whole units plus what's left in the opened one." zIndex={15}>
+                        <PartsSettingsFields />
                     </FormSection>
 
                     <FormSection title="Who can stock it" hint="Entity types allowed to list this product." zIndex={10}>

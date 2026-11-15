@@ -1,5 +1,6 @@
 // context/InventorySyncContext.tsx
 
+import { SaleUnit, takeLocal } from '@/utils/parts';
 import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
@@ -49,7 +50,7 @@ interface InventorySyncContextType {
      * (or remote_key). Never goes below zero; the next sync replaces it with server values.
      */
     deductLocalInventory: (
-        items: { retailer_receipt: string; purchased_quantity: number }[]
+        items: { retailer_receipt: string; purchased_quantity: number; sale_unit?: SaleUnit; part_quantity?: number }[]
     ) => Promise<void>;
     lastSyncedTime: string;
     /** Why the last push of local stock changes failed (null when fine). */
@@ -345,6 +346,11 @@ function normalizeItem(
             item.unit_price_discount ?? '0.00'
         ),
 
+        // Sold in parts (utils/parts.ts): part price, what's left in the opened unit, breakdown.
+        part_selling_price: String(item.part_selling_price ?? '0.00'),
+        open_content: String(item.open_content ?? '0'),
+        parts: item.parts ?? null,
+
         current_unit_quantity: Number(
             firstDefined(
                 item.current_unit_quantity,
@@ -407,6 +413,8 @@ function areReceiptsEqual(
             x.remote_id !== y.remote_id ||
             x.current_unit_quantity !==
             y.current_unit_quantity ||
+            x.open_content !== y.open_content ||
+            x.part_selling_price !== y.part_selling_price ||
             x.received_unit_quantity !==
             y.received_unit_quantity ||
             x.unit_selling_price !== y.unit_selling_price ||
@@ -610,43 +618,44 @@ export const InventorySyncProvider: React.FC<{
      * ------------------------------------------------------- */
     const deductLocalInventory = useCallback(
         async (
-            items: { retailer_receipt: string; purchased_quantity: number }[]
+            items: { retailer_receipt: string; purchased_quantity: number; sale_unit?: SaleUnit; part_quantity?: number }[]
         ) => {
             if (!items?.length) return;
 
-            // Total sold per receipt (the same receipt can appear on several lines)
-            const soldByReceipt = new Map<string, number>();
+            // Lines per receipt (the same receipt can appear on several lines);
+            // whole units or parts (utils/parts.ts takeLocal).
+            const linesByReceipt = new Map<string, { unit: SaleUnit; qty: number }[]>();
             for (const item of items) {
                 const key = String(item?.retailer_receipt ?? '');
-                const qty = Number(item?.purchased_quantity) || 0;
+                const unit: SaleUnit = item?.sale_unit === 'PART' ? 'PART' : 'FULL';
+                const qty = Number(unit === 'PART' ? item?.part_quantity : item?.purchased_quantity) || 0;
                 if (!key || qty <= 0) continue;
-                soldByReceipt.set(key, (soldByReceipt.get(key) ?? 0) + qty);
+                linesByReceipt.set(key, [...(linesByReceipt.get(key) ?? []), { unit, qty }]);
             }
-            if (soldByReceipt.size === 0) return;
+            if (linesByReceipt.size === 0) return;
 
             const existing = receiptsStateRef.current;
             let changed = false;
             const updated = existing.map((r) => {
                 const key =
-                    (r.remote_id && soldByReceipt.has(String(r.remote_id)) && String(r.remote_id)) ||
-                    ((r as any).remote_key && soldByReceipt.has(String((r as any).remote_key)) && String((r as any).remote_key)) ||
+                    (r.remote_id && linesByReceipt.has(String(r.remote_id)) && String(r.remote_id)) ||
+                    ((r as any).remote_key && linesByReceipt.has(String((r as any).remote_key)) && String((r as any).remote_key)) ||
                     null;
                 if (!key) return r;
 
-                const sold = soldByReceipt.get(key)!;
                 changed = true;
-                const next: any = {
-                    ...r,
-                    current_unit_quantity: Math.max(0, (Number(r.current_unit_quantity) || 0) - sold),
-                };
+                const before = Number(r.current_unit_quantity) || 0;
+                let next: any = r;
+                for (const line of linesByReceipt.get(key)!) next = takeLocal(next, line.unit, line.qty);
                 if ((r as any).available !== undefined && (r as any).available !== null) {
-                    next.available = Math.max(0, (Number((r as any).available) || 0) - sold);
+                    const usedWhole = before - (Number(next.current_unit_quantity) || 0);
+                    next.available = Math.max(0, (Number((r as any).available) || 0) - usedWhole);
                 }
                 return next as RetailerReceipt;
             });
 
             if (!changed) {
-                warn('deductLocalInventory: no matching local receipts for', [...soldByReceipt.keys()]);
+                warn('deductLocalInventory: no matching local receipts for', [...linesByReceipt.keys()]);
                 return;
             }
 

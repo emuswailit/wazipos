@@ -282,6 +282,16 @@ class Products(EntityRelatedModel):
         default=EntityType.default_entities,
     )
 
+    # ---- sold in parts (see products/units.py) ----
+    # e.g. a 750 ml bottle sold by the 25 ml tot, a 50 kg bag sold by the kg,
+    # a tray of 30 eggs sold per egg. Stock stays in whole units plus the
+    # content left in the opened unit.
+    sold_in_parts = models.BooleanField(default=False)
+    measure = models.CharField(max_length=10, choices=(("VOLUME", "Volume (ml)"), ("MASS", "Mass (g)"), ("COUNT", "Count (pieces)")), null=True, blank=True)
+    content_per_unit = models.DecimalField(max_digits=14, decimal_places=3, default=0, help_text="What one whole unit holds, in ml / g / pieces")
+    part_size = models.DecimalField(max_digits=14, decimal_places=3, default=0, help_text="One part, in ml / g / pieces")
+    part_label = models.CharField(max_length=32, null=True, blank=True, help_text="e.g. tot, kg, egg, glass")
+
     class Meta:
         verbose_name_plural = "products"
         constraints = [

@@ -139,6 +139,8 @@ def create_wholesaler_receipt(data, user):
             unit_buying_price=unit_buying_price,
             unit_selling_price=unit_selling_price,
             final_unit_selling_price=unit_selling_price,
+            # Sold in parts: price of one part (products/units.py)
+            part_selling_price=data["wholesaler_receipt_details"].get("part_selling_price") or 0,
             employee=employee_obj,
             owner=user
         )
@@ -196,6 +198,19 @@ def update_wholesaler_receipt(data, user):
 
     if details.get("unit_selling_price") not in (None, ""):
         wholesaler_receipt.unit_selling_price = _money(details["unit_selling_price"], "selling price")
+
+    # Sold in parts: part price, and a count of what's left in the opened unit.
+    if details.get("part_selling_price") not in (None, ""):
+        wholesaler_receipt.part_selling_price = _money(details["part_selling_price"], "part price")
+
+    if details.get("open_content") not in (None, ""):
+        from products.units import D, content_per_unit
+
+        open_content = D(details["open_content"])
+        cap = content_per_unit(wholesaler_receipt.product)
+        if open_content < 0 or (cap > 0 and open_content >= cap):
+            raise exceptions.ValidationError("What's left in the opened unit must be less than a whole unit")
+        wholesaler_receipt.open_content = open_content
 
     manufacture_date = details.get("manufacture_date") or None
     expiry_date = details.get("expiry_date") or None

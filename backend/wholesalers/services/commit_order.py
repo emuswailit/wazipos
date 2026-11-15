@@ -18,6 +18,9 @@ On commit:
 """
 
 from django.db import transaction
+
+from products.stock_service import check_available, deduct_retailer_order
+from products.units import line_quantity
 from django.utils import timezone
 
 from wholesalers.models import (
@@ -88,23 +91,16 @@ def commit_order(
                 f"Item {item.id} has no wholesaler receipt attached."
             )
         receipt = locked_receipts[item.wholesaler_receipt_id]
-        need = int(item.purchased_quantity or 0)
-        have = int(receipt.current_unit_quantity or 0)
-        if have < need:
-            raise ValueError(
-                f"Receipt {receipt.id} has only {have} units available "
-                f"but {need} are needed."
-            )
+        # Whole units or parts (products/units.py).
+        short = check_available(receipt, *line_quantity(item))
+        if short:
+            raise ValueError(short)
 
-    # Decrement receipts. The signal on WholesalerReceipts fires after each
-    # save and rebalances other pending offers against the same receipt.
-    for item in items:
-        receipt = locked_receipts[item.wholesaler_receipt_id]
-        receipt.current_unit_quantity = (
-            (receipt.current_unit_quantity or 0)
-            - int(item.purchased_quantity or 0)
-        )
-        receipt.save(update_fields=["current_unit_quantity"])
+    # Take the stock — once per order (a later payment won't take it again).
+    # The signal on WholesalerReceipts fires after each save and rebalances
+    # other pending offers against the same receipt.
+    deduct_retailer_order(order)
+    order.refresh_from_db()
 
     # Mark the order
     now = timezone.now()

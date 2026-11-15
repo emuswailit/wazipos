@@ -93,11 +93,15 @@ def save_drink(data, user):
     title = get("title") or (product.title if product else "")
     if not title:
         return ["Name the drink, or pick it from the product list"], None
-    volume = int(_d(get("volume_ml"), "750") or 0)
+    # A product sold by volume in parts (products/units.py) gives the bottle and tot size.
+    from products.units import sells_in_parts
+
+    from_product = product is not None and sells_in_parts(product) and product.measure == "VOLUME"
+    volume = int(_d(get("volume_ml") or (product.content_per_unit if from_product else ""), "750") or 0)
     if not 50 <= volume <= 5000:
         return ["Bottle size must be 50–5000 ml"], None
-    sells_tots = str(data.get("sells_tots")).lower() in ("true", "1", "yes")
-    tot_ml = int(_d(get("tot_ml"), "0") or 0)
+    sells_tots = str(data.get("sells_tots") if "sells_tots" in data else from_product).lower() in ("true", "1", "yes")
+    tot_ml = int(_d(get("tot_ml") or (product.part_size if from_product else ""), "0") or 0)
     if sells_tots and not 10 <= tot_ml <= volume:
         return ["Enter the tot size in ml (e.g. 25, 30, 35 or 50)"], None
     bottle_price, tot_price, cost = _d(get("bottle_price")), _d(get("tot_price")), _d(get("bottle_cost"))
