@@ -1,5 +1,6 @@
 // components/retailers/forecast/RetailerForecastsList.tsx
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { RequestWholesalerPickerModal } from '@/components/retailers/productRequests/RequestWholesalerPickerModal';
 import { useForecast } from '@/context/ForecastContext';
 import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
@@ -414,11 +415,23 @@ export default function RetailerForecastsList({
     /* ---------------- Render ---------------------------------- */
     return (
         <>
-            {isLarge ? (
-                <RetailerForecastsWebView {...sharedProps} />
-            ) : (
-                <RetailerForecastsMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a forecast to see its details here."
+                pane={
+                    <ForecastDetailsModal
+                        forecast={detailsTarget}
+                        onClose={closeDetails}
+                        onViewOffers={openOffers}
+                        onRequestSupply={openRequest}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <RetailerForecastsWebView {...sharedProps} />
+                ) : (
+                    <RetailerForecastsMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <ForecastOffersModal
                 forecast={offersTarget}
@@ -426,13 +439,6 @@ export default function RetailerForecastsList({
                 onSelectOffer={handleAcceptOffer}
                 onRemoveForecast={handleRemoveForecast}
                 isForecastChecked={isForecastChecked}
-            />
-
-            <ForecastDetailsModal
-                forecast={detailsTarget}
-                onClose={closeDetails}
-                onViewOffers={openOffers}
-                onRequestSupply={openRequest}
             />
 
             <RequestWholesalerPickerModal

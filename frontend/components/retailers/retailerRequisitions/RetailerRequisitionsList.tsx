@@ -19,7 +19,7 @@ import React, {
     useMemo,
     useState,
 } from 'react';
-import { useListTokens } from '@/components/common/listScreen';
+import { useListTokens, DetailsDock } from '@/components/common/listScreen';
 import { Modal, Platform, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -255,21 +255,33 @@ const RetailerRequisitionsList: React.FC = () => {
 
     return (
         <>
-            {twoPane ? (
-                <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.background }}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                        <RetailerRequisitionsWebView {...common} />
+            <DetailsDock
+                placeholder="Pick a requisition to see its details here."
+                pane={
+                    <RetailerRequisitionsDetailsModal
+                        order={paneOrder}
+                        visible={detailsOpen && !!paneOrder}
+                        onClose={() => setDetailsOpen(false)}
+                        onRefreshParentLedger={onRefresh}
+                    />
+                }
+            >
+                {twoPane ? (
+                    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.background }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <RetailerRequisitionsWebView {...common} />
+                        </View>
+                        {/* Cart-style pane: scrolls on its own, totals + payment pinned */}
+                        <View style={{ width: PANE_WIDTH, borderLeftWidth: 1, borderLeftColor: border, backgroundColor: theme.panel }}>
+                            <RequisitionCart order={paneOrder} onRefreshParentLedger={onRefresh} onShowDetails={paneOrder ? showDetails : undefined} />
+                        </View>
                     </View>
-                    {/* Cart-style pane: scrolls on its own, totals + payment pinned */}
-                    <View style={{ width: PANE_WIDTH, borderLeftWidth: 1, borderLeftColor: border, backgroundColor: theme.panel }}>
-                        <RequisitionCart order={paneOrder} onRefreshParentLedger={onRefresh} onShowDetails={paneOrder ? showDetails : undefined} />
-                    </View>
-                </View>
-            ) : isLarge ? (
-                <RetailerRequisitionsWebView {...common} />
-            ) : (
-                <RetailerRequisitionsMobileView {...common} />
-            )}
+                ) : isLarge ? (
+                    <RetailerRequisitionsWebView {...common} />
+                ) : (
+                    <RetailerRequisitionsMobileView {...common} />
+                )}
+            </DetailsDock>
 
             {!twoPane ? (
                 <Modal visible={cartOpen} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setCartOpen(false)}>
@@ -285,12 +297,6 @@ const RetailerRequisitionsList: React.FC = () => {
                 </Modal>
             ) : null}
 
-            <RetailerRequisitionsDetailsModal
-                order={paneOrder}
-                visible={detailsOpen && !!paneOrder}
-                onClose={() => setDetailsOpen(false)}
-                onRefreshParentLedger={onRefresh}
-            />
         </>
     );
 };

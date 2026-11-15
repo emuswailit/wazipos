@@ -17,6 +17,7 @@
 // Create-request submissions carry a `draft_id` idempotency key
 // in the form `<user_id>:<entity_id>:<ms_timestamp>`.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { useAuth } from '@/context/AuthContext';
 import { useRetailerProductRequestsSync } from '@/context/RetailerProductRequestsSyncContext';
 import React, {
@@ -641,15 +642,28 @@ export default function RetailerProductRequestsList({
     /* ---------------- Render ---------------- */
     return (
         <>
-            {isLarge ? (
-                <RetailerProductRequestsWebView
-                    {...sharedProps}
-                />
-            ) : (
-                <RetailerProductRequestsMobileView
-                    {...sharedProps}
-                />
-            )}
+            <DetailsDock
+                placeholder="Pick a request to see its lines and offers here."
+                pane={
+                    detailsTarget ? (
+                        <ViewRequestDetailsModal
+                            visible
+                            request={detailsTarget}
+                            onClose={closeDetails}
+                        />
+                    ) : null
+                }
+            >
+                {isLarge ? (
+                    <RetailerProductRequestsWebView
+                        {...sharedProps}
+                    />
+                ) : (
+                    <RetailerProductRequestsMobileView
+                        {...sharedProps}
+                    />
+                )}
+            </DetailsDock>
 
             <CreateRequestModal
                 visible={createOpen}
@@ -668,13 +682,6 @@ export default function RetailerProductRequestsList({
                 />
             ) : null}
 
-            {detailsTarget ? (
-                <ViewRequestDetailsModal
-                    visible
-                    request={detailsTarget}
-                    onClose={closeDetails}
-                />
-            ) : null}
         </>
     );
 }

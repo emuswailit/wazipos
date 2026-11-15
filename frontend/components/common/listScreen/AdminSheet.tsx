@@ -7,11 +7,12 @@
 
 import { isWeb, useListTokens, webPointer } from '@/components/common/listScreen/tokens';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { IconName } from './AdminListView';
+import { useDetailsDock } from './DetailsDock';
 
 const SHEET_WIDE_MIN_WIDTH = 640;
 
@@ -31,10 +32,130 @@ interface AdminSheetProps {
     scroll?: boolean;
     /** Disables backdrop / close while e.g. saving. */
     dismissible?: boolean;
+    /**
+     * Details sheets: inside a <DetailsDock> on a wide screen, show as a panel
+     * beside the list (like a cart) instead of a popup.
+     */
+    dockable?: boolean;
     children: React.ReactNode;
 }
 
 export function AdminSheet({
+    visible,
+    onClose,
+    title,
+    subtitle,
+    icon,
+    accent,
+    width = 640,
+    footer,
+    scroll = true,
+    dismissible = true,
+    dockable = false,
+    children,
+}: AdminSheetProps) {
+    const dock = useDetailsDock();
+    const docked = dockable && !!dock?.docked;
+    const dockId = useId();
+    useEffect(() => {
+        if (!dock || !dockable) return;
+        dock.setOpen(dockId, docked && visible);
+        return () => dock.setOpen(dockId, false);
+    }, [dock, dockable, docked, visible, dockId]);
+    if (docked) {
+        return visible ? (
+            <DockedPanel title={title} subtitle={subtitle} icon={icon} accent={accent} footer={footer} scroll={scroll} onClose={() => dismissible && onClose()}>
+                {children}
+            </DockedPanel>
+        ) : null;
+    }
+    return (
+        <ModalSheet
+            visible={visible}
+            onClose={onClose}
+            title={title}
+            subtitle={subtitle}
+            icon={icon}
+            accent={accent}
+            width={width}
+            footer={footer}
+            scroll={scroll}
+            dismissible={dismissible}
+        >
+            {children}
+        </ModalSheet>
+    );
+}
+
+/** A details sheet docked beside the list (DetailsDock): header, scrolling body, footer. */
+function DockedPanel({
+    title,
+    subtitle,
+    icon,
+    accent,
+    footer,
+    scroll,
+    onClose,
+    children,
+}: Pick<AdminSheetProps, 'title' | 'subtitle' | 'icon' | 'accent' | 'footer' | 'scroll' | 'children'> & { onClose: () => void }) {
+    const { theme, divider, border } = useListTokens();
+    const color = accent ?? theme.primary;
+    return (
+        <View
+            style={{
+                flex: 1,
+                minHeight: 0,
+                backgroundColor: theme.panel,
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: border,
+                overflow: 'hidden',
+                ...(isWeb ? ({ boxShadow: '0 8px 28px rgba(15,23,42,0.10)' } as any) : { elevation: 3 }),
+            }}
+        >
+            <View className="flex-row items-center gap-3 px-5" style={{ paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: divider }}>
+                {icon ? (
+                    <View className="w-10 h-10 rounded-2xl items-center justify-center" style={{ backgroundColor: `${color}18` }}>
+                        <Ionicons name={icon} size={19} color={color} />
+                    </View>
+                ) : null}
+                <View className="flex-1 min-w-0">
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 16 }} numberOfLines={2}>
+                        {title}
+                    </Text>
+                    {subtitle ? (
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
+                            {subtitle}
+                        </Text>
+                    ) : null}
+                </View>
+                <Pressable
+                    onPress={onClose}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close details"
+                    style={({ pressed }) => ({ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? divider : 'transparent', ...webPointer })}
+                >
+                    <Ionicons name="close" size={20} color={theme.textDark} />
+                </Pressable>
+            </View>
+            {scroll !== false ? (
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 18 }} showsVerticalScrollIndicator={false}>
+                    {children}
+                </ScrollView>
+            ) : (
+                <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
+            )}
+            {footer ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: divider }}>
+                    {footer}
+                </View>
+            ) : null}
+        </View>
+    );
+}
+
+function ModalSheet({
     visible,
     onClose,
     title,

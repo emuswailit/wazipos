@@ -1,4 +1,5 @@
 // components/admin/entities/AdminEntitiesList.tsx
+import { DetailsDock } from '@/components/common/listScreen';
 import entitiesApi from '@/api/entitiesApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -203,20 +204,24 @@ export default function AdminEntitiesList() {
     return (
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
             <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={theme.background} />
-            {isLargeScreen ? <AdminEntitiesWebView {...sharedProps} /> : <AdminEntitiesMobileView {...sharedProps} />}
-
-            {/* Details Modal */}
-            <AdminEntityDetailsModal
-                visible={isDetailsModalOpen}
-                onClose={() => { setIsDetailsModalOpen(false); setViewingItem(null); }}
-                onEdit={() => {
-                    setIsDetailsModalOpen(false);
-                    setEditingItem(viewingItem);
-                    setIsFormModalOpen(true);
-                }}
-                item={viewingItem}
-                formatDateHandler={formatHumanDate}
-            />
+            <DetailsDock
+                placeholder="Pick a business to see its details here."
+                pane={
+                <AdminEntityDetailsModal
+                    visible={isDetailsModalOpen}
+                    onClose={() => { setIsDetailsModalOpen(false); setViewingItem(null); }}
+                    onEdit={() => {
+                        setIsDetailsModalOpen(false);
+                        setEditingItem(viewingItem);
+                        setIsFormModalOpen(true);
+                    }}
+                    item={viewingItem}
+                    formatDateHandler={formatHumanDate}
+                />
+                }
+            >
+                {isLargeScreen ? <AdminEntitiesWebView {...sharedProps} /> : <AdminEntitiesMobileView {...sharedProps} />}
+            </DetailsDock>
 
             {/* Edit Modal */}
             <AdminEntityEditModal

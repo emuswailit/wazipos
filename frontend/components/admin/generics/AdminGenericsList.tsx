@@ -9,6 +9,7 @@
 // Parent links (drug_classes, drug_sub_classes) are M2M, sent as
 // arrays of UUIDs.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type GenericsRequest,
 } from "@/api/drugsApi";
@@ -425,11 +426,24 @@ export default function AdminGenericsList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminGenericsWebView {...sharedProps} />
-            ) : (
-                <AdminGenericsMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a generic to see its details here."
+                pane={
+                    <AdminGenericDetailsModal
+                        routeItem={selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminGenericsWebView {...sharedProps} />
+                ) : (
+                    <AdminGenericsMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminGenericEditModal
                 visible={isFormModalOpen}
@@ -451,13 +465,6 @@ export default function AdminGenericsList() {
                 }
             />
 
-            <AdminGenericDetailsModal
-                routeItem={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }

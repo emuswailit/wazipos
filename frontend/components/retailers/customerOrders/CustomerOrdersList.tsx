@@ -4,6 +4,7 @@
 //
 // Owns data + filter state, dispatches to the Web or Mobile view.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { useAuth } from '@/context/AuthContext';
 import { CustomerOrder } from '@/databases/types';
 import { uploadPendingCustomerOrders } from '@/services/customerOrderUploader';
@@ -264,17 +265,23 @@ export default function CustomerOrdersList() {
                 onRetry={onRetryUpload}
             />
 
-            {isLarge ? (
-                <CustomerOrdersWebView {...common} />
-            ) : (
-                <CustomerOrdersMobileView {...common} />
-            )}
+            <DetailsDock
+                placeholder="Pick an order to see its invoice here."
+                pane={
+                    <InvoiceModal
+                        order={selected}
+                        onClose={onCloseDetails}
+                        onRefresh={onRefresh}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <CustomerOrdersWebView {...common} />
+                ) : (
+                    <CustomerOrdersMobileView {...common} />
+                )}
+            </DetailsDock>
 
-            <InvoiceModal
-                order={selected}
-                onClose={onCloseDetails}
-                onRefresh={onRefresh}
-            />
         </View>
     );
 }

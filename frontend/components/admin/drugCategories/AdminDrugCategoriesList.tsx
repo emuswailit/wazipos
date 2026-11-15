@@ -1,5 +1,6 @@
 // app/(admin)/drug-categories/AdminDrugCategoriesList.tsx
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type CategoriesRequest as DrugCategoriesRequest,
 } from "@/api/drugsApi";
@@ -354,11 +355,24 @@ export default function AdminDrugCategoriesList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminDrugCategoriesWebView {...sharedProps} />
-            ) : (
-                <AdminDrugCategoriesMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a category to see its details here."
+                pane={
+                    <AdminDrugCategoryDetailsModal
+                        routeItem={selectedCategory}
+                        onClose={() => setSelectedCategory(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminDrugCategoriesWebView {...sharedProps} />
+                ) : (
+                    <AdminDrugCategoriesMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminDrugCategoryEditModal
                 visible={isFormModalOpen}
@@ -374,13 +388,6 @@ export default function AdminDrugCategoriesList() {
                 remoteErrors={addDrugCategoryApi.data?.errors || updateDrugCategoryApi.data?.errors}
             />
 
-            <AdminDrugCategoryDetailsModal
-                routeItem={selectedCategory}
-                onClose={() => setSelectedCategory(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }

@@ -10,6 +10,7 @@
 // intermediate wrapper file. The shell builds the full request
 // envelope.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type FormulationsRequest,
 } from "@/api/drugsApi";
@@ -399,11 +400,24 @@ export default function AdminFormulationsList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminFormulationsWebView {...sharedProps} />
-            ) : (
-                <AdminFormulationsMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a formulation to see its details here."
+                pane={
+                    <AdminFormulationDetailsModal
+                        routeItem={selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminFormulationsWebView {...sharedProps} />
+                ) : (
+                    <AdminFormulationsMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminFormulationEditModal
                 visible={isFormModalOpen}
@@ -425,13 +439,6 @@ export default function AdminFormulationsList() {
                 }
             />
 
-            <AdminFormulationDetailsModal
-                routeItem={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }

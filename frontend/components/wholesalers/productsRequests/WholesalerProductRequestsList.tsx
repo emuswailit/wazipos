@@ -7,7 +7,7 @@
 
 import wholesalersApi from '@/api/wholesalersApi';
 import { useAlert } from '@/components/common/AlertProvider';
-import { AdminListView, formatDateTime, type AdminListConfig, type BadgeTone } from '@/components/common/listScreen';
+import { AdminListView, formatDateTime, type AdminListConfig, type BadgeTone, DetailsDock } from '@/components/common/listScreen';
 import { useRetailerProductRequestsSync } from '@/context/RetailerProductRequestsSyncContext';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import type { ProductRequestSummary } from '@/databases/types';
@@ -126,43 +126,49 @@ export default function WholesalerProductRequestsList() {
 
     return (
         <>
-            <AdminListView<ProductRequestSummary, Filter>
-                variant={width >= 900 ? 'web' : 'mobile'}
-                config={config}
-                query={query}
-                setQuery={setQuery}
-                onRefresh={() => void reconnectLiveSync()}
-                refreshing={isManualRefreshing}
-                sourceLabel={sourceLabel}
-                sourceTone={sourceTone as any}
-                lastSyncedTime={lastSyncedTime}
-                {...paged}
-                onPressItem={setViewing}
-                rowActions={(r) => [
-                    { icon: 'eye-outline', label: 'View', onPress: () => setViewing(r) },
-                    ...(canOffer(r) ? [{ icon: 'pricetags-outline' as const, label: 'Make offer', onPress: () => openOffer(r), tone: 'primary' as const }] : []),
-                ]}
-                stats={[
-                    { label: 'Open', value: String(counts.PUBLISHED ?? 0), color: counts.PUBLISHED ? '#10b981' : undefined },
-                    { label: 'Partly filled', value: String(counts.PARTIALLY_FULFILLED ?? 0) },
-                    { label: 'Filled', value: String(counts.FULFILLED ?? 0) },
-                ]}
-                filters={{
-                    options: [
-                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: counts.ALL },
-                        { key: 'PUBLISHED', label: 'Open', icon: 'flash-outline', count: counts.PUBLISHED ?? 0 },
-                        { key: 'ACKNOWLEDGED', label: 'Acknowledged', icon: 'checkmark-outline', count: counts.ACKNOWLEDGED ?? 0 },
-                        { key: 'PARTIALLY_FULFILLED', label: 'Partly filled', icon: 'pie-chart-outline', count: counts.PARTIALLY_FULFILLED ?? 0 },
-                        { key: 'FULFILLED', label: 'Filled', icon: 'checkmark-done-outline', count: counts.FULFILLED ?? 0 },
-                        { key: 'EXPIRED', label: 'Expired', icon: 'time-outline', count: counts.EXPIRED ?? 0 },
-                        { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', count: counts.CANCELLED ?? 0 },
-                    ],
-                    value: filter,
-                    onChange: setFilter,
-                    allKey: 'ALL',
-                }}
-            />
-            <ViewRequestDetailsModal visible={!!viewing} request={viewing} onClose={() => setViewing(null)} />
+            <DetailsDock
+                placeholder="Pick a request to see what the retailer needs."
+                pane={
+                    <ViewRequestDetailsModal visible={!!viewing} request={viewing} onClose={() => setViewing(null)} />
+                }
+            >
+                <AdminListView<ProductRequestSummary, Filter>
+                    variant={width >= 900 ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={() => void reconnectLiveSync()}
+                    refreshing={isManualRefreshing}
+                    sourceLabel={sourceLabel}
+                    sourceTone={sourceTone as any}
+                    lastSyncedTime={lastSyncedTime}
+                    {...paged}
+                    onPressItem={setViewing}
+                    rowActions={(r) => [
+                        { icon: 'eye-outline', label: 'View', onPress: () => setViewing(r) },
+                        ...(canOffer(r) ? [{ icon: 'pricetags-outline' as const, label: 'Make offer', onPress: () => openOffer(r), tone: 'primary' as const }] : []),
+                    ]}
+                    stats={[
+                        { label: 'Open', value: String(counts.PUBLISHED ?? 0), color: counts.PUBLISHED ? '#10b981' : undefined },
+                        { label: 'Partly filled', value: String(counts.PARTIALLY_FULFILLED ?? 0) },
+                        { label: 'Filled', value: String(counts.FULFILLED ?? 0) },
+                    ]}
+                    filters={{
+                        options: [
+                            { key: 'ALL', label: 'All', icon: 'apps-outline', count: counts.ALL },
+                            { key: 'PUBLISHED', label: 'Open', icon: 'flash-outline', count: counts.PUBLISHED ?? 0 },
+                            { key: 'ACKNOWLEDGED', label: 'Acknowledged', icon: 'checkmark-outline', count: counts.ACKNOWLEDGED ?? 0 },
+                            { key: 'PARTIALLY_FULFILLED', label: 'Partly filled', icon: 'pie-chart-outline', count: counts.PARTIALLY_FULFILLED ?? 0 },
+                            { key: 'FULFILLED', label: 'Filled', icon: 'checkmark-done-outline', count: counts.FULFILLED ?? 0 },
+                            { key: 'EXPIRED', label: 'Expired', icon: 'time-outline', count: counts.EXPIRED ?? 0 },
+                            { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', count: counts.CANCELLED ?? 0 },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                />
+            </DetailsDock>
             <MakeOfferModal
                 visible={!!offering}
                 request={offering}

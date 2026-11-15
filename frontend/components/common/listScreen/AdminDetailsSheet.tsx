@@ -71,6 +71,7 @@ export function AdminDetailsSheet({
             onClose={onClose}
             title={heading}
             icon={icon}
+            dockable
             footer={
                 <>
                     <SheetButton label="Close" variant="ghost" onPress={onClose} grow={!wide} />

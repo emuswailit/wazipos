@@ -8,6 +8,7 @@
 //      change the backend applied via create_stock_adjustment is
 //      reflected in pickers and inventory views.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { useAlert } from '@/components/common/AlertProvider';
 import ApiResponseModal, {
     extractEnvelope,
@@ -447,11 +448,23 @@ const SalesReturnsList: React.FC = () => {
 
     return (
         <>
-            {isLarge ? (
-                <SalesReturnsWebView {...common} />
-            ) : (
-                <SalesReturnsMobileView {...common} />
-            )}
+            <DetailsDock
+                placeholder="Pick a return to see its details here."
+                pane={
+                    <SalesReturnDetailsSheet
+                        item={detailsTarget}
+                        onClose={() => setDetailsTarget(null)}
+                        onEdit={onOpenEdit}
+                        onDelete={onDeleteReturn}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <SalesReturnsWebView {...common} />
+                ) : (
+                    <SalesReturnsMobileView {...common} />
+                )}
+            </DetailsDock>
 
             <SalesReturnFormModal
                 visible={formOpen}
@@ -466,13 +479,6 @@ const SalesReturnsList: React.FC = () => {
                 initial={editingReturn}
                 onClose={onCloseForm}
                 onSubmit={onSubmitForm}
-            />
-
-            <SalesReturnDetailsSheet
-                item={detailsTarget}
-                onClose={() => setDetailsTarget(null)}
-                onEdit={onOpenEdit}
-                onDelete={onDeleteReturn}
             />
 
             <ApiResponseModal

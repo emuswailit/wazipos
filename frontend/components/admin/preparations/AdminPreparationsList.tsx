@@ -2,6 +2,7 @@
 //
 // Admin preparations list shell.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type PreparationsRequest,
 } from "@/api/drugsApi";
@@ -367,11 +368,24 @@ export default function AdminPreparationsList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminPreparationsWebView {...sharedProps} />
-            ) : (
-                <AdminPreparationsMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a preparation to see its details here."
+                pane={
+                    <AdminPreparationDetailsModal
+                        routeItem={selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminPreparationsWebView {...sharedProps} />
+                ) : (
+                    <AdminPreparationsMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminPreparationEditModal
                 visible={isFormModalOpen}
@@ -393,13 +407,6 @@ export default function AdminPreparationsList() {
                 }
             />
 
-            <AdminPreparationDetailsModal
-                routeItem={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }

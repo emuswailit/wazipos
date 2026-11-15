@@ -8,7 +8,7 @@
 // (/retailers/prescriptions/admin/).
 
 import { adminRxClient } from '@/api/retailerPrescriptionsApi';
-import { AdminListView, type AdminListViewProps } from '@/components/admin/kit';
+import { AdminListView, type AdminListViewProps, DetailsDock } from '@/components/admin/kit';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { DigitizePrescriptionModal } from '@/components/retailers/retailerPrescriptions/DigitizePrescriptionModal';
 import { makePrescriptionsConfig, quotationsOf } from '@/components/retailers/retailerPrescriptions/prescriptionsConfig';
@@ -167,9 +167,14 @@ export default function AdminUserPrescriptionsList() {
 
     return (
         <>
-            <AdminListView {...listProps} />
-
-            <RetailerPrescriptionDetailsModal item={detailsTarget} scope="admin" onClose={() => setDetailsTarget(null)} onDigitize={openDigitize} />
+            <DetailsDock
+                placeholder="Pick a prescription to see its details here."
+                pane={
+                    <RetailerPrescriptionDetailsModal item={detailsTarget} scope="admin" onClose={() => setDetailsTarget(null)} onDigitize={openDigitize} />
+                }
+            >
+                <AdminListView {...listProps} />
+            </DetailsDock>
 
             <DigitizePrescriptionModal
                 visible={!!digitizeTarget}

@@ -42,6 +42,7 @@ export default function PriceDiscountDetailsModal({
 
     return (
         <Modal
+            dockable
             visible={visible}
             onClose={onClose}
             title={data?.title ?? "Price discount"}

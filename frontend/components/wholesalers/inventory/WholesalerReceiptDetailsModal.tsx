@@ -1,13 +1,12 @@
 // components/wholesalers/inventory/WholesalerReceiptDetailsModal.tsx
 
+import { AdminSheet, SheetButton } from '@/components/common/listScreen';
 import { useAuth } from '@/context/AuthContext';
 import { WholesalerReceipt } from '@/databases/types';
 import React, { useState } from 'react';
 import {
     Image,
-    Modal,
     Pressable,
-    ScrollView,
     Text,
     View,
 } from 'react-native';
@@ -56,97 +55,27 @@ export function WholesalerReceiptDetailsModal({
             ? ((sellPrice - buyPrice) / sellPrice) * 100
             : null;
 
+    // Details sheet: beside the list on wide screens (DetailsDock), a sheet on phones.
     return (
-        <Modal
+        <AdminSheet
             visible={!!receipt}
-            animationType="fade"
-            transparent
-            onRequestClose={onClose}
+            onClose={onClose}
+            title={receipt.title || 'Stock item'}
+            subtitle={`${receipt.bar_code ? `Barcode ${receipt.bar_code} · ` : ''}Received ${receipt.created || '—'}`}
+            icon="cube-outline"
+            width={760}
+            dockable
+            footer={<SheetButton label="Close" variant="ghost" onPress={onClose} />}
         >
-            <View className="flex-1 bg-black/55 items-center justify-center p-4">
-                <View
-                    className="w-full max-w-[900px] max-h-[92%] rounded-2xl border overflow-hidden"
-                    style={{ backgroundColor: theme.panel, borderColor }}
-                >
-                    {/* ---------------- Header ---------------- */}
-                    <View
-                        className="flex-row items-center justify-between p-4 border-b"
-                        style={{ borderBottomColor: dividerColor }}
-                    >
-                        <View className="flex-row items-center flex-1 min-w-0">
-                            <View
-                                className="rounded-lg overflow-hidden mr-3"
-                                style={{
-                                    width: 44,
-                                    height: 44,
-                                    backgroundColor: isDarkMode
-                                        ? '#1e293b'
-                                        : '#e2e8f0',
-                                }}
-                            >
-                                {receipt.thumbnail_url ? (
-                                    <Image
-                                        source={{
-                                            uri: receipt.thumbnail_url,
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            height: '100%',
-                                        }}
-                                        resizeMode="cover"
-                                    />
-                                ) : null}
-                            </View>
-                            <View className="flex-1 min-w-0">
-                                <Text
-                                    style={{
-                                        color: theme.text,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: theme.fontSize.lg,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    {receipt.title || '—'}
-                                </Text>
-                                <Text
-                                    className="mt-0.5"
-                                    style={{
-                                        color: theme.textDark,
-                                        fontFamily:
-                                            theme.font.medium,
-                                        fontSize:
-                                            theme.fontSize.xs,
-                                    }}
-                                    numberOfLines={1}
-                                >
-                                    {receipt.bar_code
-                                        ? `Barcode ${receipt.bar_code} · `
-                                        : ''}
-                                    Received {receipt.created || '—'}
-                                </Text>
-                            </View>
-                        </View>
-                        <Pressable
-                            onPress={onClose}
-                            hitSlop={10}
-                            className="p-1.5"
-                        >
-                            <Text
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.base,
-                                }}
-                            >
-                                ✕
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {/* ---------------- Body ---------------- */}
-                    <ScrollView
-                        contentContainerStyle={{ padding: 16 }}
-                    >
+            <View>
+                {receipt.thumbnail_url ? (
+                    <Image
+                        source={{ uri: receipt.thumbnail_url }}
+                        style={{ width: '100%', height: 140, borderRadius: 16, marginBottom: 16, backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }}
+                        resizeMode="cover"
+                        accessibilityIgnoresInvertColors
+                    />
+                ) : null}
                         {/* Summary */}
                         <SectionTitle label="Summary" />
                         <View
@@ -448,33 +377,8 @@ export function WholesalerReceiptDetailsModal({
                                 </View>
                             </>
                         ) : null}
-                    </ScrollView>
-
-                    {/* ---------------- Footer ---------------- */}
-                    <View
-                        className="flex-row justify-end p-4 border-t"
-                        style={{ borderTopColor: dividerColor }}
-                    >
-                        <Pressable
-                            onPress={onClose}
-                            className="px-4 py-2.5 rounded-xl border"
-                            style={{ borderColor }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                Close
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
             </View>
-        </Modal>
+        </AdminSheet>
     );
 }
 

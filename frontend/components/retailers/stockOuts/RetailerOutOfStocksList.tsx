@@ -8,6 +8,7 @@
 // Adding an offer to (or removing it from) the open indent is handled inside
 // OutOfStockOffersModal via useIndentBridge (offline-first); this shell only opens it.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { useRetailerOutOfStocksSync } from '@/context/RetailerOutOfStocksSyncContext';
 import { RetailerOutOfStockNormalized } from '@/databases/types';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -130,43 +131,48 @@ export default function RetailerOutOfStocksList({ onOfferFeedback, onItemPress, 
 
     return (
         <>
-            {isLarge ? (
-                <RetailerOutOfStocksWebView
-                    {...sharedProps}
-                    items={paginated}
-                    page={page}
-                    pageSize={pageSize}
-                    totalItems={totalItems}
-                    totalPages={totalPages}
-                    pageStart={pageStart}
-                    pageEnd={pageEnd}
-                    onPrev={() => setPage((p) => Math.max(1, p - 1))}
-                    onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    onPageSizeChange={(size) => {
-                        setPageSize(size);
-                        setPage(1);
-                    }}
-                />
-            ) : (
-                // No pagination on small screens: the whole filtered list
-                <RetailerOutOfStocksMobileView {...sharedProps} items={filtered} />
-            )}
+            <DetailsDock
+                placeholder="Pick an item to see its details here."
+                pane={
+                    <OutOfStockDetailsModal
+                        item={detailsTarget}
+                        onClose={() => setDetailsTarget(null)}
+                        onViewOffers={(target) => {
+                            setDetailsTarget(null);
+                            openOffers(target);
+                        }}
+                        onEdit={(target) => {
+                            setDetailsTarget(null);
+                            openEdit(target);
+                        }}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <RetailerOutOfStocksWebView
+                        {...sharedProps}
+                        items={paginated}
+                        page={page}
+                        pageSize={pageSize}
+                        totalItems={totalItems}
+                        totalPages={totalPages}
+                        pageStart={pageStart}
+                        pageEnd={pageEnd}
+                        onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        onPageSizeChange={(size) => {
+                            setPageSize(size);
+                            setPage(1);
+                        }}
+                    />
+                ) : (
+                    // No pagination on small screens: the whole filtered list
+                    <RetailerOutOfStocksMobileView {...sharedProps} items={filtered} />
+                )}
+            </DetailsDock>
 
             {/* Offers: add to / remove from the open indent happens inside */}
             <OutOfStockOffersModal item={offersTarget} onClose={() => setOffersTarget(null)} onFeedback={onOfferFeedback} />
-
-            <OutOfStockDetailsModal
-                item={detailsTarget}
-                onClose={() => setDetailsTarget(null)}
-                onViewOffers={(target) => {
-                    setDetailsTarget(null);
-                    openOffers(target);
-                }}
-                onEdit={(target) => {
-                    setDetailsTarget(null);
-                    openEdit(target);
-                }}
-            />
 
             <OutOfStockFormModal
                 visible={!!formState}

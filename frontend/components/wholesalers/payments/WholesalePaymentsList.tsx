@@ -9,7 +9,7 @@
 // Backend: POST /wholesalers/retailers/orders/staff {action: GetRetailerOrderPayments}
 
 import client from '@/api/client';
-import { AdminListView, AdminSheet, formatDateTime, useListTokens, type AdminListConfig, type BadgeTone } from '@/components/common/listScreen';
+import { AdminListView, AdminSheet, formatDateTime, useListTokens, type AdminListConfig, type BadgeTone, DetailsDock } from '@/components/common/listScreen';
 import { useCachedList, usePaged } from '@/hooks/useCachedList';
 import React, { useMemo, useState } from 'react';
 import { Text, useWindowDimensions, View } from 'react-native';
@@ -128,38 +128,44 @@ export default function WholesalePaymentsList() {
 
     return (
         <>
-            <AdminListView<WholesalePayment, Filter>
-                variant={width >= 900 ? 'web' : 'mobile'}
-                config={config}
-                query={query}
-                setQuery={setQuery}
-                onRefresh={list.refresh}
-                refreshing={list.refreshing}
-                sourceLabel={list.sourceLabel}
-                sourceTone={list.source}
-                lastSyncedTime={list.lastSynced}
-                error={list.error}
-                {...paged}
-                onPressItem={setOpen}
-                rowActions={(p) => [{ icon: 'eye-outline', label: 'View', onPress: () => setOpen(p), tone: 'primary' }]}
-                stats={[
-                    { label: 'Today', value: kes(sums.today), color: sums.today ? '#10b981' : undefined },
-                    { label: 'This month', value: kes(sums.month) },
-                    { label: 'Pending', value: kes(sums.pending), color: sums.pending ? '#f59e0b' : undefined },
-                ]}
-                filters={{
-                    options: [
-                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: sums.c.ALL },
-                        { key: 'SUCCESS', label: 'Received', icon: 'checkmark-circle-outline', count: sums.c.SUCCESS ?? 0 },
-                        { key: 'PENDING', label: 'Pending', icon: 'hourglass-outline', count: sums.c.PENDING ?? 0 },
-                        { key: 'FAILED', label: 'Failed', icon: 'close-circle-outline', count: sums.c.FAILED ?? 0 },
-                    ],
-                    value: filter,
-                    onChange: setFilter,
-                    allKey: 'ALL',
-                }}
-            />
-            <PaymentSheet payment={open} onClose={() => setOpen(null)} />
+            <DetailsDock
+                placeholder="Pick a payment to see its references and payout."
+                pane={
+                    <PaymentSheet payment={open} onClose={() => setOpen(null)} />
+                }
+            >
+                <AdminListView<WholesalePayment, Filter>
+                    variant={width >= 900 ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={list.refresh}
+                    refreshing={list.refreshing}
+                    sourceLabel={list.sourceLabel}
+                    sourceTone={list.source}
+                    lastSyncedTime={list.lastSynced}
+                    error={list.error}
+                    {...paged}
+                    onPressItem={setOpen}
+                    rowActions={(p) => [{ icon: 'eye-outline', label: 'View', onPress: () => setOpen(p), tone: 'primary' }]}
+                    stats={[
+                        { label: 'Today', value: kes(sums.today), color: sums.today ? '#10b981' : undefined },
+                        { label: 'This month', value: kes(sums.month) },
+                        { label: 'Pending', value: kes(sums.pending), color: sums.pending ? '#f59e0b' : undefined },
+                    ]}
+                    filters={{
+                        options: [
+                            { key: 'ALL', label: 'All', icon: 'apps-outline', count: sums.c.ALL },
+                            { key: 'SUCCESS', label: 'Received', icon: 'checkmark-circle-outline', count: sums.c.SUCCESS ?? 0 },
+                            { key: 'PENDING', label: 'Pending', icon: 'hourglass-outline', count: sums.c.PENDING ?? 0 },
+                            { key: 'FAILED', label: 'Failed', icon: 'close-circle-outline', count: sums.c.FAILED ?? 0 },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                />
+            </DetailsDock>
         </>
     );
 }
@@ -176,7 +182,7 @@ function PaymentSheet({ payment, onClose }: { payment: WholesalePayment | null; 
         ) : null;
     const s = STATUS[statusOf(payment)] ?? { label: payment.status, tone: 'neutral' };
     return (
-        <AdminSheet visible onClose={onClose} title={kes(payment.amount)} subtitle={`${payment.retailer_title} · ${s.label}`} icon="wallet-outline" width={520}>
+        <AdminSheet visible onClose={onClose} title={kes(payment.amount)} subtitle={`${payment.retailer_title} · ${s.label}`} icon="wallet-outline" width={520} dockable>
             <View>
                 {row('Order', payment.retailer_order_reference)}
                 {row('Method', methodOf(payment))}

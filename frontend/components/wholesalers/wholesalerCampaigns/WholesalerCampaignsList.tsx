@@ -11,7 +11,7 @@
 import campaignsApi from '@/api/campaignsApi';
 import type { Campaign, CampaignStatus, UUID } from '@/campaigns/types';
 import { useAlert } from '@/components/common/AlertProvider';
-import { AdminListView, type AdminListConfig } from '@/components/common/listScreen';
+import { AdminListView, type AdminListConfig, DetailsDock } from '@/components/common/listScreen';
 import { useCachedList, usePaged } from '@/hooks/useCachedList';
 import React, { useMemo, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
@@ -117,61 +117,67 @@ export default function WholesalerCampaignsList() {
 
     return (
         <>
-            <AdminListView<Campaign, Filter>
-                variant={width >= 900 ? 'web' : 'mobile'}
-                config={config}
-                query={query}
-                setQuery={setQuery}
-                onRefresh={list.refresh}
-                refreshing={list.refreshing}
-                sourceLabel={list.sourceLabel}
-                sourceTone={list.source}
-                lastSyncedTime={list.lastSynced}
-                error={list.error}
-                {...paged}
-                onOpenCreate={() => needOnline('Creating a campaign') && setCreateOpen(true)}
-                onPressItem={(c) => (list.isOnline ? setDetailsId(c.id) : needOnline('Opening a campaign'))}
-                rowActions={(c) => [
-                    { icon: 'eye-outline', label: 'View', onPress: () => needOnline('Opening a campaign') && setDetailsId(c.id), tone: 'primary' },
-                    ...(c.status === 'DRAFT'
-                        ? [{ icon: 'construct-outline' as const, label: 'Build', onPress: () => needOnline('Building a campaign') && setBuilderId(c.id) }]
-                        : []),
-                ]}
-                stats={[
-                    { label: 'Live now', value: String(tally.LIVE), color: tally.LIVE ? '#10b981' : undefined },
-                    { label: 'Drafts', value: String(tally.DRAFT ?? 0) },
-                    { label: 'Published', value: String(tally.PUBLISHED ?? 0) },
-                ]}
-                filters={{
-                    options: [
-                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: tally.ALL },
-                        { key: 'LIVE', label: 'Live now', icon: 'radio-outline', count: tally.LIVE },
-                        { key: 'DRAFT', label: 'Drafts', icon: 'document-text-outline', count: tally.DRAFT ?? 0 },
-                        { key: 'PUBLISHED', label: 'Published', icon: 'paper-plane-outline', count: tally.PUBLISHED ?? 0 },
-                        { key: 'CLOSED', label: 'Closed', icon: 'lock-closed-outline', count: tally.CLOSED ?? 0 },
-                        { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', count: tally.CANCELLED ?? 0 },
-                    ],
-                    value: filter,
-                    onChange: setFilter,
-                    allKey: 'ALL',
-                }}
-            />
+            <DetailsDock
+                placeholder="Pick a campaign to see its products, retailers and status here."
+                pane={
+                    <WholesalerCampaignDetailsModal
+                        visible={detailsId !== null}
+                        campaignId={detailsId ?? undefined}
+                        onClose={() => setDetailsId(null)}
+                        onChanged={list.refresh}
+                        onEditMeta={(c) => {
+                            setDetailsId(null);
+                            setEditingMeta(c);
+                        }}
+                        onEditBuilder={(c) => {
+                            setDetailsId(null);
+                            setBuilderId(c.id);
+                        }}
+                    />
+                }
+            >
+                <AdminListView<Campaign, Filter>
+                    variant={width >= 900 ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={list.refresh}
+                    refreshing={list.refreshing}
+                    sourceLabel={list.sourceLabel}
+                    sourceTone={list.source}
+                    lastSyncedTime={list.lastSynced}
+                    error={list.error}
+                    {...paged}
+                    onOpenCreate={() => needOnline('Creating a campaign') && setCreateOpen(true)}
+                    onPressItem={(c) => (list.isOnline ? setDetailsId(c.id) : needOnline('Opening a campaign'))}
+                    rowActions={(c) => [
+                        { icon: 'eye-outline', label: 'View', onPress: () => needOnline('Opening a campaign') && setDetailsId(c.id), tone: 'primary' },
+                        ...(c.status === 'DRAFT'
+                            ? [{ icon: 'construct-outline' as const, label: 'Build', onPress: () => needOnline('Building a campaign') && setBuilderId(c.id) }]
+                            : []),
+                    ]}
+                    stats={[
+                        { label: 'Live now', value: String(tally.LIVE), color: tally.LIVE ? '#10b981' : undefined },
+                        { label: 'Drafts', value: String(tally.DRAFT ?? 0) },
+                        { label: 'Published', value: String(tally.PUBLISHED ?? 0) },
+                    ]}
+                    filters={{
+                        options: [
+                            { key: 'ALL', label: 'All', icon: 'apps-outline', count: tally.ALL },
+                            { key: 'LIVE', label: 'Live now', icon: 'radio-outline', count: tally.LIVE },
+                            { key: 'DRAFT', label: 'Drafts', icon: 'document-text-outline', count: tally.DRAFT ?? 0 },
+                            { key: 'PUBLISHED', label: 'Published', icon: 'paper-plane-outline', count: tally.PUBLISHED ?? 0 },
+                            { key: 'CLOSED', label: 'Closed', icon: 'lock-closed-outline', count: tally.CLOSED ?? 0 },
+                            { key: 'CANCELLED', label: 'Cancelled', icon: 'close-circle-outline', count: tally.CANCELLED ?? 0 },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                />
+            </DetailsDock>
 
             {/* Read-only details + status changes */}
-            <WholesalerCampaignDetailsModal
-                visible={detailsId !== null}
-                campaignId={detailsId ?? undefined}
-                onClose={() => setDetailsId(null)}
-                onChanged={list.refresh}
-                onEditMeta={(c) => {
-                    setDetailsId(null);
-                    setEditingMeta(c);
-                }}
-                onEditBuilder={(c) => {
-                    setDetailsId(null);
-                    setBuilderId(c.id);
-                }}
-            />
 
             {/* Name, dates, budget — create and edit share the form */}
             <WholesalerCampaignEditModal

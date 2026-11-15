@@ -11,6 +11,7 @@ export * from './AdminDetailsSheet';
 export * from './AdminFormSheet';
 export * from './AdminListView';
 export * from './AdminSheet';
+export * from './DetailsDock';
 export * from './controls';
 export * from './format';
 export * from './tokens';

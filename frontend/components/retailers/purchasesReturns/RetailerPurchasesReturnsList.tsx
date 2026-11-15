@@ -6,6 +6,7 @@
 // "New return" opens that screen. GetPurchasesReturns takes no filters and
 // paginates server-side: we fetch one large page and filter / page locally.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { PAGE_SIZE_OPTIONS, type PageSize } from '@/components/common/PaginationBar';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -166,8 +167,14 @@ const RetailerPurchasesReturnsList: React.FC = () => {
 
     return (
         <>
-            {isLarge ? <RetailerPurchasesReturnsWebView {...common} /> : <RetailerPurchasesReturnsMobileView {...common} />}
-            <PurchasesReturnDetailsSheet item={detailsTarget} onClose={() => setDetailsTarget(null)} />
+            <DetailsDock
+                placeholder="Pick a return to see its details here."
+                pane={
+                <PurchasesReturnDetailsSheet item={detailsTarget} onClose={() => setDetailsTarget(null)} />
+                }
+            >
+                {isLarge ? <RetailerPurchasesReturnsWebView {...common} /> : <RetailerPurchasesReturnsMobileView {...common} />}
+            </DetailsDock>
         </>
     );
 };

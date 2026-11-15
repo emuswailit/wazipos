@@ -2,6 +2,7 @@
 //
 // Admin routes list shell.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type RoutesRequest,
 } from "@/api/drugsApi";
@@ -360,11 +361,24 @@ export default function AdminRoutesList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminRoutesWebView {...sharedProps} />
-            ) : (
-                <AdminRoutesMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a route to see its details here."
+                pane={
+                    <AdminRouteDetailsModal
+                        routeItem={selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminRoutesWebView {...sharedProps} />
+                ) : (
+                    <AdminRoutesMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminRouteEditModal
                 visible={isFormModalOpen}
@@ -381,13 +395,6 @@ export default function AdminRoutesList() {
                 initialData={editingItem}
             />
 
-            <AdminRouteDetailsModal
-                routeItem={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </SafeAreaView>
     );
 }

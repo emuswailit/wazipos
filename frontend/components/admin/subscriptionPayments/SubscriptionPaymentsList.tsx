@@ -1,3 +1,4 @@
+import { DetailsDock } from '@/components/common/listScreen';
 import subscriptionsApi from '@/api/subscriptionsApi';
 import ApiResponseModal, { extractEnvelope } from "@/components/common/ApiResponseModal";
 import { SubscriptionPaymentNormalized } from '@/databases/types';
@@ -115,9 +116,15 @@ export default function SubscriptionPaymentsList() {
 
     return (
         <>
-            {isLarge ? <SubscriptionPaymentsWebView {...sharedProps} /> : <SubscriptionPaymentsMobileView {...sharedProps} />}
+            <DetailsDock
+                placeholder="Pick a payment to see its details here."
+                pane={
+                <SubscriptionPaymentsDetailsModal item={detailsTarget} onClose={() => setDetailsTarget(null)} />
+                }
+            >
+                {isLarge ? <SubscriptionPaymentsWebView {...sharedProps} /> : <SubscriptionPaymentsMobileView {...sharedProps} />}
+            </DetailsDock>
 
-            <SubscriptionPaymentsDetailsModal item={detailsTarget} onClose={() => setDetailsTarget(null)} />
 
             <ApiResponseModal
                 isOpen={apiError.isOpen}

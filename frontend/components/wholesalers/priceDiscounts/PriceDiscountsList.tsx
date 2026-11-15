@@ -7,7 +7,7 @@
 
 import api from '@/api/wholesalersApi';
 import { useAlert } from '@/components/common/AlertProvider';
-import { AdminListView, type AdminListConfig } from '@/components/common/listScreen';
+import { AdminListView, type AdminListConfig, DetailsDock } from '@/components/common/listScreen';
 import { useCachedList, usePaged } from '@/hooks/useCachedList';
 import React, { useMemo, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
@@ -91,52 +91,58 @@ export default function PriceDiscountsList() {
 
     return (
         <>
-            <AdminListView<PriceDiscount, Filter>
-                variant={width >= 900 ? 'web' : 'mobile'}
-                config={config}
-                query={query}
-                setQuery={setQuery}
-                onRefresh={list.refresh}
-                refreshing={list.refreshing}
-                sourceLabel={list.sourceLabel}
-                sourceTone={list.source}
-                lastSyncedTime={list.lastSynced}
-                error={list.error}
-                {...paged}
-                onOpenCreate={() => needOnline('Creating a discount') && setCreateOpen(true)}
-                onPressItem={(d) => setDetailsId(d.id)}
-                rowActions={(d) => [
-                    { icon: 'eye-outline', label: 'View', onPress: () => setDetailsId(d.id), tone: 'primary' },
-                    { icon: 'create-outline', label: 'Edit', onPress: () => needOnline('Editing a discount') && setEditTarget(d) },
-                ]}
-                stats={[
-                    { label: 'Running', value: String(counts.ACTIVE ?? 0), color: counts.ACTIVE ? '#10b981' : undefined },
-                    { label: 'Scheduled', value: String(counts.SCHEDULED ?? 0) },
-                    { label: 'Ended', value: String(counts.EXPIRED ?? 0) },
-                ]}
-                filters={{
-                    options: [
-                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: counts.ALL },
-                        { key: 'ACTIVE', label: 'Running', icon: 'flash-outline', count: counts.ACTIVE ?? 0 },
-                        { key: 'SCHEDULED', label: 'Scheduled', icon: 'calendar-outline', count: counts.SCHEDULED ?? 0 },
-                        { key: 'EXPIRED', label: 'Ended', icon: 'time-outline', count: counts.EXPIRED ?? 0 },
-                        { key: 'INACTIVE', label: 'Off', icon: 'pause-circle-outline', count: counts.INACTIVE ?? 0 },
-                    ],
-                    value: filter,
-                    onChange: setFilter,
-                    allKey: 'ALL',
-                }}
-            />
+            <DetailsDock
+                placeholder="Pick a discount to see its prices, dates and banner here."
+                pane={
+                    <PriceDiscountDetailsModal
+                        visible={detailsId !== null}
+                        discountId={detailsId ?? undefined}
+                        onClose={() => setDetailsId(null)}
+                        onEdit={(d) => {
+                            setDetailsId(null);
+                            if (needOnline('Editing a discount')) setEditTarget(d);
+                        }}
+                    />
+                }
+            >
+                <AdminListView<PriceDiscount, Filter>
+                    variant={width >= 900 ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={list.refresh}
+                    refreshing={list.refreshing}
+                    sourceLabel={list.sourceLabel}
+                    sourceTone={list.source}
+                    lastSyncedTime={list.lastSynced}
+                    error={list.error}
+                    {...paged}
+                    onOpenCreate={() => needOnline('Creating a discount') && setCreateOpen(true)}
+                    onPressItem={(d) => setDetailsId(d.id)}
+                    rowActions={(d) => [
+                        { icon: 'eye-outline', label: 'View', onPress: () => setDetailsId(d.id), tone: 'primary' },
+                        { icon: 'create-outline', label: 'Edit', onPress: () => needOnline('Editing a discount') && setEditTarget(d) },
+                    ]}
+                    stats={[
+                        { label: 'Running', value: String(counts.ACTIVE ?? 0), color: counts.ACTIVE ? '#10b981' : undefined },
+                        { label: 'Scheduled', value: String(counts.SCHEDULED ?? 0) },
+                        { label: 'Ended', value: String(counts.EXPIRED ?? 0) },
+                    ]}
+                    filters={{
+                        options: [
+                            { key: 'ALL', label: 'All', icon: 'apps-outline', count: counts.ALL },
+                            { key: 'ACTIVE', label: 'Running', icon: 'flash-outline', count: counts.ACTIVE ?? 0 },
+                            { key: 'SCHEDULED', label: 'Scheduled', icon: 'calendar-outline', count: counts.SCHEDULED ?? 0 },
+                            { key: 'EXPIRED', label: 'Ended', icon: 'time-outline', count: counts.EXPIRED ?? 0 },
+                            { key: 'INACTIVE', label: 'Off', icon: 'pause-circle-outline', count: counts.INACTIVE ?? 0 },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                />
+            </DetailsDock>
 
-            <PriceDiscountDetailsModal
-                visible={detailsId !== null}
-                discountId={detailsId ?? undefined}
-                onClose={() => setDetailsId(null)}
-                onEdit={(d) => {
-                    setDetailsId(null);
-                    if (needOnline('Editing a discount')) setEditTarget(d);
-                }}
-            />
             <PriceDiscountEditModal
                 visible={createOpen || editTarget !== null}
                 discount={editTarget}

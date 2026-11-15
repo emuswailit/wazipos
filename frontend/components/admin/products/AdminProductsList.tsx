@@ -1,5 +1,6 @@
 // components/admin/products/AdminProductsList.tsx
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { useAuth } from "@/context/AuthContext";
 import { useProductsSync } from "@/context/ProductsSyncContext";
 import useApi from "@/hooks/useApi";
@@ -376,11 +377,26 @@ export default function AdminProductsList() {
 
             <Stack.Screen options={{ headerShown: false }} />
 
-            {isLargeScreen ? (
-                <AdminProductsWebView {...sharedProps} />
-            ) : (
-                <AdminProductsMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a product to see its details here."
+                pane={
+                    selectedItem ? (
+                        <AdminProductDetailsModal
+                            routeItem={selectedItem}
+                            onClose={() => setSelectedItem(null)}
+                            theme={theme}
+                            formatDateHandler={formatHumanDate}
+                            onOpenEditTrigger={handleOpenEditFlow}
+                        />
+                    ) : null
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminProductsWebView {...sharedProps} />
+                ) : (
+                    <AdminProductsMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminProductEditModal
                 visible={isFormModalOpen}
@@ -400,17 +416,6 @@ export default function AdminProductsList() {
                     updateProductApi.data?.errors
                 }
             />
-
-            {/* 🌟 Render Details Modal Over the Table */}
-            {selectedItem && (
-                <AdminProductDetailsModal
-                    routeItem={selectedItem}
-                    onClose={() => setSelectedItem(null)}
-                    theme={theme}
-                    formatDateHandler={formatHumanDate}
-                    onOpenEditTrigger={handleOpenEditFlow}
-                />
-            )}
 
             <ApiResponseModal
                 isOpen={responseModalOpen}

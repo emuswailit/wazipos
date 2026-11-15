@@ -2,6 +2,7 @@
 //
 // Admin drug classes list shell.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type DrugClassesRequest,
 } from "@/api/drugsApi";
@@ -371,11 +372,24 @@ export default function AdminDrugClassesList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminDrugClassesWebView {...sharedProps} />
-            ) : (
-                <AdminDrugClassesMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a class to see its details here."
+                pane={
+                    <AdminDrugClassDetailsModal
+                        routeItem={selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminDrugClassesWebView {...sharedProps} />
+                ) : (
+                    <AdminDrugClassesMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminDrugClassEditModal
                 visible={isFormModalOpen}
@@ -397,13 +411,6 @@ export default function AdminDrugClassesList() {
                 }
             />
 
-            <AdminDrugClassDetailsModal
-                routeItem={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }

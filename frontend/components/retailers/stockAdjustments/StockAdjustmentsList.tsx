@@ -8,6 +8,7 @@
 //      change the backend applied is reflected in pickers and
 //      inventory views.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import { useAlert } from '@/components/common/AlertProvider';
 import ApiResponseModal, {
     extractEnvelope,
@@ -474,11 +475,23 @@ const StockAdjustmentsList: React.FC = () => {
 
     return (
         <>
-            {isLarge ? (
-                <StockAdjustmentsWebView {...common} />
-            ) : (
-                <StockAdjustmentsMobileView {...common} />
-            )}
+            <DetailsDock
+                placeholder="Pick an adjustment to see its details here."
+                pane={
+                    <StockAdjustmentDetailsSheet
+                        item={detailsTarget}
+                        onClose={() => setDetailsTarget(null)}
+                        onEdit={onOpenEdit}
+                        onDelete={onDeleteAdjustment}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <StockAdjustmentsWebView {...common} />
+                ) : (
+                    <StockAdjustmentsMobileView {...common} />
+                )}
+            </DetailsDock>
 
             <StockAdjustmentFormModal
                 visible={formOpen}
@@ -497,13 +510,6 @@ const StockAdjustmentsList: React.FC = () => {
                 initial={editingAdjustment}
                 onClose={onCloseForm}
                 onSubmit={onSubmitForm}
-            />
-
-            <StockAdjustmentDetailsSheet
-                item={detailsTarget}
-                onClose={() => setDetailsTarget(null)}
-                onEdit={onOpenEdit}
-                onDelete={onDeleteAdjustment}
             />
 
             <ApiResponseModal

@@ -9,6 +9,7 @@
 // Talks straight to `drugsApi.frequenciesAction` — no intermediate
 // wrapper file. The shell builds the full request envelope.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type FrequenciesRequest,
 } from "@/api/drugsApi";
@@ -413,11 +414,24 @@ export default function AdminFrequenciesList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminFrequenciesWebView {...sharedProps} />
-            ) : (
-                <AdminFrequenciesMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a frequency to see its details here."
+                pane={
+                    <AdminFrequencyDetailsModal
+                        routeItem={selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminFrequenciesWebView {...sharedProps} />
+                ) : (
+                    <AdminFrequenciesMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminFrequencyEditModal
                 visible={isFormModalOpen}
@@ -435,13 +449,6 @@ export default function AdminFrequenciesList() {
                 initialData={editingItem}
             />
 
-            <AdminFrequencyDetailsModal
-                routeItem={selectedItem}
-                onClose={() => setSelectedItem(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }

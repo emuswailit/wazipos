@@ -1,5 +1,6 @@
 // components/admin/subscriptions/SubscriptionList.tsx
 
+import { DetailsDock } from '@/components/common/listScreen';
 import subscriptionsApi from '@/api/subscriptionsApi';
 import { SubscriptionNormalized } from '@/databases/types';
 import { useApi } from '@/hooks/useApi';
@@ -159,21 +160,26 @@ export default function SubscriptionList() {
 
     return (
         <>
-            {isLarge ? (
-                <SubscriptionWebView {...sharedProps} />
-            ) : (
-                <SubscriptionMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a subscription to see its details here."
+                pane={
+                    <SubscriptionDetailsModal
+                        item={detailsTarget}
+                        onClose={() => setDetailsTarget(null)}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <SubscriptionWebView {...sharedProps} />
+                ) : (
+                    <SubscriptionMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <SubscriptionFormModal
                 visible={formOpen}
                 onClose={() => setFormOpen(false)}
                 onSuccess={() => { setFormOpen(false); loadData(); }}
-            />
-
-            <SubscriptionDetailsModal
-                item={detailsTarget}
-                onClose={() => setDetailsTarget(null)}
             />
 
             <ApiResponseModal

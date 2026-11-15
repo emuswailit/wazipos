@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useId } from "react";
+import { useDetailsDock } from "@/components/common/listScreen/DetailsDock";
 import {
     Platform,
     Pressable,
@@ -15,6 +16,8 @@ interface Props {
     children: ReactNode;
     maxHeightRatio?: number;
     hideHeader?: boolean;
+    /** Details: inside a <DetailsDock> on a wide screen, show beside the list instead of popping up. */
+    dockable?: boolean;
 }
 
 export function Modal({
@@ -24,8 +27,38 @@ export function Modal({
     children,
     maxHeightRatio = 0.92,
     hideHeader = false,
+    dockable = false,
 }: Props) {
     const { theme } = useAuth();
+    const dock = useDetailsDock();
+    const docked = dockable && !!dock?.docked;
+    const dockId = useId();
+    useEffect(() => {
+        if (!dock || !dockable) return;
+        dock.setOpen(dockId, docked && visible);
+        return () => dock.setOpen(dockId, false);
+    }, [dock, dockable, docked, visible, dockId]);
+
+    if (docked) {
+        if (!visible) return null;
+        return (
+            <View
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    borderWidth: 1,
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    ...(Platform.OS === "web" ? ({ boxShadow: "0 8px 28px rgba(15,23,42,0.10)" } as any) : { elevation: 3 }),
+                }}
+            >
+                {!hideHeader ? <Header title={title} onClose={onClose} /> : null}
+                <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
+            </View>
+        );
+    }
     const isWeb = Platform.OS === "web";
     const panelMaxHeight = `${maxHeightRatio * 100}%` as const;
 

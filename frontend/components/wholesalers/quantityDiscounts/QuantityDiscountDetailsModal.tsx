@@ -42,6 +42,7 @@ export default function QuantityDiscountDetailsModal({
 
     return (
         <Modal
+            dockable
             visible={visible}
             onClose={onClose}
             title={data?.title ?? "Quantity discount"}

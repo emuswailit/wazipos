@@ -174,6 +174,7 @@ export default function WholesalerCampaignDetailsModal({
 
     return (
         <Modal
+            dockable
             visible={visible}
             onClose={onClose}
             title={campaign?.title ?? "Campaign"}

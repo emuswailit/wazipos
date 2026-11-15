@@ -15,6 +15,7 @@
 //   `can't access property "length", returns is undefined`
 // when locale-tagged lookups miss their ICU data.
 
+import { DockableShell } from '@/components/common/listScreen/DetailsDock';
 import React, { useMemo } from 'react';
 import {
     Modal,
@@ -201,18 +202,14 @@ const ViewRequestDetailsModal: React.FC<Props> = ({
     const status = requestStatusTint(request.status);
     const urgency = urgencyTint(request.urgency);
 
+    // A popup on phones; beside the list on wide screens (DetailsDock).
     return (
-        <Modal
+        <DockableShell
             visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
+            onClose={onClose}
+            cardClassName="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
+            cardStyle={{ backgroundColor: theme.panel }}
         >
-            <View className="flex-1 bg-black/40 items-center justify-center p-3">
-                <View
-                    className="rounded-2xl w-full max-w-2xl max-h-[92%] overflow-hidden"
-                    style={{ backgroundColor: theme.panel }}
-                >
                     {/* ============ header ============ */}
                     <View
                         className="px-5 pt-4 pb-3 border-b"
@@ -485,9 +482,7 @@ const ViewRequestDetailsModal: React.FC<Props> = ({
                             </Pressable>
                         </View>
                     </View>
-                </View>
-            </View>
-        </Modal>
+        </DockableShell>
     );
 };
 

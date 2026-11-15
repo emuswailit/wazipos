@@ -1,5 +1,6 @@
 // components/retailers/retailerPrescriptions/RetailerPrescriptionsList.tsx
 
+import { DetailsDock } from '@/components/common/listScreen';
 import retailerPrescriptionsApi from '@/api/retailerPrescriptionsApi';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -220,18 +221,24 @@ export default function RetailerPrescriptionsList() {
     return (
         <>
             <LiveAlertBanner alert={liveAlert} onDismiss={dismissAlert} />
-            {isLarge ? (
-                <RetailerPrescriptionsWebView {...sharedProps} />
-            ) : (
-                <RetailerPrescriptionsMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a prescription to see its details here."
+                pane={
+                    <RetailerPrescriptionDetailsModal
+                        item={detailsTarget}
+                        onClose={() => setDetailsTarget(null)}
+                        onDigitize={handleDigitize}
+                    />
+                }
+            >
+                {isLarge ? (
+                    <RetailerPrescriptionsWebView {...sharedProps} />
+                ) : (
+                    <RetailerPrescriptionsMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             {/* Details Modal */}
-            <RetailerPrescriptionDetailsModal
-                item={detailsTarget}
-                onClose={() => setDetailsTarget(null)}
-                onDigitize={handleDigitize}
-            />
 
             {/* Digitize Modal */}
             <DigitizePrescriptionModal

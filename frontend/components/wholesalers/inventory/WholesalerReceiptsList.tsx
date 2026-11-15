@@ -8,7 +8,7 @@ import { InventorySyncStrip } from '@/components/common/inventory/InventorySyncS
 import { INVENTORY_FILTER_ICONS, INVENTORY_FILTER_LABELS, INVENTORY_FILTERS, formatKES, type InventoryFilter } from '@/components/common/inventory/inventoryHelpers';
 import { buildInventoryConfig } from '@/components/common/inventory/inventoryListConfig';
 import { useInventoryList } from '@/components/common/inventory/useInventoryList';
-import { AdminListView } from '@/components/common/listScreen';
+import { AdminListView, DetailsDock } from '@/components/common/listScreen';
 import PendingSyncBanner from '@/components/common/PendingSyncBanner';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
@@ -86,46 +86,51 @@ export default function WholesalerReceiptsList({ onReceiptPress, emptyComponent 
 
     return (
         <>
-            <AdminListView<WholesalerReceipt, InventoryFilter>
-                variant={isLarge ? 'web' : 'mobile'}
-                config={config}
-                header={header}
-                emptyComponent={emptyComponent}
-                query={inv.query}
-                setQuery={inv.setQuery}
-                onRefresh={refresh}
-                refreshing={isManualRefreshing || isSyncing}
-                sourceLabel={isLiveConnected ? 'Live sync' : isOnline ? 'Connecting…' : 'Offline · on this device'}
-                sourceTone={isLiveConnected ? 'server' : 'cache'}
-                lastSyncedTime={syncUiState.lastSyncedTime}
-                onOpenCreate={() => openEdit(null)}
-                onPressItem={openDetails}
-                onEditItem={openEdit}
-                rowActions={(r) => [
-                    { icon: 'eye-outline', label: 'View', onPress: () => openDetails(r) },
-                    { icon: 'create-outline', label: 'Edit', onPress: () => openEdit(r), tone: 'primary' },
-                ]}
-                stats={[
-                    { label: 'Items', value: inv.total.toLocaleString() },
-                    { label: 'Stock value', value: `KES ${formatKES(inv.stockWorth)}` },
-                    { label: 'Low', value: inv.counts.LOW.toLocaleString(), color: inv.counts.LOW ? '#f59e0b' : undefined },
-                    { label: 'Expired', value: inv.counts.EXPIRED.toLocaleString(), color: inv.counts.EXPIRED ? '#f43f5e' : undefined },
-                ]}
-                filters={{
-                    options: INVENTORY_FILTERS.filter((f) => f !== 'UNSYNCED' || inv.counts.UNSYNCED > 0).map((f) => ({
-                        key: f,
-                        label: INVENTORY_FILTER_LABELS[f],
-                        icon: INVENTORY_FILTER_ICONS[f],
-                        count: inv.counts[f],
-                    })),
-                    value: inv.filter,
-                    onChange: inv.setFilter,
-                    allKey: 'ALL',
-                }}
-                {...inv.paging}
-            />
-
-            <WholesalerReceiptDetailsModal receipt={details} onClose={() => setDetails(null)} />
+            <DetailsDock
+                placeholder="Pick a stock item to see its batches, prices and placements here."
+                pane={
+                    <WholesalerReceiptDetailsModal receipt={details} onClose={() => setDetails(null)} />
+                }
+            >
+                <AdminListView<WholesalerReceipt, InventoryFilter>
+                    variant={isLarge ? 'web' : 'mobile'}
+                    config={config}
+                    header={header}
+                    emptyComponent={emptyComponent}
+                    query={inv.query}
+                    setQuery={inv.setQuery}
+                    onRefresh={refresh}
+                    refreshing={isManualRefreshing || isSyncing}
+                    sourceLabel={isLiveConnected ? 'Live sync' : isOnline ? 'Connecting…' : 'Offline · on this device'}
+                    sourceTone={isLiveConnected ? 'server' : 'cache'}
+                    lastSyncedTime={syncUiState.lastSyncedTime}
+                    onOpenCreate={() => openEdit(null)}
+                    onPressItem={openDetails}
+                    onEditItem={openEdit}
+                    rowActions={(r) => [
+                        { icon: 'eye-outline', label: 'View', onPress: () => openDetails(r) },
+                        { icon: 'create-outline', label: 'Edit', onPress: () => openEdit(r), tone: 'primary' },
+                    ]}
+                    stats={[
+                        { label: 'Items', value: inv.total.toLocaleString() },
+                        { label: 'Stock value', value: `KES ${formatKES(inv.stockWorth)}` },
+                        { label: 'Low', value: inv.counts.LOW.toLocaleString(), color: inv.counts.LOW ? '#f59e0b' : undefined },
+                        { label: 'Expired', value: inv.counts.EXPIRED.toLocaleString(), color: inv.counts.EXPIRED ? '#f43f5e' : undefined },
+                    ]}
+                    filters={{
+                        options: INVENTORY_FILTERS.filter((f) => f !== 'UNSYNCED' || inv.counts.UNSYNCED > 0).map((f) => ({
+                            key: f,
+                            label: INVENTORY_FILTER_LABELS[f],
+                            icon: INVENTORY_FILTER_ICONS[f],
+                            count: inv.counts[f],
+                        })),
+                        value: inv.filter,
+                        onChange: inv.setFilter,
+                        allKey: 'ALL',
+                    }}
+                    {...inv.paging}
+                />
+            </DetailsDock>
 
             <WholesalerReceiptEditModal
                 visible={formOpen}

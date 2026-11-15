@@ -6,6 +6,7 @@
 // and the routing between the web table view and the mobile card
 // view. Mounts both modals.
 
+import { DetailsDock } from '@/components/common/listScreen';
 import drugsApi, {
     type DrugSubClassesRequest,
 } from "@/api/drugsApi";
@@ -416,11 +417,24 @@ export default function AdminDrugSubClassesList() {
                 }}
             />
 
-            {isLargeScreen ? (
-                <AdminDrugSubClassesWebView {...sharedProps} />
-            ) : (
-                <AdminDrugSubClassesMobileView {...sharedProps} />
-            )}
+            <DetailsDock
+                placeholder="Pick a sub-class to see its details here."
+                pane={
+                    <AdminDrugSubClassDetailsModal
+                        routeItem={selectedSubClass}
+                        onClose={() => setSelectedSubClass(null)}
+                        theme={theme}
+                        formatDateHandler={formatHumanDate}
+                        onOpenEditTrigger={handleOpenEditFlow}
+                    />
+                }
+            >
+                {isLargeScreen ? (
+                    <AdminDrugSubClassesWebView {...sharedProps} />
+                ) : (
+                    <AdminDrugSubClassesMobileView {...sharedProps} />
+                )}
+            </DetailsDock>
 
             <AdminDrugSubClassEditModal
                 visible={isFormModalOpen}
@@ -442,13 +456,6 @@ export default function AdminDrugSubClassesList() {
                 }
             />
 
-            <AdminDrugSubClassDetailsModal
-                routeItem={selectedSubClass}
-                onClose={() => setSelectedSubClass(null)}
-                theme={theme}
-                formatDateHandler={formatHumanDate}
-                onOpenEditTrigger={handleOpenEditFlow}
-            />
         </View>
     );
 }
