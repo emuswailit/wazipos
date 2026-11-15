@@ -467,6 +467,25 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 icon: 'Layers',
                 tint: TINTS.orange,
             },
+            {
+                // Customers' own dishes (ingredients + instructions) to price.
+                id: 4,
+                title: 'Custom requests',
+                route: '/restaurantRecipeRequests',
+                allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ClipboardCheck',
+                tint: TINTS.orange,
+            },
+            {
+                id: 5,
+                title: 'Ingredients',
+                route: '/restaurantIngredients',
+                allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Boxes',
+                tint: TINTS.orange,
+            },
         ],
     },
     {

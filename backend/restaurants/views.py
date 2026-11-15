@@ -1319,6 +1319,32 @@ def diningAPIView(request):
         errors, order = d.cancel_my_order(request.data, request.user)
         return fail("Not cancelled", errors) if errors else ok("Order cancelled", d.order_out(order, request), "food_order")
 
+    # ---- custom recipes (customer side)
+    from restaurants.services import recipes as rc
+
+    if action == "GetRestaurantIngredients":
+        return ok("Ingredients", rc.list_ingredients(request.data.get("entity")), "ingredients")
+    if action == "RequestCustomRecipe":
+        errors, recipe = rc.request_recipe(request.data, request.user)
+        return fail("Request not sent", errors) if errors else ok("Request sent to the kitchen", rc.recipe_out(recipe), "recipe")
+    if action == "GetMyCustomRecipes":
+        return ok("Your custom recipes", [rc.recipe_out(r) for r in rc.my_recipes(request.user)], "recipes")
+    if action == "CancelCustomRecipe":
+        errors, recipe = rc.cancel_recipe(request.data, request.user)
+        return fail("Not cancelled", errors) if errors else ok("Request cancelled", rc.recipe_out(recipe), "recipe")
+    if action == "GetRecipeDeliveryOptions":
+        from logistics.views import _option_out
+
+        errors, options, kg = rc.recipe_delivery_options(request.data, request.user)
+        if errors:
+            return fail("No delivery options", errors)
+        return ok("Delivery options", {"options": [_option_out(o) for o in options], "chargeable_weight_kg": str(kg)}, "delivery")
+    if action == "AcceptRecipeQuote":
+        errors, recipe, order = rc.accept_quote(request.data, request.user)
+        if errors:
+            return fail("Not accepted", errors)
+        return ok("Order placed", {"recipe": rc.recipe_out(recipe), "food_order": d.order_out(order, request)}, "accepted")
+
     # ---- restaurant staff
     if not d.is_restaurant_staff(request.user):
         return fail("Not a restaurant", ["Switch to your restaurant to manage it"])
@@ -1336,6 +1362,19 @@ def diningAPIView(request):
     if action == "UpdateFoodOrderStatus":
         errors, order = d.update_status(request.data, request.user)
         return fail("Status not changed", errors) if errors else ok("Order updated", d.order_out(order, request), "food_order")
+    if action == "GetMyIngredients":
+        return ok("Ingredients", rc.list_ingredients(request.user.entity_id, staff=True), "ingredients")
+    if action == "SaveIngredient":
+        errors, item = rc.save_ingredient(request.data, request.user)
+        return fail("Ingredient not saved", errors) if errors else ok("Ingredient saved", rc.ingredient_out(item), "ingredient")
+    if action == "GetRecipeRequests":
+        return ok("Custom recipe requests", [rc.recipe_out(r, for_customer=False) for r in rc.restaurant_recipes(request.data, request.user)], "recipes")
+    if action == "QuoteCustomRecipe":
+        errors, recipe = rc.quote_recipe(request.data, request.user)
+        return fail("Not priced", errors) if errors else ok("Price sent to the customer", rc.recipe_out(recipe), "recipe")
+    if action == "DeclineCustomRecipe":
+        errors, recipe = rc.decline_recipe(request.data, request.user)
+        return fail("Not declined", errors) if errors else ok("Request declined", rc.recipe_out(recipe), "recipe")
     if action == "RecordFoodPayment":
         errors, order = d.record_cash(request.data, request.user)
         return fail("Payment not recorded", errors) if errors else ok("Payment recorded", d.order_out(order, request), "food_order")

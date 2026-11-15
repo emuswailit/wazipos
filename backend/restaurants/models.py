@@ -1143,3 +1143,86 @@ class AccomodationOrderPayments(EntityRelatedModel):
 #     amount = models.DecimalField(max_digits=7, decimal_places=2)
 #     created = models.DateTimeField(auto_now_add=True)
 #     updated = models.DateTimeField(auto_now=True)
+
+
+class RestaurantIngredient(EntityRelatedModel):
+    """
+    What a restaurant can cook with for custom recipes (e.g. Chicken, Basmati
+    rice, Sukuma). price is indicative, per portion / unit; the restaurant
+    quotes the final price for each request.
+    """
+
+    name = models.CharField(max_length=120)
+    category = models.CharField(max_length=64, null=True, blank=True)
+    unit_label = models.CharField(max_length=32, default="portion")
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_available = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Restaurant ingredients"
+        ordering = ["category", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.entity})"
+
+
+class CustomRecipeStatus(models.TextChoices):
+    REQUESTED = "REQUESTED", _("Waiting for the restaurant")
+    QUOTED = "QUOTED", _("Priced — waiting for the customer")
+    ACCEPTED = "ACCEPTED", _("Accepted — now a food order")
+    DECLINED = "DECLINED", _("Declined by the restaurant")
+    CANCELLED = "CANCELLED", _("Cancelled by the customer")
+
+
+class CustomRecipe(EntityRelatedModel):
+    """
+    A customer's own recipe for a restaurant to prepare: ingredients, short
+    instructions, servings and how they'll eat it (dine in / pickup / delivery).
+    The restaurant quotes; on acceptance it becomes a BranchFoodOrder.
+    entity = the restaurant.
+    """
+
+    customer = models.ForeignKey(Users, related_name="custom_recipes", on_delete=models.CASCADE)
+    title = models.CharField(max_length=120)
+    instructions = models.TextField(max_length=1000)
+    servings = models.PositiveSmallIntegerField(default=1)
+    service_type = models.CharField(max_length=20, choices=ServiceTypeOptions.choices, default=ServiceTypeOptions.PICKUP)
+    party_size = models.PositiveSmallIntegerField(null=True, blank=True)
+    reservation_at = models.DateTimeField(null=True, blank=True)
+    destination_point = geomodel.PointField(null=True, blank=True, srid=4326)
+    customer_name = models.CharField(max_length=120, null=True, blank=True)
+    customer_phone = models.CharField(max_length=32, null=True, blank=True)
+    estimate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=CustomRecipeStatus.choices, default=CustomRecipeStatus.REQUESTED)
+    quoted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    ready_in_minutes = models.PositiveIntegerField(null=True, blank=True)
+    restaurant_note = models.CharField(max_length=300, null=True, blank=True)
+    quoted_at = models.DateTimeField(null=True, blank=True)
+    food_order = models.OneToOneField(
+        BranchFoodOrder, related_name="custom_recipe", on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Custom recipes"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.title} x{self.servings} ({self.status})"
+
+
+class CustomRecipeIngredient(models.Model):
+    """One ingredient line: from the restaurant's list, or typed by the customer."""
+
+    recipe = models.ForeignKey(CustomRecipe, related_name="ingredients", on_delete=models.CASCADE)
+    ingredient = models.ForeignKey(RestaurantIngredient, related_name="recipe_lines", on_delete=models.SET_NULL, null=True, blank=True)
+    name = models.CharField(max_length=120)
+    quantity = models.CharField(max_length=40, null=True, blank=True)  # e.g. "2 portions", "extra", "200 g"
+    portions = models.PositiveSmallIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    def __str__(self):
+        return f"{self.name} ({self.quantity or self.portions})"

@@ -101,6 +101,64 @@ export interface PlaceFoodOrderInput {
     order_channel?: string;
 }
 
+/** What a restaurant can cook with for custom recipes (indicative price per unit). */
+export interface Ingredient {
+    id: string;
+    name: string;
+    category: string | null;
+    unit_label: string;
+    price: string;
+    is_available: boolean;
+}
+
+export type RecipeStatus = 'REQUESTED' | 'QUOTED' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED';
+
+export interface CustomRecipe {
+    id: string;
+    restaurant: string;
+    restaurant_title: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+    title: string;
+    instructions: string;
+    servings: number;
+    service_type: ServiceType;
+    party_size: number | null;
+    reservation_at: string | null;
+    has_destination: boolean;
+    ingredients: { name: string; quantity: string | null; portions: number; unit_price: string; from_list: boolean }[];
+    estimate: string;
+    status: RecipeStatus;
+    quoted_price: string | null;
+    ready_in_minutes: number | null;
+    restaurant_note: string | null;
+    food_order: string | null;
+    created: string | null;
+}
+
+export interface CustomRecipeInput {
+    entity: string;
+    title: string;
+    instructions: string;
+    servings: number;
+    service_type: ServiceType;
+    ingredients: { ingredient?: string; name?: string; quantity?: string; portions: number }[];
+    customer_name?: string;
+    customer_phone?: string;
+    reservation_at?: string;
+    party_size?: number;
+    destination_latitude?: number;
+    destination_longitude?: number;
+}
+
+export const RECIPE_STATUS_META: Record<RecipeStatus, { label: string; tone: 'info' | 'warning' | 'success' | 'danger' | 'neutral' | 'primary' }> = {
+    REQUESTED: { label: 'Waiting for the kitchen', tone: 'info' },
+    QUOTED: { label: 'Priced — accept to order', tone: 'warning' },
+    ACCEPTED: { label: 'Ordered', tone: 'success' },
+    DECLINED: { label: 'Declined', tone: 'danger' },
+    CANCELLED: { label: 'Cancelled', tone: 'neutral' },
+};
+
 const ENDPOINT = '/restaurants/dining';
 const call = (action: string, data: Record<string, any> = {}): Promise<ApiResponse<any>> => client.post(ENDPOINT, { action, ...data });
 
@@ -154,4 +212,18 @@ export default {
     restaurantOrders: (scope: 'open' | 'done' = 'open') => call('GetRestaurantOrders', { scope }),
     updateStatus: (food_order: string, status: string, table?: string | null) => call('UpdateFoodOrderStatus', { food_order, status, table }),
     recordPayment: (food_order: string, payment_method?: string) => call('RecordFoodPayment', { food_order, payment_method }),
+
+    // custom recipes — customers
+    getIngredients: (entity: string) => call('GetRestaurantIngredients', { entity }),
+    requestRecipe: (input: CustomRecipeInput) => call('RequestCustomRecipe', input),
+    myRecipes: () => call('GetMyCustomRecipes'),
+    cancelRecipe: (recipe: string) => call('CancelCustomRecipe', { recipe }),
+    recipeDeliveryOptions: (recipe: string) => call('GetRecipeDeliveryOptions', { recipe }),
+    acceptQuote: (recipe: string, delivery_option?: string) => call('AcceptRecipeQuote', { recipe, delivery_option }),
+    // custom recipes — restaurant staff
+    myIngredients: () => call('GetMyIngredients'),
+    saveIngredient: (details: Record<string, any>) => call('SaveIngredient', details),
+    recipeRequests: (scope: 'open' | 'done' = 'open') => call('GetRecipeRequests', { scope }),
+    quoteRecipe: (recipe: string, price: string, ready_in_minutes?: string, note?: string) => call('QuoteCustomRecipe', { recipe, price, ready_in_minutes, note }),
+    declineRecipe: (recipe: string, note?: string) => call('DeclineCustomRecipe', { recipe, note }),
 };

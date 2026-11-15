@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { kes, type Cart } from '../shared';
+import { CustomRecipeSheet } from './CustomRecipeSheet';
 import { FoodCheckout, Stepper } from './FoodCheckout';
 
 export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restaurant: Restaurant; onBack: () => void; onPlaced: (o: FoodOrder) => void }) {
@@ -20,6 +21,7 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
     const [section, setSection] = useState('ALL');
     const [cart, setCart] = useState<Cart>({});
     const [checkout, setCheckout] = useState<ServiceType | null>(null);
+    const [recipeOpen, setRecipeOpen] = useState(false);
 
     useEffect(() => {
         let alive = true;
@@ -70,7 +72,10 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
                             {restaurant.distance_km != null ? ` · ${restaurant.distance_km.toFixed(1)} km away` : ''}
                         </Text>
                     </View>
-                    <SheetButton label="Book a table" icon="calendar-outline" variant="secondary" onPress={() => setCheckout('DINE_IN')} />
+                    <View style={{ gap: 6 }}>
+                        <SheetButton label="Book a table" icon="calendar-outline" variant="secondary" onPress={() => setCheckout('DINE_IN')} />
+                        <SheetButton label="Create your own" icon="color-wand-outline" variant="secondary" onPress={() => setRecipeOpen(true)} />
+                    </View>
                 </View>
 
                 {sections.length > 1 ? (
@@ -85,7 +90,7 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
                 {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium }}>{error}</Text> : null}
                 {items && items.length === 0 ? (
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, textAlign: 'center', marginTop: 30 }}>
-                        This restaurant hasn't put its menu online yet. You can still book a table.
+                        This restaurant hasn't put its menu online yet. You can still book a table, or create your own dish.
                     </Text>
                 ) : null}
 
@@ -142,6 +147,8 @@ export function RestaurantMenuView({ restaurant, onBack, onPlaced }: { restauran
                     </Pressable>
                 </View>
             ) : null}
+
+            <CustomRecipeSheet visible={recipeOpen} onClose={() => setRecipeOpen(false)} restaurant={restaurant} onSent={() => {}} />
 
             <FoodCheckout
                 visible={checkout !== null}

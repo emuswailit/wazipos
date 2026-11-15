@@ -16,6 +16,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 
 import { FoodStatusPill, kes, PaidPill, when } from '../shared';
 import { FoodPayment } from './FoodPayment';
+import { MyCustomRecipes } from './MyCustomRecipes';
 import { RestaurantMenuView } from './RestaurantMenuView';
 
 type View_ = 'DISCOVER' | 'ORDERS';
@@ -175,9 +176,11 @@ function MyOrders() {
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [openId, setOpenId] = useState<string | null>(null);
+    const [tick, setTick] = useState(0);
 
     const load = useCallback(async () => {
         setRefreshing(true);
+        setTick((t) => t + 1);
         try {
             const res: any = await diningApi.myOrders();
             if (isOk(res)) {
@@ -205,6 +208,7 @@ function MyOrders() {
         <ScrollView contentContainerStyle={{ padding: 16, gap: 10, maxWidth: 900, width: '100%', alignSelf: 'center' }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={theme.primary} />}>
             {orders === null && !error ? <ActivityIndicator color={theme.primary} style={{ marginTop: 30 }} /> : null}
             {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium }}>{error}</Text> : null}
+            <MyCustomRecipes version={tick} onOrdered={load} />
             {orders && orders.length === 0 ? (
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, textAlign: 'center', marginTop: 30 }}>No food orders or bookings yet.</Text>
             ) : null}
