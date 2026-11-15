@@ -1,8 +1,9 @@
 // components/retailers/newCustomerOrder/FulfillmentModal.tsx
 
 import { DateField } from '@/components/common/DateField';
-import { DeliveryLogisticsSelector } from '@/components/common/DeliveryLogisticsSelector';
-import { useDeliveryAvailability } from '@/components/deliveries/useDeliveryAvailability';
+import LocationPinPicker from '@/components/common/LocationPinPicker';
+import type { LatLng } from '@/components/common/locationPinShared';
+import { StaffDeliveryPlanner, type StaffDeliveryState } from '@/components/deliveries/StaffDeliveryPlanner';
 import { useAuth } from '@/context/AuthContext';
 import React from 'react';
 import {
@@ -23,8 +24,6 @@ const webPointer = isWeb ? ({ cursor: 'pointer' } as any) : {};
 const webNoOutline = isWeb ? ({ outlineStyle: 'none' } as any) : {};
 
 interface FulfillmentControlsProps {
-    deliveryMethod: 'PICKUP' | 'DELIVERY' | 'COURIER';
-    setDeliveryMethod: (method: 'PICKUP' | 'DELIVERY' | 'COURIER') => void;
     paymentMethodsList: any[];
     selectedPaymentMethodId: string | null;
     setSelectedPaymentMethodId: (id: string | null) => void;
@@ -34,24 +33,14 @@ interface FulfillmentControlsProps {
     isMobileBackground?: boolean;
     totals: { subtotal: number; totalDiscount: number; shippingCost: number; total: number };
 
-    isRetailerDelivery?: boolean;
-    onToggleRetailerDelivery?: (val: boolean) => void;
-    couriers?: any[];
-    couriersLoading?: boolean;
-    selectedCourierId?: string | null;
-    onSelectCourier?: (id: string | null) => void;
-    collectionPoints?: any[];
-    collectionPointsLoading?: boolean;
-    selectedCollectionPoint?: any | null;
-    onSelectCollectionPoint?: (point: any | null) => void;
-
-    // 🟢 Employee Props
-    deliveryEmployees?: any[];
-    deliveryEmployeesLoading?: boolean;
-    selectedDeliveryEmployeeId?: string | null;
-    onSelectDeliveryEmployee?: (id: string | null) => void;
-
-    shippingLoading?: boolean;
+    // Fulfilment: collected now, or one of the shop's priced deliveries (useCreateOrder).
+    delivery: StaffDeliveryState;
+    destination: LatLng | null;
+    setDestination: (v: LatLng | null) => void;
+    shopCenter?: LatLng | null;
+    loadDeliveryOptions: (() => Promise<any>) | null;
+    deliveryOptionsKey: string;
+    deliveryNotReadyHint?: string;
 }
 
 function pressHandlers(onPress: () => void, stopPropagation = false) {
@@ -61,21 +50,11 @@ function pressHandlers(onPress: () => void, stopPropagation = false) {
 }
 
 export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
-    deliveryMethod, setDeliveryMethod, paymentMethodsList, selectedPaymentMethodId, setSelectedPaymentMethodId,
+    paymentMethodsList, selectedPaymentMethodId, setSelectedPaymentMethodId,
     isPaymentSyncing, paymentDetails, setPaymentDetails, isMobileBackground = false, totals,
-    isRetailerDelivery, onToggleRetailerDelivery, couriers = [], couriersLoading = false,
-    selectedCourierId, onSelectCourier, collectionPoints = [], collectionPointsLoading = false,
-    selectedCollectionPoint, onSelectCollectionPoint, shippingLoading,
-    deliveryEmployees, deliveryEmployeesLoading, selectedDeliveryEmployeeId, onSelectDeliveryEmployee
+    delivery, destination, setDestination, shopCenter, loadDeliveryOptions, deliveryOptionsKey, deliveryNotReadyHint,
 }) => {
     const { theme } = useAuth();
-    // DELIVERY only for shops whose location is set (entitylocations).
-    const deliveryAvailability = useDeliveryAvailability({});
-    React.useEffect(() => {
-        if (!deliveryAvailability.loading && !deliveryAvailability.available && deliveryMethod !== 'PICKUP') {
-            setDeliveryMethod('PICKUP');
-        }
-    }, [deliveryAvailability.loading, deliveryAvailability.available, deliveryMethod, setDeliveryMethod]);
     const currentMethodObj = paymentMethodsList.find((m) => m.id === selectedPaymentMethodId);
     const normalizedPaymentTitle = currentMethodObj?.title?.toUpperCase() || '';
     const containerBg = isMobileBackground ? "bg-slate-50 dark:bg-slate-955" : "bg-white dark:bg-slate-900";
@@ -83,52 +62,42 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
     return (
         <View className="flex-col space-y-4 w-full">
             <View className="w-full">
-                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase tracking-wider mb-1.5">Delivery Method</Text>
-                <View className={`flex-row p-1 rounded-lg border border-slate-200 dark:border-slate-800 ${isMobileBackground ? 'bg-slate-100 dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-955'}`}>
-                    {['PICKUP', 'DELIVERY'].map((m) => {
-                        const isDisabled = m === 'DELIVERY' && !deliveryAvailability.available;
-                        const isActive = deliveryMethod === m;
-
-                        return (
-                            <View
-                                key={m}
-                                {...(!isDisabled ? pressHandlers(() => setDeliveryMethod(m as any)) : {})}
-                                className={`flex-1 py-2 rounded-md items-center justify-center ${isActive ? 'bg-slate-200 shadow-sm' : 'bg-transparent'} ${isDisabled ? 'opacity-40' : ''}`}
-                                style={!isDisabled ? webPointer : {}}
-                            >
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: theme.text }}>{m}</Text>
-                            </View>
-                        );
-                    })}
-                </View>
-                {!deliveryAvailability.loading && !deliveryAvailability.available && deliveryAvailability.reason ? (
-                    <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.textDark, marginTop: 6 }}>
-                        {deliveryAvailability.reason}
-                    </Text>
-                ) : null}
-            </View>
-
-            {deliveryMethod !== 'PICKUP' && onToggleRetailerDelivery && (
-                <DeliveryLogisticsSelector
-                    deliveryMethod={deliveryMethod}
-                    isRetailerDelivery={isRetailerDelivery || false}
-                    onToggleRetailerDelivery={onToggleRetailerDelivery}
-                    couriers={couriers}
-                    couriersLoading={couriersLoading}
-                    selectedCourierId={selectedCourierId || null}
-                    onSelectCourier={onSelectCourier || (() => { })}
-                    collectionPoints={collectionPoints}
-                    collectionPointsLoading={collectionPointsLoading}
-                    selectedCollectionPoint={selectedCollectionPoint || null}
-                    onSelectCollectionPoint={onSelectCollectionPoint || (() => { })}
-
-                    // 🟢 Pass employee props
-                    deliveryEmployees={deliveryEmployees}
-                    deliveryEmployeesLoading={deliveryEmployeesLoading}
-                    selectedDeliveryEmployeeId={selectedDeliveryEmployeeId}
-                    onSelectDeliveryEmployee={onSelectDeliveryEmployee}
+                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase tracking-wider mb-1.5">Fulfilment</Text>
+                <StaffDeliveryPlanner
+                    state={delivery}
+                    loadOptions={loadDeliveryOptions}
+                    optionsKey={deliveryOptionsKey}
+                    notReadyHint={deliveryNotReadyHint}
+                    pickupLabel="Over the counter"
+                    destinationSlot={
+                        <View style={{ gap: 6 }}>
+                            {normalizedPaymentTitle !== 'CREDIT' ? (
+                                <View className="flex-row" style={{ gap: 6 }}>
+                                    <TextInput
+                                        style={{ flex: 1, fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
+                                        className="h-9 bg-white border border-slate-200 rounded-md px-2"
+                                        placeholder="Customer name"
+                                        placeholderTextColor="#94a3b8"
+                                        value={paymentDetails.customerName}
+                                        onChangeText={(text) => setPaymentDetails((prev: any) => ({ ...prev, customerName: text }))}
+                                    />
+                                    <TextInput
+                                        style={{ flex: 1, fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
+                                        className="h-9 bg-white border border-slate-200 rounded-md px-2"
+                                        placeholder="Customer phone"
+                                        keyboardType="phone-pad"
+                                        placeholderTextColor="#94a3b8"
+                                        value={paymentDetails.customerPhone}
+                                        onChangeText={(text) => setPaymentDetails((prev: any) => ({ ...prev, customerPhone: text }))}
+                                    />
+                                </View>
+                            ) : null}
+                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase">Deliver to</Text>
+                            <LocationPinPicker value={destination} onChange={setDestination} center={shopCenter} height={180} />
+                        </View>
+                    }
                 />
-            )}
+            </View>
 
             <View className="w-full space-y-3">
                 <View>
@@ -204,14 +173,12 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                         <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }} className="text-rose-500 font-bold">KES -{totals.totalDiscount.toFixed(2)}</Text>
                     </View>
 
-                    {deliveryMethod === 'DELIVERY' && !isRetailerDelivery && (
+                    {delivery.method === 'DELIVERY' && (
                         <View className="flex-row justify-between items-center">
-                            <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm }} className="text-slate-400">Shipping:</Text>
-                            {shippingLoading ? (
-                                <ActivityIndicator size="small" color={theme.primary} />
-                            ) : (
-                                <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }} className="text-slate-600">KES {totals.shippingCost.toFixed(2)}</Text>
-                            )}
+                            <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm }} className="text-slate-400">Delivery:</Text>
+                            <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }} className="text-slate-600">
+                                {delivery.option ? `KES ${totals.shippingCost.toFixed(2)}` : 'choose an option'}
+                            </Text>
                         </View>
                     )}
 

@@ -49,6 +49,11 @@ export interface CreateStaffRetailerOrderPayload {
         order_terms: string;
         payment_method_id?: string;
         mobile_money_phone?: string | null;
+        /** "SELF" = the retailer collects; "COURIER" = delivery_option (a priced option key). */
+        delivery_method?: 'SELF' | 'COURIER';
+        delivery_option?: string | null;
+        /** Optional: the delivery person named now (else picked at dispatch). */
+        delivery_agent?: string | null;
         order_gross_price_total: number;
         order_discount_total: number;
         final_price_total: number;

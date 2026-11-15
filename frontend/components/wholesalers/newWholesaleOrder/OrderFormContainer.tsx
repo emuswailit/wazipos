@@ -1,9 +1,10 @@
 // components/wholesalers/newWholesaleOrder/OrderFormContainer.tsx
 
-import {
-    EntityAutocomplete,
-    PaymentMethodSelector,
-} from '@/components/common';
+import { EntityAutocomplete } from '@/components/common';
+import RecordPaymentModal from '@/components/common/RecordPaymentModal';
+import { StaffDeliveryPlanner } from '@/components/deliveries/StaffDeliveryPlanner';
+import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
+import { WHOLESALER_RETAILER_ORDER_PAYMENT_CONFIG } from '@/hooks/useRecordPayment';
 import { Text, View } from 'react-native';
 import OrderActionBar from './OrderActionBar';
 import OrderFormBusinessLogic from './OrderFormBusinessLogic';
@@ -27,6 +28,7 @@ interface OrderFormContainerProps {
 export default function OrderFormContainer(
     props: OrderFormContainerProps
 ) {
+    const { applyServerOrder, forceManualRefresh } = useRetailerOrdersSync();
     return (
         <OrderFormBusinessLogic
             user={props.user}
@@ -168,23 +170,24 @@ export default function OrderFormContainer(
                                 />
                             )}
 
-                            {/* -------- Payment -------- */}
-                            <PaymentMethodSelector
-                                value={
-                                    state.selectedPaymentMethod
-                                }
-                                onChange={
-                                    state.setSelectedPaymentMethod
-                                }
-                                mpesaNumber={
-                                    state.mpesaNumber
-                                }
-                                onMpesaNumberChange={
-                                    state.setMpesaNumber
-                                }
-                                label="2. Select Payment Settlement Method"
-                                required
-                            />
+                            {/* -------- Fulfilment: pickup, or delivery (person / company / courier) -------- */}
+                            <View className="w-full my-3" style={{ gap: 6 }}>
+                                <Text
+                                    style={{ color: props.theme.text, fontFamily: props.theme.font?.bold, fontSize: 13 }}
+                                >
+                                    2. Fulfilment
+                                </Text>
+                                <StaffDeliveryPlanner
+                                    state={state.delivery}
+                                    loadOptions={state.loadDeliveryOptions}
+                                    optionsKey={state.deliveryOptionsKey}
+                                    notReadyHint={state.deliveryNotReadyHint}
+                                    pickupLabel="Retailer collects"
+                                />
+                                <Text style={{ color: props.theme.textDark, fontFamily: props.theme.font?.medium, fontSize: 11.5 }}>
+                                    3. Payment is taken right after the order is created — mobile money prompts the retailer's phone; cash or credit is recorded.
+                                </Text>
+                            </View>
 
                             {/* -------- Footer -------- */}
                             <OrderManifestFooter
@@ -194,12 +197,24 @@ export default function OrderFormContainer(
                                 grandTotalCost={
                                     state.grandTotalCost
                                 }
+                                deliveryFee={state.delivery.fee}
                                 isButtonLoading={
                                     state.isSubmitting
                                 }
                                 onSubmit={state.handleSubmit}
                             />
                         </View>
+
+                        {/* Payment for the order just created */}
+                        <RecordPaymentModal
+                            isOpen={!!state.createdOrder}
+                            orderId={state.createdOrder?.id ?? ''}
+                            orderRef={state.createdOrder?.reference ?? 'New order'}
+                            config={WHOLESALER_RETAILER_ORDER_PAYMENT_CONFIG}
+                            onClose={state.closeCreatedOrder}
+                            onRefreshParentLedger={() => void forceManualRefresh()}
+                            onOrderUpdated={applyServerOrder}
+                        />
                     </View>
                 );
             }}

@@ -27,7 +27,7 @@ export default function CreateOrderScreen() {
 
     const {
         retailerReceipts, paymentMethodsList, isSyncing, triggerManualFetch,
-        isPaymentSyncing, deliveryMethod, setDeliveryMethod, selectedPaymentMethodId,
+        isPaymentSyncing, selectedPaymentMethodId,
         setSelectedPaymentMethodId, isBottomSheetVisible, setIsBottomSheetVisible,
         isScannerOpen, setIsScannerOpen, paymentDetails, setPaymentDetails,
         lineItems, isBlankRowPresent, handleUpdateRow, handleSelectProduct,
@@ -35,15 +35,10 @@ export default function CreateOrderScreen() {
         handleSearchFocused, totals, errorMessage, successMessage, setErrorMessage,
         setSuccessMessage, isSaving, wsStatus, wsDescription, resetWsState,
         isRetryingPayment, handleRetryPayment, handlePaymentSuccess,
-        isRetailerDelivery, setIsRetailerDelivery,
-        selectedCourierId, setSelectedCourierId,
-        selectedCollectionPoint, setSelectedCollectionPoint,
-        couriers, couriersLoading,
-        collectionPoints, pointsLoading,
-        deliveryEmployees, deliveryEmployeesLoading, // 🟢 Destructure Employee state
-        selectedDeliveryEmployeeId, setSelectedDeliveryEmployeeId,
-        shippingLoading,
+        delivery, destination, setDestination, shopCenter,
+        loadDeliveryOptions, deliveryOptionsKey, deliveryNotReadyHint,
     } = useCreateOrder();
+    const fulfilmentProps = { delivery, destination, setDestination, shopCenter, loadDeliveryOptions, deliveryOptionsKey, deliveryNotReadyHint };
 
     const lastRowId = lineItems[lineItems.length - 1]?.id;
 
@@ -120,24 +115,10 @@ export default function CreateOrderScreen() {
 
                             <View style={{ backgroundColor: theme.panel }} className="hidden lg:flex w-[340px] z-20 p-4 rounded-xl border border-slate-200 shadow-xs">
                                 <FulfillmentControls
-                                    deliveryMethod={deliveryMethod} setDeliveryMethod={setDeliveryMethod}
+                                    {...fulfilmentProps}
                                     paymentMethodsList={paymentMethodsList} selectedPaymentMethodId={selectedPaymentMethodId}
                                     setSelectedPaymentMethodId={setSelectedPaymentMethodId} isPaymentSyncing={isPaymentSyncing}
                                     paymentDetails={paymentDetails} setPaymentDetails={setPaymentDetails} totals={totals}
-
-                                    isRetailerDelivery={isRetailerDelivery} onToggleRetailerDelivery={setIsRetailerDelivery}
-                                    couriers={couriers} couriersLoading={couriersLoading}
-                                    selectedCourierId={selectedCourierId} onSelectCourier={setSelectedCourierId}
-                                    collectionPoints={collectionPoints} collectionPointsLoading={pointsLoading}
-                                    selectedCollectionPoint={selectedCollectionPoint} onSelectCollectionPoint={setSelectedCollectionPoint}
-
-                                    // 🟢 Pass Employee Props
-                                    deliveryEmployees={deliveryEmployees}
-                                    deliveryEmployeesLoading={deliveryEmployeesLoading}
-                                    selectedDeliveryEmployeeId={selectedDeliveryEmployeeId}
-                                    onSelectDeliveryEmployee={setSelectedDeliveryEmployeeId}
-
-                                    shippingLoading={shippingLoading}
                                 />
                                 <TouchableOpacity onPress={handleSaveOrder} disabled={isSaving || !selectedPaymentMethodId} style={{ backgroundColor: theme.primary, opacity: (isSaving || !selectedPaymentMethodId) ? 0.5 : 1 }} className="mt-4 w-full py-2.5 rounded-lg flex-row items-center justify-center shadow-sm">
                                     {isSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base }} className="text-white">{isRetryingPayment ? 'Retry Payment' : 'Save Order'}</Text>}
@@ -160,26 +141,12 @@ export default function CreateOrderScreen() {
 
                     <FulfillmentModal
                         visible={isBottomSheetVisible} onClose={() => setIsBottomSheetVisible(false)}
-                        deliveryMethod={deliveryMethod} setDeliveryMethod={setDeliveryMethod}
+                        {...fulfilmentProps}
                         paymentMethodsList={paymentMethodsList} selectedPaymentMethodId={selectedPaymentMethodId}
                         setSelectedPaymentMethodId={setSelectedPaymentMethodId} isPaymentSyncing={isPaymentSyncing}
                         paymentDetails={paymentDetails} setPaymentDetails={setPaymentDetails}
                         onSave={handleSaveOrder} totals={totals} theme={theme} isSaving={isSaving}
                         isRetryingPayment={isRetryingPayment}
-
-                        isRetailerDelivery={isRetailerDelivery} onToggleRetailerDelivery={setIsRetailerDelivery}
-                        couriers={couriers} couriersLoading={couriersLoading}
-                        selectedCourierId={selectedCourierId} onSelectCourier={setSelectedCourierId}
-                        collectionPoints={collectionPoints} collectionPointsLoading={pointsLoading}
-                        selectedCollectionPoint={selectedCollectionPoint} onSelectCollectionPoint={setSelectedCollectionPoint}
-
-                        // 🟢 Pass Employee Props
-                        deliveryEmployees={deliveryEmployees}
-                        deliveryEmployeesLoading={deliveryEmployeesLoading}
-                        selectedDeliveryEmployeeId={selectedDeliveryEmployeeId}
-                        onSelectDeliveryEmployee={setSelectedDeliveryEmployeeId}
-
-                        shippingLoading={shippingLoading}
                     />
 
                     <UniversalScannerModal visible={isScannerOpen} onClose={() => setIsScannerOpen(false)} onBarcodeScanned={handleBarcodeScannedContinuously} />

@@ -132,6 +132,24 @@ def retailer_order_weight(order):
     return _q(total)
 
 
+def wholesale_items_weight(items):
+    """Retailer-order lines before the order exists: [{wholesaler_receipt, purchased_quantity}, ...]."""
+    from wholesalers.models import WholesalerReceipts
+
+    ids = [str(i.get("wholesaler_receipt") or "") for i in items or [] if i.get("wholesaler_receipt")]
+    products = {
+        str(r.id): r.product
+        for r in WholesalerReceipts.objects.select_related("product").filter(id__in=ids)
+        if r.product
+    }
+    total = Decimal("0")
+    for i in items or []:
+        product = products.get(str(i.get("wholesaler_receipt") or ""))
+        if product:
+            total += _product_kg(product, i.get("purchased_quantity") or i.get("quantity") or 1)
+    return _q(total)
+
+
 def checkout_items_weight(items):
     """Customer checkout lines: [{retailer_receipt, purchased_quantity}, ...]."""
     from retailers.models import RetailerReceipts
@@ -297,6 +315,56 @@ def retailer_order_delivery_options(order):
     origin, destination = entity_point(seller), entity_point(buyer)
     kg = retailer_order_weight(order)
     return [], delivery_options(seller, origin, destination, kg), kg
+
+
+def staff_retailer_order_delivery_options(seller, retailer, items):
+    """Wholesaler staff building an order for `retailer`: (errors, options, kg)."""
+    errors = delivery_location_errors(seller)
+    if not errors and retailer is not None and not entity_point(retailer):
+        errors = [f"{retailer.title} has not set its business location, so it can't receive deliveries. Choose pickup instead."]
+    if errors:
+        return errors, [], Decimal("0")
+    kg = wholesale_items_weight(items)
+    return [], delivery_options(seller, entity_point(seller), entity_point(retailer), kg), kg
+
+
+def plan_staff_retailer_order_delivery(seller, retailer, items, option_key):
+    """Re-price the option staff picked: (errors, chosen, kg)."""
+    errors, options, kg = staff_retailer_order_delivery_options(seller, retailer, items)
+    if errors:
+        return errors, None, kg
+    chosen = next((o for o in options if o["key"] == str(option_key or "").strip()), None)
+    if not chosen:
+        return ["That delivery option is no longer available; choose again"], None, kg
+    return [], chosen, kg
+
+
+def attach_retailer_order_shipment(order, chosen, kg, user):
+    """Save a staff-chosen delivery as the retailer order's (QUOTED) shipment."""
+    return _create_quoted_shipment(
+        seller=order.wholesaler, user=user, chosen=chosen, kg=kg,
+        origin=entity_point(order.wholesaler), destination=entity_point(order.retailer),
+        recipient_name=order.retailer.title, recipient_phone=getattr(order.retailer, "phone", None),
+        retailer_order=order,
+    )
+
+
+def preassign_delivery_person(shipment, agent_id):
+    """
+    Seller staff can name the delivery person when the order is made; the leg
+    stays PENDING (it is dispatched once the order is paid and ready). Returns an error or None.
+    """
+    if not agent_id:
+        return None
+    leg = shipment.legs.exclude(kind=ShipmentLeg.Kind.TRANSIT).order_by("sequence").first()
+    if not leg:
+        return None
+    agent, err = _agent_of(leg.provider, agent_id, leg.mode, shipment.chargeable_weight_kg)
+    if err:
+        return err
+    leg.agent = agent
+    leg.save(update_fields=["agent"])
+    return None
 
 
 def checkout_delivery_options(seller, destination, items):
@@ -473,7 +541,7 @@ def dispatch_order(data, user):
         return ["This order is already out for delivery; reassign its legs instead"], None
 
     leg = shipment.legs.exclude(kind=ShipmentLeg.Kind.TRANSIT).order_by("sequence").first()
-    agent, err = _agent_of(leg.provider, data.get("agent"), leg.mode, shipment.chargeable_weight_kg)
+    agent, err = _agent_of(leg.provider, data.get("agent") or leg.agent_id, leg.mode, shipment.chargeable_weight_kg)
     if err:
         return [err], None
 

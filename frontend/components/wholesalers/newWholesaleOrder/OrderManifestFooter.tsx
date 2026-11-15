@@ -13,6 +13,8 @@ interface OrderManifestFooterProps {
     notes: string;
     onNotesChange: (text: string) => void;
     grandTotalCost: number;
+    /** Delivery fee of the chosen option (0 for pickup). */
+    deliveryFee?: number;
     isButtonLoading: boolean;
     onSubmit: () => void;
 }
@@ -22,9 +24,11 @@ export default function OrderManifestFooter({
     notes,
     onNotesChange,
     grandTotalCost,
+    deliveryFee = 0,
     isButtonLoading,
     onSubmit,
 }: OrderManifestFooterProps) {
+    const total = (Number(grandTotalCost) || 0) + (Number(deliveryFee) || 0);
     const isDark = (theme as any).isDarkMode;
 
     const borderColor = isDark ? '#334155' : '#cbd5e1';
@@ -76,7 +80,7 @@ export default function OrderManifestFooter({
                         fontFamily: theme.font?.bold,
                     }}
                 >
-                    Manifest Subtotal:
+                    {deliveryFee > 0 ? `Items ${(Number(grandTotalCost) || 0).toFixed(2)} + delivery ${Number(deliveryFee).toFixed(2)}` : 'Order total'}:
                 </Text>
                 <Text
                     className="text-xl font-black"
@@ -86,7 +90,7 @@ export default function OrderManifestFooter({
                     }}
                 >
                     KES{' '}
-                    {(Number(grandTotalCost) || 0).toFixed(2)}
+                    {total.toFixed(2)}
                 </Text>
             </View>
 
@@ -109,7 +113,7 @@ export default function OrderManifestFooter({
                                 fontFamily: theme.font?.bold,
                             }}
                         >
-                            Submit Order
+                            Create order & take payment
                         </Text>
                     )}
                 </TouchableOpacity>

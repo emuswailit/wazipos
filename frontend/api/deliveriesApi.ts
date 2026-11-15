@@ -183,6 +183,9 @@ export default {
      * { entity }: a shop; { retailer_order }: wholesaler + retailer; {}: own business.
      */
     getDeliveryAvailability: (data: { entity?: string; retailer_order?: string } = {}) => call('GetDeliveryAvailability', data),
+    /** Wholesaler staff building a retailer order: options from us to the retailer. */
+    getStaffRetailerOrderDeliveryOptions: (retailer: string, order_items: { wholesaler_receipt: string; purchased_quantity: number }[]) =>
+        call('GetStaffRetailerOrderDeliveryOptions', { retailer, order_items }),
     // buyer
     getRetailerOrderDeliveryOptions: (retailer_order: string) => call('GetRetailerOrderDeliveryOptions', { retailer_order }),
     chooseRetailerOrderDelivery: (retailer_order: string, option: string) => call('ChooseRetailerOrderDelivery', { retailer_order, option }),

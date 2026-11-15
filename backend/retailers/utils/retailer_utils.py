@@ -3350,9 +3350,6 @@ def create_customer_order(data, user):
         errors.append("Order origin is required")
         return errors, None
 
-    if order_origin == "CUSTOMER":
-        customer = user
-
     draft_id = details.get("draft_id")
     if not draft_id:
         errors.append("Draft ID is required")
@@ -3402,8 +3399,16 @@ def create_customer_order(data, user):
             create_log("info", f"CreateCustomerOrder: draft {draft_id} already exists as {existing.id}; returning it")
             return [], existing
 
+    # STAFF = the shop's own staff (counter / phone orders); CUSTOMER = a shopper.
+    # Decided here, not by the app (older apps sent the platform name).
+    order_origin = "STAFF" if (entity and getattr(user, "entity_id", None) == entity.id) else "CUSTOMER"
+    if order_origin == "CUSTOMER":
+        customer = user
+
     payment_account_number = details.get("payment_account_number")
 
+    if details.get("shipping_cost") in (None, "") and details.get("shipping_amount") not in (None, ""):
+        details["shipping_cost"] = details["shipping_amount"]
     if details.get("shipping_cost") not in (None, ""):
         shipping_cost = _to_decimal(details["shipping_cost"])
 
@@ -3515,17 +3520,18 @@ def create_customer_order(data, user):
             return location_errors, None
         option_key = details.get("delivery_option")
         seller_staff = bool(entity) and getattr(user, "entity_id", None) == entity.id
-        if option_key:
-            plan_errors, chosen, chosen_kg = plan_customer_checkout_delivery(
-                entity, destination_point, order_items, option_key
-            )
-            if plan_errors:
-                return plan_errors, None
-            shipping_cost = chosen["total"]
-            delivery_choice = (chosen, chosen_kg)
-        elif not seller_staff:
-            errors.append("Choose a delivery option")
+        if not option_key:
+            # Staff too: a priced option is what creates the delivery to dispatch.
+            errors.append("Choose a delivery option" if not seller_staff else "Set the customer's location and choose a delivery option")
             return errors, None
+        plan_errors, chosen, chosen_kg = plan_customer_checkout_delivery(
+            entity, destination_point, order_items, option_key
+        )
+        if plan_errors:
+            return plan_errors, None
+        shipping_cost = chosen["total"]
+        delivery_choice = (chosen, chosen_kg)
+        delivery_method = "COURIER" if chosen["method"] == "COURIER" else "DELIVERY"
 
     order_number = generate_document_number(
         entity, user, "CUSTOMERORDER",
@@ -3568,7 +3574,14 @@ def create_customer_order(data, user):
         if delivery_choice:
             from logistics.utils.deliveries import attach_customer_order_shipment
 
-            attach_customer_order_shipment(order_created, delivery_choice[0], delivery_choice[1], user)
+            shipment = attach_customer_order_shipment(order_created, delivery_choice[0], delivery_choice[1], user)
+            if seller_staff and details.get("delivery_agent"):
+                from logistics.utils.deliveries import preassign_delivery_person
+
+                agent_error = preassign_delivery_person(shipment, details.get("delivery_agent"))
+                if agent_error:
+                    order_created.delete()
+                    return [agent_error], None
 
         for item in order_items:
             purchased_qty = _to_int(item["purchased_quantity"])

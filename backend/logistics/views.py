@@ -457,6 +457,19 @@ def deliveriesAPIView(request):
         # Seller, once paid: assign a delivery person of the planned provider
         # ("retailer_order" or "customer_order").
         return _shipment_response(deliveries.dispatch_order(request.data, request.user), request, "Order dispatched")
+    if action == "GetStaffRetailerOrderDeliveryOptions":
+        # Wholesaler staff building a retailer order: "retailer" + "order_items"
+        # [{wholesaler_receipt, purchased_quantity}] -> priced options.
+        retailer = models.Entities.objects.filter(id=request.data.get("retailer")).first()
+        if not retailer:
+            return custom_errors_response(1, "No delivery options", ["Pick the retailer first"])
+        errors, options, kg = deliveries.staff_retailer_order_delivery_options(entity, retailer, request.data.get("order_items") or [])
+        if errors:
+            return custom_errors_response(1, "No delivery options", errors)
+        return custom_success_message(0, "Delivery options", {
+            "options": [_option_out(o) for o in options],
+            "chargeable_weight_kg": str(kg),
+        }, "delivery")
     if action == "GetDeliveryAvailability":
         # Can these businesses use DELIVERY? Only when their locations are set.
         # {"retailer_order"}: the wholesaler and the retailer; {"entity"}: that

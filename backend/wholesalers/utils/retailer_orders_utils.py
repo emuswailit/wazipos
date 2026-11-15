@@ -853,8 +853,13 @@ def create_retailer_order(data, user):
         except KeyError:
             errors.append("Order terms is required")
 
-        if "shipping_amount" in order_details:
-            shipping_amount = order_details["shipping_amount"]
+        # Fulfilment: "SELF"/"PICKUP" = the retailer collects; "COURIER"/"DELIVERY"
+        # = one of the priced delivery options ("delivery_option"), optionally
+        # with the delivery person named now ("delivery_agent").
+        delivery_method = str(order_details.get("delivery_method") or "SELF").strip().upper()
+        delivery_method = "COURIER" if delivery_method in ("COURIER", "DELIVERY") else "SELF"
+        delivery_option = order_details.get("delivery_option")
+        delivery_agent = order_details.get("delivery_agent")
         if "order_gross_price_total" in order_details:
             order_gross_price_total = order_details["order_gross_price_total"]
         if "order_discount_total" in order_details:
@@ -931,6 +936,31 @@ def create_retailer_order(data, user):
         
         return [], order
 
+    # Totals come from the lines (the client's figures are not trusted).
+    from decimal import Decimal as _D
+
+    order_gross_price_total = _D("0")
+    order_discount_total = _D("0")
+    for item in order_items:
+        qty = _D(str(item.get("purchased_quantity") or 0))
+        order_gross_price_total += qty * _D(str(item.get("item_price") or 0))
+        order_discount_total += _D(str(item.get("item_price_discount") or 0))
+    final_price_total = order_gross_price_total - order_discount_total
+
+    delivery_choice = None
+    if delivery_method == "COURIER":
+        from logistics.utils.deliveries import plan_staff_retailer_order_delivery
+
+        if not delivery_option:
+            return ["Choose a delivery option"], None
+        plan_errors, chosen, kg = plan_staff_retailer_order_delivery(wholesaler_obj, retailer_obj, order_items, delivery_option)
+        if plan_errors:
+            return plan_errors, None
+        delivery_choice = (chosen, kg)
+        shipping_amount = chosen["total"]
+    else:
+        shipping_amount = 0
+
     # Create the order
     document_number = generate_document_number(user.entity, user,"RETAILERORDER")
     retailer_order = RetailerOrders.objects.create(
@@ -940,6 +970,7 @@ def create_retailer_order(data, user):
         order_terms=order_terms,
         draft_id=draft_id,
         shipping_amount=shipping_amount,
+        delivery_method=delivery_method,
         owner=user,
         entity=user.entity,
         order_origin=order_origin,
@@ -966,14 +997,17 @@ def create_retailer_order(data, user):
                     discount_quantity = wholesaler_quantity_discount.awarded_quantity
                 else:
                     discount_quantity = 0
+            # item_price_discount is the line's discount (qty x price - discount).
+            line_qty = int(item['purchased_quantity'])
+            line_total = float(item['item_price']) * line_qty - float(item.get('item_price_discount') or 0)
             RetailerOrderItems.objects.create(
                 retailer_order=retailer_order,
-                item_price_total=item['item_price_total'],
+                item_price_total=round(line_total, 2),
                 purchased_quantity=item['purchased_quantity'],
                 total_quantity=int(item['purchased_quantity'])+ int(discount_quantity),
                 discount_quantity=discount_quantity,
                 item_price=item['item_price'],
-                item_net_price=float(item['item_price'])-float(item['item_price_discount']),
+                item_net_price=round(line_total / line_qty, 2) if line_qty else 0,
                 item_price_discount=item['item_price_discount'],
                 unit_of_issue=wholesaler_receipt.unit_of_receipt,
                 wholesaler_receipt_id=item['wholesaler_receipt'],
@@ -981,21 +1015,28 @@ def create_retailer_order(data, user):
                 entity=user.entity
             )
 
-        if payment_method:
-            payment_errors=[]
-            reference_number = generate_reference_number(user.entity, user)
-            payment_errors, created_order = process_customer_order_payment(
-                retailer_order, payment_method, user, mobile_money_phone, reference_number
-            )
-            
-            # --- CRITICAL FIX 2: Fixed reference variable NameError here ---
-            create_log("errror", f"Errors: {payment_errors}")
+        if delivery_choice:
+            from logistics.utils.deliveries import attach_retailer_order_shipment, preassign_delivery_person
 
-            
-            if len(payment_errors) > 0:
-                return payment_errors, None
-            else:
+            shipment = attach_retailer_order_shipment(retailer_order, delivery_choice[0], delivery_choice[1], user)
+            agent_error = preassign_delivery_person(shipment, delivery_agent)
+            if agent_error:
+                transaction.set_rollback(True)
+                return [agent_error], None
+
+        if payment_method:
+            # Retailer-order payments (system till / offline), never the customer-order flow.
+            payment_errors, paid_order = process_retailer_order_payment({
+                "retailer_order": str(retailer_order.id),
+                "payment_method": str(payment_method.id),
+                "mobile_money_phone": mobile_money_phone,
+            }, user)
+            if payment_errors:
+                # The order stands; the client takes payment again from the order.
+                create_log("error", f"Retailer order {retailer_order.id} payment failed: {payment_errors}")
+                retailer_order.payment_errors = payment_errors
                 return None, retailer_order
+            return None, paid_order
         else:
             create_log("info", f"Retailer order {retailer_order.id} created without payment by {user.first_name} {user.last_name}")
             return None, retailer_order

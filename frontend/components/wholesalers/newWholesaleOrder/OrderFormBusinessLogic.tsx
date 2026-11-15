@@ -2,7 +2,7 @@
 
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useWholesaleOrderForm } from './useWholesaleOrderForm';
 
 interface OrderFormBusinessLogicProps {
@@ -55,6 +55,11 @@ export default function OrderFormBusinessLogic({
         grandTotalCost,
         submitOrder,
 
+        delivery,
+        loadDeliveryOptions,
+        deliveryOptionsKey,
+        deliveryNotReadyHint,
+
         isScannerOpen,
         setIsScanningOpen,
         processBarcodeScanResult,
@@ -63,6 +68,9 @@ export default function OrderFormBusinessLogic({
         onSubmitFinished,
         onRowsCountChange,
     });
+
+    /* -------- The order just created: payment is taken on it -------- */
+    const [createdOrder, setCreatedOrder] = useState<{ id: string; reference?: string } | null>(null);
 
     /* -------- Toast helper -------- */
     const triggerNotificationToast = (msg: string) => {
@@ -81,25 +89,9 @@ export default function OrderFormBusinessLogic({
             return;
         }
 
-        /* ---- Payment guard ---- */
-        if (!selectedPaymentMethod) {
-            const msg =
-                '⚠️ Please select a payment method before submitting.';
-            alert(msg);
-            triggerNotificationToast(msg);
-            return;
-        }
-
-        /* ---- Mobile Money offline guard ---- */
-        const isMobileMoney = String(
-            selectedPaymentMethod?.title ?? ''
-        )
-            .toUpperCase()
-            .includes('MOBILE');
-
-        if (isMobileMoney && !isOnline) {
-            const msg =
-                '⚠️ Mobile Money requires an internet connection. Connect or switch to CASH / CREDIT.';
+        /* ---- Fulfilment guard ---- */
+        if (delivery.method === 'DELIVERY' && !delivery.option) {
+            const msg = '⚠️ Choose a delivery option (or switch to pickup).';
             alert(msg);
             triggerNotificationToast(msg);
             return;
@@ -163,8 +155,6 @@ export default function OrderFormBusinessLogic({
 
             const result = await submitOrder({
                 retailerId,
-                paymentMethodId: selectedPaymentMethod.id,
-                mobileMoneyPhone: isMobileMoney ? mpesaNumber : null,
                 userId: String(user?.id ?? ''),
             });
 
@@ -179,11 +169,14 @@ export default function OrderFormBusinessLogic({
             onSubmitFinished?.(retailerId, notes, submittedItems);
             triggerNotificationToast(
                 result.reference
-                    ? `✅ Success: order ${result.reference} created`
-                    : '✅ Success: order created'
+                    ? `✅ Success: order ${result.reference} created — take payment`
+                    : '✅ Success: order created — take payment'
             );
 
             await clearActiveDraftSession();
+            // Take payment now (any method: mobile money prompts the retailer's
+            // phone; cash / credit are recorded). Closing it leaves the order unpaid.
+            setCreatedOrder({ id: result.orderId, reference: result.reference });
         } catch (e: any) {
             console.error(
                 '[OrderFormBusinessLogic] submit failed',
@@ -226,6 +219,16 @@ export default function OrderFormBusinessLogic({
 
                 /* Totals */
                 grandTotalCost,
+
+                /* Fulfilment */
+                delivery,
+                loadDeliveryOptions,
+                deliveryOptionsKey,
+                deliveryNotReadyHint,
+
+                /* Payment on the created order */
+                createdOrder,
+                closeCreatedOrder: () => setCreatedOrder(null),
 
                 /* Status */
                 isSyncLoading,

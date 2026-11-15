@@ -240,7 +240,8 @@ function AgentPicker({
 }) {
     const { theme, border } = useListTokens();
     const [agents, setAgents] = useState<DeliveryAgent[] | null>(null);
-    const [pick, setPick] = useState<string | null>(null);
+    // The person named when the order was made (if any) is preselected.
+    const [pick, setPick] = useState<string | null>(leg.agent ?? null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
 

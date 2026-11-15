@@ -8,9 +8,9 @@ import { usePaymentMethodsSync } from '@/context/PaymentMethodsSyncContext';
 import { storageService } from '@/components/retailers/customerOrders/storageService';
 import { RetailerReceipt } from '@/databases/types';
 import { useApi } from '@/hooks/useApi';
-import { useLogistics } from '@/hooks/useLogistics';
-import { useEmployees } from '@/hooks/useEmployees';
-import { extractEnvelope } from '@/components/common/ApiResponseModal';
+import deliveriesApi from '@/api/deliveriesApi';
+import { useStaffDelivery } from '@/components/deliveries/StaffDeliveryPlanner';
+import type { LatLng } from '@/components/common/locationPinShared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -30,6 +30,18 @@ const formatPhoneForJamboPay = (phone: string) => {
 
 // Offline orders are saved via storageService.addPendingOrder; anything left under the old
 // 'wazipos_offline_customer_orders' key is migrated by services/customerOrderUploader.ts.
+
+/** One line for CreateCustomerOrder: the line discount is sent per unit (the server multiplies by quantity). */
+function toOrderItem(item: any) {
+    const qty = Number(item.quantity || 1);
+    return {
+        retailer_receipt: String(item.selectedProduct),
+        purchased_quantity: qty,
+        unit_selling_price: Number(item.price || 0),
+        final_unit_selling_price: Number(item.price || 0),
+        item_discount: qty > 0 ? Number(item.discount || 0) / qty : 0,
+    };
+}
 
 export function useCreateOrder() {
     const { user, token } = useAuth();
@@ -59,26 +71,21 @@ export function useCreateOrder() {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
-    const [deliveryMethod, setDeliveryMethod] = useState<'PICKUP' | 'DELIVERY' | 'COURIER'>('PICKUP');
-    const [isRetailerDelivery, setIsRetailerDelivery] = useState(false);
-    const [selectedCourierId, setSelectedCourierId] = useState<string | null>(null);
-    const [selectedCollectionPoint, setSelectedCollectionPoint] = useState<any | null>(null);
-
-    // 🟢 Employee Delivery State
-    const [selectedDeliveryEmployeeId, setSelectedDeliveryEmployeeId] = useState<string | null>(null);
+    // Fulfilment: the customer takes it now / collects it, or one of the shop's
+    // priced deliveries to where the customer is (pinned on the map).
+    const delivery = useStaffDelivery();
+    const [destination, setDestination] = useState<LatLng | null>(null);
     const entityId = String((user as any)?.entity_id || (user as any)?.entity || '');
-    const { employees: deliveryEmployees, isLoading: deliveryEmployeesLoading } = useEmployees(isRetailerDelivery && !!entityId); // fetch delivery staff only when retailer delivery is chosen
+    const shopCenter = useMemo<LatLng | null>(() => {
+        const lat = Number((user as any)?.entity_latitude);
+        const lng = Number((user as any)?.entity_longitude);
+        return Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0) ? { latitude: lat, longitude: lng } : null;
+    }, [user]);
 
     const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(null);
     const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [paymentDetails, setPaymentDetails] = useState({ mobileMoneyNumber: '', customerName: '', customerPhone: '', dueDate: getTodayString() });
-
-    const [shippingCost, setShippingCost] = useState<number>(0);
-    const [shippingLoading, setShippingLoading] = useState(false);
-    const [shippingError, setShippingError] = useState<string | null>(null);
-
-    const { activeCouriers, activeCouriersLoading, collectionPoints, pointsLoading } = useLogistics(deliveryMethod, selectedCourierId);
 
     /**
      * Store an order in the Customer Orders store (same place on web and native):
@@ -127,69 +134,33 @@ export function useCreateOrder() {
         totalDiscountRef.current = totalDiscount;
     }, [subtotal, totalDiscount]);
 
-    useEffect(() => {
-        if (deliveryMethod !== 'DELIVERY' || isRetailerDelivery || !selectedCollectionPoint) {
-            setShippingCost(0);
-            setShippingError(null);
-            setShippingLoading(false);
-            return;
-        }
-
-        const originLat = Number((user as any)?.entity_latitude) || 0.0;
-        const originLng = Number((user as any)?.entity_longitude) || 0.0;
-
-        if (originLat === 0 && originLng === 0) {
-            setShippingError("Store location not set. Cannot calculate shipping.");
-            setShippingLoading(false);
-            return;
-        }
-
-        let cancelled = false;
-        (async () => {
-            setShippingLoading(true);
-            setShippingError(null);
-            try {
-                const res = await submitApi.request({
-                    action: "CalculateShippingRate",
-                    entity: (user as any)?.entity_id || (user as any)?.entity,
-                    origin_latitude: originLat,
-                    origin_longitude: originLng,
-                    destination_latitude: selectedCollectionPoint.latitude,
-                    destination_longitude: selectedCollectionPoint.longitude,
-                    delivery_method: 'DELIVERY',
-                    order_total: Math.max(0, subtotalRef.current - totalDiscountRef.current),
-                    is_retailer_delivery: false,
-                }).catch((e: any) => {
-                    console.warn("Shipping rate failed:", e?.message);
-                    return { ok: false, data: { response_message: "Network error." } };
-                });
-
-                if (!cancelled) {
-                    const env = extractEnvelope(res);
-                    if (String(env.response_code) !== "0") {
-                        setShippingError(env.response_message || "Failed to calculate shipping.");
-                        setShippingCost(0);
-                    } else {
-                        setShippingCost(Number(res.data?.shipping_cost ?? res.data?.cost ?? 0));
-                    }
-                }
-            } catch (err: any) {
-                if (!cancelled) {
-                    setShippingError(err.message || "Connection error.");
-                    setShippingCost(0);
-                }
-            } finally {
-                if (!cancelled) setShippingLoading(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [deliveryMethod, isRetailerDelivery, selectedCollectionPoint, submitApi.request, user]);
+    // Delivery options for the current lines + pinned destination.
+    const pricedLines = useMemo(
+        () => processedLineItems
+            .filter((i) => i.selectedProduct && Number(i.quantity) > 0)
+            .map((i) => ({ retailer_receipt: String(i.selectedProduct), purchased_quantity: Number(i.quantity) || 1 })),
+        [processedLineItems]
+    );
+    const deliveryOptionsKey = `${destination ? `${destination.latitude.toFixed(5)},${destination.longitude.toFixed(5)}` : ''}|${pricedLines.map((l) => `${l.retailer_receipt}x${l.purchased_quantity}`).join(',')}`;
+    const loadDeliveryOptions = useMemo(
+        () => destination && pricedLines.length && entityId
+            ? () => deliveriesApi.getCustomerDeliveryOptions({
+                entity: entityId,
+                destination_latitude: destination.latitude,
+                destination_longitude: destination.longitude,
+                order_items: pricedLines,
+            })
+            : null,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [deliveryOptionsKey, entityId]
+    );
+    const deliveryNotReadyHint = !pricedLines.length ? 'Add items to price delivery.' : "Pin the customer's location to see delivery options.";
 
     const totals = useMemo(() => {
-        const shipping = isRetailerDelivery ? 0 : (shippingCost || 0);
+        const shipping = delivery.fee;
         const finalTotal = Math.max(0, subtotal - totalDiscount) + shipping;
         return { subtotal: Math.max(0, subtotal - totalDiscount), shippingCost: shipping, total: finalTotal, totalDiscount };
-    }, [subtotal, totalDiscount, shippingCost, isRetailerDelivery]);
+    }, [subtotal, totalDiscount, delivery.fee]);
 
     const isBlankRowPresent = useMemo(() => lineItems.some(item => !item.selectedProduct), [lineItems]);
 
@@ -249,10 +220,11 @@ export function useCreateOrder() {
         setSelectedPaymentMethodId(null);
         setOrderToRetry(null);
         setIsRetryingPayment(false);
-        setSelectedCollectionPoint(null);
+        delivery.reset();
+        setDestination(null);
         resetWsState();
         setSuccessMessage("Payment successful!");
-    }, []);
+    }, [delivery.reset]);
 
     const handleUpdateRow = useCallback((id: string, updates: Partial<OrderLineItem>) => {
         setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, ...updates } : item));
@@ -332,24 +304,24 @@ export function useCreateOrder() {
             }
         }
 
-        if (deliveryMethod !== 'PICKUP' && !isRetailerDelivery) {
-            if (!selectedCourierId) {
-                setErrorMessage("Please select a courier/transporter.");
+        const wantsDelivery = delivery.method === 'DELIVERY' && !isRetryingPayment;
+        if (wantsDelivery) {
+            if (!isOnline) {
+                setErrorMessage("Delivery needs an internet connection (it is priced by the server). Switch to pickup or reconnect.");
                 return;
             }
-            if (deliveryMethod === 'DELIVERY' && !selectedCollectionPoint) {
-                setErrorMessage("Please select a drop-off point.");
+            if (!destination) {
+                setErrorMessage("Pin the customer's location for delivery.");
                 return;
             }
-            if (shippingError && isOnline) {
-                setErrorMessage(shippingError);
+            if (!delivery.option) {
+                setErrorMessage("Choose a delivery option.");
                 return;
             }
-        }
-
-        if (deliveryMethod !== 'PICKUP' && isRetailerDelivery && !selectedDeliveryEmployeeId) {
-            setErrorMessage("Please select a delivery staff member.");
-            return;
+            if (!paymentDetails?.customerPhone?.trim()) {
+                setErrorMessage("Enter the customer's phone for the delivery.");
+                return;
+            }
         }
 
         setIsSaving(true);
@@ -377,21 +349,11 @@ export function useCreateOrder() {
                     credit_due_date: methodTitle === 'CREDIT' ? paymentDetails?.dueDate || null : null,
                     payment_method: selectedPaymentMethodId,
                     payment_account_number: momoNumber,
-                    delivery_method: deliveryMethod || 'SELF',
+                    // Offline orders are always collected (delivery is priced online).
+                    delivery_method: 'PICKUP',
                     order_channel: Platform.OS === 'web' ? 'WEB' : 'ANDROID',
-                    order_origin: Platform.OS.toUpperCase(),
-                    shipping_amount: String(totals.shippingCost),
-                    order_items: lines.map((item: any) => ({
-                        retailer_receipt: String(item.selectedProduct),
-                        purchased_quantity: Number(item.quantity || 1),
-                        unit_selling_price: Number(item.price || 0),
-                        final_unit_selling_price: Number(item.price || 0),
-                        item_discount: Number(item.discount || 0),
-                    })),
-                    is_retailer_delivery: isRetailerDelivery,
-                    delivery_person: isRetailerDelivery ? selectedDeliveryEmployeeId : null,
-                    courier_id: isRetailerDelivery ? null : selectedCourierId,
-                    collection_point_id: (deliveryMethod === 'DELIVERY' && !isRetailerDelivery) ? selectedCollectionPoint?.id : null,
+                    order_origin: 'STAFF',
+                    order_items: lines.map((item: any) => toOrderItem(item)),
                 };
 
                 // Display fields in the server's shape, so the order looks right in the
@@ -484,13 +446,7 @@ export function useCreateOrder() {
 
                 const orderItemsPayload = processedLineItems
                     .filter(item => item.selectedProduct)
-                    .map((item: any) => ({
-                        retailer_receipt: String(item.selectedProduct),
-                        purchased_quantity: Number(item.quantity || 1),
-                        unit_selling_price: Number(item.price || 0),
-                        final_unit_selling_price: Number(item.price || 0),
-                        item_discount: Number(item.discount || 0),
-                    }));
+                    .map((item: any) => toOrderItem(item));
 
                 const draftId = `draft-${Date.now()}`;
                 const payload = {
@@ -499,20 +455,25 @@ export function useCreateOrder() {
                         draft_id: draftId,
                         customer_name: paymentDetails?.customerName || 'Walk-in Customer',
                         customer_phone: paymentDetails?.customerPhone || momoNumber || '',
-                        credit_due_date: paymentDetails?.dueDate || null,
+                        credit_due_date: methodTitle === 'CREDIT' ? paymentDetails?.dueDate || null : null,
 
                         payment_method: selectedPaymentMethodId,
                         payment_account_number: momoNumber,
-                        delivery_method: deliveryMethod || 'SELF',
                         order_channel: Platform.OS === 'web' ? 'WEB' : 'ANDROID',
-                        order_origin: Platform.OS.toUpperCase(),
-                        shipping_amount: String(totals.shippingCost),
+                        order_origin: 'STAFF',
                         order_items: orderItemsPayload,
-
-                        is_retailer_delivery: isRetailerDelivery,
-                        delivery_person: isRetailerDelivery ? selectedDeliveryEmployeeId : null,
-                        courier_id: isRetailerDelivery ? null : selectedCourierId,
-                        collection_point_id: (deliveryMethod === 'DELIVERY' && !isRetailerDelivery) ? selectedCollectionPoint?.id : null,
+                        // Fulfilment: the option is re-priced server-side (its total is the fee).
+                        delivery_method: wantsDelivery ? 'DELIVERY' : 'PICKUP',
+                        ...(wantsDelivery && destination && delivery.option
+                            ? {
+                                delivery_option: delivery.option.key,
+                                delivery_agent: delivery.agentId,
+                                destination_latitude: destination.latitude,
+                                destination_longitude: destination.longitude,
+                                recipient_name: paymentDetails?.customerName || 'Customer',
+                                recipient_phone: paymentDetails?.customerPhone || '',
+                            }
+                            : {}),
                     }
                 };
 
@@ -545,6 +506,8 @@ export function useCreateOrder() {
                             setSuccessMessage("Order created successfully!");
                             setLineItems([{ id: '1', selectedProduct: null, selectedProductTitle: '', quantity: 1, price: 0, discount: 0, searchQuery: '', isDropdownOpen: false, calculatedLineAmount: 0 }]);
                             setSelectedPaymentMethodId(null);
+                            delivery.reset();
+                            setDestination(null);
                         }
                     }
                     setIsBottomSheetVisible(false);
@@ -560,15 +523,13 @@ export function useCreateOrder() {
         }
     }, [
         isOnline, processedLineItems, paymentDetails, selectedPaymentMethodId,
-        deliveryMethod, submitApi, isRetryingPayment, orderToRetry,
-        isRetailerDelivery, selectedCourierId, selectedCollectionPoint, selectedDeliveryEmployeeId,
-        paymentMethodsList, totals.shippingCost, shippingError, deductLocalInventory, triggerManualFetch
+        submitApi, isRetryingPayment, orderToRetry, delivery, destination,
+        paymentMethodsList, totals, deductLocalInventory, triggerManualFetch
     ]);
 
     return {
         retailerReceipts, paymentMethodsList, triggerManualFetch, isSyncing: false, lastSyncedTime: "",
         isPaymentSyncing: isPaymentSyncing || false,
-        deliveryMethod, setDeliveryMethod,
         selectedPaymentMethodId, setSelectedPaymentMethodId,
         isBottomSheetVisible, setIsBottomSheetVisible,
         isScannerOpen, setIsScannerOpen,
@@ -578,18 +539,9 @@ export function useCreateOrder() {
         handleUpdateRow, handleSelectProduct, handleAddRow, handleDeleteRow, handleSearchFocused,
         handleSaveOrder, handleBarcodeScannedContinuously,
 
-        isRetailerDelivery, setIsRetailerDelivery,
-        selectedCourierId, setSelectedCourierId,
-        selectedCollectionPoint, setSelectedCollectionPoint,
-        couriers: activeCouriers,
-        couriersLoading: activeCouriersLoading,
-        collectionPoints,
-        pointsLoading,
-
-        deliveryEmployees, deliveryEmployeesLoading,
-        selectedDeliveryEmployeeId, setSelectedDeliveryEmployeeId,
-
-        shippingCost, shippingLoading, shippingError,
+        // Fulfilment
+        delivery, destination, setDestination, shopCenter,
+        loadDeliveryOptions, deliveryOptionsKey, deliveryNotReadyHint,
 
         wsStatus, wsDescription, resetWsState,
         isRetryingPayment, handleRetryPayment,

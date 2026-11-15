@@ -4,6 +4,8 @@ import wholesalersApi, {
     type CreateStaffRetailerOrderPayload,
     type CreateStaffRetailerOrderResponse,
 } from '@/api/wholesalersApi';
+import deliveriesApi from '@/api/deliveriesApi';
+import { useStaffDelivery } from '@/components/deliveries/StaffDeliveryPlanner';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
 import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
@@ -109,6 +111,9 @@ export function useWholesaleOrderForm(
 
     /* -------- Notes -------- */
     const [notes, setNotes] = useState('');
+
+    /* -------- Fulfilment: the retailer collects, or one of the priced deliveries -------- */
+    const delivery = useStaffDelivery();
 
     /* -------- Payment -------- */
     const [selectedPaymentMethod, setSelectedPaymentMethod] =
@@ -238,12 +243,13 @@ export function useWholesaleOrderForm(
             ]);
             setSelectedRetailer(null);
             setNotes('');
+            delivery.reset();
             setMpesaNumber('');
             setSelectedPaymentMethod(null);
             draftIdRef.current = null;
             onRowsCountChange?.(1);
         },
-        [onRowsCountChange]
+        [onRowsCountChange, delivery.reset]
     );
 
     /* ---------------------------------------------------------
@@ -319,6 +325,29 @@ export function useWholesaleOrderForm(
         [formRows]
     );
 
+    /* -------- Delivery options for the current retailer + lines -------- */
+    const pricedLines = useMemo(
+        () =>
+            formRows
+                .filter((r) => r.selectedReceipt && Number(r.purchased_quantity) > 0)
+                .map((r) => ({
+                    wholesaler_receipt: String(r.wholesaler_receipt_id || resolveReceiptId(r.selectedReceipt)),
+                    purchased_quantity: Number(r.purchased_quantity) || 0,
+                })),
+        [formRows, resolveReceiptId]
+    );
+    const retailerRemoteId = String((selectedRetailer as any)?.remote_id ?? '');
+    const deliveryOptionsKey = `${retailerRemoteId}|${pricedLines.map((l) => `${l.wholesaler_receipt}x${l.purchased_quantity}`).join(',')}`;
+    const loadDeliveryOptions = useMemo(
+        () =>
+            retailerRemoteId && pricedLines.length
+                ? () => deliveriesApi.getStaffRetailerOrderDeliveryOptions(retailerRemoteId, pricedLines)
+                : null,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [deliveryOptionsKey]
+    );
+    const deliveryNotReadyHint = !retailerRemoteId ? 'Pick the retailer first.' : 'Add items to price delivery.';
+
     /* ---------------------------------------------------------
      * submitOrder — sends CreateStaffRetailerOrder straight to the backend
      * ------------------------------------------------------- */
@@ -356,8 +385,11 @@ export function useWholesaleOrderForm(
                     retailer_id: opts.retailerId,
                     draft_id: draftIdRef.current,
                     order_terms: 'CASH',
-                    payment_method_id: opts.paymentMethodId,
-                    mobile_money_phone: opts.mobileMoneyPhone ?? null,
+                    // Payment is taken on the created order (RecordPaymentModal), so
+                    // mobile money is followed live and cash / credit recorded properly.
+                    delivery_method: delivery.method === 'DELIVERY' ? 'COURIER' : 'SELF',
+                    delivery_option: delivery.method === 'DELIVERY' ? delivery.option?.key ?? null : null,
+                    delivery_agent: delivery.method === 'DELIVERY' ? delivery.agentId : null,
                     order_gross_price_total: gross,
                     order_discount_total: discountTotal,
                     final_price_total: gross - discountTotal,
@@ -381,7 +413,7 @@ export function useWholesaleOrderForm(
                 reference: res.data.retailer_order.reference_number,
             };
         },
-        [formRows, resolveReceiptId, forceManualRefresh]
+        [formRows, resolveReceiptId, forceManualRefresh, delivery.method, delivery.option, delivery.agentId]
     );
 
     /* ---------------------------------------------------------
@@ -421,6 +453,12 @@ export function useWholesaleOrderForm(
         setSyncStatus,
         submitToast,
         setSubmitToast,
+
+        /* Fulfilment */
+        delivery,
+        loadDeliveryOptions,
+        deliveryOptionsKey,
+        deliveryNotReadyHint,
 
         /* Totals & submit */
         grandTotalCost,
