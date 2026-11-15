@@ -1,6 +1,7 @@
 // components/wholesalers/newWholesaleOrder/OrderFormContainer.tsx
 
 import { EntityAutocomplete } from '@/components/common';
+import PendingSyncBanner from '@/components/common/PendingSyncBanner';
 import RecordPaymentModal from '@/components/common/RecordPaymentModal';
 import { StaffDeliveryPlanner } from '@/components/deliveries/StaffDeliveryPlanner';
 import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
@@ -58,6 +59,9 @@ export default function OrderFormContainer(
                                     props.theme.panel,
                             }}
                         >
+                            {/* -------- Orders saved offline, not yet on the server -------- */}
+                            <PendingSyncBanner kind="wholesale" />
+
                             {/* -------- Toast -------- */}
                             {state.submitToast && (
                                 <View
@@ -184,9 +188,20 @@ export default function OrderFormContainer(
                                     notReadyHint={state.deliveryNotReadyHint}
                                     pickupLabel="Retailer collects"
                                 />
-                                <Text style={{ color: props.theme.textDark, fontFamily: props.theme.font?.medium, fontSize: 11.5 }}>
-                                    3. Payment is taken right after the order is created — mobile money prompts the retailer's phone; cash or credit is recorded.
-                                </Text>
+                                {state.isOnline ? (
+                                    <Text style={{ color: props.theme.textDark, fontFamily: props.theme.font?.medium, fontSize: 11.5 }}>
+                                        3. Payment is taken right after the order is created — mobile money prompts the retailer's phone; cash or credit is recorded.
+                                    </Text>
+                                ) : (
+                                    <View className="rounded-xl px-3 py-2.5" style={{ backgroundColor: '#d9770618', borderWidth: 1.5, borderColor: '#d97706' }}>
+                                        <Text style={{ color: '#d97706', fontFamily: props.theme.font?.bold, fontSize: 13 }}>
+                                            📴 Offline — CASH sales only
+                                        </Text>
+                                        <Text style={{ color: props.theme.text, fontFamily: props.theme.font?.medium, fontSize: 12 }}>
+                                            The order is saved on this device as paid in cash (the retailer collects it) and sent to the server as soon as you're back online.
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
 
                             {/* -------- Footer -------- */}
@@ -198,6 +213,7 @@ export default function OrderFormContainer(
                                     state.grandTotalCost
                                 }
                                 deliveryFee={state.delivery.fee}
+                                submitLabel={state.isOnline ? undefined : 'Save offline (cash sale)'}
                                 isButtonLoading={
                                     state.isSubmitting
                                 }

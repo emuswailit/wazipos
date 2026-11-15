@@ -1,6 +1,8 @@
 // app/(retailers)/newCustomerOrder/index.tsx
 
 import ApiErrorModal from '@/components/common/ApiErrorModal';
+import PendingSyncBanner from '@/components/common/PendingSyncBanner';
+import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import PaymentStatusModal from '@/components/common/PaymentStatusModal';
 import { UniversalScannerModal } from '@/components/common/UniversalScannerModal';
 import { FulfillmentControls, FulfillmentModal } from '@/components/retailers/newCustomerOrder/FulfillmentModal';
@@ -22,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CreateOrderScreen() {
     const { theme } = useAuth();
+    const { isOnline } = useNetworkStatus();
     const scrollRef = useRef<ScrollView>(null);
     const rowCoordinatesRef = useRef<Record<string, number>>({});
 
@@ -92,6 +95,16 @@ export default function CreateOrderScreen() {
                         keyboardShouldPersistTaps="handled"
                         refreshControl={<RefreshControl refreshing={isSyncing} onRefresh={triggerManualFetch} tintColor={theme.primary} />}
                     >
+                        {/* Cash sales saved offline and not yet on the server */}
+                        <PendingSyncBanner kind="customer" />
+                        {!isOnline ? (
+                            <View className="w-full rounded-xl px-3 py-2.5 mb-3" style={{ backgroundColor: '#d9770618', borderWidth: 1.5, borderColor: '#d97706' }}>
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: '#d97706' }}>📴 Offline — CASH sales only</Text>
+                                <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.text }}>
+                                    Sales are saved on this device (stock is taken off locally) and sent to the server as soon as the connection is back.
+                                </Text>
+                            </View>
+                        ) : null}
                         <View className="w-full flex flex-col md:flex-row justify-between items-start md:items-center pb-3 mb-4 border-b border-slate-200 gap-y-2 relative z-40">
                             <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.lg, color: theme.text }}>
                                 New Customer Order

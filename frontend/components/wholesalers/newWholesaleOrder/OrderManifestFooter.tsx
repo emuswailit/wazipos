@@ -15,6 +15,8 @@ interface OrderManifestFooterProps {
     grandTotalCost: number;
     /** Delivery fee of the chosen option (0 for pickup). */
     deliveryFee?: number;
+    /** Button text (default: create and take payment). */
+    submitLabel?: string;
     isButtonLoading: boolean;
     onSubmit: () => void;
 }
@@ -25,6 +27,7 @@ export default function OrderManifestFooter({
     onNotesChange,
     grandTotalCost,
     deliveryFee = 0,
+    submitLabel = 'Create order & take payment',
     isButtonLoading,
     onSubmit,
 }: OrderManifestFooterProps) {
@@ -113,7 +116,7 @@ export default function OrderManifestFooter({
                                 fontFamily: theme.font?.bold,
                             }}
                         >
-                            Create order & take payment
+                            {submitLabel}
                         </Text>
                     )}
                 </TouchableOpacity>

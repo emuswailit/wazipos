@@ -281,10 +281,11 @@ export function useCreateOrder() {
         const currentMethod = paymentMethodsList.find(m => m.id === selectedPaymentMethodId);
         const methodTitle = currentMethod?.title?.toUpperCase() || '';
         const isMobileMoney = methodTitle === 'MOBILE MONEY';
-        const isOfflineAllowed = methodTitle === 'CASH' || methodTitle === 'CREDIT';
+        // Offline, only CASH sales are taken (saved on this device, synced when back online).
+        const isOfflineAllowed = methodTitle === 'CASH';
 
         if (!isOnline && !isOfflineAllowed) {
-            setErrorMessage("Mobile Money requires an internet connection. Please connect to continue.");
+            setErrorMessage("You're offline: only CASH sales can be saved now. They sync automatically when the connection is back.");
             return;
         }
 
@@ -346,7 +347,7 @@ export function useCreateOrder() {
                     draft_id: draftId,
                     customer_name: paymentDetails?.customerName || 'Walk-in Customer',
                     customer_phone: paymentDetails?.customerPhone || momoNumber || '',
-                    credit_due_date: methodTitle === 'CREDIT' ? paymentDetails?.dueDate || null : null,
+                    credit_due_date: null, // offline sales are CASH only
                     payment_method: selectedPaymentMethodId,
                     payment_account_number: momoNumber,
                     // Offline orders are always collected (delivery is priced online).
@@ -383,7 +384,7 @@ export function useCreateOrder() {
                 await saveOrderLocally(localOrder);
                 await deductLocalInventory(itemsToDeduct);
 
-                setSuccessMessage("Order saved offline successfully.");
+                setSuccessMessage("Saved offline as a cash sale — it will sync when you're back online.");
                 setLineItems([{ id: '1', selectedProduct: null, selectedProductTitle: '', quantity: 1, price: 0, discount: 0, searchQuery: '', isDropdownOpen: false, calculatedLineAmount: 0 }]);
                 setSelectedPaymentMethodId(null);
                 setIsBottomSheetVisible(false);

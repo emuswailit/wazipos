@@ -8,6 +8,7 @@
 //   narrower : tapping an order opens that cart full screen.
 // The cart's (i) button opens RetailerOrderDetailsModal (lifecycle, identifiers).
 
+import PendingSyncBanner from '@/components/common/PendingSyncBanner';
 import { AdminListView, useListTokens } from '@/components/common/listScreen';
 import { RequisitionCart } from '@/components/retailers/retailerRequisitions/RequisitionCart';
 import type { PageSize } from '@/components/common/PaginationBar';
@@ -184,6 +185,10 @@ export default function RetailerOrdersList() {
 
     return (
         <>
+            {/* Cash orders made offline on this device, not on the server yet */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 10, backgroundColor: theme.background }}>
+                <PendingSyncBanner kind="wholesale" />
+            </View>
             {twoPane ? (
                 <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.background }}>
                     <View style={{ flex: 1, minWidth: 0 }}>{list}</View>

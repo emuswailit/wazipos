@@ -1,6 +1,7 @@
 // components/wholesalers/newWholesaleOrder/OrderFormBusinessLogic.tsx
 
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
+import { usePaymentMethodsSync } from '@/context/PaymentMethodsSyncContext';
 
 import React, { useState } from 'react';
 import { useWholesaleOrderForm } from './useWholesaleOrderForm';
@@ -24,6 +25,7 @@ export default function OrderFormBusinessLogic({
     children,
 }: OrderFormBusinessLogicProps) {
     const { isOnline } = useNetworkStatus();
+    const { paymentMethodsList } = usePaymentMethodsSync();
 
     const {
         formRows,
@@ -135,13 +137,27 @@ export default function OrderFormBusinessLogic({
             return;
         }
 
-        /* ---- Online guard (no offline queue) ---- */
+        /* ---- Offline: CASH sale the retailer collects, queued on this device ---- */
+        let offlineCashMethodId: string | null = null;
         if (!isOnline) {
-            const msg =
-                '⚠️ You are offline. Connect to the internet to submit this order.';
-            alert(msg);
-            triggerNotificationToast(msg);
-            return;
+            const fail = (msg: string) => {
+                alert(msg);
+                triggerNotificationToast(msg);
+            };
+            if (delivery.method === 'DELIVERY') {
+                return fail('⚠️ You are offline. Delivery is priced online — switch to "Retailer collects" to save this as a cash sale.');
+            }
+            const cash = (paymentMethodsList ?? []).find((m: any) => String(m?.title ?? '').toUpperCase() === 'CASH');
+            if (!cash?.id) {
+                return fail('⚠️ You are offline and the CASH payment method isn\'t saved on this device yet. Open the app once online, then try again.');
+            }
+            const short = formRows.find(
+                (r) => r.selectedReceipt && r.available !== undefined && Number(r.purchased_quantity) > Number(r.available)
+            );
+            if (short) {
+                return fail(`⚠️ Only ${short.available} in stock for ${(short.selectedReceipt as any)?.title ?? 'an item'}.`);
+            }
+            offlineCashMethodId = String(cash.id);
         }
 
         try {
@@ -156,12 +172,22 @@ export default function OrderFormBusinessLogic({
             const result = await submitOrder({
                 retailerId,
                 userId: String(user?.id ?? ''),
+                offlineCashMethodId,
+                retailerTitle: String((selectedRetailer as any)?.title ?? ''),
             });
 
             if (!result.ok) {
                 setSyncStatus('error');
                 alert(`Wholesale Submission Error\n\n${result.message}`);
                 triggerNotificationToast(`❌ Failed: ${result.message}`);
+                return;
+            }
+
+            if (result.offline) {
+                setSyncStatus('idle');
+                onSubmitFinished?.(retailerId, notes, submittedItems);
+                triggerNotificationToast('📴 Saved offline as a CASH sale — it will sync when you are back online');
+                await clearActiveDraftSession();
                 return;
             }
 
@@ -225,6 +251,9 @@ export default function OrderFormBusinessLogic({
                 loadDeliveryOptions,
                 deliveryOptionsKey,
                 deliveryNotReadyHint,
+
+                /* Connection (offline = CASH sales queued on this device) */
+                isOnline,
 
                 /* Payment on the created order */
                 createdOrder,

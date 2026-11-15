@@ -64,6 +64,10 @@ interface WholesalerReceiptsSyncContextType {
     updateLocalReceipt: (
         receipt: WholesalerReceipt
     ) => Promise<void>;
+    /** Offline sales: take sold packs off the local stock (the server does it on upload). */
+    deductLocalStock: (
+        items: { wholesaler_receipt: string; purchased_quantity: number }[]
+    ) => Promise<void>;
     syncUiState: SyncUiState;
 }
 
@@ -1764,6 +1768,30 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
     ]);
 
     /* ---------------------------------------------------------
+     * Offline sales: deduct sold packs locally until the server's stock arrives
+     * ------------------------------------------------------- */
+    const deductLocalStock = useCallback(
+        async (items: { wholesaler_receipt: string; purchased_quantity: number }[]) => {
+            const sold = new Map<string, number>();
+            for (const i of items ?? []) {
+                const key = String(i?.wholesaler_receipt ?? '');
+                const qty = Number(i?.purchased_quantity) || 0;
+                if (key && qty > 0) sold.set(key, (sold.get(key) ?? 0) + qty);
+            }
+            if (!sold.size) return;
+            const next = receiptsStateRef.current.map((r: any) => {
+                const key = [r.remote_id, r.remote_key, r.id].map((k) => (k == null ? '' : String(k))).find((k) => k && sold.has(k));
+                if (!key) return r;
+                return { ...r, current_unit_quantity: Math.max(0, (Number(r.current_unit_quantity) || 0) - sold.get(key)!) };
+            });
+            receiptsStateRef.current = next;
+            setWholesalerReceipts(next);
+            await commitToStorage(next);
+        },
+        [commitToStorage]
+    );
+
+    /* ---------------------------------------------------------
      * Memoized context value
      * ------------------------------------------------------- */
     const value = useMemo<WholesalerReceiptsSyncContextType>(
@@ -1780,9 +1808,11 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
             wholesalerReceipts,
             addLocalReceipt,
             updateLocalReceipt,
+            deductLocalStock,
             syncUiState,
         }),
         [
+            deductLocalStock,
             isSyncing,
             isManualRefreshing,
             isLiveConnected,

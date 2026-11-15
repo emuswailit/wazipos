@@ -6,6 +6,7 @@ import wholesalersApi, {
 } from '@/api/wholesalersApi';
 import deliveriesApi from '@/api/deliveriesApi';
 import { useStaffDelivery } from '@/components/deliveries/StaffDeliveryPlanner';
+import { queueWholesaleOrder } from '@/services/wholesaleOrderUploader';
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
 import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
@@ -72,7 +73,7 @@ export function useWholesaleOrderForm(
     const { forceManualRefresh } = useRetailerOrdersSync();
 
     /* -------- Wholesaler inventory (scanner lookups) -------- */
-    const { wholesalerReceipts } = useWholesalerReceiptsSync();
+    const { wholesalerReceipts, deductLocalStock } = useWholesalerReceiptsSync();
 
     /* -------- Idempotency key, stable until a successful submit or reset -------- */
     const draftIdRef = useRef<string | null>(null);
@@ -357,7 +358,10 @@ export function useWholesaleOrderForm(
             paymentMethodId?: string;
             mobileMoneyPhone?: string | null;
             userId: string;
-        }): Promise<{ ok: true; orderId: string; reference?: string } | { ok: false; message: string }> => {
+            /** Offline: the CASH payment method id (the order is queued, not sent). */
+            offlineCashMethodId?: string | null;
+            retailerTitle?: string;
+        }): Promise<{ ok: true; orderId: string; reference?: string; offline?: boolean } | { ok: false; message: string }> => {
             if (!draftIdRef.current) draftIdRef.current = newDraftId(opts.userId);
 
             const lines = formRows.filter((r) => r.selectedReceipt);
@@ -397,6 +401,26 @@ export function useWholesaleOrderForm(
                 },
             };
 
+            // Offline: a CASH sale the retailer collects, kept on this device and
+            // uploaded (with its cash payment) as soon as the connection is back.
+            if (opts.offlineCashMethodId) {
+                payload.retailer_order_details.payment_method_id = opts.offlineCashMethodId;
+                payload.retailer_order_details.delivery_method = 'SELF';
+                payload.retailer_order_details.delivery_option = null;
+                payload.retailer_order_details.delivery_agent = null;
+                await queueWholesaleOrder({
+                    draft_id: draftIdRef.current,
+                    payload,
+                    retailer_title: opts.retailerTitle || 'Retailer',
+                    total: gross - discountTotal,
+                    items: order_items.length,
+                    created: new Date().toISOString(),
+                });
+                await deductLocalStock(order_items.map((i) => ({ wholesaler_receipt: i.wholesaler_receipt, purchased_quantity: i.purchased_quantity })));
+                draftIdRef.current = null;
+                return { ok: true, orderId: '', offline: true };
+            }
+
             const res = await wholesalersApi.wholesaleRetailerOrdersStaffAction(payload);
             if (!res.ok) {
                 return { ok: false, message: describeErrors(res.data) || res.problem || 'Network error.' };
@@ -413,7 +437,7 @@ export function useWholesaleOrderForm(
                 reference: res.data.retailer_order.reference_number,
             };
         },
-        [formRows, resolveReceiptId, forceManualRefresh, delivery.method, delivery.option, delivery.agentId]
+        [formRows, resolveReceiptId, forceManualRefresh, delivery.method, delivery.option, delivery.agentId, deductLocalStock]
     );
 
     /* ---------------------------------------------------------

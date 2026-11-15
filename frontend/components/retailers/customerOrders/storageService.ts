@@ -1,5 +1,6 @@
 import { dbInstance, withDb } from '@/databases/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { notifyPendingOrdersChanged } from '@/services/pendingOrdersSignal';
 import { Platform } from 'react-native';
 import { CustomerOrder } from './types';
 
@@ -125,6 +126,7 @@ export const storageService = {
             local.unshift(row);
             await AsyncStorage.setItem(NATIVE_ASYNC_ORDERS_KEY, JSON.stringify(local));
         }
+        notifyPendingOrdersChanged();
     },
 
     /** Write back existing rows (as returned by getAllOrders) in place; never removes rows. */

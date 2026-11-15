@@ -14,6 +14,7 @@
 import retailersApi from '@/api/retailersApi';
 import { storageService } from '@/components/retailers/customerOrders/storageService';
 import { readAllLocal } from '@/services/inventoryLocalStore';
+import { notifyPendingOrdersChanged } from '@/services/pendingOrdersSignal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
@@ -236,5 +237,6 @@ async function doUpload(): Promise<UploadSummary> {
     }
 
     summary.remaining = (await storageService.getPendingOrders()).length;
+    notifyPendingOrdersChanged();
     return summary;
 }
