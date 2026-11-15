@@ -710,6 +710,29 @@ def usersAPIView(request):
         action = request.data["action"]
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
+
+    # ---- becoming a seller: complete profile, then open a shop ----
+    if action in ("GetSellerReadiness", "CompleteSellerProfile", "CreateMyBusiness"):
+        from authentication.utils import seller_onboarding as so
+
+        if action == "GetSellerReadiness":
+            return custom_success_message(0, "Seller readiness", so.seller_readiness(request.user, request), "readiness")
+        if action == "CompleteSellerProfile":
+            errors, note = so.complete_seller_profile(request.data, request.FILES, request.user)
+            if errors:
+                return custom_errors_response(1, "Profile not saved", errors)
+            out = so.seller_readiness(request.user, request)
+            out["consent_note"] = note
+            return custom_success_message(0, "Seller profile saved", out, "readiness")
+        errors, entity = so.create_my_business(request.data, request.user)
+        if errors:
+            return custom_errors_response(1, "Business not created", errors)
+        return custom_success_message(
+            0,
+            "Business created",
+            {"entity": EntitySerializer(entity, context={"request": request}).data, "tokens": request.user.tokens()},
+            "business",
+        )
     if request.data["action"] == "ChangeUserPassword":
         """Get all entities for admin users"""
 
