@@ -40,6 +40,14 @@ export function paymentBadge(o: RetailerOrder): AdminBadge {
         : { label: 'Unpaid', tone: 'warning', icon: 'alert-circle' };
 }
 
+/** delivery_method: "COURIER" = delivery, "SELF" = retailer collects, blank = not chosen yet. */
+export function deliveryBadge(o: RetailerOrder): AdminBadge {
+    const m = String((o as any).delivery_method || '').toUpperCase();
+    if (m === 'COURIER') return { label: 'Delivery', tone: 'primary', icon: 'bicycle-outline' };
+    if (m === 'SELF') return { label: 'Pickup', tone: 'neutral', icon: 'storefront-outline' };
+    return { label: 'Not chosen', tone: 'neutral', icon: 'help-circle-outline' };
+}
+
 const kes = (n: number) => `KES ${formatKES(n)}`;
 
 export const retailerOrdersConfig: AdminListConfig<RetailerOrder> = {
@@ -56,7 +64,7 @@ export const retailerOrdersConfig: AdminListConfig<RetailerOrder> = {
         return `${orderRef(o)} · ${n} item${n === 1 ? '' : 's'}`;
     },
     avatarOf: (o) => ({ label: o.retailer_title || orderRef(o) }),
-    badgesOf: (o) => [statusBadge(o), paymentBadge(o)],
+    badgesOf: (o) => [statusBadge(o), paymentBadge(o), deliveryBadge(o)],
     metaOf: (o) => (o.created ? formatDate(o.created) : null),
     metaIcon: 'calendar-outline',
     metricOf: (o) => ({ value: kes(totalOf(o)), label: isPaid(o) ? 'Paid' : `Due ${kes(balanceOf(o))}`, color: isPaid(o) ? '#10b981' : undefined }),
@@ -66,6 +74,7 @@ export const retailerOrdersConfig: AdminListConfig<RetailerOrder> = {
         { key: 'items', label: 'Items', flex: 0.6, align: 'center', render: (o) => String(orderItemCount(o)) },
         { key: 'status', label: 'Status', flex: 1.2, render: (o) => <AdminBadgePill badge={statusBadge(o)} /> },
         { key: 'payment', label: 'Payment', flex: 1.1, render: (o) => <AdminBadgePill badge={paymentBadge(o)} /> },
+        { key: 'delivery', label: 'Delivery', flex: 1.1, render: (o) => <AdminBadgePill badge={deliveryBadge(o)} /> },
         {
             key: 'balance',
             label: 'Balance',

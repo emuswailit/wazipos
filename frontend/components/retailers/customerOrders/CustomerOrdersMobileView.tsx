@@ -29,6 +29,7 @@ import {
     StatusPill,
     statusTint,
     toBool,
+    deliveryBadge,
     UploadStatus,
     type CustomerOrdersViewProps,
 } from './CustomerOrdersWebView';
@@ -266,6 +267,7 @@ const OrderCard = memo(function OrderCard({
                 <View className="flex-row items-center mt-3.5 pt-3 gap-3" style={{ borderTopWidth: 1, borderTopColor: divider }}>
                     <StatusPill status={order.status} size="sm" />
                     <Meta icon="cube-outline" text={`${itemCount} item${itemCount === 1 ? '' : 's'}`} />
+                    <Meta icon={deliveryBadge(order).icon as any} text={deliveryBadge(order).label} />
                     <Meta icon="calendar-outline" text={formatDate(order.created)} />
                     <View className="flex-1" />
                     <Ionicons name="chevron-forward" size={16} color={tint.fg} />

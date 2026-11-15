@@ -3,6 +3,7 @@
 import { isTrueFlag } from '@/utils/flags';
 import { PaginationBar, type PageSize } from '@/components/common/PaginationBar';
 import type { CustomerOrder } from '@/databases/types';
+import { AdminBadgePill, type AdminBadge } from '@/components/common/listScreen';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -111,6 +112,14 @@ const MONTHS_SHORT = [
 
 export const toBool = (v: any): boolean =>
     isTrueFlag(v); // case-insensitive: the backend sends "true" / "True" strings
+
+/** How the customer gets the goods: DELIVERY / COURIER = delivered, PICKUP (or blank, e.g. counter sales) = collected. */
+export function deliveryBadge(order: CustomerOrder): AdminBadge {
+    const m = String((order as any).delivery_method || '').toUpperCase();
+    if (m === 'COURIER') return { label: 'Courier', tone: 'primary', icon: 'cube-outline' };
+    if (m === 'DELIVERY') return { label: 'Delivery', tone: 'primary', icon: 'bicycle-outline' };
+    return { label: 'Pickup', tone: 'neutral', icon: 'storefront-outline' };
+}
 
 export const formatKES = (
     raw: string | number | null | undefined
@@ -364,6 +373,7 @@ const COLS = {
     method: 1.1,
     status: 1,
     payment: 0.9,
+    delivery: 1,
     amount: 1.2,
     chevron: 0.3,
 } as const;
@@ -535,6 +545,7 @@ export function CustomerOrdersWebView({
                         <HeaderCell flex={COLS.method}>Method</HeaderCell>
                         <HeaderCell flex={COLS.status}>Status</HeaderCell>
                         <HeaderCell flex={COLS.payment}>Payment</HeaderCell>
+                        <HeaderCell flex={COLS.delivery}>Delivery</HeaderCell>
                         <HeaderCell flex={COLS.amount} align="right">Amount</HeaderCell>
                         <View style={{ flex: COLS.chevron }} />
                     </View>
@@ -818,6 +829,11 @@ function Row({
             {/* Payment */}
             <View style={{ flex: COLS.payment, paddingRight: 12 }}>
                 <PaymentPill paid={paid} compact />
+            </View>
+
+            {/* Delivery */}
+            <View style={{ flex: COLS.delivery, paddingRight: 12, alignItems: 'flex-start' }}>
+                <AdminBadgePill badge={deliveryBadge(item)} />
             </View>
 
             {/* Amount */}
