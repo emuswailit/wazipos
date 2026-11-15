@@ -1,32 +1,29 @@
 // components/retailers/retailerInventory/RetailerInventoryList.tsx
+//
+// The shop's stock (retailer receipts), kept on the device and synced with the
+// server (InventorySyncContext): works offline, shows where sync stands, and
+// lists stock as cards on phones / a table on wide screens.
 
-import type { PageSize } from '@/components/common/PaginationBar';
+import { InventorySyncStrip } from '@/components/common/inventory/InventorySyncStrip';
+import { INVENTORY_FILTER_ICONS, INVENTORY_FILTER_LABELS, INVENTORY_FILTERS, formatKES, type InventoryFilter } from '@/components/common/inventory/inventoryHelpers';
+import { buildInventoryConfig } from '@/components/common/inventory/inventoryListConfig';
+import { useInventoryList } from '@/components/common/inventory/useInventoryList';
+import { AdminListView } from '@/components/common/listScreen';
+import PendingSyncBanner from '@/components/common/PendingSyncBanner';
 import { useAuth } from '@/context/AuthContext';
 import { useInventorySync } from '@/context/InventorySyncContext';
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
-import { useWindowDimensions } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useWindowDimensions, View } from 'react-native';
 
 import { InventoryDetailsModal } from './InventoryDetailsModal';
 import RetailerInventoryAddModal from './RetailerInventoryAddModal';
-import { RetailerInventoryMobileView } from './RetailerInventoryMobileView';
-import {
-    INVENTORY_FILTERS,
-    isExpired,
-    isExpiringSoon,
-    isLowStock,
-    matchesInventoryFilter,
-    RetailerInventoryWebView,
-    type InventoryCounts,
-    type InventoryFilter,
-} from './RetailerInventoryWebView';
 
-const LARGE_SCREEN_MIN_WIDTH = 768;
-const DEFAULT_PAGE_SIZE: PageSize = 25;
+const config = buildInventoryConfig({
+    title: 'Inventory',
+    addLabel: 'Receive stock',
+    emptyMessage: 'Stock you receive (or receive from wholesaler orders) shows here.',
+    showBuyingPrice: true,
+});
 
 export default function RetailerInventoryList() {
     const {
@@ -34,261 +31,99 @@ export default function RetailerInventoryList() {
         forceManualRefresh,
         isLiveConnected,
         isManualRefreshing,
+        isPushSyncing,
+        isSyncing,
+        isOnline,
+        pendingCount,
         lastSyncedTime,
+        lastSyncError,
     } = useInventorySync();
-
     const { isDarkMode } = useAuth();
     const { width } = useWindowDimensions();
-    const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
+    const isLarge = width >= 900;
 
-    const [activeFilter, setActiveFilter] =
-        useState<InventoryFilter>('ALL');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const inv = useInventoryList<any>(retailerReceipts);
+    const [details, setDetails] = useState<any | null>(null);
+    const [editing, setEditing] = useState<any | null>(null);
+    const [formOpen, setFormOpen] = useState(false);
 
-    const [detailsTarget, setDetailsTarget] =
-        useState<any | null>(null);
-    const [editTarget, setEditTarget] = useState<any | null>(
-        null
-    );
-
-    /* -------- Pagination -------- */
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] =
-        useState<PageSize>(DEFAULT_PAGE_SIZE);
-
-    /* -------- Filter -------- */
-    const filteredReceipts = useMemo(() => {
-        if (!Array.isArray(retailerReceipts)) return [];
-        const q = searchQuery.trim().toLowerCase();
-
-        return retailerReceipts.filter((receipt: any) => {
-            if (!receipt) return false;
-
-            if (!matchesInventoryFilter(receipt, activeFilter)) return false;
-
-            if (q) {
-                const product = String(
-                    receipt.title ??
-                    receipt.product_title ??
-                    receipt.long_title ??
-                    receipt.product_name ??
-                    ''
-                ).toLowerCase();
-                const batch = String(
-                    receipt.batch ?? receipt.batch_no ?? ''
-                ).toLowerCase();
-                const supplier = String(
-                    receipt.received_from_title ??
-                    receipt.supplier_name ??
-                    receipt.received_from ??
-                    ''
-                ).toLowerCase();
-                const bar = String(
-                    receipt.bar_code ?? ''
-                ).toLowerCase();
-
-                if (
-                    !product.includes(q) &&
-                    !batch.includes(q) &&
-                    !supplier.includes(q) &&
-                    !bar.includes(q)
-                ) {
-                    return false;
-                }
-            }
-            return true;
-        });
-    }, [retailerReceipts, activeFilter, searchQuery]);
-
-    /* -------- Counts -------- */
-    const counts: InventoryCounts = useMemo(() => {
-        const list = Array.isArray(retailerReceipts)
-            ? retailerReceipts.filter(Boolean)
-            : [];
-        const byFilter = Object.fromEntries(
-            INVENTORY_FILTERS.map((f) => [
-                f,
-                list.filter((i: any) => matchesInventoryFilter(i, f)).length,
-            ])
-        ) as Record<InventoryFilter, number>;
-        return {
-            total: list.length,
-            active: list.filter((i: any) => !isExpired(i)).length,
-            expired: byFilter.EXPIRED,
-            lowStock: list.filter((i: any) => isLowStock(i)).length,
-            expiring: list.filter((i: any) => isExpiringSoon(i)).length,
-            visible: filteredReceipts.length,
-            byFilter,
-        };
-    }, [retailerReceipts, filteredReceipts.length]);
-
-    /* -------- Total value -------- */
-    const totalValue = useMemo(() => {
-        return filteredReceipts.reduce(
-            (sum: number, receipt: any) => {
-                if (!receipt) return sum;
-                const qty = Number(
-                    receipt.current_unit_quantity ?? 0
-                );
-                if (!Number.isFinite(qty) || qty <= 0)
-                    return sum;
-
-                const price = parseFloat(
-                    receipt.final_unit_selling_price ??
-                    receipt.unit_selling_price ??
-                    '0'
-                );
-                if (!Number.isFinite(price) || price < 0)
-                    return sum;
-                return sum + qty * price;
-            },
-            0
-        );
-    }, [filteredReceipts]);
-
-    /* -------- Pagination slice -------- */
-    const totalItems = filteredReceipts.length;
-    const totalPages = Math.max(
-        1,
-        Math.ceil(totalItems / pageSize)
-    );
-
-    useEffect(() => {
-        setPage(1);
-    }, [activeFilter, searchQuery, pageSize]);
-
-    useEffect(() => {
-        if (page > totalPages) setPage(totalPages);
-    }, [totalPages, page]);
-
-    const pageStart = (page - 1) * pageSize;
-    const pageEnd = Math.min(pageStart + pageSize, totalItems);
-
-    const pagedReceipts = useMemo(
-        () => filteredReceipts.slice(pageStart, pageEnd),
-        [filteredReceipts, pageStart, pageEnd]
-    );
-
-    /* -------- Pagination handlers -------- */
-    const goPrev = useCallback(
-        () => setPage((p) => Math.max(1, p - 1)),
-        []
-    );
-
-    const goNext = useCallback(
-        () => setPage((p) => Math.min(totalPages, p + 1)),
-        [totalPages]
-    );
-
-    const changePageSize = useCallback((size: PageSize) => {
-        setPageSize(size);
-        setPage(1);
+    const refresh = useCallback(() => void forceManualRefresh(), [forceManualRefresh]);
+    const openEdit = useCallback((item: any | null) => {
+        setDetails(null);
+        setEditing(item);
+        setFormOpen(true);
     }, []);
 
-    /* -------- Other callbacks -------- */
-    const refreshing = isManualRefreshing;
-
-    const handleRefresh = useCallback(() => {
-        void forceManualRefresh();
-    }, [forceManualRefresh]);
-
-    const handleView = useCallback((item: any) => {
-        setDetailsTarget(item);
-    }, []);
-
-    const handleCloseDetails = useCallback(() => {
-        setDetailsTarget(null);
-    }, []);
-
-    const handleEditRow = useCallback((item: any) => {
-        setDetailsTarget(null);
-        setEditTarget(item);
-        setIsAddModalOpen(true);
-    }, []);
-
-    const handleEditFromDetails = useCallback(
-        (item: any) => {
-            setDetailsTarget(null);
-            setEditTarget(item);
-            setIsAddModalOpen(true);
-        },
-        []
+    const header = useMemo(
+        () => (
+            <View style={{ gap: 8 }}>
+                <InventorySyncStrip
+                    online={isOnline}
+                    live={isLiveConnected}
+                    syncing={isManualRefreshing || isPushSyncing}
+                    pending={pendingCount}
+                    error={lastSyncError}
+                    lastSynced={lastSyncedTime}
+                    onSync={refresh}
+                />
+                <PendingSyncBanner kind="customer" />
+            </View>
+        ),
+        [isOnline, isLiveConnected, isManualRefreshing, isPushSyncing, pendingCount, lastSyncError, lastSyncedTime, refresh],
     );
-
-    const handleOpenAdd = useCallback(() => {
-        setEditTarget(null);
-        setIsAddModalOpen(true);
-    }, []);
-
-    const handleCloseAdd = useCallback(() => {
-        setIsAddModalOpen(false);
-        setEditTarget(null);
-    }, []);
-
-    const handleAddSuccess = useCallback(() => {
-        void forceManualRefresh();
-    }, [forceManualRefresh]);
-
-    /* -------- Shared props (No Pagination) -------- */
-    const baseProps = {
-        query: searchQuery,
-        setQuery: setSearchQuery,
-        activeFilter,
-        setActiveFilter,
-        onOpenCreate: handleOpenAdd,
-        onRefresh: handleRefresh,
-        refreshing,
-        isLiveConnected,
-        lastSyncedTime,
-        counts,
-        totalValue,
-        onView: handleView,
-        onEdit: handleEditRow,
-    };
-
-    /* -------- Web Props (With Pagination) -------- */
-    const webProps = {
-        ...baseProps,
-        items: pagedReceipts,
-        page,
-        pageSize,
-        totalItems,
-        totalPages,
-        pageStart,
-        pageEnd,
-        onPrev: goPrev,
-        onNext: goNext,
-        onPageSizeChange: changePageSize,
-    };
-
-    /* -------- Mobile Props (All Items) -------- */
-    const mobileProps = {
-        ...baseProps,
-        items: filteredReceipts, // 🌟 Pass the FULL array to mobile
-    };
 
     return (
         <>
-            {isLarge ? (
-                <RetailerInventoryWebView {...webProps} />
-            ) : (
-                <RetailerInventoryMobileView {...mobileProps} />
-            )}
-
-            <InventoryDetailsModal
-                item={detailsTarget}
-                onClose={handleCloseDetails}
-                onEdit={handleEditFromDetails}
+            <AdminListView<any, InventoryFilter>
+                variant={isLarge ? 'web' : 'mobile'}
+                config={config}
+                header={header}
+                query={inv.query}
+                setQuery={inv.setQuery}
+                onRefresh={refresh}
+                refreshing={isManualRefreshing || isSyncing}
+                sourceLabel={isLiveConnected ? 'Live sync' : isOnline ? 'Connecting…' : 'Offline · on this device'}
+                sourceTone={isLiveConnected ? 'server' : 'cache'}
+                lastSyncedTime={lastSyncedTime}
+                onOpenCreate={() => openEdit(null)}
+                onPressItem={setDetails}
+                onEditItem={openEdit}
+                rowActions={(r) => [
+                    { icon: 'eye-outline', label: 'View', onPress: () => setDetails(r) },
+                    { icon: 'create-outline', label: 'Edit', onPress: () => openEdit(r), tone: 'primary' },
+                ]}
+                stats={[
+                    { label: 'Items', value: inv.total.toLocaleString() },
+                    { label: 'Stock value', value: `KES ${formatKES(inv.stockWorth)}` },
+                    { label: 'Low', value: inv.counts.LOW.toLocaleString(), color: inv.counts.LOW ? '#f59e0b' : undefined },
+                    { label: 'Expired', value: inv.counts.EXPIRED.toLocaleString(), color: inv.counts.EXPIRED ? '#f43f5e' : undefined },
+                ]}
+                filters={{
+                    options: INVENTORY_FILTERS.filter((f) => f !== 'UNSYNCED' || inv.counts.UNSYNCED > 0).map((f) => ({
+                        key: f,
+                        label: INVENTORY_FILTER_LABELS[f],
+                        icon: INVENTORY_FILTER_ICONS[f],
+                        count: inv.counts[f],
+                    })),
+                    value: inv.filter,
+                    onChange: inv.setFilter,
+                    allKey: 'ALL',
+                }}
+                {...inv.paging}
             />
 
+            <InventoryDetailsModal item={details} onClose={() => setDetails(null)} onEdit={openEdit} />
+
             <RetailerInventoryAddModal
-                isOpen={isAddModalOpen}
-                onClose={handleCloseAdd}
-                onSuccess={handleAddSuccess}
+                isOpen={formOpen}
+                onClose={() => {
+                    setFormOpen(false);
+                    setEditing(null);
+                }}
+                onSuccess={refresh}
                 isDarkMode={isDarkMode}
                 theme={undefined as any}
-                inventoryToEdit={editTarget}
+                inventoryToEdit={editing}
             />
         </>
     );

@@ -9,6 +9,8 @@ import { useApi } from '@/hooks/useApi';
 import {
     backfillWholesalerDraftIds
 } from '@/services/wholesalerInventoryMigration';
+import { onPendingOrdersChanged } from '@/services/pendingOrdersSignal';
+import { pendingWholesaleSales, withPendingSales } from '@/services/pendingStockOverlay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
     createContext,
@@ -19,7 +21,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 /* =========================================================
  * Types
@@ -34,6 +36,8 @@ interface SyncUiState {
     showPendingChip: boolean;
     showSyncing: boolean;
     lastSyncedTime: string;
+    /** Why the last push failed (null when fine). */
+    lastError: string | null;
     syncStatus:
     | 'idle'
     | 'pushing'
@@ -140,10 +144,9 @@ const isSyncedFlag = (
 const needsRemotePush = (
     record: WholesalerReceipt
 ): boolean => {
-    if (!hasDraftId(record)) return false;
     if (isSyncedFlag(record)) return false;
-    if (hasRemoteId(record)) return false;
-    return true;
+    // New receipts are created by draft_id; edited server receipts are updated by id.
+    return hasDraftId(record) || hasRemoteId(record);
 };
 
 /* =========================================================
@@ -217,19 +220,6 @@ function resolveWireProductTitle(item: any): string {
     return '';
 }
 
-function notify(title: string, message: string) {
-    if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') {
-            window.alert(`${title}\n\n${message}`);
-        } else {
-            console.log(`[NOTIFY] ${title} — ${message}`);
-        }
-        return;
-    }
-    Alert.alert(title, message, [{ text: 'OK' }], {
-        cancelable: true,
-    });
-}
 
 function formatSyncTime() {
     return new Date().toLocaleString([], {
@@ -681,6 +671,7 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
     const [isLiveConnected, setIsLiveConnected] = useState(false);
     const [isPushSyncing, setIsPushSyncing] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [lastSyncError, setLastSyncError] = useState<string | null>(null);
     const [syncStatus, setSyncStatus] = useState<
         'idle' | 'pushing' | 'live' | 'offline' | 'error'
     >('idle');
@@ -1041,35 +1032,15 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                     record.draft_id ||
                     buildDraftId(currentUserId);
 
+                const isUpdate = hasRemoteId(record);
+                const details: any = buildReceiptDetails(record, currentUserId);
+                if (isUpdate) details.wholesaler_receipt = String(record.remote_id);
                 const body = {
-                    action: 'CreateWholesalerReceipt' as const,
-                    wholesaler_receipt_details:
-                        buildReceiptDetails(
-                            record,
-                            currentUserId
-                        ),
+                    action: isUpdate ? 'UpdateWholesalerReceipt' : 'CreateWholesalerReceipt',
+                    wholesaler_receipt_details: details,
                 };
 
-                console.log(
-                    '================================================'
-                );
-                console.log(
-                    '[WholesalerReceiptsSync] → REQUEST',
-                    {
-                        draft_id: draftId,
-                        title: record.title,
-                    }
-                );
-                console.log(
-                    '[WholesalerReceiptsSync] → REQUEST BODY',
-                    body
-                );
-                console.log(
-                    '================================================'
-                );
-
                 let result: any = null;
-                const startedAt = Date.now();
                 try {
                     result =
                         await getReceiptsWriteApi.request(
@@ -1086,33 +1057,6 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                         },
                     };
                 }
-                const elapsed = Date.now() - startedAt;
-
-                console.log(
-                    '================================================'
-                );
-                console.log(
-                    '[WholesalerReceiptsSync] ← RESPONSE',
-                    result
-                );
-                console.log(
-                    '[WholesalerReceiptsSync] ← META',
-                    {
-                        draft_id: draftId,
-                        elapsed_ms: elapsed,
-                        status: result?.status,
-                        ok: result?.ok,
-                        problem: result?.problem,
-                        response_code:
-                            result?.data?.response_code,
-                        response_message:
-                            result?.data?.response_message,
-                    }
-                );
-                console.log(
-                    '================================================'
-                );
-
                 const isOk =
                     result?.ok &&
                     String(
@@ -1154,7 +1098,9 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                     }
 
                     const idx = all.findIndex(
-                        (r) => r.draft_id === draftId
+                        (r) =>
+                            (isUpdate && r.remote_id === record.remote_id) ||
+                            r.draft_id === draftId
                     );
 
                     if (idx >= 0) {
@@ -1167,6 +1113,8 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
 
                         all[idx] = {
                             ...all[idx],
+                            ...(createdReceipt ? normalizeReceipt(createdReceipt, nowIso) : {}),
+                            id: all[idx].id,
                             remote_id: finalRemoteId,
                             draft_id: draftId,
                             synced: true,
@@ -1175,15 +1123,6 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                             updated: nowIso,
                         };
 
-                        console.log(
-                            '[WholesalerReceiptsSync] local row updated',
-                            {
-                                draft_id: draftId,
-                                remote_id: finalRemoteId,
-                                synced: true,
-                                title: all[idx].title,
-                            }
-                        );
                     } else {
                         warn(
                             'pushPending — no local row for draft_id',
@@ -1195,6 +1134,7 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                     madeAChange = true;
 
                     const failureMessage =
+                        (Array.isArray(result?.data?.errors) && result.data.errors.join(' · ')) ||
                         result?.data?.response_message ||
                         result?.data?.message ||
                         result?.problem ||
@@ -1211,7 +1151,9 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                     }
 
                     const idx = all.findIndex(
-                        (r) => r.draft_id === draftId
+                        (r) =>
+                            (isUpdate && r.remote_id === record.remote_id) ||
+                            r.draft_id === draftId
                     );
 
                     if (idx >= 0) {
@@ -1237,52 +1179,18 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                 setLastSyncedTime(formatSyncTime());
             }
 
-            const successMessage =
-                firstSuccess?.response_message;
-            const failureMessageAlert =
-                firstFailure?.response_message;
-
-            if (succeeded > 0 && failed === 0) {
-                notify(
-                    'Sync Success',
-                    successMessage ||
-                    `${succeeded} item${succeeded === 1 ? '' : 's'
-                    } synced to server.`
+            if (failed > 0) {
+                setLastSyncError(
+                    firstFailure?.response_message ||
+                    `${failed} receipt${failed === 1 ? '' : 's'} couldn't be saved to the server${succeeded ? ` (${succeeded} saved)` : ''}.`
                 );
-            } else if (succeeded > 0 && failed > 0) {
-                notify(
-                    'Sync Partial',
-                    `${succeeded} succeeded · ${failed} failed.\n\n` +
-                    (failureMessageAlert
-                        ? `Last error: ${failureMessageAlert}\n\n`
-                        : '') +
-                    JSON.stringify(
-                        firstFailure?.response?.data ??
-                        firstFailure?.response,
-                        null,
-                        2
-                    ).slice(0, 800)
-                );
-            } else if (failed > 0) {
-                notify(
-                    'Sync Failed',
-                    failureMessageAlert ||
-                    `${failed} item${failed === 1 ? '' : 's'
-                    } could not be synced.\n\nServer response:\n${JSON.stringify(
-                        firstFailure?.response?.data ??
-                        firstFailure?.response,
-                        null,
-                        2
-                    ).slice(0, 800)}`
-                );
+            } else if (succeeded > 0) {
+                setLastSyncError(null);
+                log(`pushPending — ${succeeded} synced`, firstSuccess?.response_message);
             }
         } catch (err: any) {
             warn('pushPending outer error:', err);
-            notify(
-                'Sync Error',
-                err?.message ||
-                'Unexpected error during sync.'
-            );
+            setLastSyncError(err?.message || 'Unexpected error during sync.');
         } finally {
             pushGuardRef.current = false;
             setIsPushSyncing(false);
@@ -1408,32 +1316,12 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                             return;
                         }
 
-                        // Dev-only: print the discount keys on the
-                        // first receipt so we can verify the wire
-                        // shape matches what normalizeReceipt expects.
-                        if (__DEV__ && incoming[0]) {
-                            const s = incoming[0];
-                            console.log(
-                                '[WS] sample receipt discount keys:',
-                                {
-                                    price_discount:
-                                        s.price_discount,
-                                    quantity_discounts:
-                                        s.quantity_discounts,
-                                    quantity_discount:
-                                        s.quantity_discount,
-                                    wholesaler_price_discount_receipt:
-                                        s.wholesaler_price_discount_receipt,
-                                    wholesaler_quantity_discount_receipt:
-                                        s.wholesaler_quantity_discount_receipt,
-                                }
-                            );
-                        }
-
                         setIsSyncing(true);
 
                         const nowStr =
                             new Date().toISOString();
+                        // Sales still queued on this device aren't on the server yet.
+                        const sold = await pendingWholesaleSales();
 
                         const currentMap = new Map<
                             string,
@@ -1467,11 +1355,10 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                                 return;
                             }
 
-                            const normalized =
-                                normalizeReceipt(
-                                    raw,
-                                    nowStr
-                                );
+                            const normalized = withPendingSales(
+                                normalizeReceipt(raw, nowStr),
+                                sold
+                            );
 
                             normalized.id = existing?.id;
                             normalized.draft_id =
@@ -1653,10 +1540,15 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
     /* ---------------------------------------------------------
      * Online / offline transitions
      * ------------------------------------------------------- */
+    const seenOnlineRef = useRef<boolean | null>(null);
     useEffect(() => {
         if (!token) return;
+        const previous = seenOnlineRef.current;
+        seenOnlineRef.current = isOnline;
+        if (previous === null || previous === isOnline) return; // bootstrap handled the first run
 
         if (isOnline) {
+            reconnectAttemptRef.current = 0;
             (async () => {
                 await actionsRef.current.pushPending();
                 actionsRef.current.establishLiveWebSocketSync(
@@ -1727,6 +1619,34 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
     }, [token]);
 
     /* ---------------------------------------------------------
+     * Offline orders queued / uploaded -> stock changed
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!token) return;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const off = onPendingOrdersChanged(() => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                if (!isOnlineRef.current) return;
+                const ws = wsRef.current;
+                if (ws && ws.readyState === 1) {
+                    try {
+                        ws.send(JSON.stringify({ action: WS_SNAPSHOT_ACTION }));
+                        return;
+                    } catch {
+                        /* reconnect below */
+                    }
+                }
+                actionsRef.current.establishLiveWebSocketSync(token);
+            }, 1500);
+        });
+        return () => {
+            off();
+            if (timer) clearTimeout(timer);
+        };
+    }, [token]);
+
+    /* ---------------------------------------------------------
      * Derived — pending count + sync UI state
      * ------------------------------------------------------- */
     const pendingCount = useMemo(
@@ -1755,9 +1675,11 @@ export const WholesalerReceiptsSyncProvider: React.FC<{
                 !offline && hasPending && !syncing,
             showSyncing: syncing,
             lastSyncedTime,
+            lastError: lastSyncError,
             syncStatus,
         };
     }, [
+        lastSyncError,
         isSyncing,
         isPushSyncing,
         isManualRefreshing,

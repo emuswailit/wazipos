@@ -10,6 +10,8 @@ import {
     backfillDraftIds,
     buildDraftId,
 } from '@/services/inventoryMigration';
+import { onPendingOrdersChanged } from '@/services/pendingOrdersSignal';
+import { pendingRetailSales, withPendingSales } from '@/services/pendingStockOverlay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
     createContext,
@@ -20,7 +22,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 /* =========================================================
  * Types
@@ -50,6 +52,8 @@ interface InventorySyncContextType {
         items: { retailer_receipt: string; purchased_quantity: number }[]
     ) => Promise<void>;
     lastSyncedTime: string;
+    /** Why the last push of local stock changes failed (null when fine). */
+    lastSyncError: string | null;
     retailerReceipts: RetailerReceipt[];
 }
 
@@ -103,20 +107,6 @@ function isServerAssignedId(raw: any): boolean {
     if (s.startsWith('local-')) return false;
     if (s.startsWith('temp-')) return false;
     return true;
-}
-
-function notify(title: string, message: string) {
-    if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') {
-            window.alert(`${title}\n\n${message}`);
-        } else {
-            console.log(`[NOTIFY] ${title} — ${message}`);
-        }
-        return;
-    }
-    Alert.alert(title, message, [{ text: 'OK' }], {
-        cancelable: true,
-    });
 }
 
 /* =========================================================
@@ -457,6 +447,7 @@ export const InventorySyncProvider: React.FC<{
         useState(false);
     const [isLiveConnected, setIsLiveConnected] = useState(false);
     const [isPushSyncing, setIsPushSyncing] = useState(false);
+    const [lastSyncError, setLastSyncError] = useState<string | null>(null);
 
     const getInventoryReadApi = useApi(
         retailersApi.retailerReceiptsAction
@@ -781,8 +772,10 @@ export const InventorySyncProvider: React.FC<{
 
                 if (res?.ok && Array.isArray(data)) {
                     const nowStr = new Date().toISOString();
+                    // Sales still queued on this device aren't on the server yet.
+                    const sold = await pendingRetailSales();
                     const normalized = data.map((item: any) =>
-                        normalizeItem(item, nowStr)
+                        withPendingSales(normalizeItem(item, nowStr), sold)
                     );
 
                     const existing = receiptsStateRef.current;
@@ -979,7 +972,12 @@ export const InventorySyncProvider: React.FC<{
                         (record as any).draft_id
                 );
 
-                if (res?.ok) {
+                const accepted =
+                    res?.ok &&
+                    String(res?.data?.response_code ?? '0') === '0' &&
+                    !!res?.data?.retailer_receipt;
+
+                if (accepted) {
                     succeeded++;
                     madeAChange = true;
 
@@ -989,6 +987,8 @@ export const InventorySyncProvider: React.FC<{
                     if (idx >= 0) {
                         all[idx] = {
                             ...all[idx],
+                            ...normalizeItem(serverRecord, new Date().toISOString()),
+                            id: (all[idx] as any).id,
                             synced: true,
                             sync_error: null,
                             remote_id: String(
@@ -1008,6 +1008,8 @@ export const InventorySyncProvider: React.FC<{
                         all[idx] = {
                             ...all[idx],
                             sync_error:
+                                (Array.isArray(res?.data?.errors) && res.data.errors.join(' · ')) ||
+                                res?.data?.response_message ||
                                 res?.data?.message ||
                                 res?.problem ||
                                 'Push failed',
@@ -1027,23 +1029,13 @@ export const InventorySyncProvider: React.FC<{
                 );
             }
 
-            if (succeeded > 0 && failed === 0) {
-                notify(
-                    'Sync Success',
-                    `${succeeded} item${succeeded === 1 ? '' : 's'
-                    } synced to server.`
+            if (failed > 0) {
+                setLastSyncError(
+                    `${failed} stock change${failed === 1 ? '' : 's'} couldn't be saved to the server${succeeded ? ` (${succeeded} saved)` : ''}.`
                 );
-            } else if (succeeded > 0 && failed > 0) {
-                notify(
-                    'Sync Partial',
-                    `${succeeded} succeeded · ${failed} failed.`
-                );
-            } else if (failed > 0) {
-                notify(
-                    'Sync Failed',
-                    `${failed} item${failed === 1 ? '' : 's'
-                    } could not be synced.`
-                );
+            } else if (succeeded > 0) {
+                setLastSyncError(null);
+                log(`pushPending — ${succeeded} synced`);
             }
         } catch (err: any) {
             warn('pushPending outer error:', err);
@@ -1107,6 +1099,7 @@ export const InventorySyncProvider: React.FC<{
 
                         const nowStr =
                             new Date().toISOString();
+                        const sold = await pendingRetailSales();
                         const currentMap = new Map<
                             string,
                             RetailerReceipt
@@ -1167,9 +1160,9 @@ export const InventorySyncProvider: React.FC<{
                                 }
                             }
 
-                            const normalized = normalizeItem(
-                                raw,
-                                nowStr
+                            const normalized = withPendingSales(
+                                normalizeItem(raw, nowStr),
+                                sold
                             );
                             normalized.id = existing?.id;
 
@@ -1335,8 +1328,12 @@ export const InventorySyncProvider: React.FC<{
     /* ---------------------------------------------------------
      * Online / offline transitions
      * ------------------------------------------------------- */
+    const seenOnlineRef = useRef<boolean | null>(null);
     useEffect(() => {
         if (!token) return;
+        const previous = seenOnlineRef.current;
+        seenOnlineRef.current = isOnline;
+        if (previous === null || previous === isOnline) return; // bootstrap handled the first run
 
         if (isOnline) {
             reconnectAttemptRef.current = 0;
@@ -1352,6 +1349,24 @@ export const InventorySyncProvider: React.FC<{
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOnline, token]);
+
+    /* ---------------------------------------------------------
+     * Offline orders queued / uploaded -> stock changed
+     * ------------------------------------------------------- */
+    useEffect(() => {
+        if (!token) return;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const off = onPendingOrdersChanged(() => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                if (isOnlineRef.current) void actionsRef.current.runRemoteInventorySynchronizer();
+            }, 1500);
+        });
+        return () => {
+            off();
+            if (timer) clearTimeout(timer);
+        };
+    }, [token]);
 
     /* ---------------------------------------------------------
      * Memoized value
@@ -1379,6 +1394,7 @@ export const InventorySyncProvider: React.FC<{
             applyServerReceipt,
             deductLocalInventory,
             lastSyncedTime,
+            lastSyncError,
             retailerReceipts,
         }),
         [
@@ -1395,6 +1411,7 @@ export const InventorySyncProvider: React.FC<{
             applyServerReceipt,
             deductLocalInventory,
             lastSyncedTime,
+            lastSyncError,
             retailerReceipts,
         ]
     );

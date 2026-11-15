@@ -1,230 +1,144 @@
 // components/wholesalers/inventory/WholesalerReceiptsList.tsx
+//
+// The wholesaler's stock (receipts), kept on the device and synced with the
+// server (WholesalerReceiptsSyncContext): receive / edit stock offline, see
+// where sync stands, cards on phones / a table on wide screens.
 
+import { InventorySyncStrip } from '@/components/common/inventory/InventorySyncStrip';
+import { INVENTORY_FILTER_ICONS, INVENTORY_FILTER_LABELS, INVENTORY_FILTERS, formatKES, type InventoryFilter } from '@/components/common/inventory/inventoryHelpers';
+import { buildInventoryConfig } from '@/components/common/inventory/inventoryListConfig';
+import { useInventoryList } from '@/components/common/inventory/useInventoryList';
+import { AdminListView } from '@/components/common/listScreen';
+import PendingSyncBanner from '@/components/common/PendingSyncBanner';
+import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { useWholesalerReceiptsSync } from '@/context/WholesalerReceiptsSyncContext';
-import { WholesalerReceipt } from '@/databases/types';
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
-import { useWindowDimensions } from 'react-native';
+import type { WholesalerReceipt } from '@/databases/types';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useWindowDimensions, View } from 'react-native';
 
 import { WholesalerReceiptDetailsModal } from './WholesalerReceiptDetailsModal';
-import { WholesalerReceiptsMobileView } from './WholesalerReceiptsMobileView';
-import { WholesalerReceiptsWebView } from './WholesalerReceiptsWebView';
+import { WholesalerReceiptEditModal } from './WholesalerReceiptEditModal';
 
-/* =========================================================
- * Constants
- * ======================================================= */
-
-export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
-
-const EXPIRY_FILTERS = [
-    { value: 'FRESH', label: 'Fresh' },
-    { value: 'EXPIRING', label: 'Expiring' },
-    { value: 'EXPIRING_SOON', label: 'Expiring soon' },
-    { value: 'EXPIRED', label: 'Expired' },
-    { value: 'UNKNOWN', label: 'No expiry' },
-] as const;
-
-/* =========================================================
- * Props
- * ======================================================= */
+const config = buildInventoryConfig({
+    title: 'Inventory',
+    addLabel: 'Receive stock',
+    emptyMessage: 'Stock you receive shows here — it works offline and syncs when you are back online.',
+    showBuyingPrice: true,
+});
 
 interface Props {
     onReceiptPress?: (receipt: WholesalerReceipt) => void;
     emptyComponent?: React.ReactElement | null;
 }
 
-/* =========================================================
- * Component
- * ======================================================= */
-
-export default function WholesalerReceiptsList({
-    onReceiptPress,
-    emptyComponent,
-}: Props) {
+export default function WholesalerReceiptsList({ onReceiptPress, emptyComponent }: Props) {
     const { width } = useWindowDimensions();
     const isLarge = width >= 900;
-
+    const { isOnline } = useNetworkStatus();
     const {
-        wholesalerReceipts: items,
+        wholesalerReceipts,
         isSyncing,
         isManualRefreshing,
+        isPushSyncing,
         isLiveConnected,
         pendingCount,
-        syncStatus,
-        lastSyncedTime,
+        syncUiState,
         forceManualRefresh,
+        pushPending,
     } = useWholesalerReceiptsSync();
 
-    /* ---------------- UI state ---------------- */
-    const [query, setQuery] = useState('');
-    const [expiryFilter, setExpiryFilter] = useState<
-        string | null
-    >(null);
-    const [inStockOnly, setInStockOnly] = useState(false);
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState<PageSize>(10);
+    const inv = useInventoryList<WholesalerReceipt>(wholesalerReceipts);
+    const [details, setDetails] = useState<WholesalerReceipt | null>(null);
+    const [editing, setEditing] = useState<WholesalerReceipt | null>(null);
+    const [formOpen, setFormOpen] = useState(false);
 
-    const [detailsTarget, setDetailsTarget] =
-        useState<WholesalerReceipt | null>(null);
-
-    /* ---------------- Filtering ---------------- */
-    const filtered = useMemo(() => {
-        let base = items;
-
-        if (expiryFilter) {
-            base = base.filter(
-                (r) => r.expiry_status === expiryFilter
-            );
-        }
-
-        if (inStockOnly) {
-            base = base.filter(
-                (r) => r.current_unit_quantity > 0
-            );
-        }
-
-        const q = query.trim().toLowerCase();
-        if (!q) return base;
-
-        return base.filter((r) => {
-            if (r.title?.toLowerCase().includes(q)) return true;
-            if (r.product_title?.toLowerCase().includes(q))
-                return true;
-            if (r.bar_code?.toLowerCase().includes(q))
-                return true;
-            if (r.batch?.toLowerCase().includes(q)) return true;
-            if (
-                r.received_from_title?.toLowerCase().includes(q)
-            )
-                return true;
-            return false;
-        });
-    }, [items, query, expiryFilter, inStockOnly]);
-
-    /* ---------------- Pagination ---------------- */
-    const totalItems = filtered.length;
-    const totalPages = Math.max(
-        1,
-        Math.ceil(totalItems / pageSize)
-    );
-
-    useEffect(() => {
-        setPage(1);
-    }, [query, expiryFilter, inStockOnly, pageSize]);
-
-    useEffect(() => {
-        if (page > totalPages) setPage(totalPages);
-    }, [page, totalPages]);
-
-    const pageStart = (page - 1) * pageSize;
-    const pageEnd = Math.min(
-        pageStart + pageSize,
-        totalItems
-    );
-
-    const paginated = useMemo(
-        () => filtered.slice(pageStart, pageEnd),
-        [filtered, pageStart, pageEnd]
-    );
-
-    /* ---------------- Handlers ---------------- */
-    const handleRefresh = useCallback(() => {
-        void forceManualRefresh();
-    }, [forceManualRefresh]);
-
+    const refresh = useCallback(() => void forceManualRefresh(), [forceManualRefresh]);
     const openDetails = useCallback(
-        (receipt: WholesalerReceipt) => {
-            setDetailsTarget(receipt);
-            onReceiptPress?.(receipt);
+        (r: WholesalerReceipt) => {
+            setDetails(r);
+            onReceiptPress?.(r);
         },
-        [onReceiptPress]
+        [onReceiptPress],
     );
-
-    const closeDetails = useCallback(
-        () => setDetailsTarget(null),
-        []
-    );
-
-    /* ---------------- Pagination handlers ---------------- */
-    const goPrev = useCallback(
-        () => setPage((p) => Math.max(1, p - 1)),
-        []
-    );
-    const goNext = useCallback(
-        () => setPage((p) => Math.min(totalPages, p + 1)),
-        [totalPages]
-    );
-    const changePageSize = useCallback((size: PageSize) => {
-        setPageSize(size);
-        setPage(1);
+    const openEdit = useCallback((r: WholesalerReceipt | null) => {
+        setDetails(null);
+        setEditing(r);
+        setFormOpen(true);
     }, []);
 
-    /* ---------------- Shared props ---------------- */
-    const refreshing = isSyncing || isManualRefreshing;
+    const header = useMemo(
+        () => (
+            <View style={{ gap: 8 }}>
+                <InventorySyncStrip
+                    online={isOnline}
+                    live={isLiveConnected}
+                    syncing={isManualRefreshing || isPushSyncing}
+                    pending={pendingCount}
+                    error={syncUiState.lastError}
+                    lastSynced={syncUiState.lastSyncedTime}
+                    onSync={refresh}
+                />
+                <PendingSyncBanner kind="wholesale" />
+            </View>
+        ),
+        [isOnline, isLiveConnected, isManualRefreshing, isPushSyncing, pendingCount, syncUiState.lastError, syncUiState.lastSyncedTime, refresh],
+    );
 
-    const sourceTone:
-        | 'server'
-        | 'cache'
-        | 'none' = isLiveConnected
-            ? 'server'
-            : items.length > 0
-                ? 'cache'
-                : 'none';
-
-    const sharedProps = {
-        query,
-        setQuery,
-        expiryFilter,
-        setExpiryFilter,
-        expiryFilters: EXPIRY_FILTERS,
-        inStockOnly,
-        setInStockOnly,
-        onRefresh: handleRefresh,
-        refreshing,
-        isLiveConnected,
-        syncStatus,
-        sourceLabel:
-            sourceTone === 'server'
-                ? 'Live · socket'
-                : sourceTone === 'cache'
-                    ? 'Local cache'
-                    : 'No data',
-        sourceTone,
-        lastSyncedTime,
-        pendingCount,
-        items: paginated,
-        emptyComponent,
-        onPressReceipt: openDetails,
-        page,
-        pageSize,
-        totalItems,
-        totalPages,
-        pageStart,
-        pageEnd,
-        onPrev: goPrev,
-        onNext: goNext,
-        onPageSizeChange: changePageSize,
-    };
-
-    /* ---------------- Render ---------------- */
     return (
         <>
-            {isLarge ? (
-                <WholesalerReceiptsWebView {...sharedProps} />
-            ) : (
-                <WholesalerReceiptsMobileView {...sharedProps} />
-            )}
+            <AdminListView<WholesalerReceipt, InventoryFilter>
+                variant={isLarge ? 'web' : 'mobile'}
+                config={config}
+                header={header}
+                emptyComponent={emptyComponent}
+                query={inv.query}
+                setQuery={inv.setQuery}
+                onRefresh={refresh}
+                refreshing={isManualRefreshing || isSyncing}
+                sourceLabel={isLiveConnected ? 'Live sync' : isOnline ? 'Connecting…' : 'Offline · on this device'}
+                sourceTone={isLiveConnected ? 'server' : 'cache'}
+                lastSyncedTime={syncUiState.lastSyncedTime}
+                onOpenCreate={() => openEdit(null)}
+                onPressItem={openDetails}
+                onEditItem={openEdit}
+                rowActions={(r) => [
+                    { icon: 'eye-outline', label: 'View', onPress: () => openDetails(r) },
+                    { icon: 'create-outline', label: 'Edit', onPress: () => openEdit(r), tone: 'primary' },
+                ]}
+                stats={[
+                    { label: 'Items', value: inv.total.toLocaleString() },
+                    { label: 'Stock value', value: `KES ${formatKES(inv.stockWorth)}` },
+                    { label: 'Low', value: inv.counts.LOW.toLocaleString(), color: inv.counts.LOW ? '#f59e0b' : undefined },
+                    { label: 'Expired', value: inv.counts.EXPIRED.toLocaleString(), color: inv.counts.EXPIRED ? '#f43f5e' : undefined },
+                ]}
+                filters={{
+                    options: INVENTORY_FILTERS.filter((f) => f !== 'UNSYNCED' || inv.counts.UNSYNCED > 0).map((f) => ({
+                        key: f,
+                        label: INVENTORY_FILTER_LABELS[f],
+                        icon: INVENTORY_FILTER_ICONS[f],
+                        count: inv.counts[f],
+                    })),
+                    value: inv.filter,
+                    onChange: inv.setFilter,
+                    allKey: 'ALL',
+                }}
+                {...inv.paging}
+            />
 
-            <WholesalerReceiptDetailsModal
-                receipt={detailsTarget}
-                onClose={closeDetails}
+            <WholesalerReceiptDetailsModal receipt={details} onClose={() => setDetails(null)} />
+
+            <WholesalerReceiptEditModal
+                visible={formOpen}
+                receipt={editing}
+                onClose={() => {
+                    setFormOpen(false);
+                    setEditing(null);
+                }}
+                onSave={async () => {
+                    // Saved on the device first; send it now when online (else it syncs later).
+                    if (isOnline) void pushPending();
+                }}
             />
         </>
     );
 }
-

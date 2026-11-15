@@ -8,7 +8,7 @@ import { resolveImageUrl } from '@/lib/images';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { expiryLabel, formatKES, isExpired, preparationTitle, productTitle } from './RetailerInventoryWebView';
+import { expiryLabel, formatKES, isExpired, preparationTitle, productTitle } from '@/components/common/inventory/inventoryHelpers';
 
 interface InventoryDetailsModalProps {
     item: any | null;

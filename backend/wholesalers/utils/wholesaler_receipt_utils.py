@@ -150,92 +150,70 @@ def create_wholesaler_receipt(data, user):
 
 
 def update_wholesaler_receipt(data, user):
-    errors = []
-    product_obj = None
-    received_unit_quantity = 0
-    current_unit_quantity = 0
-    pack_buying_price = 0.0
-    pack_selling_price = 0.0
-    manufacture_date = None
-    expiry_date = None
-    received_from_obj = None
-    wholesaler_order_item_obj = None
-    employee_obj = None
-    wholesaler_price_discount_obj = None
-    wholesaler_quantity_discount_obj = None
-    loose_units_quantity = 0.00
-    qty_discounts=[]
+    """
+    Edit one of the caller's own receipts (offline edits are pushed here).
+    received_unit_quantity: the stock received; current stock moves by the
+    difference (so sales since then are kept). current_unit_quantity: an
+    explicit stock count, when sent.
+    """
+    details = data.get("wholesaler_receipt_details") or {}
+    receipt_id = str(details.get("wholesaler_receipt") or "").strip()
+    if not receipt_id:
+        raise exceptions.ValidationError("Receipt ID is required")
+    wholesaler_receipt = WholesalerReceipts.objects.filter(id=receipt_id, entity=user.entity).first()
+    if not wholesaler_receipt:
+        raise exceptions.ValidationError("Receipt for provided ID does not exist")
 
-    wholesaler_receipt = None
+    def _int(value, label):
+        try:
+            n = int(float(value))
+        except (TypeError, ValueError):
+            raise exceptions.ValidationError(f"Enter a valid {label}")
+        if n < 0:
+            raise exceptions.ValidationError(f"{label.capitalize()} can't be negative")
+        return n
 
-    try:
-        wholesaler_receipt_id = data["wholesaler_receipt_details"]["wholesaler_receipt"]
-        if wholesaler_receipt_id == "":
-            errors.append("Receipt ID cannot be empty")
-        else:
-            wholesaler_receipt = wholesalers_models_validators.validate_wholesaler_receipt(
-                wholesaler_receipt_id)
-    except KeyError:
-        errors.append("Receipt ID is required")
+    def _money(value, label):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            raise exceptions.ValidationError(f"Enter a valid {label}")
 
-    if "product" in data["wholesaler_receipt_details"]:
-        product_id = data["wholesaler_receipt_details"]["product"]
-        if product_id == "":
-            errors.append("Product ID cannot be empty")
-        else:
-            product_obj = product_models_validator.validate_product(product_id)
+    if details.get("product") not in (None, ""):
+        wholesaler_receipt.product = product_models_validator.validate_product(details["product"])
 
-            wholesaler_receipt.product=product_obj
-            wholesaler_receipt.save()
+    if details.get("received_unit_quantity") not in (None, ""):
+        received = _int(details["received_unit_quantity"], "received quantity")
+        delta = received - int(wholesaler_receipt.received_unit_quantity or 0)
+        wholesaler_receipt.received_unit_quantity = received
+        wholesaler_receipt.current_unit_quantity = max(0, int(wholesaler_receipt.current_unit_quantity or 0) + delta)
 
-    if "received_unit_quantity" in data["wholesaler_receipt_details"]:
-        received_unit_quantity = data["wholesaler_receipt_details"]["received_unit_quantity"]
+    if details.get("current_unit_quantity") not in (None, ""):
+        wholesaler_receipt.current_unit_quantity = _int(details["current_unit_quantity"], "stock quantity")
 
-        wholesaler_receipt.current_unit_quantity=int(received_unit_quantity)
-        wholesaler_receipt.save()
+    if details.get("unit_buying_price") not in (None, ""):
+        wholesaler_receipt.unit_buying_price = _money(details["unit_buying_price"], "buying price")
 
-    if "unit_buying_price" in data["wholesaler_receipt_details"]:
-        unit_buying_price = data["wholesaler_receipt_details"]["unit_buying_price"]
-        wholesaler_receipt.unit_buying_price=float(unit_buying_price)
-        wholesaler_receipt.save()
+    if details.get("unit_selling_price") not in (None, ""):
+        wholesaler_receipt.unit_selling_price = _money(details["unit_selling_price"], "selling price")
 
-    if "unit_selling_price" in data["wholesaler_receipt_details"]:
-        unit_selling_price = data["wholesaler_receipt_details"]["unit_selling_price"]
-        wholesaler_receipt.unit_selling_price=float(unit_selling_price)
-        wholesaler_receipt.save()
-
-    if "manufacture_date" in data["wholesaler_receipt_details"]:
-        manufacture_date = data["wholesaler_receipt_details"]["manufacture_date"]
-        
-   
-
-    if "expiry_date" in data["wholesaler_receipt_details"]:
-        expiry_date = data["wholesaler_receipt_details"]["expiry_date"]
-
-
+    manufacture_date = details.get("manufacture_date") or None
+    expiry_date = details.get("expiry_date") or None
     if manufacture_date and expiry_date:
-        if validators.end_date_is_after_start_date(manufacture_date, expiry_date):
-            pass
-        else:
-            wholesaler_receipt.manufacture_date=manufacture_date
-            wholesaler_receipt.expiry_date=expiry_date
-            wholesaler_receipt.save()
+        if not validators.end_date_is_after_start_date(manufacture_date, expiry_date):
+            raise exceptions.ValidationError("Expiry date must be after the manufacture date")
+        wholesaler_receipt.manufacture_date = manufacture_date
+        wholesaler_receipt.expiry_date = expiry_date
+    elif expiry_date:
+        wholesaler_receipt.expiry_date = expiry_date
 
-    if "batch" in data["wholesaler_receipt_details"]:
-        batch = data["wholesaler_receipt_details"]["batch"]
-        wholesaler_receipt.batch=batch
-        wholesaler_receipt.save()
+    if "batch" in details:
+        wholesaler_receipt.batch = details.get("batch") or None
 
+    if details.get("received_from"):
+        wholesaler_receipt.received_from = authentication_models_validators.validate_entity(details["received_from"])
 
-    if "received_from" in data["wholesaler_receipt_details"]:
-        received_from_id = data["wholesaler_receipt_details"]["received_from"]
-        if received_from_id and not received_from_id == "":
-            received_from_obj = authentication_models_validators.validate_entity(
-                received_from_id)
-            wholesaler_receipt.received_from=received_from_obj
-            wholesaler_receipt.save()
-            
-
+    wholesaler_receipt.save()
     return wholesaler_receipt
 
 
