@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# The repo-root .gitignore (Python template) ignores every lib/ folder;
+# this one is app source (lib/images.ts, lib/dates.ts).
+!/lib/
