@@ -168,11 +168,38 @@ export const MODE_LABELS: Record<DeliveryMode, string> = {
     COURIER: 'Courier',
 };
 
-/** Pull the server's error text out of a response. */
+const PROBLEM_TEXT: Record<string, string> = {
+    NETWORK_ERROR: 'No connection to the server.',
+    TIMEOUT_ERROR: 'The server took too long to answer.',
+    CONNECTION_ERROR: 'The server could not be reached.',
+    SERVER_ERROR: 'The server hit an error.',
+};
+
+/**
+ * Pull the server's error text out of a response. Handles our own
+ * {errors, response_message}, plain DRF bodies ({detail}, a list, or
+ * {field: [msgs]}), and finally the HTTP status — never a bare "CLIENT_ERROR".
+ */
 export function apiError(res: any, fallback: string): string {
-    const errs = res?.data?.errors;
+    const data = res?.data;
+    const errs = data?.errors;
     if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.problem || fallback;
+    if (typeof errs === 'string' && errs) return errs;
+    if (data?.response_message) return String(data.response_message);
+    if (data?.detail) return String(data.detail);
+    if (Array.isArray(data) && data.length) return data.map(String).join(' ');
+    if (data && typeof data === 'object') {
+        const msgs = Object.values(data).flat().filter((v) => typeof v === 'string') as string[];
+        if (msgs.length) return msgs.join(' ');
+    }
+    const status = Number(res?.status);
+    if (status === 401) return 'Your session has expired. Sign in again.';
+    if (status === 403) return "You don't have access to this.";
+    if (status === 404) return 'This feature is not on the server yet.';
+    if (status === 429) return 'Too many requests. Wait a moment and try again.';
+    const problem = PROBLEM_TEXT[res?.problem];
+    if (problem) return status ? `${problem} (${status})` : problem;
+    return status ? `${fallback} (${status})` : fallback;
 }
 
 export const isOk = (res: any) => !!res?.ok && String(res?.data?.response_code) === '0';

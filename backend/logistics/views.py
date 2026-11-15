@@ -605,7 +605,16 @@ def fulfilmentAPIView(request):
     if action == "GetFulfilmentQueue":
         kind = "customer" if request.data.get("kind") == "customer" else "retailer"
         scope = "done" if request.data.get("scope") == "done" else "open"
-        return custom_success_message(0, "Fulfilment queue", ff.fulfilment_queue(request.user, kind, scope), "orders")
+        if not getattr(request.user, "entity_id", None):
+            return custom_errors_response(1, "No business", ["Switch to your business to see its orders"])
+        try:
+            rows = ff.fulfilment_queue(request.user, kind, scope)
+        except Exception as e:  # show the reason on the screen instead of a bare 4xx / 500
+            from utils.logging import create_log
+
+            create_log("error", f"GetFulfilmentQueue ({kind}/{scope}) failed for entity {request.user.entity_id}: {e!r}")
+            return custom_errors_response(1, "Could not load the queue", [f"The queue could not be loaded: {e}"])
+        return custom_success_message(0, "Fulfilment queue", rows, "orders")
     if action == "GetFulfilment":
         from retailers.models import CustomerOrders
         from wholesalers.models import RetailerOrders

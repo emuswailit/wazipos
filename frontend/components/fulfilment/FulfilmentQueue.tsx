@@ -57,9 +57,14 @@ export default function FulfilmentQueue({ kind }: { kind: FulfilmentKind }) {
         try {
             const [o, d]: any[] = await Promise.all([fulfilmentApi.getQueue(kind, 'open'), fulfilmentApi.getQueue(kind, 'done')]);
             if (isOk(o)) setOpen(o.data?.orders ?? []);
-            else setError(apiError(o, 'Could not load the queue.'));
+            else {
+                // Stop the spinner: show the reason and an empty list (Refresh retries).
+                setOpen((prev) => prev ?? []);
+                setError(apiError(o, 'Could not load the queue.'));
+            }
             if (isOk(d)) setDone(d.data?.orders ?? []);
         } catch (e: any) {
+            setOpen((prev) => prev ?? []);
             setError(e?.message || 'Could not reach the server.');
         } finally {
             setRefreshing(false);
@@ -92,7 +97,7 @@ export default function FulfilmentQueue({ kind }: { kind: FulfilmentKind }) {
     const list = (
         <View style={{ gap: 8 }}>
             {open === null ? <ActivityIndicator color={theme.primary} style={{ marginTop: 24 }} /> : null}
-            {open !== null && rows.length === 0 ? (
+            {open !== null && rows.length === 0 && !error ? (
                 <EmptyState
                     icon="cube-outline"
                     title={filter === 'DONE' ? 'Nothing handed over yet' : 'Nothing to prepare'}
