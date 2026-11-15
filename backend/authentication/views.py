@@ -2670,270 +2670,121 @@ def clustersAPIView(request):
 
 class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
     """
-    UC42: Register User
+    UC42: Register User — a person signs themselves up (multipart / form).
+
+    Fields: first_name, middle_name?, last_name, phone, email, password,
+    accepted_terms; optional gender, date_of_birth, identifier_type
+    (NationalId / Passport), identifier_number, document (photo / scan).
+    The account joins the default WAZIPOS entity with the Client role. A
+    consent code is texted to the phone (SMS & calls handshake — confirmed in
+    the app or at /consent). The reply carries tokens, like a login, so the app
+    can sign the person straight in. The password is never sent by SMS/email.
     """
 
     serializer_class = RegisterSerializer
     renderer_classes = (UserRenderer,)
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    authentication_classes = []
+    permission_classes = (permissions.AllowAny,)
 
-    @transaction.atomic
     def post(self, request):
-        errors=[]
-        user_obj = None
-        authenticated_user = None
-        phone =request.data['phone']
-        email =request.data['email']
-        identifier_number =request.data['identifier_number']
-        default_entity = models.Entities.objects.get(
-                     title="WAZIPOS"
-                )
-        create_log("info",f"{default_entity}")
-        password = request.data['password']
-        if phone and  models.Users.objects.filter(phone=phone).exists():
-            errors.append("Phone is already in use")
-        if email and models.Users.objects.filter(email=email).exists():
-            errors.append("Email is already in use")
+        from authentication.utils import admin_users as au
+        from core.utils import normalize_phone
 
-        if identifier_number and models.Users.objects.filter(identifier_number=identifier_number).exists():
-            errors.append("User identifier number is already in use")
+        data = request.data
+        get = lambda k: str(data.get(k) or "").strip()
+        errors = []
 
-        if len(errors)>0:
+        first, last = get("first_name"), get("last_name")
+        email = get("email").lower()
+        raw_phone = get("phone")
+        phone = normalize_phone(raw_phone) if raw_phone else None
+        password = str(data.get("password") or "")
+        if not first:
+            errors.append("Enter your first name")
+        if not last:
+            errors.append("Enter your last name")
+        if not phone:
+            errors.append("Enter a valid phone number, e.g. 0712345678")
+        if not email or "@" not in email:
+            errors.append("Enter a valid email address")
+        if len(password) < 8:
+            errors.append("Use a password of at least 8 characters")
+        if get("accepted_terms").lower() not in ("true", "1", "yes"):
+            errors.append("Accept the terms and conditions to continue")
+        if email and models.Users.objects.filter(email__iexact=email).exists():
+            errors.append("This email already has an account — sign in instead")
+        if phone and models.Users.objects.filter(phone__in={phone, "0" + phone[3:], "+" + phone}).exists():
+            errors.append("This phone number already has an account — sign in instead")
+
+        id_type, id_number = get("identifier_type"), get("identifier_number")
+        if id_type and id_type not in ("NationalId", "Passport"):
+            errors.append("Identity document must be a National ID or a passport")
+        if id_number and not id_type:
+            errors.append("Pick the identity document type")
+        if id_type and not id_number:
+            errors.append("Enter the document number")
+        if id_number and models.Users.objects.filter(identifier_number__iexact=id_number).exists():
+            errors.append("This ID / passport number is already registered")
+        gender = get("gender")
+        if gender and gender not in ("Female", "Male", "Other"):
+            errors.append("Pick a valid gender")
+
+        if errors:
+            return JsonResponse({"response_code": 1, "response_message": "Account not created", "errors": errors}, status=status.HTTP_200_OK)
+
+        client_role = models.Roles.objects.filter(value="Client").first()
+        default_entity = models.Entities.objects.filter(title="WAZIPOS").first()
+        if not client_role or not default_entity:
             return JsonResponse(
-                        {
-                                "response_code": 1,
-                                "response_message": "User not created",
-                                "errors": errors,
-                            
-                            },
-                
-                        )
-      
-        
-        # sms_endpoint = request.data['sms_endpoint']
-        # api_key = request.data['api_key']
-        
-        images = request.FILES.getlist("images")
-        documents = request.FILES.getlist("documents")
-        if images and len(images) > 0 or documents and len(documents) > 0:
-            # request.data.pop("images")
-            user = request.data
+                {"response_code": 1, "response_message": "Account not created", "errors": ["Registration isn't available right now. Please try again later."]},
+                status=status.HTTP_200_OK,
+            )
 
+        with transaction.atomic():
+            user = models.Users(
+                email=email,
+                first_name=first,
+                middle_name=get("middle_name") or None,
+                last_name=last,
+                phone=phone,
+                gender=gender or None,
+                date_of_birth=get("date_of_birth") or None,
+                identifier_type=id_type or "false",
+                identifier_number=id_number or None,
+                registration_method="Email",
+                accepted_terms="true",
+            )
+            user.set_password(password)
+            user.entity = default_entity
+            user.country = default_entity.country
+            user.is_active = True
+            user.save()
+            user.roles.add(client_role)
+            document = request.FILES.get("document")
+            if document and id_type:
+                doc = models.UserDocuments.objects.create(owner=user, document=document, document_type=id_type, document_number=id_number)
+                user.documents.add(doc)
 
-            
-            serializer = self.serializer_class(data=user, context={"request": request})
-            # serializer.is_valid(raise_exception=   True)
-            if serializer.is_valid(raise_exception=True):
-                create_log("info",f"With images : {images}")
-                serializer.save(entity=default_entity)
-                user_data = serializer.data
+        sms_errors, _ = au.request_contact_consent(user)
+        send_email({
+            "email_body": f"Hi {first.title()}, your WaziPOS account is ready. Sign in with {email} or your phone number.",
+            "to_email": email,
+            "email_subject": "Welcome to WaziPOS",
+        })
 
-                # Retrieve user from database
-
-
-                user = models.Users.objects.get(email=user_data["email"])
-                user.set_password(password)
-                user.entity=default_entity
-                user.save()
-                authenticated_user = authenticate(phone_or_email=phone, password=password)
-                # if authenticated_user:
-                #     sent = sms_utils.send_sms_code(authenticated_user)
-                # else:
-                #     print("No auth user 2")
-                # Generate token
-                token = RefreshToken.for_user(user).access_token
-
-                uploaded_images = []
-                for image in images:
-                    content = models.UserImages.objects.create(
-                        owner=user, image=image,
-                    )
-                    uploaded_images.append(content)
-
-                user.images.add(*uploaded_images)
-                context = serializer.data
-                context["images"] = [image.id for image in uploaded_images]
-
-                uploaded_documents = []
-                for document in documents:
-                    content = models.UserDocuments.objects.create(
-                        owner=user,
-                        document=document,
-                    )
-                    uploaded_documents.append(content)
-
-                user.documents.add(*uploaded_documents)
-                context = serializer.data
-                context["documents"] = [document.id for document in uploaded_documents]
-
-                # Get current site
-                current_site = get_current_site(request).domain
-                relativeLink = reverse("email-verify")
-
-                # generate absolute url
-                absurl = (
-                    "http://" + current_site + relativeLink + "?token=" + str(token)
-                )
-
-                email_body = f"Your Wazipos account has been created. Your password is {password} . Do not share your password with any other person."
-        
-    
-                data = {
-                        "email_body": email_body,
-                        "to_email": user.email,
-                        "email_subject": "Succesful Wazipos Account Creation",
-                    }
-
-                send_email(data)
-
-                # Send sms
-                telco, phone_number = get_telco_by_phone_number(user.phone)
-                message =f"Your Wazipos account has been created. Your password is {password} . Do not share your password with any other person."
-                errors, sent = send_sms(phone_number, message)
-                # email_body = (
-                #     "Hi "
-                #     + user.first_name
-                #     + " "
-                #     + user.last_name
-                #     + " Use link below to verify your email \n"
-                #     + absurl
-                # )
-                # data = {
-                #     "email_body": email_body,
-                #     "to_email": user.email,
-                #     "email_subject": "Verify your email address",
-                # }
-
-                # send_email(data)
-
-                # time_otp = sms_utils.generate_otp(user)
-                # message =f"Mobiticket verification OTP {time_otp}.You or your agent should use it to activate your account. Your secret password is {password}. PLease donT share password with anyone"
-                # payload = {
-                #         "contact" : user.phone,
-                #         "message" : message,
-                #         "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
-                #         "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
-                #     }
-        
-                # errors, sent = send_swift_sms(payload)
-                # data = {
-                #     "email_body": email_body,
-                #     "to_email": user.email,
-                #     "email_subject": "Verify your email address",
-                # }
-
-                # send_email(data)
-                # sent = sms_utils.send_sms_code(user)
-
-                errors_messages = []
-
-                errors_messages = []
-
-                return JsonResponse(
-                    data={
-                        "response_code": 0,
-                        "response_message": "User succesfully created",
-                        "user": serializer.data,
-                        "errors": errors_messages,
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
-
-            else:
-                create_log("info",f"No images : {images}")
-                default_errors = serializer.errors  # default errors dict
-                errors_messages = []
-                for field_name, field_errors in default_errors.items():
-                    for field_error in field_errors:
-                        error_message = "%s: %s" % (field_name, field_error)
-                        errors_messages.append(error_message)
-
-                return JsonResponse(
-                    {
-                        "response_code": 1,
-                        "response_message": "User not created",
-                        "errors": errors_messages,
-                        "status": status.HTTP_200_OK,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-        else:
-            user = request.data
-
-
-            serializer = self.serializer_class(data=user, context={"request": request})
-            # serializer.is_valid(raise_exception=   True)
-            if serializer.is_valid():
-                serializer.save(entity=default_entity)
-                user_data = serializer.data
-
-                # Retrieve user from database
-                user = models.Users.objects.get(email=user_data["email"])
-                user.set_password(password)
-                user.save()
-                user_obj = models.Users.objects.get(email=user_data["email"])
-                # Generate token
-                token = RefreshToken.for_user(user).access_token
-                # Get current site
-                # TODO: Ensure current site settings have been updated in the django admin panel
-                current_site = get_current_site(request).domain
-                # current_site = 'wazipos.com'
-                relativeLink = reverse("email-verify")
-                # generate absolute url
-                absurl = (
-                    "https://" + current_site + relativeLink + "?token=" + str(token)
-                )
-
-                email_body = f"Your Wazipos account has been created. Your password is {password} . Do not share your password with any other person."
-        
-    
-                data = {
-                        "email_body": email_body,
-                        "to_email": user.email,
-                        "email_subject": "Succesful Wazipos Account Creation",
-                    }
-
-                send_email(data)
-
-                # Send sms
-                telco, phone_number = get_telco_by_phone_number(user.phone)
-                message =f"Your Wazipos account has been created. Your password is {password} . Do not share your password with any other person."
-                errors, sent = send_sms(phone_number, message)
-              
-
-                errors_messages = []
-
-                authenticated_user = authenticate(phone_or_email=phone, password=password)
-                # if authenticated_user:
-                #     sent = sms_utils.send_sms_code(authenticated_user)
-                # else:
-                #     print("No auth user 2")
-                return JsonResponse(
-                    data={
-                        "response_code": 0,
-                        "response_message": "User succesfully created",
-                        "user": serializer.data,
-                        "errors": errors_messages,
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
-            else:
-                default_errors = serializer.errors  # default errors dict
-                errors_messages = []
-                for field_name, field_errors in default_errors.items():
-                    for field_error in field_errors:
-                        error_message = "%s: %s" % (field_name, field_error)
-                        errors_messages.append(error_message)
-
-                return JsonResponse(
-                    data={
-                        "response_code": 1,
-                        "response_message": "User not created",
-                        "errors": errors_messages,
-                        "status": status.HTTP_200_OK,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+        tokens = user.tokens()
+        return JsonResponse(
+            {
+                "response_code": 0,
+                "response_message": "Account created",
+                "tokens": tokens,
+                "consent_sent": not sms_errors,
+                "consent_error": sms_errors[0] if sms_errors else None,
+                "user": {"id": str(user.id), "email": user.email, "phone": user.phone, "name": f"{first} {last}".title()},
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class EntityRegisterView(CreateModelMixin, generics.GenericAPIView):

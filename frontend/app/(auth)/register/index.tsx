@@ -1,1172 +1,379 @@
 // app/(auth)/register/index.tsx
 //
-// Unified registration form.
-//
-// Shell: shared Screen component (SafeAreaView + optional ScrollView).
-// Text inputs: shared CustomTextField.
-// Date of birth: shared DateField.
-//
-// Country list is sourced from EntitiesSyncContext.
-// Phone prefix is an inline dropdown that floats above siblings.
-// Country defaults to Kenya (+254).
-//
-// The "Powered by Jambopay" credit is rendered inside the scroll
-// content, so it appears at the end of every device regardless of
-// screen height. `footerOffset` on Screen gives it enough bottom
-// breathing room to clear the home indicator.
+// Self sign-up — one form for phones, tablets and web:
+//   1. Continue with Google / Facebook (placeholders until their keys are set),
+//      or fill in name, phone, email and password. Gender, date of birth and an
+//      ID / passport (number + photo) are optional, under "More details".
+//   2. The server creates the account (default WAZIPOS entity), replies with a
+//      session, and texts a consent code. The person enters it here — their
+//      consent to SMS and calls from vendors and their staff — or skips it
+//      (they can confirm later at /consent). Then they're signed in.
 
-import { CustomTextField } from "@/components/common/CustomTextField";
-import { DateField } from "@/components/common/DateField";
-import { Screen } from "@/components/common/Screen";
-import { useAuth } from "@/context/AuthContext";
-import { useEntitiesSync } from "@/context/EntitiesSyncContext";
-import { useRouter } from "expo-router";
-import {
-    FormikProps,
-    FormikProvider,
-    useFormik,
-} from "formik";
-import React, { useEffect, useMemo, useState } from "react";
-import {
-    ActivityIndicator,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
-import * as Yup from "yup";
+import authService, { type SelfRegisterInput } from '@/api/authApi';
+import adminUsersApi from '@/api/adminUsersApi';
+import FacebookSignInButton from '@/components/auth/FacebookSignInButton';
+import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
+import { ChoiceChips, FormRow } from '@/components/common/listScreen';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { DateField } from '@/components/common/DateField';
+import { pickImage, previewUri, type PickedImage } from '@/components/common/imagePicker';
+import { useAuth } from '@/context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { Formik } from 'formik';
+import React, { useState } from 'react';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import * as Yup from 'yup';
 
-/* =========================================================
- * Constants
- * ======================================================= */
-
-const COUNTIES = [
-    { id: "NBI", title: "Nairobi" },
-    { id: "MSA", title: "Mombasa" },
-    { id: "KIS", title: "Kisumu" },
-    { id: "NKU", title: "Nakuru" },
-    { id: "KMB", title: "Kiambu" },
-    { id: "UGI", title: "Uasin Gishu" },
-    { id: "MCK", title: "Machakos" },
-];
-
-const GENDERS = ["Male", "Female", "Other"];
-
+const KE_PHONE = /^(?:\+?254|0)?(7|1)\d{8}$/;
 const MIN_AGE_YEARS = 18;
 
-const DEFAULT_COUNTRY_ID = "KE";
-const DEFAULT_COUNTRY_TITLE = "KENYA";
-const DEFAULT_COUNTY_ID = "NBI";
-const DEFAULT_COUNTY_TITLE = "Nairobi";
-const DEFAULT_DIAL_CODE = "+254";
-
-/* =========================================================
- * Types
- * ======================================================= */
-
-interface CountryOption {
-    id: string;
-    title: string;
-    country_code: string;
-}
-
-type PickerTarget = null | "gender";
-
-/* =========================================================
- * Country normalization
- * ======================================================= */
-
-function normalizeCountry(c: any): CountryOption | null {
-    const iso2 = String(c?.iso_code_two ?? "")
+const schema = Yup.object({
+    first_name: Yup.string().trim().required('Enter your first name'),
+    middle_name: Yup.string().trim().optional(),
+    last_name: Yup.string().trim().required('Enter your last name'),
+    phone: Yup.string()
         .trim()
-        .toUpperCase();
-    const rawId = String(c?.id ?? "").trim();
-    const title = String(c?.title ?? "").trim();
-    const dialRaw = String(c?.country_code ?? "").trim();
-
-    if (!title) return null;
-
-    if (!/^[0-9]+(-[0-9]+)?$/.test(dialRaw)) return null;
-
-    const id = /^[A-Z]{2}$/.test(iso2) ? iso2 : rawId;
-    if (!id) return null;
-
-    return {
-        id,
-        title,
-        country_code: `+${dialRaw}`,
-    };
-}
-
-/* =========================================================
- * Validation
- * ======================================================= */
-
-const RegisterSchema = Yup.object().shape({
-    country: Yup.string().required("Country selection is required"),
-    county: Yup.string().when("country", {
-        is: "KE",
-        then: (schema) =>
-            schema.required("County selection is required for Kenyan users"),
-        otherwise: (schema) => schema.notRequired(),
-    }),
-    firstName: Yup.string().required("First name is required"),
-    middleName: Yup.string().notRequired(),
-    lastName: Yup.string().required("Last name is required"),
-    gender: Yup.string().required("Gender selection is required"),
-    dob: Yup.string()
-        .required("Date of birth is required")
-        .matches(/^\d{4}-\d{2}-\d{2}$/, "Date must use YYYY-MM-DD format")
-        .test("valid-date", "Please enter a valid date", (value) => {
-            if (!value) return false;
-            const [y, m, d] = value.split("-").map(Number);
-            const dt = new Date(y, m - 1, d);
-            return (
-                dt.getFullYear() === y &&
-                dt.getMonth() === m - 1 &&
-                dt.getDate() === d
-            );
-        })
-        .test("ageCheck", "You must be at least 18 years old", (value) => {
-            if (!value) return false;
-            const [y, m, d] = value.split("-").map(Number);
+        .required('Enter your phone number')
+        .test('ke', 'Enter a valid number, e.g. 0712345678', (v) => KE_PHONE.test(String(v || '').replace(/\s+/g, ''))),
+    email: Yup.string().trim().email('Enter a valid email address').required('Enter your email address'),
+    password: Yup.string().min(8, 'Use at least 8 characters').required('Choose a password'),
+    confirm_password: Yup.string().oneOf([Yup.ref('password')], "Passwords don't match").required('Repeat your password'),
+    gender: Yup.string().optional(),
+    date_of_birth: Yup.string()
+        .optional()
+        .test('age', `You must be at least ${MIN_AGE_YEARS}`, (v) => {
+            if (!v) return true;
+            const [y, m, d] = v.split('-').map(Number);
             const dob = new Date(y, m - 1, d);
-            const today = new Date();
-            const age =
-                today.getFullYear() -
-                dob.getFullYear() -
-                (today <
-                    new Date(
-                        today.getFullYear(),
-                        dob.getMonth(),
-                        dob.getDate()
-                    )
-                    ? 1
-                    : 0);
+            const now = new Date();
+            const age = now.getFullYear() - dob.getFullYear() - (now < new Date(now.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0);
             return age >= MIN_AGE_YEARS;
         }),
-    email: Yup.string()
-        .email("Please enter a valid email address")
-        .required("Account email is required"),
-    phone: Yup.string()
-        .matches(
-            /^[1-9][0-9]{7,12}$/,
-            "Phone number must not start with zero"
-        )
-        .required("Phone number is required"),
-    password: Yup.string()
-        .min(8, "Password must be at least 8 characters long")
-        .required("Password is required"),
-    confirmPassword: Yup.string()
-        .oneOf([Yup.ref("password")], "Passwords must match exactly")
-        .required("Please confirm your password"),
-    agreeToTerms: Yup.boolean()
-        .oneOf([true], "You must accept the terms and conditions")
-        .required(),
+    identifier_type: Yup.string().oneOf(['', 'NationalId', 'Passport']).optional(),
+    identifier_number: Yup.string().trim().when('identifier_type', {
+        is: (t: string) => !!t,
+        then: (s) => s.required('Enter the document number'),
+        otherwise: (s) => s.optional(),
+    }),
+    accepted_terms: Yup.boolean().oneOf([true], 'Accept the terms to continue'),
 });
 
-/* =========================================================
- * Screen
- * ======================================================= */
+type Pending = { token: string; phone: string; consentSent: boolean; consentError: string | null };
 
 export default function RegisterScreen() {
-    const { login, theme } = useAuth();
+    const { theme, login } = useAuth();
     const router = useRouter();
+    const [errors, setErrors] = useState<string[]>([]);
+    const [socialBusy, setSocialBusy] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [doc, setDoc] = useState<PickedImage | null>(null);
+    const [pending, setPending] = useState<Pending | null>(null);
 
-    const {
-        countriesRaw,
-        isLocationsSyncing,
-        triggerLocationsFetch,
-    } = useEntitiesSync();
-
-    const countryList = useMemo<CountryOption[]>(() => {
-        return (countriesRaw ?? [])
-            .map(normalizeCountry)
-            .filter((c): c is CountryOption => c !== null)
-            .sort((a, b) => a.title.localeCompare(b.title));
-    }, [countriesRaw]);
-
-    useEffect(() => {
-        if (countryList.length === 0 && !isLocationsSyncing) {
-            void triggerLocationsFetch();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [countryList.length, isLocationsSyncing]);
-
-    const [countrySearch, setCountrySearch] = useState(
-        DEFAULT_COUNTRY_TITLE
-    );
-    const [isCountryFocused, setIsCountryFocused] = useState(false);
-    const [countySearch, setCountySearch] = useState(
-        DEFAULT_COUNTY_TITLE
-    );
-    const [isCountyFocused, setIsCountyFocused] = useState(false);
-
-    const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
-
-    const [codeDropdownOpen, setCodeDropdownOpen] = useState(false);
-    const [codeQuery, setCodeQuery] = useState("");
-
-    const formik = useFormik({
-        initialValues: {
-            country: DEFAULT_COUNTRY_ID,
-            county: DEFAULT_COUNTY_ID,
-            countryCode: DEFAULT_DIAL_CODE,
-            firstName: "",
-            middleName: "",
-            lastName: "",
-            gender: "",
-            dob: "",
-            email: "",
-            phone: "",
-            password: "",
-            confirmPassword: "",
-            agreeToTerms: true,
-        },
-        validationSchema: RegisterSchema,
-        onSubmit: async (values, { setSubmitting }) => {
-            try {
-                // TODO: replace with the real Register API call.
-                // On success:
-                //   await markHasAccount();
-                //   router.replace('/(auth)/login');
-                const simulatedExpiry =
-                    Math.floor(Date.now() / 1000) + 7200;
-                const fakeTokenPayload =
-                    btoa(
-                        JSON.stringify({
-                            alg: "HS256",
-                            typ: "JWT",
-                        })
-                    ) +
-                    "." +
-                    btoa(
-                        JSON.stringify({
-                            id: "usr_789",
-                            email: values.email,
-                            exp: simulatedExpiry,
-                        })
-                    ) +
-                    "." +
-                    "signature_mask";
-                await login(fakeTokenPayload);
-            } catch (e) {
-                console.error("Registration transaction failed:", e);
-            } finally {
-                setSubmitting(false);
-            }
-        },
-    });
-
-    return (
-        <FormikProvider value={formik}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-                style={{ flex: 1 }}
-            >
-                {/* footerOffset={96} leaves room below the Jambopay
-                    credit for the iOS home indicator and any
-                    gesture bar on Android. */}
-                <Screen scroll padded footerOffset={96}>
-                    <View
-                        style={{
-                            width: "100%",
-                            maxWidth: 768,
-                            alignSelf: "center",
-                        }}
-                    >
-                        <RegisterForm
-                            formik={formik}
-                            theme={theme}
-                            countryList={countryList}
-                            isLocationsSyncing={isLocationsSyncing}
-                            countrySearch={countrySearch}
-                            setCountrySearch={setCountrySearch}
-                            isCountryFocused={isCountryFocused}
-                            setIsCountryFocused={setIsCountryFocused}
-                            countySearch={countySearch}
-                            setCountySearch={setCountySearch}
-                            isCountyFocused={isCountyFocused}
-                            setIsCountyFocused={setIsCountyFocused}
-                            codeDropdownOpen={codeDropdownOpen}
-                            setCodeDropdownOpen={setCodeDropdownOpen}
-                            codeQuery={codeQuery}
-                            setCodeQuery={setCodeQuery}
-                            openGenderPicker={() =>
-                                setPickerTarget("gender")
-                            }
-                            router={router}
-                        />
-                    </View>
-                </Screen>
-            </KeyboardAvoidingView>
-
-            <GenderSheet
-                target={pickerTarget}
-                onClose={() => setPickerTarget(null)}
-                formik={formik}
-            />
-        </FormikProvider>
-    );
-}
-
-/* =========================================================
- * Form body
- * ======================================================= */
-
-function RegisterForm({
-    formik,
-    theme,
-    countryList,
-    isLocationsSyncing,
-    countrySearch,
-    setCountrySearch,
-    isCountryFocused,
-    setIsCountryFocused,
-    countySearch,
-    setCountySearch,
-    isCountyFocused,
-    setIsCountyFocused,
-    codeDropdownOpen,
-    setCodeDropdownOpen,
-    codeQuery,
-    setCodeQuery,
-    openGenderPicker,
-    router,
-}: {
-    formik: FormikProps<any>;
-    theme: any;
-    countryList: CountryOption[];
-    isLocationsSyncing: boolean;
-    countrySearch: string;
-    setCountrySearch: (v: string) => void;
-    isCountryFocused: boolean;
-    setIsCountryFocused: (v: boolean) => void;
-    countySearch: string;
-    setCountySearch: (v: string) => void;
-    isCountyFocused: boolean;
-    setIsCountyFocused: (v: boolean) => void;
-    codeDropdownOpen: boolean;
-    setCodeDropdownOpen: (v: boolean) => void;
-    codeQuery: string;
-    setCodeQuery: (v: string) => void;
-    openGenderPicker: () => void;
-    router: any;
-}) {
-    const filteredCountries = useMemo(
-        () =>
-            countryList.filter((c) =>
-                c.title
-                    .toLowerCase()
-                    .includes(countrySearch.toLowerCase())
-            ),
-        [countryList, countrySearch]
-    );
-
-    const filteredCodes = useMemo(() => {
-        const q = codeQuery.trim().toLowerCase();
-        if (!q) return countryList.slice(0, 20);
-        return countryList
-            .filter(
-                (c) =>
-                    c.title.toLowerCase().includes(q) ||
-                    c.country_code.includes(q) ||
-                    c.id.toLowerCase().includes(q)
-            )
-            .slice(0, 20);
-    }, [countryList, codeQuery]);
-
-    const filteredCounties = COUNTIES.filter((c) =>
-        c.title.toLowerCase().includes(countySearch.toLowerCase())
-    );
-
-    const isKenyaSelected = formik.values.country === "KE";
-
-    const selectedCountry = countryList.find(
-        (c) => c.id === formik.values.country
-    );
-    const displayedDial =
-        selectedCountry?.country_code ??
-        (formik.values.countryCode || DEFAULT_DIAL_CODE);
-
-    const countriesEmpty =
-        countryList.length === 0 && !isLocationsSyncing;
-    const countriesLoading =
-        countryList.length === 0 && isLocationsSyncing;
-
-    const chooseCode = (c: CountryOption) => {
-        formik.setFieldValue("country", c.id);
-        formik.setFieldValue("countryCode", c.country_code);
-        if (c.id !== "KE") formik.setFieldValue("county", "");
-        setCodeDropdownOpen(false);
-        setCodeQuery("");
+    const signIn = async (token: string) => {
+        await login(token);
+        router.replace('/(tabs)' as any);
     };
 
-    const errorOf = (name: string) =>
-        formik.touched[name] && formik.errors[name]
-            ? String(formik.errors[name])
-            : undefined;
+    /** Google: the same exchange as the login screen (creates the account if new). */
+    const onGoogleIdToken = async (idToken: string) => {
+        setErrors([]);
+        setSocialBusy(true);
+        try {
+            const res: any = await authService.googleLogin(idToken);
+            const token = res.data?.tokens?.access;
+            if (res.ok && String(res.data?.response_code) === '0' && token) await signIn(token);
+            else setErrors([res.data?.response_message || 'Google sign-up did not work. Please try again.']);
+        } catch (e: any) {
+            setErrors([e?.message || 'Could not reach the server.']);
+        } finally {
+            setSocialBusy(false);
+        }
+    };
+
+    const card = {
+        maxWidth: 560,
+        backgroundColor: theme.panel,
+        ...(Platform.OS === 'web' ? ({ boxShadow: '0 10px 40px rgba(15,23,42,0.08)' } as any) : { elevation: 3 }),
+    };
 
     return (
-        <View className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-            {/* ============ Header ============ */}
-            <View className="md:col-span-2 mb-4 items-center">
-                <Text
-                    style={{ color: theme.primary }}
-                    className="text-3xl font-black tracking-tight text-center"
-                >
-                    Create Account
-                </Text>
-                <Text className="text-slate-500 mt-2 text-sm font-medium leading-relaxed text-center">
-                    Join the wazipos network. Settle B2B payments, check
-                    inventory, and shop ubiquitously.
-                </Text>
-            </View>
-
-            {/* ============ First Name ============ */}
-            <CustomTextField
-                name="firstName"
-                label="First Name"
-                placeholder="John"
-                autoCapitalize="words"
-                error={errorOf("firstName")}
-            />
-
-            {/* ============ Middle Name ============ */}
-            <CustomTextField
-                name="middleName"
-                label="Middle Name"
-                placeholder="Doe (Optional)"
-                autoCapitalize="words"
-                error={errorOf("middleName")}
-            />
-
-            {/* ============ Last Name ============ */}
-            <CustomTextField
-                name="lastName"
-                label="Last Name"
-                placeholder="Smith"
-                autoCapitalize="words"
-                error={errorOf("lastName")}
-            />
-
-            {/* ============ Gender ============ */}
-            <View className="w-full" style={{ gap: 6 }}>
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        fontSize: 11,
-                        fontWeight: "500",
-                        letterSpacing: 0.5,
-                        textTransform: "uppercase",
-                    }}
-                >
-                    Gender
-                </Text>
-                <TouchableOpacity
-                    onPress={openGenderPicker}
-                    style={{
-                        backgroundColor: theme.surface,
-                        borderColor:
-                            formik.touched.gender && formik.errors.gender
-                                ? "#ef4444"
-                                : theme.border,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        minHeight: 48,
-                        paddingHorizontal: 12,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexDirection: "row",
-                    }}
-                >
-                    <Text
-                        style={{
-                            flex: 1,
-                            color: formik.values.gender
-                                ? theme.text
-                                : "#94a3b8",
-                            fontSize: 15,
-                        }}
-                    >
-                        {formik.values.gender || "Select Gender"}
-                    </Text>
-                    <Text className="text-slate-400 text-[10px]">▾</Text>
-                </TouchableOpacity>
-                {errorOf("gender") ? (
-                    <Text style={{ color: "#ef4444", fontSize: 12 }}>
-                        {errorOf("gender")}
-                    </Text>
-                ) : null}
-            </View>
-
-            {/* ============ Date of Birth ============ */}
-            <View className="w-full">
-                <DateField
-                    name="dob"
-                    label="Date of Birth"
-                    placeholder="Select date of birth"
-                    required
-                />
-            </View>
-
-            {/* ============ Country ============ */}
-            <View className="w-full relative" style={{ gap: 6 }}>
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        fontSize: 11,
-                        fontWeight: "500",
-                        letterSpacing: 0.5,
-                        textTransform: "uppercase",
-                    }}
-                >
-                    Country
-                </Text>
-                <TextInput
-                    style={{
-                        backgroundColor: countriesLoading
-                            ? "#f1f5f9"
-                            : theme.surface,
-                        borderColor:
-                            formik.touched.country && formik.errors.country
-                                ? "#ef4444"
-                                : theme.border,
-                        color: theme.text,
-                        fontSize: 15,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                        minHeight: 48,
-                    }}
-                    placeholder={
-                        countriesLoading
-                            ? "Loading countries…"
-                            : countriesEmpty
-                                ? "No countries available"
-                                : "Type country name..."
-                    }
-                    placeholderTextColor="#94a3b8"
-                    value={countrySearch}
-                    editable={!countriesLoading && !countriesEmpty}
-                    onFocus={() => {
-                        setIsCountryFocused(true);
-                        setCountrySearch("");
-                    }}
-                    onChangeText={(text) => {
-                        setCountrySearch(text);
-                        setIsCountryFocused(true);
-                    }}
-                    onBlur={() =>
-                        setTimeout(() => setIsCountryFocused(false), 200)
-                    }
-                />
-
-                {isCountryFocused &&
-                    !countriesLoading &&
-                    filteredCountries.length > 0 && (
-                        <View
-                            style={{
-                                backgroundColor: theme.background,
-                                borderColor: theme.border,
-                            }}
-                            className="absolute top-[70px] left-0 right-0 border rounded-xl shadow-xl z-50 max-h-[180px] overflow-hidden"
-                        >
-                            <ScrollView
-                                nestedScrollEnabled
-                                keyboardShouldPersistTaps="handled"
-                            >
-                                {filteredCountries.map((item) => (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        className="py-3 px-4 border-b border-slate-50"
-                                        onPress={() => {
-                                            formik.setFieldValue(
-                                                "country",
-                                                item.id
-                                            );
-                                            formik.setFieldValue(
-                                                "countryCode",
-                                                item.country_code
-                                            );
-                                            setCountrySearch(item.title);
-                                            setIsCountryFocused(false);
-                                            if (item.id === "KE") {
-                                                formik.setFieldValue(
-                                                    "county",
-                                                    DEFAULT_COUNTY_ID
-                                                );
-                                                setCountySearch(
-                                                    DEFAULT_COUNTY_TITLE
-                                                );
-                                            } else {
-                                                formik.setFieldValue(
-                                                    "county",
-                                                    ""
-                                                );
-                                                setCountySearch("");
-                                            }
-                                        }}
-                                    >
-                                        <Text
-                                            style={{
-                                                color: theme.text,
-                                                fontSize: 14,
-                                                fontWeight: "500",
-                                            }}
-                                        >
-                                            {item.title}
-                                            {item.country_code
-                                                ? ` (${item.country_code})`
-                                                : ""}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    )}
-
-                {errorOf("country") ? (
-                    <Text style={{ color: "#ef4444", fontSize: 12 }}>
-                        {errorOf("country")}
-                    </Text>
-                ) : null}
-            </View>
-
-            {/* ============ County ============ */}
-            <View className="w-full relative" style={{ gap: 6 }}>
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        fontSize: 11,
-                        fontWeight: "500",
-                        letterSpacing: 0.5,
-                        textTransform: "uppercase",
-                    }}
-                >
-                    County
-                </Text>
-                <TextInput
-                    style={{
-                        backgroundColor: isKenyaSelected
-                            ? theme.surface
-                            : "#f1f5f9",
-                        borderColor:
-                            formik.touched.county && formik.errors.county
-                                ? "#ef4444"
-                                : theme.border,
-                        opacity: isKenyaSelected ? 1 : 0.6,
-                        color: theme.text,
-                        fontSize: 15,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                        minHeight: 48,
-                    }}
-                    placeholder={
-                        isKenyaSelected
-                            ? "Type county name..."
-                            : "Unavailable for selected country"
-                    }
-                    placeholderTextColor="#94a3b8"
-                    value={countySearch}
-                    editable={isKenyaSelected}
-                    onFocus={() => {
-                        if (!isKenyaSelected) return;
-                        setIsCountyFocused(true);
-                        setCountySearch("");
-                    }}
-                    onChangeText={(text) => {
-                        if (!isKenyaSelected) return;
-                        setCountySearch(text);
-                        setIsCountyFocused(true);
-                    }}
-                    onBlur={() =>
-                        setTimeout(() => setIsCountyFocused(false), 200)
-                    }
-                />
-                {isKenyaSelected &&
-                    isCountyFocused &&
-                    filteredCounties.length > 0 && (
-                        <View
-                            style={{
-                                backgroundColor: theme.background,
-                                borderColor: theme.border,
-                            }}
-                            className="absolute top-[70px] left-0 right-0 border rounded-xl shadow-xl z-50 max-h-[180px] overflow-hidden"
-                        >
-                            <ScrollView
-                                nestedScrollEnabled
-                                keyboardShouldPersistTaps="handled"
-                            >
-                                {filteredCounties.map((item) => (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        className="py-3 px-4 border-b border-slate-50"
-                                        onPress={() => {
-                                            formik.setFieldValue(
-                                                "county",
-                                                item.id
-                                            );
-                                            setCountySearch(item.title);
-                                            setIsCountyFocused(false);
-                                        }}
-                                    >
-                                        <Text
-                                            style={{
-                                                color: theme.text,
-                                                fontSize: 14,
-                                                fontWeight: "500",
-                                            }}
-                                        >
-                                            {item.title}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    )}
-                {errorOf("county") ? (
-                    <Text style={{ color: "#ef4444", fontSize: 12 }}>
-                        {errorOf("county")}
-                    </Text>
-                ) : null}
-            </View>
-
-            {/* ============ Email ============ */}
-            <CustomTextField
-                name="email"
-                label="Email Address"
-                placeholder="name@wazipos.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                error={errorOf("email")}
-            />
-
-            {/* ============ Phone Number ============ */}
-            <View
-                className="w-full"
-                style={{ zIndex: 1000, elevation: 10, gap: 6 }}
-            >
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        fontSize: 11,
-                        fontWeight: "500",
-                        letterSpacing: 0.5,
-                        textTransform: "uppercase",
-                    }}
-                >
-                    Phone Number
-                </Text>
-
-                <View
-                    className="flex-row gap-x-2"
-                    style={{ alignItems: "flex-start" }}
-                >
-                    {/* -------- Inline code dropdown -------- */}
-                    <View
-                        className="relative"
-                        style={{
-                            width: 96,
-                            zIndex: 1001,
-                            elevation: 11,
-                        }}
-                    >
-                        <TouchableOpacity
-                            onPress={() => {
-                                setCodeDropdownOpen(!codeDropdownOpen);
-                                setCodeQuery("");
-                            }}
-                            style={{
-                                backgroundColor: theme.surface,
-                                borderColor: codeDropdownOpen
-                                    ? theme.primary
-                                    : theme.border,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                minHeight: 48,
-                                paddingHorizontal: 12,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexDirection: "row",
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    color: "#475569",
-                                    fontWeight: "700",
-                                    fontSize: 15,
-                                }}
-                                numberOfLines={1}
-                            >
-                                {displayedDial}
-                            </Text>
-                            <Text
-                                style={{
-                                    color: "#94a3b8",
-                                    fontSize: 10,
-                                    marginLeft: 4,
-                                }}
-                            >
-                                ▾
-                            </Text>
-                        </TouchableOpacity>
-
-                        {codeDropdownOpen && (
-                            <View
-                                style={{
-                                    backgroundColor: theme.background,
-                                    borderColor: theme.border,
-                                    shadowColor: "#000",
-                                    shadowOffset: {
-                                        width: 0,
-                                        height: 6,
-                                    },
-                                    shadowOpacity: 0.08,
-                                    shadowRadius: 12,
-                                    elevation: 12,
-                                    top: 54,
-                                }}
-                                className="absolute left-0 w-64 border rounded-xl overflow-hidden z-[1002]"
-                            >
-                                <TextInput
-                                    value={codeQuery}
-                                    onChangeText={setCodeQuery}
-                                    placeholder="Search…"
-                                    placeholderTextColor="#94a3b8"
-                                    autoFocus
-                                    style={{
-                                        borderBottomColor: theme.border,
-                                        color: theme.textDark,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 10,
-                                        fontSize: 12,
-                                        borderBottomWidth: 1,
-                                    }}
-                                />
-
-                                <ScrollView
-                                    nestedScrollEnabled
-                                    keyboardShouldPersistTaps="handled"
-                                    style={{ maxHeight: 220 }}
-                                >
-                                    {filteredCodes.length === 0 ? (
-                                        <Text
-                                            style={{
-                                                color: theme.textDark,
-                                                fontSize: 12,
-                                                textAlign: "center",
-                                                paddingVertical: 16,
-                                            }}
-                                        >
-                                            No matches
-                                        </Text>
-                                    ) : (
-                                        filteredCodes.map((item) => {
-                                            const active =
-                                                item.id ===
-                                                formik.values.country;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={item.id}
-                                                    onPress={() =>
-                                                        chooseCode(item)
-                                                    }
-                                                    style={{
-                                                        backgroundColor:
-                                                            active
-                                                                ? theme.primary +
-                                                                "15"
-                                                                : "transparent",
-                                                        borderBottomColor:
-                                                            theme.border,
-                                                        borderBottomWidth: 1,
-                                                        paddingHorizontal: 12,
-                                                        paddingVertical: 10,
-                                                    }}
-                                                    className="flex-row items-center"
-                                                >
-                                                    <Text
-                                                        style={{
-                                                            fontWeight: "700",
-                                                            fontSize: 12,
-                                                            width: 48,
-                                                            color: active
-                                                                ? theme.primary
-                                                                : "#475569",
-                                                        }}
-                                                    >
-                                                        {
-                                                            item.country_code
-                                                        }
-                                                    </Text>
-                                                    <Text
-                                                        style={{
-                                                            fontSize: 12,
-                                                            flex: 1,
-                                                            color: active
-                                                                ? theme.primary
-                                                                : "#0f172a",
-                                                            fontWeight: active
-                                                                ? "700"
-                                                                : "500",
-                                                        }}
-                                                        numberOfLines={1}
-                                                    >
-                                                        {item.title}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })
-                                    )}
-                                </ScrollView>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={{ flex: 1 }}>
-                        <CustomTextField
-                            value={formik.values.phone}
-                            onChangeText={(text) =>
-                                formik.setFieldValue(
-                                    "phone",
-                                    text.replace(/^0+/, "")
-                                )
-                            }
-                            onBlur={() =>
-                                formik.setFieldTouched("phone", true)
-                            }
-                            placeholder="700 000000"
-                            keyboardType="phone-pad"
-                            error={errorOf("phone")}
-                        />
-                    </View>
-                </View>
-            </View>
-
-            {/* ============ Password ============ */}
-            <CustomTextField
-                name="password"
-                label="Password"
-                placeholder="••••••••"
-                secureTextEntry
-                autoCapitalize="none"
-                error={errorOf("password")}
-            />
-
-            {/* ============ Confirm Password ============ */}
-            <CustomTextField
-                name="confirmPassword"
-                label="Confirm Password"
-                placeholder="••••••••"
-                secureTextEntry
-                autoCapitalize="none"
-                error={errorOf("confirmPassword")}
-            />
-
-            {/* ============ Terms ============ */}
-            <View className="mt-2 md:col-span-2 flex-row items-center px-1">
-                <TouchableOpacity
-                    onPress={() =>
-                        formik.setFieldValue(
-                            "agreeToTerms",
-                            !formik.values.agreeToTerms
-                        )
-                    }
-                    style={{
-                        borderColor: formik.values.agreeToTerms
-                            ? theme.primary
-                            : theme.border,
-                    }}
-                    className="w-5 h-5 border rounded flex items-center justify-center mr-3"
-                >
-                    {formik.values.agreeToTerms && (
-                        <View
-                            style={{ backgroundColor: theme.primary }}
-                            className="w-3 h-3 rounded-[2px]"
-                        />
-                    )}
-                </TouchableOpacity>
-                <Text className="text-slate-500 text-xs font-medium leading-relaxed flex-1">
-                    I have read, understood, and accepted the comprehensive{" "}
-                    <Text
-                        style={{ color: theme.primary }}
-                        className="font-bold"
-                    >
-                        wazipos Terms of Service
-                    </Text>{" "}
-                    and security privacy policies.
-                </Text>
-            </View>
-
-            {/* ============ Submit + login link ============ */}
-            <View className="mt-2 md:col-span-2 gap-y-2">
-                <TouchableOpacity
-                    onPress={() => formik.handleSubmit()}
-                    disabled={
-                        formik.isSubmitting || !formik.values.agreeToTerms
-                    }
-                    style={{
-                        backgroundColor: formik.values.agreeToTerms
-                            ? theme.primary
-                            : "#94a3b8",
-                        opacity: formik.values.agreeToTerms ? 1 : 0.6,
-                    }}
-                    className="w-full items-center justify-center rounded-xl py-4 shadow-md min-h-[56px]"
-                >
-                    {formik.isSubmitting ? (
-                        <ActivityIndicator color={theme.textLight} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.background }}>
+            <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+                <View className="w-full rounded-3xl p-5 md:p-8" style={[card, { gap: 18 }]}>
+                    {pending ? (
+                        <ConsentStep pending={pending} onDone={() => void signIn(pending.token)} />
                     ) : (
-                        <Text
-                            style={{ color: theme.textLight }}
-                            className="font-bold text-base"
-                        >
-                            Register Hub Account
-                        </Text>
+                        <>
+                            {/* Header */}
+                            <View style={{ gap: 6 }}>
+                                <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: `${theme.primary}14` }}>
+                                    <Ionicons name="person-add-outline" size={24} color={theme.primary} />
+                                </View>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26, marginTop: 6 }}>Create your account</Text>
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 14, lineHeight: 20 }}>
+                                    Shop, pay and manage your business on WaziPOS.
+                                </Text>
+                            </View>
+
+                            {/* Social sign-up (placeholders until keys are set — never breaks dev builds) */}
+                            <View style={{ gap: 10 }}>
+                                <GoogleSignInButton onIdToken={onGoogleIdToken} onError={(m) => setErrors([m])} loading={socialBusy} />
+                                <FacebookSignInButton onError={(m) => setErrors([m])} />
+                            </View>
+
+                            <View className="flex-row items-center" style={{ gap: 10 }}>
+                                <View className="flex-1 h-px" style={{ backgroundColor: theme.border }} />
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>or sign up with your details</Text>
+                                <View className="flex-1 h-px" style={{ backgroundColor: theme.border }} />
+                            </View>
+
+                            <Formik
+                                initialValues={{
+                                    first_name: '',
+                                    middle_name: '',
+                                    last_name: '',
+                                    phone: '',
+                                    email: '',
+                                    password: '',
+                                    confirm_password: '',
+                                    gender: '',
+                                    date_of_birth: '',
+                                    identifier_type: '' as '' | 'NationalId' | 'Passport',
+                                    identifier_number: '',
+                                    accepted_terms: false,
+                                }}
+                                validationSchema={schema}
+                                onSubmit={async (v) => {
+                                    setErrors([]);
+                                    const input: SelfRegisterInput = {
+                                        first_name: v.first_name.trim(),
+                                        middle_name: v.middle_name.trim(),
+                                        last_name: v.last_name.trim(),
+                                        phone: v.phone.replace(/\s+/g, ''),
+                                        email: v.email.trim().toLowerCase(),
+                                        password: v.password,
+                                        accepted_terms: v.accepted_terms,
+                                        gender: v.gender,
+                                        date_of_birth: v.date_of_birth,
+                                        identifier_type: v.identifier_type,
+                                        identifier_number: v.identifier_type ? v.identifier_number.trim() : '',
+                                    };
+                                    try {
+                                        const res: any = await authService.register(input, v.identifier_type ? doc : null);
+                                        const token = res.data?.tokens?.access;
+                                        if (res.ok && String(res.data?.response_code) === '0' && token) {
+                                            setPending({ token, phone: input.phone, consentSent: !!res.data?.consent_sent, consentError: res.data?.consent_error ?? null });
+                                        } else {
+                                            const errs = res.data?.errors;
+                                            setErrors(Array.isArray(errs) && errs.length ? errs : [res.data?.response_message || res.problem || 'Your account could not be created.']);
+                                        }
+                                    } catch (e: any) {
+                                        setErrors([e?.message || 'Could not reach the server.']);
+                                    }
+                                }}
+                            >
+                                {(f) => (
+                                    <View style={{ gap: 14 }}>
+                                        <FormRow>
+                                            <CustomTextField name="first_name" label="First name" required placeholder="Jane" autoCapitalize="words" textContentType="givenName" />
+                                            <CustomTextField name="last_name" label="Last name" required placeholder="Wanjiku" autoCapitalize="words" textContentType="familyName" />
+                                        </FormRow>
+                                        <FormRow>
+                                            <CustomTextField name="phone" label="Phone" required placeholder="0712345678" keyboardType="phone-pad" textContentType="telephoneNumber" />
+                                            <CustomTextField name="email" label="Email" required placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" textContentType="emailAddress" />
+                                        </FormRow>
+                                        <FormRow>
+                                            <CustomTextField name="password" label="Password" required placeholder="At least 8 characters" secureTextEntry={!showPassword} autoCapitalize="none" textContentType="newPassword" />
+                                            <CustomTextField name="confirm_password" label="Repeat password" required placeholder="Type it again" secureTextEntry={!showPassword} autoCapitalize="none" textContentType="newPassword" />
+                                        </FormRow>
+                                        <Pressable onPress={() => setShowPassword((s) => !s)} className="flex-row items-center self-start" style={{ gap: 6 }}>
+                                            <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={15} color={theme.primary} />
+                                            <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12 }}>{showPassword ? 'Hide passwords' : 'Show passwords'}</Text>
+                                        </Pressable>
+
+                                        {/* Optional details */}
+                                        <Pressable
+                                            onPress={() => setMoreOpen((o) => !o)}
+                                            className="flex-row items-center justify-between rounded-xl px-3 h-11"
+                                            style={{ borderWidth: 1, borderColor: theme.border }}
+                                        >
+                                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>More details (optional)</Text>
+                                            <Ionicons name={moreOpen ? 'chevron-up' : 'chevron-down'} size={16} color={theme.textDark} />
+                                        </Pressable>
+                                        {moreOpen ? (
+                                            <View style={{ gap: 14 }}>
+                                                <FormRow>
+                                                    <CustomTextField name="middle_name" label="Middle name" placeholder="Optional" autoCapitalize="words" />
+                                                    <DateField name="date_of_birth" label="Date of birth" placeholder="Optional" />
+                                                </FormRow>
+                                                <ChoiceChips<string>
+                                                    label="Gender"
+                                                    options={[
+                                                        { value: '', label: 'Prefer not to say' },
+                                                        { value: 'Female', label: 'Female' },
+                                                        { value: 'Male', label: 'Male' },
+                                                        { value: 'Other', label: 'Other' },
+                                                    ]}
+                                                    value={f.values.gender}
+                                                    onChange={(g) => f.setFieldValue('gender', g)}
+                                                />
+                                                <ChoiceChips<'' | 'NationalId' | 'Passport'>
+                                                    label="Identity document"
+                                                    hint="Optional — helps sellers trust your orders."
+                                                    options={[
+                                                        { value: '', label: 'None', icon: 'remove-circle-outline' },
+                                                        { value: 'NationalId', label: 'National ID', icon: 'id-card-outline' },
+                                                        { value: 'Passport', label: 'Passport', icon: 'airplane-outline' },
+                                                    ]}
+                                                    value={f.values.identifier_type}
+                                                    onChange={(t) => {
+                                                        f.setFieldValue('identifier_type', t);
+                                                        if (!t) setDoc(null);
+                                                    }}
+                                                />
+                                                {f.values.identifier_type ? (
+                                                    <View style={{ gap: 10 }}>
+                                                        <CustomTextField
+                                                            name="identifier_number"
+                                                            label={f.values.identifier_type === 'Passport' ? 'Passport number' : 'ID number'}
+                                                            required
+                                                            autoCapitalize="characters"
+                                                        />
+                                                        <Pressable
+                                                            onPress={async () => {
+                                                                const picked = await pickImage({ allowsEditing: false, quality: 0.8 });
+                                                                if (picked) setDoc(picked);
+                                                            }}
+                                                            className="flex-row items-center rounded-xl p-2.5"
+                                                            style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: theme.border, gap: 10 }}
+                                                        >
+                                                            <View className="rounded-lg items-center justify-center overflow-hidden" style={{ width: 64, height: 44, backgroundColor: `${theme.primary}10` }}>
+                                                                {doc ? <Image source={{ uri: previewUri(doc)! }} style={{ width: 64, height: 44 }} /> : <Ionicons name="camera-outline" size={20} color={theme.primary} />}
+                                                            </View>
+                                                            <Text className="flex-1" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                                                                {doc ? `${doc.name} — tap to change` : 'Add a photo of the document (optional)'}
+                                                            </Text>
+                                                        </Pressable>
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        ) : null}
+
+                                        {/* Terms */}
+                                        <Pressable onPress={() => f.setFieldValue('accepted_terms', !f.values.accepted_terms)} className="flex-row items-start" style={{ gap: 10 }}>
+                                            <View
+                                                className="w-5 h-5 rounded-md items-center justify-center mt-0.5"
+                                                style={{ borderWidth: 1.5, borderColor: f.values.accepted_terms ? theme.primary : theme.border, backgroundColor: f.values.accepted_terms ? theme.primary : 'transparent' }}
+                                            >
+                                                {f.values.accepted_terms ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+                                            </View>
+                                            <Text className="flex-1" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5, lineHeight: 18 }}>
+                                                I accept the WaziPOS terms and privacy policy.
+                                            </Text>
+                                        </Pressable>
+                                        {f.submitCount > 0 && f.errors.accepted_terms ? (
+                                            <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12 }}>{String(f.errors.accepted_terms)}</Text>
+                                        ) : null}
+
+                                        {errors.length ? (
+                                            <View className="rounded-xl px-3 py-2.5" style={{ backgroundColor: 'rgba(244,63,94,0.10)', gap: 4 }}>
+                                                {errors.map((e) => (
+                                                    <Text key={e} style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>
+                                                        • {e}
+                                                    </Text>
+                                                ))}
+                                            </View>
+                                        ) : null}
+
+                                        <Pressable
+                                            onPress={() => f.handleSubmit()}
+                                            disabled={f.isSubmitting}
+                                            className="h-12 rounded-xl items-center justify-center"
+                                            style={{ backgroundColor: theme.primary, opacity: f.isSubmitting ? 0.7 : 1 }}
+                                        >
+                                            {f.isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>Create account</Text>}
+                                        </Pressable>
+                                    </View>
+                                )}
+                            </Formik>
+
+                            <Pressable onPress={() => router.push('/(auth)/login' as any)} hitSlop={8} className="items-center py-1">
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>
+                                    Already have an account? <Text style={{ color: theme.primary, fontFamily: theme.font.bold }}>Sign in</Text>
+                                </Text>
+                            </Pressable>
+                        </>
                     )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    onPress={() => router.push("/(auth)/login")}
-                    className="items-center py-3"
-                >
-                    <Text className="text-sm text-slate-500 font-medium">
-                        Already Registered?{" "}
-                        <Text
-                            style={{ color: theme.primary }}
-                            className="font-bold"
-                        >
-                            Sign In
-                        </Text>
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* ============ Powered by ============ */}
-            {/* Rendered inside the scroll content so it appears on
-                every device at the end of the form. footerOffset on
-                Screen provides the bottom margin that keeps it clear
-                of the home indicator on small screens. */}
-            <View
-                className="md:col-span-2 mt-8 pt-6 items-center"
-                style={{ borderTopWidth: 1, borderTopColor: theme.border }}
-            >
-                <Text
-                    style={{
-                        color: theme.textDark,
-                        fontSize: 13,
-                        letterSpacing: 0.3,
-                    }}
-                >
-                    Powered by{" "}
-                    <Text
-                        style={{
-                            color: theme.primary,
-                            fontWeight: "700",
-                        }}
-                    >
-                        Jambopay
-                    </Text>
-                </Text>
-            </View>
-        </View>
+                </View>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11, marginTop: 16 }}>Powered by JamboPay</Text>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }
 
-/* =========================================================
- * Gender sheet
- * ======================================================= */
-
-function GenderSheet({
-    target,
-    onClose,
-    formik,
-}: {
-    target: PickerTarget;
-    onClose: () => void;
-    formik: FormikProps<any>;
-}) {
+/** After sign-up: the consent code texted to their phone (or skip for now). */
+function ConsentStep({ pending, onDone }: { pending: Pending; onDone: () => void }) {
     const { theme } = useAuth();
-    const visible = target === "gender";
+    const [code, setCode] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const confirm = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            const res: any = await adminUsersApi.confirmOwnConsent(pending.phone, code);
+            if (res.ok && String(res.data?.response_code) === '0') onDone();
+            else {
+                const errs = res.data?.errors;
+                setError((Array.isArray(errs) && errs.join(' ')) || res.data?.response_message || 'That code did not work.');
+            }
+        } catch (e: any) {
+            setError(e?.message || 'Could not reach the server.');
+        } finally {
+            setBusy(false);
+        }
+    };
 
     return (
-        <Modal
-            visible={visible}
-            animationType="slide"
-            transparent
-            onRequestClose={onClose}
-        >
-            <View className="flex-1 justify-end bg-black/50 items-center">
-                <View
-                    style={{ backgroundColor: theme.background }}
-                    className="w-full max-w-md p-6 rounded-t-3xl max-h-[40vh]"
-                >
-                    <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-slate-100">
-                        <Text
-                            style={{ color: theme.textDark }}
-                            className="font-bold text-base"
-                        >
-                            Select Gender
-                        </Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <Text
-                                style={{ color: theme.primary }}
-                                className="font-bold"
-                            >
-                                Close
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <FlatList
-                        data={GENDERS}
-                        keyExtractor={(item) => item}
-                        renderItem={({ item }) => {
-                            const active = formik.values.gender === item;
-                            return (
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        formik.setFieldValue(
-                                            "gender",
-                                            item
-                                        );
-                                        onClose();
-                                    }}
-                                    style={{
-                                        backgroundColor: active
-                                            ? theme.primary + "15"
-                                            : "transparent",
-                                    }}
-                                    className="py-4 px-2 border-b border-slate-50"
-                                >
-                                    <Text
-                                        className="text-sm"
-                                        style={{
-                                            color: active
-                                                ? theme.primary
-                                                : "#0f172a",
-                                            fontWeight: active
-                                                ? "700"
-                                                : "500",
-                                        }}
-                                    >
-                                        {item}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        }}
-                    />
-                </View>
+        <View style={{ gap: 16 }}>
+            <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: 'rgba(16,185,129,0.12)' }}>
+                <Ionicons name="checkmark-circle" size={26} color="#10b981" />
             </View>
-        </Modal>
+            <View style={{ gap: 6 }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 24 }}>Your account is ready</Text>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 14, lineHeight: 20 }}>
+                    {pending.consentSent
+                        ? `We texted a 6-digit code to ${pending.phone}. Entering it lets sellers and their staff send you SMS and call you about your orders.`
+                        : `We couldn't text ${pending.phone} right now${pending.consentError ? ` (${pending.consentError})` : ''}. You can continue and confirm later.`}
+                </Text>
+            </View>
+            {pending.consentSent ? (
+                <CustomTextField
+                    label="6-digit code"
+                    value={code}
+                    onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                />
+            ) : null}
+            {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>{error}</Text> : null}
+            {pending.consentSent ? (
+                <Pressable
+                    onPress={() => void confirm()}
+                    disabled={busy || code.length !== 6}
+                    className="h-12 rounded-xl items-center justify-center"
+                    style={{ backgroundColor: theme.primary, opacity: busy || code.length !== 6 ? 0.6 : 1 }}
+                >
+                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>Confirm & continue</Text>}
+                </Pressable>
+            ) : null}
+            <Pressable onPress={onDone} className="h-11 rounded-xl items-center justify-center" style={{ borderWidth: 1, borderColor: theme.border }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{pending.consentSent ? 'Skip for now' : 'Continue'}</Text>
+            </Pressable>
+        </View>
     );
 }

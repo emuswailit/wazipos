@@ -57,7 +57,9 @@ export default function GoogleSignInButton({ onIdToken, onError, loading, disabl
     }
 
     const google = loadGoogleSignin();
-    if (!google) return null; // native module not in this build
+    // Native module not in this build (Expo Go / an older dev build): show the
+    // "coming soon" button instead of crashing or vanishing.
+    if (!google) return <SocialPlaceholderButton provider="google" onPress={onError} />;
     const { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } = google;
 
     const handlePress = async () => {
