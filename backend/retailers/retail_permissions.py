@@ -80,7 +80,7 @@ class RetailEmployeePermission(permissions.BasePermission):
     def has_permission(self, request, view):
         roles = []
         allowed_roles = [
-            "RETAIL_ACCOUNTS","PharmaceuticalRetailerSuperAdmin", "GeneralRetailerSuperAdmin","PharmaceuticalRetailerSuperAdmin","RestaurantSuperAdmin","RESTAURANT_SALES","RETAIL_PHARMACY","RETAIL_SALES"
+            "RETAIL_ACCOUNTS","PharmaceuticalRetailerSuperAdmin", "GeneralRetailerSuperAdmin","PharmaceuticalRetailerSuperAdmin","RestaurantSuperAdmin","RestaurantSales","RETAIL_PHARMACY","RETAIL_SALES"
         ]
 
         if request.user.is_authenticated:
