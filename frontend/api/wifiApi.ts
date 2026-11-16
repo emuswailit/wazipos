@@ -104,19 +104,10 @@ const wifiApi = {
     updateTariff: (d: Record<string, any>) => call('UpdateWifiTariff', d),
     deleteTariff: (id: string) => call('DeleteWifiTariff', { id }),
     deleteRouter: (id: string) => call('DeleteWifiRouter', { id }),
+    /** Subscriptions are created by customers' payments: read only. */
     subscriptions: () => call('GetWifiSubscriptions'),
-    createSubscription: (d: Record<string, any>) => call('CreateWifiSubscription', d),
-    updateSubscription: (d: Record<string, any>) => call('UpdateWifiSubscription', d),
-    deleteSubscription: (id: string) => call('DeleteWifiSubscription', { id }),
+    /** Customers' package payments: read only. */
     payments: () => call('GetWifiPayments'),
-    /** A payment taken by staff (cash etc.); M-Pesa payments arrive by themselves. */
-    createPayment: (d: Record<string, any>) => call('CreateWifiPayment', d),
-    updatePayment: (d: Record<string, any>) => call('UpdateWifiPayment', d),
-    /** Only staff-recorded payments (reference CASH…) can be deleted. */
-    deletePayment: (id: string) => call('DeleteWifiPayment', { id }),
 };
-
-/** Recorded by staff (can be edited / deleted), not an M-Pesa payment. */
-export const isManualPayment = (p: Pick<WifiPayment, 'reference_number'>) => String(p.reference_number || '').startsWith('CASH');
 
 export default wifiApi;

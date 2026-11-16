@@ -153,33 +153,14 @@ def wifiAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)     
-    elif request.data["action"] in WIFI_CRUD:
-        # CRUD for routers / subscriptions / payments (wifi/utils/wifi_crud.py).
+    elif request.data["action"] == "DeleteWifiRouter":
+        # Payments and subscriptions are created by customers and are read only.
         from .utils import wifi_crud as crud
 
-        action = request.data["action"]
-        if action.startswith("Delete"):
-            fn = {"DeleteWifiRouter": crud.delete_router, "DeleteWifiSubscription": crud.delete_subscription, "DeleteWifiPayment": crud.delete_payment}[action]
-            errors = fn(request.data, request.user)
-            if errors:
-                return custom_errors_response(1, "Not deleted", errors)
-            return custom_success_message(0, "Deleted", {"id": request.data.get("id")}, "deleted")
-        create = action.startswith("Create")
-        if "Subscription" in action:
-            errors, obj = crud.save_subscription(request.data, request.user, create)
-            ser, key = serializers.WifiSubscriptionsSerializer, "wifi_subscription"
-        else:
-            errors, obj = crud.save_payment(request.data, request.user, create)
-            ser, key = serializers.WifiSubscriptionPaymentsSerializer, "wifi_payment"
+        errors = crud.delete_router(request.data, request.user)
         if errors:
-            return custom_errors_response(1, "Not saved", errors)
-        return custom_success_message(0, "Saved", ser(obj, context={"request": request}).data, key)
+            return custom_errors_response(1, "Not deleted", errors)
+        return custom_success_message(0, "Deleted", {"id": request.data.get("id")}, "deleted")
     else:
         raise exceptions.ValidationError(f'Action { request.data["action"]} is unknown')
 
-
-WIFI_CRUD = (
-    "DeleteWifiRouter",
-    "CreateWifiSubscription", "UpdateWifiSubscription", "DeleteWifiSubscription",
-    "CreateWifiPayment", "UpdateWifiPayment", "DeleteWifiPayment",
-)

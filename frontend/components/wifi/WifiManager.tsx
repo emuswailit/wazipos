@@ -2,7 +2,8 @@
 //
 // Wi-Fi hotspot business (entity type InternetServiceProvider). One component, one
 // route per model (app/(hotspots)/wifiRouters, wifiTarrifs, wifiSubscriptions,
-// wifiPayments), each with full CRUD:
+// wifiPayments). Routers and packages: add / edit / delete. Subscriptions and
+// payments come from customers paying for packages: view only.
 //   Routers        hotspots (IP, NAS id, brand / model, contact) — add / edit / switch off
 //   Packages       what customers buy: price for a length of time on a router
 //   Subscriptions  who is connected, until when
@@ -11,7 +12,7 @@
 // list on wide screens, each list kept on the device for offline viewing.
 
 import { apiError, isOk } from '@/api/deliveriesApi';
-import wifiApi, { DURATION_LABELS, isManualPayment, lengthLabel, type Duration, type WifiPayment, type WifiRouter, type WifiSubscription, type WifiTariff } from '@/api/wifiApi';
+import wifiApi, { DURATION_LABELS, lengthLabel, type Duration, type WifiPayment, type WifiRouter, type WifiSubscription, type WifiTariff } from '@/api/wifiApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { CustomTextField } from '@/components/common/CustomTextField';
 import {
@@ -97,8 +98,7 @@ const subsConfig: AdminListConfig<WifiSubscription> = {
     noun: ['subscription', 'subscriptions'],
     icon: 'people-outline',
     searchPlaceholder: 'Search device, username…',
-    addLabel: 'Add subscription',
-    emptyMessage: 'Customers who buy a package appear here. You can also connect a device by hand.',
+    emptyMessage: 'Customers appear here when they pay for a package.',
     keyOf: (s) => s.id,
     titleOf: (s) => s.username || s.mac_address || 'Device',
     subtitleOf: (s) => [s.mac_address, `until ${when(s.valid_to)}`].filter(Boolean).join(' · '),
@@ -120,8 +120,7 @@ const paymentsConfig: AdminListConfig<WifiPayment> = {
     noun: ['payment', 'payments'],
     icon: 'wallet-outline',
     searchPlaceholder: 'Search package, account, M-Pesa code…',
-    addLabel: 'Record payment',
-    emptyMessage: 'M-Pesa package payments appear here. Record cash payments by hand.',
+    emptyMessage: 'Customers’ package payments appear here.',
     keyOf: (p) => p.id,
     titleOf: (p) => p.tariff_title || 'Package',
     subtitleOf: (p) => [p.account, p.provider_reference_number || p.reference_number].filter(Boolean).join(' · '),
@@ -166,7 +165,9 @@ export default function WifiManager({ tab }: { tab: Tab }) {
     }, [list.items, query, config]);
     const paged = usePaged(filtered, `${tab}|${query}`);
 
-    const editable = (x: any | null) => tab !== 'PAYMENTS' || !x || isManualPayment(x);
+    // Payments and the subscriptions they create come from customers: view only.
+    const readOnly = tab === 'SUBSCRIPTIONS' || tab === 'PAYMENTS';
+    const editable = (_x?: any | null) => !readOnly;
     const openForm = (item: any | null) => {
         if (!list.isOnline) return alert('You’re offline', 'Changes need an internet connection.');
         setViewing(null);
@@ -183,11 +184,7 @@ export default function WifiManager({ tab }: { tab: Tab }) {
             const res: any =
                 tab === 'ROUTERS'
                     ? await (editing ? wifiApi.updateRouter(body) : wifiApi.createRouter(body))
-                    : tab === 'PACKAGES'
-                      ? await (editing ? wifiApi.updateTariff(body) : wifiApi.createTariff(body))
-                      : tab === 'SUBSCRIPTIONS'
-                        ? await (editing ? wifiApi.updateSubscription(body) : wifiApi.createSubscription(body))
-                        : await (editing ? wifiApi.updatePayment(body) : wifiApi.createPayment(body));
+                    : await (editing ? wifiApi.updateTariff(body) : wifiApi.createTariff(body));
             if (!isOk(res)) return setFormError(apiError(res, 'Could not save.'));
             setFormOpen(false);
             setEditing(null);
@@ -206,8 +203,8 @@ export default function WifiManager({ tab }: { tab: Tab }) {
         const warn: Record<Tab, string> = {
             ROUTERS: 'Packages on it must be deleted first.',
             PACKAGES: 'Customers can no longer buy it.',
-            SUBSCRIPTIONS: 'The device loses its connection record.',
-            PAYMENTS: 'Only payments you recorded can be deleted.',
+            SUBSCRIPTIONS: '',
+            PAYMENTS: '',
         };
         alert(`Delete ${noun}`, `Delete “${what}”? ${warn[tab]}`, [
             { text: 'Keep', style: 'cancel' },
@@ -215,7 +212,7 @@ export default function WifiManager({ tab }: { tab: Tab }) {
                 text: 'Delete',
                 style: 'destructive',
                 onPress: async () => {
-                    const fn = tab === 'ROUTERS' ? wifiApi.deleteRouter : tab === 'PACKAGES' ? wifiApi.deleteTariff : tab === 'SUBSCRIPTIONS' ? wifiApi.deleteSubscription : wifiApi.deletePayment;
+                    const fn = tab === 'ROUTERS' ? wifiApi.deleteRouter : wifiApi.deleteTariff;
                     const res: any = await fn(x.id).catch(() => null);
                     if (isOk(res)) {
                         setViewing(null);
@@ -267,7 +264,7 @@ export default function WifiManager({ tab }: { tab: Tab }) {
                     lastSyncedTime={list.lastSynced}
                     error={list.error}
                     {...paged}
-                    onOpenCreate={() => openForm(null)}
+                    onOpenCreate={readOnly ? undefined : () => openForm(null)}
                     onPressItem={setViewing}
                     onEditItem={(x) => (editable(x) ? openForm(x) : setViewing(x))}
                     rowActions={(x) => [
@@ -286,11 +283,7 @@ export default function WifiManager({ tab }: { tab: Tab }) {
                 <RouterForm visible={formOpen} initial={editing} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
             ) : tab === 'PACKAGES' ? (
                 <PackageForm visible={formOpen} initial={editing} routers={routers.items} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
-            ) : tab === 'SUBSCRIPTIONS' ? (
-                <SubscriptionForm visible={formOpen} initial={editing} tariffs={tariffs.items} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
-            ) : (
-                <PaymentForm visible={formOpen} initial={editing} tariffs={tariffs.items} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
-            )}
+            ) : null}
         </View>
     );
 }
@@ -438,159 +431,6 @@ function PackageForm({ visible, initial, routers, saving, error, onClose, onSave
                     ) : null}
                     <FormSection title="Status">
                         <SwitchField name="is_active" label="On sale" hint="Switch off to stop selling it without deleting it." />
-                    </FormSection>
-                </AdminFormSheet>
-            )}
-        </Formik>
-    );
-}
-
-/** "2026-11-16T14:05" for a date-time text box (local time). */
-const localInput = (iso?: string | null) => {
-    const d = iso ? new Date(iso) : new Date();
-    if (isNaN(d.getTime())) return '';
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
-const toIso = (v: string) => {
-    const d = new Date(v.trim().replace(' ', 'T'));
-    return isNaN(d.getTime()) ? undefined : d.toISOString();
-};
-
-function SubscriptionForm({ visible, initial, tariffs, saving, error, onClose, onSave }: FormProps<WifiSubscription> & { tariffs: WifiTariff[] }) {
-    const onSale = tariffs.filter((t) => on(t.is_active));
-    return (
-        <Formik
-            key={`${visible}-${initial?.id ?? 'new'}`}
-            initialValues={{
-                tariff_selected: initial?.tariff_selected ?? onSale[0]?.id ?? '',
-                mac_address: initial?.mac_address ?? '',
-                username: initial?.username ?? '',
-                password: '',
-                valid_from: localInput(initial?.valid_from),
-                valid_to: initial ? localInput(initial.valid_to) : '',
-                is_active: initial ? on(initial.is_active) : true,
-            }}
-            validationSchema={Yup.object({
-                mac_address: Yup.string().trim().required("Enter the device's MAC address"),
-                tariff_selected: initial ? Yup.string() : Yup.string().required('Pick the package'),
-            })}
-            onSubmit={(v) =>
-                onSave({
-                    tariff_selected: v.tariff_selected || undefined,
-                    mac_address: v.mac_address.trim().toUpperCase(),
-                    username: v.username.trim() || undefined,
-                    password: v.password.trim() || undefined,
-                    valid_from: toIso(v.valid_from),
-                    // Blank: the package's length from the start time.
-                    valid_to: v.valid_to.trim() ? toIso(v.valid_to) : undefined,
-                    is_active: v.is_active ? 'true' : 'false',
-                })
-            }
-        >
-            {(f) => (
-                <AdminFormSheet
-                    visible={visible}
-                    onClose={onClose}
-                    title={initial ? 'Edit subscription' : 'New subscription'}
-                    subtitle={initial?.username ?? 'Connect a device by hand'}
-                    icon="people-outline"
-                    submitLabel={initial ? 'Save changes' : 'Connect device'}
-                    submitting={saving}
-                    error={error}
-                    onSubmit={() => f.handleSubmit()}
-                >
-                    <FormSection title="Package" zIndex={30}>
-                        <SelectDropdown
-                            name="tariff_selected"
-                            label="Package"
-                            required={!initial}
-                            options={onSale.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}`, description: lengthLabel(t) }))}
-                            placeholder={onSale.length ? 'Select a package…' : 'No packages on sale'}
-                            helperText={onSale.length ? undefined : 'Add a package first under Wi-Fi Hotspots → Packages.'}
-                            disabled={!onSale.length}
-                        />
-                    </FormSection>
-                    <FormSection title="Device">
-                        <CustomTextField name="mac_address" label="MAC address" required placeholder="e.g. A4:5E:60:12:34:56" autoCapitalize="characters" />
-                        <FormRow>
-                            <CustomTextField name="username" label="Username" placeholder="Made up if blank" autoCapitalize="none" />
-                            <CustomTextField name="password" label={initial ? 'New password' : 'Password'} placeholder={initial ? 'Leave blank to keep' : 'Made up if blank'} autoCapitalize="none" />
-                        </FormRow>
-                    </FormSection>
-                    <FormSection title="Time" hint="Leave the end blank to use the package's length.">
-                        <FormRow>
-                            <CustomTextField name="valid_from" label="From" placeholder="YYYY-MM-DD HH:MM" autoCapitalize="none" />
-                            <CustomTextField name="valid_to" label="Until" placeholder="From + package length" autoCapitalize="none" />
-                        </FormRow>
-                        {initial ? <SwitchField name="is_active" label="Active" hint="Switch off to cut the device off early." /> : null}
-                    </FormSection>
-                </AdminFormSheet>
-            )}
-        </Formik>
-    );
-}
-
-const PAY_STATUSES = ['SUCCESS', 'PENDING', 'FAILED', 'CANCELLED'] as const;
-
-function PaymentForm({ visible, initial, tariffs, saving, error, onClose, onSave }: FormProps<WifiPayment> & { tariffs: WifiTariff[] }) {
-    return (
-        <Formik
-            key={`${visible}-${initial?.id ?? 'new'}`}
-            initialValues={{
-                tariff: initial?.tariff ?? tariffs[0]?.id ?? '',
-                amount: initial ? String(Number(initial.amount)) : tariffs[0] ? String(Number(tariffs[0].price)) : '',
-                telco: initial?.telco ?? 'CASH',
-                status: (initial?.status ?? 'SUCCESS') as string,
-                description: initial?.description ?? '',
-            }}
-            validationSchema={Yup.object({
-                tariff: Yup.string().required('Pick the package paid for'),
-                amount: Yup.number().typeError('Enter the amount').moreThan(0, 'Enter the amount').required('Enter the amount'),
-            })}
-            onSubmit={(v) => onSave({ tariff: v.tariff, amount: Number(v.amount), telco: v.telco, status: v.status, description: v.description.trim() })}
-        >
-            {(f) => (
-                <AdminFormSheet
-                    visible={visible}
-                    onClose={onClose}
-                    title={initial ? 'Edit payment' : 'Record payment'}
-                    subtitle={initial?.reference_number ?? 'Cash or other payment taken by staff'}
-                    icon="wallet-outline"
-                    submitLabel={initial ? 'Save changes' : 'Record payment'}
-                    submitting={saving}
-                    error={error}
-                    onSubmit={() => f.handleSubmit()}
-                >
-                    <FormSection title="Package" zIndex={30}>
-                        <SelectDropdown
-                            label="Package"
-                            required
-                            options={tariffs.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}`, description: lengthLabel(t) }))}
-                            value={f.values.tariff}
-                            onChange={(id) => {
-                                f.setFieldValue('tariff', id);
-                                const t = tariffs.find((x) => x.id === id);
-                                if (t) f.setFieldValue('amount', String(Number(t.price)));
-                            }}
-                            error={f.touched.tariff && typeof f.errors.tariff === 'string' ? f.errors.tariff : undefined}
-                            placeholder={tariffs.length ? 'Select a package…' : 'No packages yet'}
-                            helperText={tariffs.length ? undefined : 'Add a package first under Wi-Fi Hotspots → Packages.'}
-                            disabled={!tariffs.length}
-                        />
-                    </FormSection>
-                    <FormSection title="Payment">
-                        <FormRow>
-                            <CustomTextField name="amount" label="Amount (KES)" required keyboardType="decimal-pad" />
-                            <CustomTextField name="telco" label="Paid by" placeholder="CASH, card…" autoCapitalize="characters" />
-                        </FormRow>
-                        <ChoiceChips<string>
-                            label="Status"
-                            options={PAY_STATUSES.map((st) => ({ value: st, label: PAY_LABEL[st] }))}
-                            value={f.values.status}
-                            onChange={(st) => f.setFieldValue('status', st)}
-                        />
-                        <CustomTextField name="description" label="Note" placeholder="Optional" />
                     </FormSection>
                 </AdminFormSheet>
             )}
