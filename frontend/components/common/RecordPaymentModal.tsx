@@ -166,13 +166,19 @@ export default function RecordPaymentModal({
                 const wsUrl = `${baseWsUrl}?token=${encodeURIComponent(token)}`;
 
                 wsRef.current = new WebSocket(wsUrl);
+                // The server checks every ~5 s and only treats a non-PENDING
+                // status as final from its 3rd check: right after the order is
+                // created its reference may not be visible yet (NOT_FOUND).
+                let notFoundSeen = 0;
 
                 wsRef.current.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
                         if (data.payment) {
+                            const rawStatus = data.payment.status?.toUpperCase();
+                            if (rawStatus === "NOT_FOUND" && ++notFoundSeen < 3) return; // still settling
                             setLastWsData(data.payment);
-                            const wsStatus = data.payment.status?.toUpperCase();
+                            const wsStatus = rawStatus;
                             const wsDescription =
                                 data.payment.description ||
                                 data.payment.jambopay_response?.description ||
