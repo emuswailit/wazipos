@@ -151,24 +151,20 @@ def get_all_products(user):
         # Return all products for admin user
         return Products.objects.filter(active=True)
     else:
-        # Everyone else: the active products in the categories their business
-        # is allowed to sell (Entities.categories), with the category loaded.
-        queryset = Products.objects.filter(active=True).select_related("category", "sub_category")
+        # return Products.objects.filter(active=True)
+        queryset = Products.objects.filter(active=True)
 
-        entity = getattr(user, "entity", None)
-        if not entity:
+        # Safely check if the user has an entity
+        if not user.entity:
             return queryset.none()
 
-        category_ids = list(entity.categories.values_list("id", flat=True))
-        if category_ids:
-            return queryset.filter(category_id__in=category_ids)
+        entity_type = str(user.entity.entity_type).strip()
+        create_log("info",f"User entity typr { str(user.entity.entity_type).strip()}")
 
-        # No categories assigned to this business yet: fall back to the
-        # products marked for its entity type, so its catalogue isn't empty.
-        entity_type = str(entity.entity_type or "").strip()
-        create_log("info", f"Entity {entity.id} has no categories; using entity type {entity_type}")
         if entity_type:
+            # 🌟 Use __overlap for ArrayField. It checks if the array contains the entity_type.
             queryset = queryset.filter(allowed_entities__overlap=[entity_type])
+
         return queryset
     
 def get_client_products(user):
