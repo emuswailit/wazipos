@@ -12,6 +12,7 @@ from .utils.retailer_utils import (
     customer_orders_group,
 )
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 from decouple import config
@@ -1234,9 +1235,14 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
     @sync_to_async
     def helper_func(self):
-        # 🟢 1. Look out for the order with reference number from frontend
+        # 🟢 1. Look out for the order with reference number from frontend.
+        # Visible to the shop's staff (order entity = their business) and to the
+        # person paying: a shopper's order belongs to the shop, not to the
+        # shopper's own business, so an entity-only filter never found it.
+        uid = self.user.id
         customer_order = CustomerOrders.objects.filter(
-            reference_number=self.identifier, entity=self.user.entity
+            Q(entity_id=self.user.entity_id) | Q(owner_id=uid) | Q(user_id=uid) | Q(customer_id=uid),
+            reference_number=self.identifier,
         ).first()
 
         tx_data = None
