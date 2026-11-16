@@ -13,6 +13,7 @@ from authentication.validators import authentication_models_validators
 from utils.encription import decrypt
 from core.responses import custom_error_response, custom_success_message,qr_code_response
 from core.phone_number_utils import get_telco_by_phone_number
+from core.app_permissions import AdminRoleOnly
 from employees.serializers import EmployeesSerializer
 from core.utils import send_sms, send_push_notification
 from authentication.utils import utils
@@ -1008,11 +1009,7 @@ def usersAPIView(request):
 
 
 @api_view(["POST"])
-@permission_classes(
-    [
-        permissions.IsAdminUser,
-    ]
-)
+@permission_classes([AdminRoleOnly])  # users with the Admin role only (was is_staff)
 def adminUsersAPIView(request):
     try:
         action = request.data["action"]

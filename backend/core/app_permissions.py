@@ -647,3 +647,16 @@ class PharmacySuperintendentPermission(permissions.BasePermission):
             raise NotAcceptable(
                 {"response_code": 1, "response_message": "Please log in"}
             )
+
+class AdminRoleOnly(permissions.BasePermission):
+    """Platform administrators only: the signed-in user must hold the "Admin" role."""
+
+    message = "Only administrators can do this."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            raise exceptions.ValidationError("Please log in")
+        if user.roles.filter(value="Admin").exists():
+            return True
+        raise exceptions.ValidationError(["Only administrators can do this."])
