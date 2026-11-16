@@ -1,495 +1,212 @@
-// components/entities/entityExpenseCategories/EntityExpenseCategoriesList.tsx
+// components/entities/expensesCategories/EntityExpenseCategoriesList.tsx
 //
-// Shell for the entity expense categories screen.
+// Expense categories (rent, transport, salaries…), some recurring. Shared list
+// kit, details beside the list on wide screens, kept on the device for offline
+// viewing. Add / edit / delete need a connection.
 
+import expensesApi, { type EntityExpenseCategory, type RecurrencePeriod } from '@/api/expensesApi';
+import { apiError } from '@/api/deliveriesApi';
 import { useAlert } from '@/components/common/AlertProvider';
-import ApiResponseModal, {
-    extractEnvelope,
-    routeEnvelope,
-    type ApiResponseEnvelope,
-    type ResponseKind,
-} from '@/components/common/ApiResponseModal';
-import {
-    PAGE_SIZE_OPTIONS,
-    type PageSize,
-} from '@/components/common/PaginationBar';
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
+import { CustomTextField } from '@/components/common/CustomTextField';
+import { AdminFormSheet, AdminListView, ChoiceChips, ConfigDetailsSheet, DetailsDock, formatDate, FormSection, SheetButton, type AdminListConfig } from '@/components/common/listScreen';
+import { SwitchField } from '@/components/common/SwitchField';
+import { useCachedList, usePaged } from '@/hooks/useCachedList';
+import { Formik } from 'formik';
+import React, { useMemo, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
+import * as Yup from 'yup';
 
-import expensesApi, {
-    type EntityExpenseCategory,
-    type RecurrencePeriod,
-} from '@/api/expensesApi';
+type Filter = 'ALL' | 'RECURRING' | 'ONE_OFF';
 
-import { EntityExpenseCategoriesMobileView } from './EntityExpenseCategoriesMobileView';
-import { EntityExpenseCategoriesWebView } from './EntityExpenseCategoriesWebView';
-import {
-    EntityExpenseCategoryFormModal,
-    type FormFieldConfig,
-} from './EntityExpenseCategoryFormModal';
+const PERIODS: RecurrencePeriod[] = ['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY'];
+const PERIOD_LABEL: Record<RecurrencePeriod, string> = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', QUARTERLY: 'Quarterly', YEARLY: 'Yearly' };
+const rows = (d: any) => (Array.isArray(d) ? d : d?.results ?? []);
+const isOk = (res: any) => !!res?.ok && (res?.data?.response_code == null || String(res.data.response_code) === '0');
+const recurs = (c: EntityExpenseCategory) => c.is_recurrent === 'true';
 
-const LARGE_SCREEN_MIN_WIDTH = 900;
-const FETCH_PAGE_SIZE = 500;
+const config: AdminListConfig<EntityExpenseCategory> = {
+    title: 'Expense categories',
+    noun: ['category', 'categories'],
+    icon: 'pricetag-outline',
+    searchPlaceholder: 'Search categories…',
+    addLabel: 'Add category',
+    emptyMessage: 'Group expenses, e.g. Rent (monthly), Transport, Airtime, Salaries (monthly).',
+    keyOf: (c) => c.id,
+    titleOf: (c) => c.title,
+    subtitleOf: (c) => c.description || null,
+    avatarOf: () => ({ icon: 'pricetag-outline' }),
+    badgesOf: (c) => [recurs(c) ? { label: PERIOD_LABEL[c.recurrence_period as RecurrencePeriod] ?? 'Recurring', tone: 'violet', icon: 'repeat' } : { label: 'One-off', tone: 'neutral' }],
+    metaOf: (c) => (c.updated ? `Updated ${formatDate(c.updated)}` : null),
+    metaIcon: 'time-outline',
+    primaryColumn: { label: 'Category', flex: 1.5 },
+    columns: [
+        { key: 'desc', label: 'Description', flex: 2, render: (c) => c.description || '—' },
+        { key: 'recurs', label: 'Recurs', flex: 1, render: (c) => (recurs(c) ? PERIOD_LABEL[c.recurrence_period as RecurrencePeriod] ?? 'Yes' : 'One-off') },
+    ],
+};
 
-/* =========================================================
- * Local helpers
- * ======================================================= */
-
-const RECURRENCE_PERIODS: RecurrencePeriod[] = [
-    'DAILY',
-    'WEEKLY',
-    'MONTHLY',
-    'QUARTERLY',
-    'YEARLY',
-];
-
-function matchesQuery(c: EntityExpenseCategory, q: string): boolean {
-    if (!q) return true;
-    const needle = q.toLowerCase();
-    return (
-        String(c.title || '').toLowerCase().includes(needle) ||
-        String(c.description || '').toLowerCase().includes(needle)
-    );
-}
-
-function buildFormFields(
-    category: EntityExpenseCategory | null,
-): FormFieldConfig[] {
-    return [
-        {
-            key: 'title',
-            label: 'Title',
-            type: 'text',
-            required: true,
-            placeholder: 'e.g. Rent, Utilities, Software',
-            initialValue: category?.title ?? '',
-        },
-        {
-            key: 'description',
-            label: 'Description',
-            type: 'textarea',
-            placeholder: 'Optional notes about this category…',
-            initialValue: category?.description ?? '',
-        },
-        {
-            key: 'is_recurrent',
-            label: 'Recurrent',
-            type: 'select',
-            required: true,
-            initialValue: category?.is_recurrent ?? 'false',
-            options: [
-                { label: 'No', value: 'false' },
-                { label: 'Yes', value: 'true' },
-            ],
-        },
-        {
-            key: 'recurrence_period',
-            label: 'Recurrence period',
-            type: 'select',
-            required: true,
-            initialValue: category?.recurrence_period ?? '',
-            visibleWhen: (values) => values.is_recurrent === 'true',
-            options: RECURRENCE_PERIODS.map((p) => ({
-                label: p.charAt(0) + p.slice(1).toLowerCase(),
-                value: p,
-            })),
-        },
-    ];
-}
-
-/* =========================================================
- * Component
- * ======================================================= */
-
-const EntityExpenseCategoriesList: React.FC = () => {
+export default function EntityExpenseCategoriesList() {
     const alert = useAlert();
     const { width } = useWindowDimensions();
-    const isLarge = width >= LARGE_SCREEN_MIN_WIDTH;
+    const list = useCachedList<EntityExpenseCategory>({ key: 'entity_expense_categories', fetch: () => expensesApi.getEntityExpenseCategories({ page: 1, page_size: 500 }), pick: rows });
 
-    /* ---------------- Server data ---------------- */
-    const [categories, setCategories] = useState<EntityExpenseCategory[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [refreshTick, setRefreshTick] = useState(0);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const res = await expensesApi.getEntityExpenseCategories({
-                    page: 1,
-                    page_size: FETCH_PAGE_SIZE,
-                });
-                if (cancelled) return;
-                setCategories(res.data?.results ?? []);
-            } catch (e: any) {
-                if (cancelled) return;
-                setError(e?.message ?? 'Failed to load categories');
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [refreshTick]);
-
-    const onRefresh = useCallback(() => setRefreshTick((t) => t + 1), []);
-
-    /* ---------------- Local UI state ---------------- */
     const [query, setQuery] = useState('');
-    const [onlyRecurrent, setOnlyRecurrent] = useState(false);
-
-    /* ---------------- Form modal ---------------- */
+    const [filter, setFilter] = useState<Filter>('ALL');
+    const [viewing, setViewing] = useState<EntityExpenseCategory | null>(null);
+    const [editing, setEditing] = useState<EntityExpenseCategory | null>(null);
     const [formOpen, setFormOpen] = useState(false);
-    const [editingCategory, setEditingCategory] =
-        useState<EntityExpenseCategory | null>(null);
-    const [formSubmitting, setFormSubmitting] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
-    /* ---------------- Response modal ---------------- */
-    const [responseOpen, setResponseOpen] = useState(false);
-    const [responseKind, setResponseKind] = useState<ResponseKind>('error');
-    const [responseTitle, setResponseTitle] = useState<string | undefined>();
-    const [responseEnvelope, setResponseEnvelope] =
-        useState<ApiResponseEnvelope | null>(null);
-    const [responseFallback, setResponseFallback] = useState<string | null>(
-        null,
-    );
-    const [refreshOnClose, setRefreshOnClose] = useState(false);
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return list.items
+            .filter((c) => filter === 'ALL' || (filter === 'RECURRING' ? recurs(c) : !recurs(c)))
+            .filter((c) => !q || `${c.title} ${c.description ?? ''}`.toLowerCase().includes(q))
+            .sort((a, b) => a.title.localeCompare(b.title));
+    }, [list.items, query, filter]);
+    const paged = usePaged(filtered, `${query}|${filter}`);
+    const recurring = list.items.filter(recurs).length;
 
-    const closeResponse = useCallback(() => {
-        setResponseOpen(false);
-        setResponseEnvelope(null);
-        setResponseFallback(null);
-        setResponseTitle(undefined);
-        if (refreshOnClose) {
-            setRefreshOnClose(false);
-            setRefreshTick((t) => t + 1);
-        }
-    }, [refreshOnClose]);
-
-    /* ---------------- Pagination ---------------- */
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState<PageSize>(PAGE_SIZE_OPTIONS[0]);
-
-    /* ---------------- Filtering ---------------- */
-    const visible = useMemo(() => {
-        const base = onlyRecurrent
-            ? categories.filter((c) => c.is_recurrent === 'true')
-            : categories;
-        return base.filter((c) => matchesQuery(c, query));
-    }, [categories, onlyRecurrent, query]);
-
-    const counts = useMemo(() => {
-        let recurrent = 0;
-        for (const c of categories) {
-            if (c.is_recurrent === 'true') recurrent++;
-        }
-        return {
-            total: categories.length,
-            visible: visible.length,
-            recurrent,
-        };
-    }, [categories, visible]);
-
-    /* ---------------- Pagination math ---------------- */
-    const totalItems = visible.length;
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-
-    useEffect(() => {
-        setPage(1);
-    }, [query, onlyRecurrent, pageSize]);
-
-    useEffect(() => {
-        if (page > totalPages) setPage(totalPages);
-    }, [page, totalPages]);
-
-    const pageStart = (page - 1) * pageSize;
-    const pageEnd = Math.min(pageStart + pageSize, totalItems);
-
-    const paginated = useMemo(
-        () => visible.slice(pageStart, pageEnd),
-        [visible, pageStart, pageEnd],
-    );
-
-    const goPrev = useCallback(() => setPage((p) => Math.max(1, p - 1)), []);
-    const goNext = useCallback(
-        () => setPage((p) => Math.min(totalPages, p + 1)),
-        [totalPages],
-    );
-    const changePageSize = useCallback((size: PageSize) => {
-        setPageSize(size);
-    }, []);
-
-    /* ---------------- Handlers ---------------- */
-    const onQueryChange = useCallback((q: string) => setQuery(q), []);
-    const onToggleOnlyRecurrent = useCallback(
-        () => setOnlyRecurrent((v) => !v),
-        [],
-    );
-
-    const onOpenCreate = useCallback(() => {
-        setEditingCategory(null);
+    const openForm = (c: EntityExpenseCategory | null) => {
+        if (!list.isOnline) return alert('You’re offline', 'Changes need an internet connection.');
+        setViewing(null);
+        setEditing(c);
+        setFormError(null);
         setFormOpen(true);
-    }, []);
-
-    const onOpenEdit = useCallback((c: EntityExpenseCategory) => {
-        setEditingCategory(c);
-        setFormOpen(true);
-    }, []);
-
-    const onCloseForm = useCallback(() => {
-        if (formSubmitting) return;
-        setFormOpen(false);
-        setEditingCategory(null);
-    }, [formSubmitting]);
-
-    /* ---------------- Submit ---------------- */
-    const onSubmitForm = useCallback(
-        async (values: Record<string, string>) => {
-            setFormSubmitting(true);
-            try {
-                const payload = {
-                    title: values.title,
-                    description: values.description || undefined,
-                    is_recurrent: (values.is_recurrent || 'false') as
-                        | 'true'
-                        | 'false',
-                    recurrence_period:
-                        values.is_recurrent === 'true'
-                            ? (values.recurrence_period as RecurrencePeriod)
-                            : null,
-                };
-
-                let res;
-                if (editingCategory) {
-                    res = await expensesApi.updateEntityExpenseCategory({
-                        entity_expense_category: editingCategory.id,
-                        ...payload,
-                    });
-                } else {
-                    res = await expensesApi.createEntityExpenseCategory(
-                        payload,
-                    );
-                }
-
-                const env = extractEnvelope(res);
-                const kind = routeEnvelope(env);
-
-                if (kind === 'success') {
-                    setFormOpen(false);
-                    setEditingCategory(null);
-                    setRefreshOnClose(true);
-
-                    setResponseKind('success');
-                    setResponseTitle(
-                        editingCategory
-                            ? 'Category updated'
-                            : 'Category created',
-                    );
-                    setResponseEnvelope(env);
-                    setResponseFallback(null);
-                    setResponseOpen(true);
-                    return;
-                }
-
-                // eslint-disable-next-line no-console
-                console.warn(
-                    '[category submit] rejected:',
-                    JSON.stringify(env, null, 2),
-                );
-
-                setResponseKind('error');
-                setResponseTitle(
-                    editingCategory
-                        ? 'Could not update category'
-                        : 'Could not create category',
-                );
-                setResponseEnvelope(env);
-                setResponseFallback(null);
-                setResponseOpen(true);
-            } catch (e: any) {
-                // eslint-disable-next-line no-console
-                console.error(
-                    '[category submit] failed:',
-                    JSON.stringify(
-                        {
-                            message: e?.message,
-                            status: e?.response?.status,
-                            data: e?.response?.data,
-                        },
-                        null,
-                        2,
-                    ),
-                );
-
-                const env = e?.response ? extractEnvelope(e.response) : null;
-                const hasEnvelope = !!(env?.response_message || env?.errors);
-
-                setResponseKind('error');
-                setResponseTitle('Could not save category');
-                setResponseEnvelope(hasEnvelope ? env : null);
-                setResponseFallback(
-                    hasEnvelope ? null : e?.message ?? 'Network error.',
-                );
-                setResponseOpen(true);
-            } finally {
-                setFormSubmitting(false);
-            }
-        },
-        [editingCategory],
-    );
-
-    /* ---------------- Delete ---------------- */
-    const performDeleteCategory = useCallback(
-        async (category: EntityExpenseCategory) => {
-            try {
-                const res =
-                    await expensesApi.deleteEntityExpenseCategory({
-                        entity_expense_category: category.id,
-                    });
-
-                const env = extractEnvelope(res);
-                const kind = routeEnvelope(env);
-
-                if (kind === 'success') {
-                    setRefreshOnClose(true);
-                    setResponseKind('success');
-                    setResponseTitle('Category deleted');
-                    setResponseEnvelope(env);
-                    setResponseFallback(null);
-                    setResponseOpen(true);
-                    return;
-                }
-
-                // eslint-disable-next-line no-console
-                console.warn(
-                    '[category delete] rejected:',
-                    JSON.stringify(env, null, 2),
-                );
-
-                setResponseKind('error');
-                setResponseTitle('Could not delete category');
-                setResponseEnvelope(env);
-                setResponseFallback(null);
-                setResponseOpen(true);
-            } catch (e: any) {
-                // eslint-disable-next-line no-console
-                console.error(
-                    '[category delete] failed:',
-                    JSON.stringify(
-                        {
-                            message: e?.message,
-                            status: e?.response?.status,
-                            data: e?.response?.data,
-                        },
-                        null,
-                        2,
-                    ),
-                );
-
-                const env = e?.response ? extractEnvelope(e.response) : null;
-                const hasEnvelope = !!(env?.response_message || env?.errors);
-
-                setResponseKind('error');
-                setResponseTitle('Could not delete category');
-                setResponseEnvelope(hasEnvelope ? env : null);
-                setResponseFallback(
-                    hasEnvelope ? null : e?.message ?? 'Network error.',
-                );
-                setResponseOpen(true);
-            }
-        },
-        [],
-    );
-
-    const onDeleteCategory = useCallback(
-        (category: EntityExpenseCategory) => {
-            alert(
-                'Delete category',
-                `Delete "${category.title}"? This cannot be undone.`,
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Delete',
-                        style: 'destructive',
-                        onPress: () => {
-                            void performDeleteCategory(category);
-                        },
-                    },
-                ],
-                'danger',
-            );
-        },
-        [alert, performDeleteCategory],
-    );
-
-    /* ---------------- Shared props ---------------- */
-    const common = {
-        categories: paginated,
-        counts,
-        query,
-        onQueryChange,
-        onlyRecurrent,
-        onToggleOnlyRecurrent,
-        loading,
-        error,
-        onRefresh,
-        onNewCategory: onOpenCreate,
-        onEditCategory: onOpenEdit,
-        onDeleteCategory,
-
-        page,
-        pageSize,
-        totalItems,
-        totalPages,
-        pageStart,
-        pageEnd,
-        onPrev: goPrev,
-        onNext: goNext,
-        onPageSizeChange: changePageSize,
     };
+
+    const save = async (v: { title: string; description: string; is_recurrent: boolean; recurrence_period: RecurrencePeriod }) => {
+        setSaving(true);
+        setFormError(null);
+        try {
+            const payload = {
+                title: v.title.trim(),
+                description: v.description.trim() || undefined,
+                is_recurrent: (v.is_recurrent ? 'true' : 'false') as 'true' | 'false',
+                recurrence_period: v.is_recurrent ? v.recurrence_period : null,
+            };
+            const res: any = editing
+                ? await expensesApi.updateEntityExpenseCategory({ entity_expense_category: editing.id, ...payload } as any)
+                : await expensesApi.createEntityExpenseCategory(payload as any);
+            if (!isOk(res)) return setFormError(apiError(res, 'Could not save the category.'));
+            setFormOpen(false);
+            setEditing(null);
+            await list.refresh();
+        } catch (e: any) {
+            setFormError(e?.message || 'Could not reach the server.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const remove = (c: EntityExpenseCategory) =>
+        alert('Delete category', `Delete “${c.title}”? Expenses keep their amounts but lose this category.`, [
+            { text: 'Keep', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                    const res: any = await expensesApi.deleteEntityExpenseCategory({ entity_expense_category: c.id } as any).catch(() => null);
+                    if (isOk(res)) {
+                        setViewing(null);
+                        list.patch((x) => x.filter((i) => i.id !== c.id));
+                    } else alert('Not deleted', apiError(res, 'Could not delete the category.'), undefined, 'danger');
+                },
+            },
+        ], 'danger');
 
     return (
         <>
-            {isLarge ? (
-                <EntityExpenseCategoriesWebView {...common} />
-            ) : (
-                <EntityExpenseCategoriesMobileView {...common} />
-            )}
-
-            <EntityExpenseCategoryFormModal
-                visible={formOpen}
-                title={editingCategory ? 'Edit category' : 'New category'}
-                subtitle={
-                    editingCategory
-                        ? 'Update the details of this expense category.'
-                        : 'Add a new expense category for your entity.'
+            <DetailsDock
+                placeholder="Pick a category to see it here."
+                pane={
+                    <ConfigDetailsSheet
+                        config={config}
+                        item={viewing}
+                        onClose={() => setViewing(null)}
+                        onEdit={(c) => openForm(c)}
+                        actions={viewing ? <SheetButton label="Delete" icon="trash-outline" variant="danger" onPress={() => remove(viewing)} /> : null}
+                    />
                 }
-                submitLabel={editingCategory ? 'Save' : 'Create'}
-                submitting={formSubmitting}
-                fields={buildFormFields(editingCategory)}
-                onClose={onCloseForm}
-                onSubmit={onSubmitForm}
-            />
+            >
+                <AdminListView<EntityExpenseCategory, Filter>
+                    variant={width >= 768 ? 'web' : 'mobile'}
+                    config={config}
+                    query={query}
+                    setQuery={setQuery}
+                    onRefresh={list.refresh}
+                    refreshing={list.refreshing}
+                    sourceLabel={list.sourceLabel}
+                    sourceTone={list.source}
+                    lastSyncedTime={list.lastSynced}
+                    error={list.error}
+                    {...paged}
+                    onOpenCreate={() => openForm(null)}
+                    onPressItem={setViewing}
+                    onEditItem={openForm}
+                    rowActions={(c) => [
+                        { icon: 'create-outline', label: 'Edit', onPress: () => openForm(c), tone: 'primary' },
+                        { icon: 'trash-outline', label: 'Delete', onPress: () => remove(c), tone: 'danger' },
+                    ]}
+                    stats={[
+                        { label: 'Categories', value: String(list.items.length) },
+                        { label: 'Recurring', value: String(recurring) },
+                    ]}
+                    filters={{
+                        options: [
+                            { key: 'ALL', label: 'All', icon: 'apps-outline', count: list.items.length },
+                            { key: 'RECURRING', label: 'Recurring', icon: 'repeat-outline', count: recurring },
+                            { key: 'ONE_OFF', label: 'One-off', icon: 'flash-outline', count: list.items.length - recurring },
+                        ],
+                        value: filter,
+                        onChange: setFilter,
+                        allKey: 'ALL',
+                    }}
+                />
+            </DetailsDock>
 
-            <ApiResponseModal
-                isOpen={responseOpen}
-                variant={responseKind}
-                title={responseTitle}
-                envelope={responseEnvelope}
-                fallbackMessage={responseFallback}
-                onClose={closeResponse}
-            />
+            <Formik
+                key={`${formOpen}-${editing?.id ?? 'new'}`}
+                initialValues={{
+                    title: editing?.title ?? '',
+                    description: editing?.description ?? '',
+                    is_recurrent: editing ? recurs(editing) : false,
+                    recurrence_period: (editing?.recurrence_period ?? 'MONTHLY') as RecurrencePeriod,
+                }}
+                validationSchema={Yup.object({ title: Yup.string().trim().required('Name the category, e.g. Rent') })}
+                onSubmit={save}
+            >
+                {(f) => (
+                    <AdminFormSheet
+                        visible={formOpen}
+                        onClose={() => !saving && setFormOpen(false)}
+                        title={editing ? 'Edit category' : 'New category'}
+                        subtitle="Group your expenses"
+                        icon="pricetag-outline"
+                        submitLabel={editing ? 'Save changes' : 'Add category'}
+                        submitting={saving}
+                        error={formError}
+                        onSubmit={() => f.handleSubmit()}
+                    >
+                        <FormSection title="Category">
+                            <CustomTextField name="title" label="Name" required placeholder="e.g. Rent, Transport, Airtime" autoCapitalize="words" />
+                            <CustomTextField name="description" label="Description" placeholder="Optional" multiline />
+                        </FormSection>
+                        <FormSection title="Recurring" hint="For costs that come back on a schedule, like rent or salaries.">
+                            <SwitchField name="is_recurrent" label="Recurs" row />
+                            {f.values.is_recurrent ? (
+                                <ChoiceChips<RecurrencePeriod>
+                                    label="Every"
+                                    options={PERIODS.map((p) => ({ value: p, label: PERIOD_LABEL[p] }))}
+                                    value={f.values.recurrence_period}
+                                    onChange={(p) => f.setFieldValue('recurrence_period', p)}
+                                />
+                            ) : null}
+                        </FormSection>
+                    </AdminFormSheet>
+                )}
+            </Formik>
         </>
     );
-};
-
-export default EntityExpenseCategoriesList;
+}
