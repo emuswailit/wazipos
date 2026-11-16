@@ -633,6 +633,7 @@ export default function RetailerShopFrontWeb({
         status,
         error,
         isLoading,
+        reload: reloadInventory,
     } = useRetailerInventory(retailerId);
 
     /* ---- Plans use real prices: re-price the plan from the shop's live stock
@@ -701,9 +702,52 @@ export default function RetailerShopFrontWeb({
     const cartItemCount = cart.itemCount;
     const topPad = isWeb ? 16 : 54;
 
-    const handleRequestCloseOrder = useCallback((o: CustomerOrder) => {
-        setPayingOrder(o);
-    }, []);
+    /* ---- Before M-Pesa: re-check the cart against the shop's current stock.
+     *      The server charges today's prices whatever the app shows, so say
+     *      what changed first; items out of stock or no longer sold block payment. ---- */
+    const [checkingOut, setCheckingOut] = useState(false);
+    const handleRequestCloseOrder = useCallback(
+        async (o: CustomerOrder) => {
+            if (checkingOut) return;
+            setCheckingOut(true);
+            try {
+                const fresh = await reloadInventory();
+                if (!fresh) {
+                    setPayingOrder(o); // couldn't check: the server still prices it
+                    return;
+                }
+                const asPlan = { ...(cart.plan ?? {}), items: o.order_items ?? [] } as any;
+                const { items, checks, changed, summary } = checkPlan(asPlan, fresh, getReceiptPrice);
+                const blocking = summary.out.length + summary.gone.length + summary.low.length;
+                if (!changed.length && !blocking) {
+                    setPayingOrder(o);
+                    return;
+                }
+                // New prices into the cart (and the plan, when paying one).
+                const byId = new Map(fresh.map((r: any) => [String(r.remote_id || r.id || ""), r]));
+                for (const it of changed) {
+                    const r = byId.get(String(it.retailer_receipt));
+                    if (r) cart.addOrUpdate(r, Number(it.purchased_quantity ?? 1));
+                }
+                if (cart.plan) void cart.applyPlanCheck(items, checks);
+                const msg = describeCheck(summary) ?? "";
+                const total = items.reduce((t, it) => t + Number(it.purchased_quantity ?? 0) * Number(it.receipt_details?.final_unit_selling_price ?? it.item_net_price ?? 0), 0);
+                const fmt = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
+                if (blocking) {
+                    alert("Check your cart before paying", `${msg}\n\nUpdate the quantities or remove those items, then pay.`, [{ text: "Review cart", style: "cancel" }], "danger");
+                } else {
+                    alert("Prices changed", msg, [
+                        { text: "Review cart", style: "cancel" },
+                        { text: `Pay ${fmt(total)}`, onPress: () => setPayingOrder({ ...o, order_items: items } as CustomerOrder) },
+                    ]);
+                }
+            } finally {
+                setCheckingOut(false);
+            }
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [checkingOut, reloadInventory, cart.plan, cart.addOrUpdate, cart.applyPlanCheck],
+    );
 
     const handleDeliveryMethodChange = useCallback((m: DeliveryMethod) => {
         setDeliveryMethod(m);

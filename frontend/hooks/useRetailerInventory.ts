@@ -266,6 +266,22 @@ export function useRetailerInventory(retailerId: string | null) {
         };
     }, [retailerId]);
 
+    /** Fetches the shop's current stock again (e.g. right before checkout) and
+     *  returns it; null when it could not be loaded. */
+    const reload = useCallback(async (): Promise<RetailerReceipt[] | null> => {
+        if (!retailerId) return null;
+        try {
+            const res = await inventoryApiRef.current.request({ action: "GetRetailerReceiptsForEntity", entity: retailerId });
+            const raw = (res as any)?.data ?? inventoryApiRef.current.data ?? res;
+            const aggregated = aggregateByProduct(extractRows(raw));
+            setReceipts(aggregated);
+            setStatus("loaded");
+            return aggregated;
+        } catch {
+            return null;
+        }
+    }, [retailerId]);
+
     const categories = useMemo(() => {
         const counts = new Map<string, number>();
         receipts.forEach((r) => {
@@ -343,5 +359,6 @@ export function useRetailerInventory(retailerId: string | null) {
         status,
         error,
         isLoading: status === "loading",
+        reload,
     };
 }
