@@ -939,24 +939,71 @@ def create_retailer_order(data, user):
         
         return [], order
 
-    # Totals come from the lines (the client's figures are not trusted).
+    # PRICING IS THE SERVER'S (the client's figures are not trusted).
+    #   - buying retailers: the lot's price, or the wholesaler's active price
+    #     offer when lower; no discount from the request;
+    #   - the wholesaler's own staff: counter price / discount allowed, never
+    #     below the lot's landed cost.
+    # Every lot must belong to the selling wholesaler. Prices are worked out
+    # once here (item["_price"], item["_disc"]) and used for the lines below.
     from decimal import Decimal as _D
+
+    seller_staff = bool(wholesaler_obj) and getattr(user, "entity_id", None) == getattr(wholesaler_obj, "id", None)
+    today_ = get_today_date()
+
+    def _money(v):
+        try:
+            return _D(str(v if v not in (None, "") else 0))
+        except Exception:
+            return _D("0")
 
     order_gross_price_total = _D("0")
     order_discount_total = _D("0")
     for item in order_items:
+        lot = WholesalerReceipts.objects.filter(id=item.get("wholesaler_receipt")).select_related("product").first()
+        if not lot:
+            return ["An item in this order is no longer available"], None
+        if wholesaler_obj and lot.entity_id != wholesaler_obj.id:
+            return ["An item in this order is not sold by this wholesaler"], None
         if str(item.get("sale_unit") or "FULL").upper() == "PART":
             # Part lines are priced from the receipt's part price, server side.
-            part_receipt = WholesalerReceipts.objects.get(id=item["wholesaler_receipt"])
-            part_qty = _D(str(item.get("part_quantity") or item.get("purchased_quantity") or 0))
-            item["_part_price"] = _D(str(part_receipt.part_selling_price or 0))
+            part_qty = _money(item.get("part_quantity") or item.get("purchased_quantity"))
+            part_price = _money(lot.part_selling_price)
+            part_disc = min(max(_money(item.get("item_price_discount")), _D("0")), part_price * part_qty) if seller_staff else _D("0")
+            item["_part_price"] = part_price
             item["_part_qty"] = part_qty
-            order_gross_price_total += part_qty * item["_part_price"]
-            order_discount_total += _D(str(item.get("item_price_discount") or 0))
+            item["_disc"] = part_disc
+            order_gross_price_total += part_qty * part_price
+            order_discount_total += part_disc
             continue
-        qty = _D(str(item.get("purchased_quantity") or 0))
-        order_gross_price_total += qty * _D(str(item.get("item_price") or 0))
-        order_discount_total += _D(str(item.get("item_price_discount") or 0))
+        qty = _money(item.get("purchased_quantity"))
+        if qty <= 0:
+            return ["Quantities must be at least 1"], None
+        list_price = _money(lot.final_unit_selling_price or lot.unit_selling_price)
+        if seller_staff:
+            price = _money(item.get("item_price")) or list_price
+            disc = min(max(_money(item.get("item_price_discount")), _D("0")), price * qty)
+            cost = _money(lot.unit_buying_price)
+            if cost > 0 and (price * qty - disc) < cost * qty:
+                return [f"{lot.product.title}: price after discount is below its cost (KES {cost} each)"], None
+        else:
+            offer = (
+                WholesalerPriceDiscounts.objects.filter(
+                    wholesaler_receipt=lot, is_active="true", start__lte=today_, end__gte=today_,
+                )
+                .order_by("offer_price")
+                .first()
+            )
+            price = list_price
+            if offer and offer.offer_price and _money(offer.offer_price) < price:
+                price = _money(offer.offer_price)
+            disc = _D("0")
+        if price <= 0:
+            return [f"{lot.product.title} has no price set; the wholesaler must set one first"], None
+        item["_price"] = price
+        item["_disc"] = disc
+        order_gross_price_total += qty * price
+        order_discount_total += disc
     final_price_total = order_gross_price_total - order_discount_total
 
     delivery_choice = None
@@ -1004,7 +1051,7 @@ def create_retailer_order(data, user):
             if "_part_qty" in item:
                 part_qty = item["_part_qty"]
                 part_price = item["_part_price"]
-                part_discount = _D(str(item.get("item_price_discount") or 0))
+                part_discount = item.get("_disc") or _D("0")
                 part_total = part_price * part_qty - part_discount
                 RetailerOrderItems.objects.create(
                     retailer_order=retailer_order,
@@ -1032,17 +1079,18 @@ def create_retailer_order(data, user):
                 else:
                     discount_quantity = 0
             # item_price_discount is the line's discount (qty x price - discount).
+            # Server prices from the loop above (item["_price"], item["_disc"]).
             line_qty = int(item['purchased_quantity'])
-            line_total = float(item['item_price']) * line_qty - float(item.get('item_price_discount') or 0)
+            line_total = float(item["_price"]) * line_qty - float(item["_disc"])
             RetailerOrderItems.objects.create(
                 retailer_order=retailer_order,
                 item_price_total=round(line_total, 2),
                 purchased_quantity=item['purchased_quantity'],
                 total_quantity=int(item['purchased_quantity'])+ int(discount_quantity),
                 discount_quantity=discount_quantity,
-                item_price=item['item_price'],
+                item_price=item["_price"],
                 item_net_price=round(line_total / line_qty, 2) if line_qty else 0,
-                item_price_discount=item['item_price_discount'],
+                item_price_discount=item["_disc"],
                 unit_of_issue=wholesaler_receipt.unit_of_receipt,
                 wholesaler_receipt_id=item['wholesaler_receipt'],
                 owner=user,

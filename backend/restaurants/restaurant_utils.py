@@ -1443,6 +1443,13 @@ def create_single_food_order(data, user):
 
     for item in order_items:
         food_item = validate_food_item(item["food_item"])
+        # Quantity comes from the app: whole, positive, sane (a negative one cut the bill).
+        try:
+            qty_ = float(item["quantity"])
+        except (KeyError, TypeError, ValueError):
+            return ["Enter a quantity for every item"], None
+        if qty_ <= 0 or qty_ > 1000 or qty_ != int(qty_):
+            return ["Quantities must be whole numbers from 1"], None
 
         items_cost = float(food_item.price) * float(item["quantity"])
         order_items_cost = float(order_items_cost)+float(items_cost)
@@ -1917,6 +1924,12 @@ def create_bar_inventory_order(data, user):
         for item in order_items:
             print("item", item)
             bar_inventory_item = validate_bar_inventory(item["id"])
+            try:
+                qty_ = float(item["quantity"])
+            except (KeyError, TypeError, ValueError):
+                return ["Enter a quantity for every item"], None
+            if qty_ <= 0 or qty_ > 1000 or qty_ != int(qty_):
+                return ["Quantities must be whole numbers from 1"], None
             items_cost = float(bar_inventory_item.pack_selling_price) * float(item["quantity"])
             order_items_cost = float(order_items_cost)+float(items_cost)
             print(" oa", order_items_cost)

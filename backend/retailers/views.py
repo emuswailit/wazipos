@@ -2376,8 +2376,26 @@ class RetailerCloseAndOrderIndentAPIView(APIView):
                         )
 
                     req_qty = int(item["required_quantity"])
-                    final_price = Decimal(str(item["price"]))
-                    gross_subtotal = Decimal(str(item["total"]))
+                    if req_qty <= 0:
+                        raise ValueError("Quantities must be at least 1")
+                    # Price is the server's, not the app's: the lot's price, or the
+                    # wholesaler's active offer price when lower.
+                    from wholesalers.models import WholesalerPriceDiscounts
+
+                    today_ = timezone.localdate()
+                    final_price = Decimal(str(w_receipt.final_unit_selling_price or w_receipt.unit_selling_price or 0))
+                    offer = (
+                        WholesalerPriceDiscounts.objects.filter(
+                            wholesaler_receipt=w_receipt, is_active="true", start__lte=today_, end__gte=today_,
+                        )
+                        .order_by("offer_price")
+                        .first()
+                    )
+                    if offer and offer.offer_price and Decimal(str(offer.offer_price)) < final_price:
+                        final_price = Decimal(str(offer.offer_price))
+                    if final_price <= 0:
+                        raise ValueError(f"{w_receipt.product.title} has no price set; the wholesaler must set one first")
+                    gross_subtotal = final_price * req_qty
 
                     indent_item = RetailerIndentItem.objects.filter(
                         entity=entity,

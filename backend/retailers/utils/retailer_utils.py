@@ -3607,6 +3607,14 @@ def create_customer_order(data, user):
         shipping_cost = chosen["total"]
         delivery_choice = (chosen, chosen_kg)
         delivery_method = "COURIER" if chosen["method"] == "COURIER" else "DELIVERY"
+    else:
+        # No priced delivery option: shoppers pay no delivery fee (one sent by the
+        # app is ignored — a negative one would cut the total); the shop's staff
+        # may charge a fee by hand, never below zero.
+        if bool(entity) and getattr(user, "entity_id", None) == entity.id:
+            shipping_cost = max(_to_decimal(shipping_cost or 0), Decimal("0.00"))
+        else:
+            shipping_cost = Decimal("0.00")
 
     order_number = generate_document_number(
         entity, user, "CUSTOMERORDER",
