@@ -11,6 +11,7 @@ import {
     useShopperCart,
 } from "@/context/ShopperCartContext";
 import type { CustomerOrder } from "@/databases/types";
+import { Ionicons } from "@expo/vector-icons";
 import {
     AlertCircle,
     CheckCircle2,
@@ -223,6 +224,10 @@ interface RetailerCartPanelProps {
     shippingCost?: number | null;
     retailerName?: string;
     retailerLocation?: string;
+    /** Shown when not already planning: keep the basket as a plan for later. */
+    onSaveAsPlan?: () => void;
+    /** Set while the cart is a shopping plan. */
+    planTitle?: string;
 }
 
 /* ── Component ──────────────────────────────────────────────── */
@@ -241,9 +246,12 @@ export default function RetailerCartPanel({
     shippingCost,
     retailerName,
     retailerLocation,
+    onSaveAsPlan,
+    planTitle,
 }: RetailerCartPanelProps) {
     const { theme, isDarkMode } = useAuth();
     const {
+        plan,
         order,
         lines,
         isReady,
@@ -508,6 +516,21 @@ export default function RetailerCartPanel({
                         </Text>
                     </View>
 
+                    {plan?.budget ? (
+                        // Budget check: real prices of the real products at this shop.
+                        <View style={{ marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: finalTotal > plan.budget ? "rgba(244,63,94,0.08)" : "rgba(16,185,129,0.08)", gap: 6 }}>
+                            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                                <Text style={{ fontFamily: theme.font.medium, fontSize: 12.5, color: theme.textDark }}>Budget KES {formatMoney(plan.budget)}</Text>
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: 12.5, color: finalTotal > plan.budget ? "#f43f5e" : "#10b981" }}>
+                                    {finalTotal > plan.budget ? `KES ${formatMoney(finalTotal - plan.budget)} over` : `KES ${formatMoney(plan.budget - finalTotal)} left`}
+                                </Text>
+                            </View>
+                            <View style={{ height: 6, borderRadius: 3, backgroundColor: "rgba(100,116,139,0.18)", overflow: "hidden" }}>
+                                <View style={{ width: `${Math.min(100, (finalTotal / plan.budget) * 100)}%`, height: "100%", backgroundColor: finalTotal > plan.budget ? "#f43f5e" : "#10b981" }} />
+                            </View>
+                        </View>
+                    ) : null}
+
                     {isReady && !empty && (
                         <>
                             <View style={{ marginTop: 14 }}>
@@ -621,9 +644,26 @@ export default function RetailerCartPanel({
                                     minimumFontScale={0.8}
                                     style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: "#fff", paddingHorizontal: 12 }}
                                 >
-                                    {isDelivery ? "Pay with M-Pesa · delivery" : "Pay with M-Pesa · pickup"}
+                                    {planTitle ? "Pay plan with M-Pesa · " : "Pay with M-Pesa · "}
+                                    {isDelivery ? "delivery" : "pickup"}
                                 </Text>
                             </TouchableOpacity>
+                            {onSaveAsPlan ? (
+                                <TouchableOpacity
+                                    onPress={onSaveAsPlan}
+                                    activeOpacity={0.85}
+                                    style={{ marginTop: 8, height: 42, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: "#8b5cf6", ...webPointer }}
+                                >
+                                    <Ionicons name="calendar-outline" size={16} color="#8b5cf6" />
+                                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: "#8b5cf6" }}>
+                                        Not ready? Save as a plan
+                                    </Text>
+                                </TouchableOpacity>
+                            ) : planTitle ? (
+                                <Text style={{ marginTop: 8, textAlign: "center", fontFamily: theme.font.medium, fontSize: 11.5, color: theme.textDark }}>
+                                    Saved to “{planTitle}” on this phone as you go.
+                                </Text>
+                            ) : null}
                         </>
                     )}
                 </ScrollView>

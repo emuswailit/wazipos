@@ -19,8 +19,9 @@ import { useAuth } from '@/context/AuthContext';
 import { useCategories } from '@/hooks/useCategories';
 import { deliveryHint, formatKm, useNearbyShops, type NearbyShop } from '@/hooks/useNearbyShops';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useMemo, useRef, useState } from 'react';
+import { getPlan, type ShoppingPlan } from '@/utils/shoppingPlans';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { CustomMapView } from './CustomMapView';
@@ -137,8 +138,19 @@ function ShopCard({ shop, onOpen }: { shop: NearbyShop; onOpen: () => void }) {
 
 export default function AdjacentShopsScreen() {
     const { theme, border, chipBg } = useListTokens();
-    const { isDarkMode } = useAuth();
+    const { isDarkMode, user } = useAuth() as any;
     const router = useRouter();
+    // ?plan=<id>: choosing the shop for a shopping plan.
+    const { plan: planParam } = useLocalSearchParams<{ plan?: string }>();
+    const planId = Array.isArray(planParam) ? planParam[0] : planParam;
+    const [plan, setPlan] = useState<ShoppingPlan | null>(null);
+    useEffect(() => {
+        if (!planId) {
+            setPlan(null);
+            return;
+        }
+        getPlan(String(user?.id ?? ''), planId).then(setPlan).catch(() => setPlan(null));
+    }, [planId, user?.id]);
     const { width } = useWindowDimensions();
     const cols = width >= 1200 ? 3 : width >= 720 ? 2 : 1;
     const nearby = useNearbyShops();
@@ -173,6 +185,7 @@ export default function AdjacentShopsScreen() {
                 location: [shop.distanceKm !== null ? formatKm(shop.distanceKm) : null, place].filter(Boolean).join(' · '),
                 lat: String(shop.latitude || ''),
                 lng: String(shop.longitude || ''),
+                ...(planId ? { plan: planId } : {}),
                 ...(shop.distanceKm !== null ? { distance: String(shop.distanceKm) } : {}),
                 ...(nearby.coords ? { userLat: String(nearby.coords.latitude), userLng: String(nearby.coords.longitude) } : {}),
             },
@@ -289,6 +302,14 @@ export default function AdjacentShopsScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.background }}>
+            {planId ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#8b5cf614', borderBottomWidth: 1, borderBottomColor: '#8b5cf633' }}>
+                    <Ionicons name="calendar" size={18} color="#8b5cf6" />
+                    <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }} numberOfLines={2}>
+                        Choose a shop for “{plan?.title ?? 'your plan'}”. You’ll price it with that shop’s real products.
+                    </Text>
+                </View>
+            ) : null}
             {view === 'MAP' ? (
                 <View style={{ flex: 1 }}>
                     <View style={{ padding: 12, paddingBottom: 8, maxWidth: 1200, width: '100%', alignSelf: 'center', zIndex: 10 }}>{header}</View>

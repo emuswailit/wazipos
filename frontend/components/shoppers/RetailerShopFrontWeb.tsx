@@ -1,6 +1,9 @@
 // components/shoppers/RetailerShopFrontWeb.tsx
 import type { DeliveryMethod } from "@/components/common/DeliveryMethodSelector";
 import RecordPaymentModal from "@/components/common/RecordPaymentModal";
+import { useAlert } from "@/components/common/AlertProvider";
+import { PlanBanner, PlanFormSheet, type PlanDetails } from "@/components/shopping/plans/PlanParts";
+import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { useShopperCart } from "@/context/ShopperCartContext";
 import type { CustomerOrder, RetailerReceipt } from "@/databases/types";
@@ -566,6 +569,34 @@ export default function RetailerShopFrontWeb({
     const isMobileWeb = runtimeClass === "mobile-web";
     const isDesktopWeb = runtimeClass === "desktop-web";
     const cart = useShopperCart();
+    const alert = useAlert();
+
+    /* ---- Shopping plans: save the basket for later, or pay a plan ---- */
+    const [savePlanOpen, setSavePlanOpen] = useState(false);
+    const [savingPlan, setSavingPlan] = useState(false);
+    const paidRef = useRef(false);
+    const savePlan = async (d: PlanDetails) => {
+        setSavingPlan(true);
+        try {
+            const p = await cart.saveAsPlan(d);
+            setSavePlanOpen(false);
+            if (p) {
+                alert("Plan saved", `“${p.title}” is on this phone with ${p.items.length} item${p.items.length === 1 ? "" : "s"}. Open it from Shopping → Planner and pay by M-Pesa when you’re ready.`, [
+                    { text: "Keep shopping", style: "cancel" },
+                    { text: "Open Planner", onPress: () => router.push("/plans" as any) },
+                ], "success");
+            }
+        } finally {
+            setSavingPlan(false);
+        }
+    };
+    const offerPlanInstead = () => {
+        if (cart.plan || cart.itemCount === 0) return;
+        alert("Not ready to pay?", "Save this basket as a plan. It stays on your phone, and you can pay for it by M-Pesa whenever you’re ready.", [
+            { text: "Not now", style: "cancel" },
+            { text: "Save as plan", onPress: () => setSavePlanOpen(true) },
+        ]);
+    };
 
     const [productsColumnWidth, setProductsColumnWidth] = useState(0);
     const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
@@ -602,6 +633,52 @@ export default function RetailerShopFrontWeb({
         error,
         isLoading,
     } = useRetailerInventory(retailerId);
+
+    /* ---- Plans use real prices: re-price the plan from the shop's live stock
+     *      once per opening, and say what changed. ---- */
+    const repricedRef = useRef<string | null>(null);
+    useEffect(() => {
+        const plan = cart.plan;
+        if (!plan || !products.length || repricedRef.current === plan.id) return;
+        repricedRef.current = plan.id;
+        const byId = new Map<string, RetailerReceipt>();
+        for (const r of products) {
+            const id = String((r as any).remote_id || (r as any).id || "");
+            if (id) byId.set(id, r);
+        }
+        let before = 0;
+        let after = 0;
+        let changed = 0;
+        const gone: string[] = [];
+        const short: string[] = [];
+        for (const it of plan.items) {
+            const qty = Number(it.purchased_quantity ?? 0);
+            const was = Number(it.receipt_details?.final_unit_selling_price ?? it.item_net_price ?? 0);
+            before += was * qty;
+            const r = byId.get(String(it.retailer_receipt));
+            if (!r) {
+                gone.push(it.title || "An item");
+                after += was * qty;
+                continue;
+            }
+            const now = getReceiptPrice(r);
+            after += now * qty;
+            if (Math.abs(now - was) > 0.004) {
+                changed += 1;
+                cart.addOrUpdate(r, qty);
+            }
+            if (Number(r.current_unit_quantity ?? 0) < qty) short.push(it.title || "An item");
+        }
+        if (!changed && !gone.length && !short.length) return;
+        const fmt = (n: number) => `KES ${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+        const parts = [
+            changed ? `${changed} price${changed === 1 ? "" : "s"} changed since you saved this plan: total ${fmt(before)} → ${fmt(after)}.` : null,
+            short.length ? `Not enough in stock now: ${short.slice(0, 3).join(", ")}${short.length > 3 ? "…" : ""}.` : null,
+            gone.length ? `No longer sold here: ${gone.slice(0, 3).join(", ")}${gone.length > 3 ? "…" : ""}. Remove or swap them before paying.` : null,
+        ].filter(Boolean);
+        alert("Plan updated to today’s prices", parts.join("\n\n"), undefined, gone.length || short.length ? "danger" : "default");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cart.plan?.id, products]);
 
     const borderColor = isDarkMode ? "#1e293b" : "#e8edf2";
     const subtleBg = isDarkMode ? "#0f172a" : "#f1f5f9";
@@ -761,6 +838,8 @@ export default function RetailerShopFrontWeb({
             shippingCost={shippingCost}
             retailerName={retailerName}
             retailerLocation={retailerLocation}
+            onSaveAsPlan={cart.plan ? undefined : () => setSavePlanOpen(true)}
+            planTitle={cart.plan?.title}
         />
     );
 
@@ -1170,6 +1249,7 @@ export default function RetailerShopFrontWeb({
 
     return (
         <View className="flex-1" style={{ backgroundColor: theme.background }}>
+            {cart.plan ? <PlanBanner plan={cart.plan} onDone={() => router.push("/plans" as any)} /> : null}
             {showThreeColumn ? (
                 <View className="flex-1 flex-row">
                     <View
@@ -1541,10 +1621,32 @@ export default function RetailerShopFrontWeb({
                 orderId={payingOrder?.draft_id ?? ""}
                 orderRef={payingOrder?.draft_id ?? ""}
                 config={customerConfig}
-                onClose={() => setPayingOrder(null)}
-                onSuccess={async () => {
+                onClose={() => {
                     setPayingOrder(null);
+                    // Closed without paying: offer to keep the basket as a plan.
+                    if (!paidRef.current) offerPlanInstead();
+                    paidRef.current = false;
                 }}
+                onSuccess={async () => {
+                    paidRef.current = true;
+                    setPayingOrder(null);
+                    if (cart.plan) {
+                        // The plan is now a real order: drop the wishlist.
+                        const title = cart.plan.title;
+                        await cart.completePlan();
+                        alert("Plan paid", `“${title}” is now an order. Follow it in Shopping → Orders.`, [
+                            { text: "My orders", onPress: () => router.replace("/myOrders" as any) },
+                            { text: "Planner", onPress: () => router.replace("/plans" as any) },
+                        ], "success");
+                    }
+                }}
+            />
+            <PlanFormSheet
+                visible={savePlanOpen}
+                mode="save"
+                submitting={savingPlan}
+                onClose={() => !savingPlan && setSavePlanOpen(false)}
+                onSubmit={savePlan}
             />
 
 </View>

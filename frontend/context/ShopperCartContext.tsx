@@ -21,6 +21,7 @@ import React, {
     useState,
 } from "react";
 import { Platform } from "react-native";
+import { deletePlan, getPlan, newPlanId, planToOrder, upsertPlan, type ShoppingPlan } from "@/utils/shoppingPlans";
 
 export interface ShopperCartLine {
     receiptId: string;
@@ -184,6 +185,14 @@ interface ShopperCartValue {
     // 🌟 ADDED INDEX FALLBACK
     removeLine: (receiptId: string, index?: number) => void;
     clear: () => void;
+
+    /** Set when the shop front is open on a shopping plan (?plan=<id>):
+     *  the cart reads and writes that plan on the device instead of the draft. */
+    plan: ShoppingPlan | null;
+    /** Saves the current cart as a new plan for this shop and empties the cart. */
+    saveAsPlan: (details: { title: string; for_whom?: string; need_by?: string; note?: string }) => Promise<ShoppingPlan | null>;
+    /** Removes the open plan (after it was paid for and became an order). */
+    completePlan: () => Promise<void>;
 }
 
 const ShopperCartContext = createContext<ShopperCartValue | undefined>(
@@ -201,7 +210,14 @@ export function ShopperCartProvider({
     const params = useGlobalSearchParams<{
         id?: string;
         name?: string;
+        plan?: string;
+        type?: string;
+        location?: string;
+        lat?: string;
+        lng?: string;
     }>();
+    const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] ?? "" : v ?? "");
+    const planId = one(params.plan);
 
     const retailerId = useMemo(() => {
         const raw = params.id;
@@ -215,17 +231,45 @@ export function ShopperCartProvider({
     }, [params.name]);
 
     const [order, setOrder] = useState<CustomerOrder | null>(null);
+    const [plan, setPlan] = useState<ShoppingPlan | null>(null);
     const [isReady, setIsReady] = useState(false);
     const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         setOrder(null);
+        setPlan(null);
         setIsReady(false);
 
         (async () => {
             if (!userId || !retailerId) {
                 if (!cancelled) setIsReady(true);
+                return;
+            }
+
+            if (planId) {
+                // Plan mode: the plan is the cart. Pin it to this shop.
+                try {
+                    const existing = await getPlan(userId, planId);
+                    const sameShop = existing?.retailer_id === retailerId;
+                    const p = await upsertPlan(userId, planId, {
+                        ...(existing ?? { title: "My plan" }),
+                        items: sameShop ? existing?.items ?? [] : [],
+                        retailer_id: retailerId,
+                        retailer_name: retailerName,
+                        retailer_type: one(params.type) || existing?.retailer_type,
+                        retailer_location: one(params.location) || existing?.retailer_location,
+                        retailer_lat: one(params.lat) || existing?.retailer_lat,
+                        retailer_lng: one(params.lng) || existing?.retailer_lng,
+                    });
+                    if (cancelled) return;
+                    setPlan(p);
+                    setOrder(planToOrder(p));
+                } catch (e) {
+                    console.warn("[ShopperCart] plan hydrate failed:", e);
+                } finally {
+                    if (!cancelled) setIsReady(true);
+                }
                 return;
             }
 
@@ -241,12 +285,20 @@ export function ShopperCartProvider({
         })();
 
         return () => { cancelled = true; };
-    }, [userId, retailerId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userId, retailerId, planId]);
 
     useEffect(() => {
-        if (!isReady || !order || !order.id) return;
+        if (!isReady || !order) return;
+        if (!planId && !order.id) return;
         if (persistTimer.current) clearTimeout(persistTimer.current);
         persistTimer.current = setTimeout(() => {
+            if (planId) {
+                upsertPlan(userId, planId, { items: order.order_items ?? [] })
+                    .then(setPlan)
+                    .catch((e) => console.warn("[ShopperCart] plan persist failed:", e));
+                return;
+            }
             db.replaceShopperItems(order).catch((e) =>
                 console.warn("[ShopperCart] persist failed:", e),
             );
@@ -260,13 +312,15 @@ export function ShopperCartProvider({
         if (Platform.OS !== "web") return;
         if (typeof window === "undefined") return;
         const onBeforeUnload = () => {
-            if (order?.id) {
+            if (planId) {
+                if (order) upsertPlan(userId, planId, { items: order.order_items ?? [] }).catch(() => { });
+            } else if (order?.id) {
                 db.replaceShopperItems(order).catch(() => { });
             }
         };
         window.addEventListener("beforeunload", onBeforeUnload);
         return () => window.removeEventListener("beforeunload", onBeforeUnload);
-    }, [order]);
+    }, [order, planId, userId]);
 
     const lines = useMemo<ShopperCartLine[]>(
         () => (order?.order_items ?? []).map(orderItemToLine),
@@ -293,6 +347,7 @@ export function ShopperCartProvider({
                     if (!receiptId) return;
 
                     let active = order;
+                    if (!active && planId) return; // plan still loading
                     if (!active) {
                         active = await db.getOrCreateShopperDraft(userId, retailerId, retailerName);
                     }
@@ -322,7 +377,7 @@ export function ShopperCartProvider({
                 }
             })();
         },
-        [order, userId, retailerId, retailerName],
+        [order, userId, retailerId, retailerName, planId],
     );
 
     const setQuantity = useCallback(
@@ -371,6 +426,11 @@ export function ShopperCartProvider({
     }, []);
 
     const clear = useCallback(() => {
+        if (planId) {
+            // Emptying a plan keeps the plan itself.
+            setOrder((prev) => (prev ? { ...prev, order_items: [] } : prev));
+            return;
+        }
         (async () => {
             try {
                 if (userId && retailerId) {
@@ -387,7 +447,43 @@ export function ShopperCartProvider({
                 setOrder(null);
             }
         })();
-    }, [userId, retailerId]);
+    }, [userId, retailerId, planId]);
+
+    const saveAsPlan = useCallback(
+        async (details: { title: string; for_whom?: string; need_by?: string; note?: string }) => {
+            if (!userId || !retailerId || !order) return null;
+            const p = await upsertPlan(userId, newPlanId(), {
+                ...details,
+                items: order.order_items ?? [],
+                retailer_id: retailerId,
+                retailer_name: retailerName,
+                retailer_type: one(params.type),
+                retailer_location: one(params.location),
+                retailer_lat: one(params.lat),
+                retailer_lng: one(params.lng),
+            });
+            if (!planId) {
+                // The basket now lives in the plan: empty the cart draft.
+                try {
+                    const orders = await db.getShopperOrdersByUserAndEntity(userId, retailerId);
+                    for (const o of orders) if (o?.id != null) await db.deleteShopperOrderById(o.id as number);
+                } catch (e) {
+                    console.warn("[ShopperCart] clear after plan failed:", e);
+                }
+                setOrder(null);
+            }
+            return p;
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [userId, retailerId, retailerName, order, planId, params.type, params.location, params.lat, params.lng],
+    );
+
+    const completePlan = useCallback(async () => {
+        if (!planId) return;
+        await deletePlan(userId, planId);
+        setPlan(null);
+        setOrder(null);
+    }, [userId, planId]);
 
     const { itemCount, totalUnits, subtotal } = useMemo(() => {
         const items = order?.order_items ?? [];
@@ -416,8 +512,11 @@ export function ShopperCartProvider({
             setQuantity,
             removeLine,
             clear,
+            plan,
+            saveAsPlan,
+            completePlan,
         }),
-        [order, lines, isReady, itemCount, totalUnits, subtotal, getQuantity, hasLine, addOrUpdate, setQuantity, removeLine, clear],
+        [order, lines, isReady, itemCount, totalUnits, subtotal, getQuantity, hasLine, addOrUpdate, setQuantity, removeLine, clear, plan, saveAsPlan, completePlan],
     );
 
     return (
