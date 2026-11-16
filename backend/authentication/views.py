@@ -3571,9 +3571,13 @@ class VerifyEmail(views.APIView):
                 jwt=token, key=settings.SECRET_KEY, algorithms=["HS256"]
             )
             user = models.Users.objects.get(id=payload["user_id"])
-            if not user.is_email_verified:
+            # Opened from the link emailed at sign-up. (Was `if not user.is_email_verified`,
+            # never true for the string "false", so nobody got verified.)
+            if str(user.is_email_verified).lower() != "true":
                 user.is_email_verified = "true"
                 user.is_verified = "true"
+                from django.utils import timezone as dj_tz
+                user.email_verified_at = dj_tz.now()
                 user.save()
             return Response(
                 {"email": "Successfully activated"}, status=status.HTTP_200_OK
@@ -5035,11 +5039,7 @@ def get_or_create_google_user(claims):
     email = claims["email"].strip().lower()
     user = models.Users.objects.filter(email__iexact=email).first()
     if user:
-        if user.is_email_verified != "true":
-            # Google has verified this address, so the account's email is verified too.
-            user.is_email_verified = "true"
-            user.is_verified = "true"
-            user.save()
+        # Emails are verified only by the link emailed to the address, not by Google.
         return user, False
 
     client_role = models.Roles.objects.filter(value="Client").first()
@@ -5058,11 +5058,20 @@ def get_or_create_google_user(claims):
         user.entity = default_entity
         user.country = default_entity.country
         user.is_active = True
-        user.is_email_verified = "true"
-        user.is_verified = "true"
         user.save()
         user.roles.add(client_role)
+    _email_verification_link(user)
     return user, True
+
+
+def _email_verification_link(user):
+    """New social-sign-in accounts confirm their email from the emailed link."""
+    from authentication.utils import admin_users as au
+
+    try:
+        au.request_email_verification(user)
+    except Exception as e:  # never block sign-in over email
+        create_log("error", f"Email verification link for {user.id} failed: {e}")
 
 
 class GoogleIdTokenLoginAPIView(APIView):
@@ -5160,10 +5169,9 @@ def get_or_create_social_user(email, first_name, last_name, method):
         user.entity = default_entity
         user.country = default_entity.country
         user.is_active = True
-        user.is_email_verified = "true"
-        user.is_verified = "true"
         user.save()
         user.roles.add(client_role)
+    _email_verification_link(user)
     return user, True
 
 

@@ -1712,6 +1712,9 @@ class UsersSerializer(serializers.ModelSerializer):
             "allowed_roles",
             "created_at",
             "is_verified",
+            # Set only by verification: email by the emailed link, phone by the SMS code.
+            "is_email_verified",
+            "phone_otp_verified",
         )
 
         extra_kwargs = {
