@@ -27,6 +27,7 @@ import {
     type AdminListConfig,
     type BadgeTone,
 } from '@/components/common/listScreen';
+import { SelectDropdown } from '@/components/common/SelectDropdown';
 import { SwitchField } from '@/components/common/SwitchField';
 import { useCachedList, usePaged } from '@/hooks/useCachedList';
 import { Formik } from 'formik';
@@ -423,18 +424,16 @@ function PackageForm({ visible, initial, routers, saving, error, onClose, onSave
                         />
                     </FormSection>
                     {!initial ? (
-                        <FormSection title="Router">
-                            {routers.length ? (
-                                <ChoiceChips<string>
-                                    label="Sold on"
-                                    options={routers.map((r) => ({ value: r.id, label: r.title }))}
-                                    value={f.values.router_id}
-                                    onChange={(id) => f.setFieldValue('router_id', id)}
-                                    error={typeof f.errors.router_id === 'string' ? f.errors.router_id : undefined}
-                                />
-                            ) : (
-                                <CustomTextField label="Router" value="Add a router first (Routers tab)" editable={false} />
-                            )}
+                        <FormSection title="Router" zIndex={30}>
+                            <SelectDropdown
+                                name="router_id"
+                                label="Sold on"
+                                required
+                                options={routers.map((r) => ({ value: r.id, label: r.title, description: r.router_ip }))}
+                                placeholder={routers.length ? 'Select a router…' : 'No routers yet'}
+                                helperText={routers.length ? undefined : 'Add a router first under Wi-Fi Hotspots → Routers.'}
+                                disabled={!routers.length}
+                            />
                         </FormSection>
                     ) : null}
                     <FormSection title="Status">
@@ -501,17 +500,16 @@ function SubscriptionForm({ visible, initial, tariffs, saving, error, onClose, o
                     error={error}
                     onSubmit={() => f.handleSubmit()}
                 >
-                    <FormSection title="Package">
-                        {onSale.length ? (
-                            <ChoiceChips<string>
-                                options={onSale.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}` }))}
-                                value={f.values.tariff_selected}
-                                onChange={(id) => f.setFieldValue('tariff_selected', id)}
-                                error={typeof f.errors.tariff_selected === 'string' ? f.errors.tariff_selected : undefined}
-                            />
-                        ) : (
-                            <CustomTextField label="Package" value="Add a package first (Packages)" editable={false} />
-                        )}
+                    <FormSection title="Package" zIndex={30}>
+                        <SelectDropdown
+                            name="tariff_selected"
+                            label="Package"
+                            required={!initial}
+                            options={onSale.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}`, description: lengthLabel(t) }))}
+                            placeholder={onSale.length ? 'Select a package…' : 'No packages on sale'}
+                            helperText={onSale.length ? undefined : 'Add a package first under Wi-Fi Hotspots → Packages.'}
+                            disabled={!onSale.length}
+                        />
                     </FormSection>
                     <FormSection title="Device">
                         <CustomTextField name="mac_address" label="MAC address" required placeholder="e.g. A4:5E:60:12:34:56" autoCapitalize="characters" />
@@ -564,21 +562,22 @@ function PaymentForm({ visible, initial, tariffs, saving, error, onClose, onSave
                     error={error}
                     onSubmit={() => f.handleSubmit()}
                 >
-                    <FormSection title="Package">
-                        {tariffs.length ? (
-                            <ChoiceChips<string>
-                                options={tariffs.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}` }))}
-                                value={f.values.tariff}
-                                onChange={(id) => {
-                                    f.setFieldValue('tariff', id);
-                                    const t = tariffs.find((x) => x.id === id);
-                                    if (t) f.setFieldValue('amount', String(Number(t.price)));
-                                }}
-                                error={typeof f.errors.tariff === 'string' ? f.errors.tariff : undefined}
-                            />
-                        ) : (
-                            <CustomTextField label="Package" value="Add a package first (Packages)" editable={false} />
-                        )}
+                    <FormSection title="Package" zIndex={30}>
+                        <SelectDropdown
+                            label="Package"
+                            required
+                            options={tariffs.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}`, description: lengthLabel(t) }))}
+                            value={f.values.tariff}
+                            onChange={(id) => {
+                                f.setFieldValue('tariff', id);
+                                const t = tariffs.find((x) => x.id === id);
+                                if (t) f.setFieldValue('amount', String(Number(t.price)));
+                            }}
+                            error={f.touched.tariff && typeof f.errors.tariff === 'string' ? f.errors.tariff : undefined}
+                            placeholder={tariffs.length ? 'Select a package…' : 'No packages yet'}
+                            helperText={tariffs.length ? undefined : 'Add a package first under Wi-Fi Hotspots → Packages.'}
+                            disabled={!tariffs.length}
+                        />
                     </FormSection>
                     <FormSection title="Payment">
                         <FormRow>
