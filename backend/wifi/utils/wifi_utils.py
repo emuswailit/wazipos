@@ -20,7 +20,7 @@ def create_wifi_router(data, user):
 
     if not data.get("model") or data.get("model").strip() == "":
         errors.append("Router model is required.")
-    
+
     if not data.get("contact") or data.get("contact").strip() == "":
         errors.append("User support contact is required.")
 
@@ -33,6 +33,8 @@ def create_wifi_router(data, user):
             brand=data["brand"],
             model=data.get("model"),
             contact=data.get("contact"),
+            nas_id=str(data.get("nas_id") or "").strip(),
+            description=str(data.get("description") or "").strip() or None,
             owner=user,
             entity=user.entity
         )
@@ -52,14 +54,16 @@ def update_wifi_router(data, user):
         errors.append("ID is required to update the tariff.")
         return errors, wifi_router
 
-    try:
-        wifi_router = models.WifiRouters.objects.get(id=data["id"], owner=user)
-    except models.WifiRouters.DoesNotExist:
+    wifi_router = models.WifiRouters.objects.filter(id=data["id"], entity=user.entity).first()
+    if not wifi_router:
         errors.append("Wifi router not found.")
         return errors, wifi_router
-    
+
+    for field in ("title", "router_ip", "nas_id", "brand", "model", "contact", "description"):
+        if field in data and data.get(field) is not None:
+            setattr(wifi_router, field, str(data[field]).strip())
     if "is_active" in data:
-        wifi_router.is_active = data["is_active"]
+        wifi_router.is_active = "true" if str(data["is_active"]).lower() in ("true", "1", "yes") else "false"
 
     try:
         wifi_router.save()
@@ -138,11 +142,11 @@ def update_wifi_tariff(data, user):
 
     if data.get("title"):
         wifi_tariff.title = data["title"].upper()
-    
+
     if data.get("price") and data["price"] > 0:
         wifi_tariff.price = data["price"]
 
-    
+
     if "is_active" in data:
         wifi_tariff.is_active = data["is_active"]
 
@@ -154,10 +158,11 @@ def update_wifi_tariff(data, user):
     return errors, wifi_tariff
 
 def get_wifi_tariffs(data, user):
-        wifi_tariffs = []
-        if models.WifiTarrifs.objects.filter(entity=user.entity,is_active="true").exists():
-            wifi_tariffs = models.WifiTarrifs.objects.filter(entity=user.entity,is_active="true").exclude(price=0)
-        return wifi_tariffs
+        # scope "all": the provider's own screen (inactive packages too); default: the ones on sale.
+        qs = models.WifiTarrifs.objects.filter(entity=user.entity).select_related("router").order_by("price")
+        if str((data or {}).get("scope") or "").lower() != "all":
+            qs = qs.filter(is_active="true").exclude(price=0)
+        return qs
 
 def delete_wifi_tariff(data, user):
     """
@@ -178,7 +183,7 @@ def delete_wifi_tariff(data, user):
     except Exception as e:
         errors.append(str(e))
 
-    return errors, wifi_tariff  
+    return errors, wifi_tariff
 
 
 
@@ -186,8 +191,8 @@ def get_wifi_subscriptions(user):
     wifi_tariff_subscriptions=[]
     if models.WifiSubscriptions.objects.filter(entity=user.entity).exists():
         wifi_tariff_subscriptions=models.WifiSubscriptions.objects.filter(entity=user.entity).all().order_by('-created')
-    return wifi_tariff_subscriptions 
- 
+    return wifi_tariff_subscriptions
+
 def get_wifi_subscription_payments(user):
     wifi_subscription_payments=[]
     if user.is_staff:
@@ -200,4 +205,4 @@ def get_wifi_subscription_payments(user):
         if account:
             if models.WifiSubscriptionPayments.objects.filter(entity=user.entity,status="SUCCESS",account=account).exists():
                 wifi_subscription_payments=models.WifiSubscriptionPayments.objects.filter(entity=user.entity,status="SUCCESS",account=account).all().order_by('-created')
-    return wifi_subscription_payments  
+    return wifi_subscription_payments

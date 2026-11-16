@@ -430,6 +430,28 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         ],
     },
     {
+        // Wi-Fi hotspot businesses (entity type InternetServiceProvider):
+        // routers, packages, connected customers and their payments.
+        id: 91,
+        title: 'Wi-Fi Hotspots',
+        route: '/wifiManager',
+        allowedRoles: ['Admin', 'InternetServiceProviderSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Wifi',
+        tint: TINTS.sky,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'Routers, packages & customers',
+                route: '/wifiManager',
+                allowedRoles: ['Admin', 'InternetServiceProviderSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Wifi',
+                tint: TINTS.sky,
+            },
+        ],
+    },
+    {
         // Running a restaurant (an entity of type Restaurant): orders & table
         // bookings board, the menu, and tables. Customers use the Restaurants tab.
         // A hotel (entity type Hotel) gets all of it, plus Stays and Rooms —

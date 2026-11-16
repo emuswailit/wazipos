@@ -53,6 +53,12 @@ def wifiAPIView(request):
 
         if len(errors)>0:
             return custom_errors_response(1,"Router could not created",errors)
+    elif request.data["action"] == "UpdateWifiRouter":
+        errors, wifi_router = wifi_utils.update_wifi_router(request.data, request.user)
+        if errors:
+            return custom_errors_response(1, "Router could not be updated", errors)
+        serializer = serializers.WifiRoutersSerializer(wifi_router, many=False, context={"request": request})
+        return custom_success_message(0, "Wifi router updated successfully", serializer.data, "wifi_router")
     elif request.data["action"] == "GetWifiRouters":
         wifi_routers = wifi_utils.get_wifi_routers(
          request.user
