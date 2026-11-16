@@ -326,7 +326,7 @@ export default function RetailerForecastsList({
                 target_wholesaler_ids: payload.target_wholesaler_ids,
                 target_wholesaler_titles: payload.target_wholesaler_titles ?? [],
                 wholesalers: (payload as any).wholesalers ?? [],   // ← must be here
-                best_forecast_quantity: requestTarget?.required_quantity ?? 1,
+                best_forecast_quantity: Math.max(1, requestTarget?.required_quantity ?? 1),
             });
             setRequestTarget(null);
         },
@@ -447,9 +447,7 @@ export default function RetailerForecastsList({
                 productTitle={
                     requestTarget?.product_title ?? ''
                 }
-                defaultQuantity={
-                    requestTarget?.required_quantity ?? 1
-                }
+                defaultQuantity={Math.max(1, requestTarget?.required_quantity ?? 1)}
                 mode={existingDraft ? 'update' : 'add'}
                 initialWholesalerIds={
                     existingDraft?.target_wholesaler_ids

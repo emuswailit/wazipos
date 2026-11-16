@@ -138,7 +138,17 @@ function normalizeForecast(
         daily: (raw.daily ?? []) as RetailerForecastDailyRow[],
         wholesaler_offers: offers,
         wholesaler_campaigns: campaigns,
-        required_quantity: Math.max(1, Math.ceil(totalForecast)),
+        // Server: ceil(forecast + safety − on hand − on order), 0 when covered.
+        // Older servers don't send it: fall back to forecast − on hand.
+        required_quantity:
+            raw.suggested_order_quantity != null
+                ? Math.max(0, Number(raw.suggested_order_quantity))
+                : Math.max(0, Math.ceil(totalForecast - Number(raw.on_hand ?? 0))),
+        on_hand: raw.on_hand != null ? Number(raw.on_hand) : null,
+        on_order: raw.on_order != null ? Number(raw.on_order) : null,
+        safety_stock: raw.safety_stock != null ? Number(raw.safety_stock) : null,
+        days_of_stock: raw.days_of_stock != null ? Number(raw.days_of_stock) : null,
+        days_extrapolated: Number(raw.days_extrapolated ?? 0),
         has_offers: offers.length > 0,
         has_campaigns: campaigns.length > 0,
         best_offer_score:
@@ -185,6 +195,8 @@ function areForecastsEqual(
             x.avg_daily_forecast !== y.avg_daily_forecast ||
             x.days_covered !== y.days_covered ||
             x.required_quantity !== y.required_quantity ||
+            x.on_hand !== y.on_hand ||
+            x.on_order !== y.on_order ||
             x.has_offers !== y.has_offers ||
             x.has_campaigns !== y.has_campaigns ||
             x.best_offer_score !== y.best_offer_score ||
@@ -488,7 +500,9 @@ export function ForecastProvider({
                         tier: 'RETAILER',
                         lead_time_days: f.leadTimeDays,
                         order_days: f.orderDays,
-                        include_daily: true,
+                        // Day-by-day rows are loaded per product when its
+                        // details open; the list needs totals only.
+                        include_daily: false,
                         include_offers: true,
                         include_campaigns: true,
                         min_avg_daily_demand:

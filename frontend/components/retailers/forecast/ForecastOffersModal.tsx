@@ -40,8 +40,10 @@ export function ForecastOffersModal({ forecast, onClose, onSelectOffer, onRemove
     useEffect(() => {
         if (!forecast) return;
         setSelectedOfferId(forecast.wholesaler_offers[0]?.receipt_id ?? null);
-        setQuantity(forecast.required_quantity);
-        setQuantityText(String(forecast.required_quantity));
+        // Covered products suggest 0; ordering anyway starts at 1.
+        const start = Math.max(1, forecast.required_quantity);
+        setQuantity(start);
+        setQuantityText(String(start));
     }, [forecast]);
 
     /** Offers already on the open indent. */

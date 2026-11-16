@@ -22,6 +22,8 @@ export function formatKES(raw: string | number | null | undefined): string {
 function forecastBadges(f: RetailerForecastNormalized, inBasket: boolean): AdminBadge[] {
     const best = bestOfferOf(f);
     const out: AdminBadge[] = [];
+    if (f.required_quantity <= 0) out.push({ label: 'Covered', tone: 'success', icon: 'checkmark-circle-outline' });
+    else if (f.days_of_stock != null && f.days_of_stock < 7) out.push({ label: f.on_hand ? `${f.days_of_stock}d of stock` : 'Out of stock', tone: 'danger', icon: 'alert-circle-outline' });
     if (inBasket) out.push({ label: 'In basket', tone: 'warning', icon: 'basket-outline' });
     if (!f.has_offers && !f.has_campaigns) out.push({ label: 'No offers', tone: 'neutral' });
     if (best?.price_discount_percent && best.price_discount_percent > 0) out.push({ label: `${best.price_discount_percent.toFixed(0)}% off`, tone: 'success' });
@@ -47,8 +49,9 @@ export function makeForecastsConfig(inBasket: (f: RetailerForecastNormalized) =>
         },
         avatarOf: (f) => ({ icon: 'trending-up-outline', color: f.has_offers ? '#10b981' : f.has_campaigns ? '#f59e0b' : '#64748b' }),
         badgesOf: (f) => forecastBadges(f, inBasket(f)),
-        metricOf: (f) => ({ value: units(f.required_quantity), label: 'to order' }),
-        metaOf: (f) => `${units(f.total_forecast)} forecast · ${f.avg_daily_forecast.toFixed(1)}/day`,
+        metricOf: (f) => ({ value: units(f.required_quantity), label: f.required_quantity > 0 ? 'to order' : 'covered', color: f.required_quantity > 0 ? undefined : '#10b981' }),
+        metaOf: (f) =>
+            `${units(f.total_forecast)} forecast · ${f.avg_daily_forecast.toFixed(1)}/day${f.on_hand != null ? ` · ${units(f.on_hand)} in stock` : ''}${f.on_order ? ` · ${units(f.on_order)} on order` : ''}`,
         metaIcon: 'stats-chart-outline',
         primaryColumn: { label: 'Product', flex: 2.4 },
         columns: [

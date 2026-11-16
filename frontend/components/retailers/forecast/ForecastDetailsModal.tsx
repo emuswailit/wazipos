@@ -5,7 +5,9 @@
 
 import { AdminBadgePill, AdminDetailsSheet, SheetButton, formatDate, textOr, useListTokens, useSheetIsWide, webPointer, type AdminBadge } from '@/components/common/listScreen';
 import type { RetailerForecastDailyRow, RetailerForecastNormalized } from '@/databases/types';
-import React, { useMemo, useState } from 'react';
+import analyticsApi from '@/api/analyticsApi';
+import { useForecast } from '@/context/ForecastContext';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { formatKES, units } from './forecastsConfig';
@@ -58,23 +60,36 @@ export function ForecastDetailsModal({ forecast, onClose, onViewOffers, onReques
             avatar={{ icon: 'trending-up-outline', color: hasSupply ? '#10b981' : '#64748b' }}
             badges={badges}
             stats={[
-                { label: 'To order', value: units(f.required_quantity), color: '#6366f1' },
+                { label: f.required_quantity > 0 ? 'To order' : 'Covered', value: units(f.required_quantity), color: f.required_quantity > 0 ? '#6366f1' : '#10b981' },
                 { label: 'Forecast', value: units(f.total_forecast) },
-                { label: 'Per day', value: f.avg_daily_forecast.toFixed(1) },
+                { label: 'In stock', value: f.on_hand != null ? units(f.on_hand) : '—' },
             ]}
             sections={[
+                {
+                    title: 'Order',
+                    icon: 'cart-outline',
+                    fields: [
+                        { label: 'Forecast demand', value: units(f.total_forecast) },
+                        { label: '+ Safety stock (9 in 10 days covered)', value: f.safety_stock != null ? units(f.safety_stock) : '' },
+                        { label: '− In stock', value: f.on_hand != null ? units(f.on_hand) : '' },
+                        { label: '− Already on order', value: f.on_order != null ? units(f.on_order) : '' },
+                        { label: '= To order', value: units(f.required_quantity) },
+                        { label: 'Stock lasts', value: f.days_of_stock != null ? `${f.days_of_stock} days` : '' },
+                    ],
+                },
                 {
                     title: 'Demand',
                     icon: 'stats-chart-outline',
                     fields: [
+                        { label: 'Per day', value: f.avg_daily_forecast.toFixed(1) },
                         { label: 'Likely range (P10–P90)', value: `${units(f.total_p10)} – ${units(f.total_p90)}` },
-                        { label: 'Days covered', value: String(f.days_covered) },
+                        { label: 'Days covered', value: f.days_extrapolated ? `${f.days_covered} forecast + ${f.days_extrapolated} estimated` : String(f.days_covered) },
                         { label: 'Sales history', value: f.history_days != null ? `${f.history_days} days` : '' },
                         { label: 'Variability (CV)', value: f.demand_cv != null ? f.demand_cv.toFixed(2) : '' },
                         { label: 'Days with no sales', value: f.zero_demand_pct != null ? `${(f.zero_demand_pct * 100).toFixed(0)}%` : '' },
                     ],
                 },
-                { title: 'Daily forecast', icon: 'calendar-outline', children: <DailyBars rows={f.daily ?? []} /> },
+                { title: 'Daily forecast', icon: 'calendar-outline', children: <DailyLoader key={f.remote_id} f={f} /> },
                 { title: `Offers (${f.wholesaler_offers.length})`, icon: 'pricetags-outline', children: <Offers f={f} /> },
                 ...(f.wholesaler_campaigns.length > 0 ? [{ title: `Campaigns (${f.wholesaler_campaigns.length})`, icon: 'megaphone-outline' as const, children: <Campaigns f={f} /> }] : []),
             ]}
@@ -84,6 +99,39 @@ export function ForecastDetailsModal({ forecast, onClose, onViewOffers, onReques
 }
 
 /* ------------------------------------------------------------------ */
+
+/** Day-by-day rows aren't in the list payload: load them for this product. */
+function DailyLoader({ f }: { f: RetailerForecastNormalized }) {
+    const { theme } = useListTokens();
+    const { filters } = useForecast();
+    const [rows, setRows] = useState<RetailerForecastDailyRow[]>(f.daily ?? []);
+    const [loading, setLoading] = useState(!(f.daily?.length));
+    useEffect(() => {
+        if (f.daily?.length) return;
+        let live = true;
+        analyticsApi
+            .getBulkForecastAction({
+                tier: 'RETAILER',
+                lead_time_days: filters.leadTimeDays,
+                order_days: filters.orderDays,
+                product_ids: [f.remote_id],
+                include_daily: true,
+                include_offers: false,
+                include_campaigns: false,
+            })
+            .then((res: any) => {
+                if (live) setRows(res?.data?.bulk_forecast?.products?.[0]?.daily ?? []);
+            })
+            .catch(() => undefined)
+            .finally(() => live && setLoading(false));
+        return () => {
+            live = false;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [f.remote_id]);
+    if (loading) return <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>Loading daily forecast…</Text>;
+    return <DailyBars rows={rows} />;
+}
 
 function Empty({ text }: { text: string }) {
     const { theme, chipBg } = useListTokens();

@@ -985,7 +985,14 @@ export interface RetailerForecastNormalized {
 
     wholesaler_campaigns: RetailerForecastCampaign[];
 
+    /** Units to order: forecast + safety stock − on hand − on order (0 = covered). */
     required_quantity: number;
+    on_hand?: number | null;
+    on_order?: number | null;
+    safety_stock?: number | null;
+    days_of_stock?: number | null;
+    /** Days past the forecast horizon estimated from the last week. */
+    days_extrapolated?: number;
 
     has_offers: boolean;
     has_campaigns: boolean;
