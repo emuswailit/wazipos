@@ -129,7 +129,7 @@ function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
         >
             <View className="flex-row items-center" style={{ gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                    <SearchField value={q} onChangeText={setQ} placeholder="Search restaurants and hotels…" />
+                    <SearchField variant="mobile" value={q} onChangeText={setQ} placeholder="Search restaurants and hotels…" />
                 </View>
                 <SheetButton label={here ? 'Near me ✓' : 'Near me'} icon="navigate-outline" variant="secondary" loading={locating} loadingLabel="…" onPress={() => void nearMe()} />
             </View>
