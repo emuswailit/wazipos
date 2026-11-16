@@ -10,7 +10,7 @@
 // the plan as you go.
 
 import { useAlert } from '@/components/common/AlertProvider';
-import { AdminDetailsSheet, AdminListView, DetailsDock, SheetButton, formatDate, useListTokens, type AdminBadge, type AdminListConfig } from '@/components/common/listScreen';
+import { AdminDetailsSheet, AdminListView, DetailsDock, SheetButton, formatDate, useListTokens, webPointer, type AdminBadge, type AdminListConfig } from '@/components/common/listScreen';
 import { useAuth } from '@/context/AuthContext';
 import { usePaged } from '@/hooks/useCachedList';
 import { PlanLineFlag } from '@/components/shoppers/RetailerCartPanel';
@@ -18,7 +18,8 @@ import { getReceiptPrice, useRetailerInventory } from '@/hooks/useRetailerInvent
 import { checkPlan, deletePlan, describeCheck, duplicatePlan, lineQty, linePrice, newPlanId, planTotal, planUnits, upsertPlan, useShoppingPlans, type ShoppingPlan } from '@/utils/shoppingPlans';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Text, useWindowDimensions, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 
 import { PlanFormSheet, type PlanDetails } from './PlanParts';
 
@@ -230,6 +231,7 @@ function PlanDetailsSheet({ plan, userId, onClose, onEdit, onCopy, onDelete }: {
                     ? [{ title: 'Today at the shop', icon: 'pulse-outline' as const, children: <CheckNote text={checking ? 'Checking prices and stock at the shop…' : checkNote!} /> }]
                     : []),
                 { title: `Items (${plan.items.length})`, icon: 'basket-outline', children: <PlanLines plan={plan} /> },
+                { title: 'Manage plan', icon: 'settings-outline', children: <ManageRow onEdit={onEdit} onCopy={onCopy} onDelete={onDelete} /> },
                 {
                     title: 'About',
                     icon: 'information-circle-outline',
@@ -241,20 +243,43 @@ function PlanDetailsSheet({ plan, userId, onClose, onEdit, onCopy, onDelete }: {
                     ],
                 },
             ]}
-            actions={
-                // Main action on its own row; four buttons don't fit one row on a phone.
-                <View style={{ flex: 1, gap: 8 }}>
-                    <View style={{ flexDirection: 'row' }}>
-                        <SheetButton label={plan.retailer_id ? (plan.items.length ? 'Open in shop & pay' : 'Add products') : 'Choose a shop'} icon="storefront-outline" onPress={() => openPlan(plan)} grow />
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <SheetButton label="Edit" icon="create-outline" variant="secondary" onPress={onEdit} grow />
-                        <SheetButton label="Copy" icon="copy-outline" variant="secondary" onPress={onCopy} grow />
-                        <SheetButton label="Delete" icon="trash-outline" variant="danger" onPress={onDelete} grow />
-                    </View>
-                </View>
-            }
+            // Footer: one clear main action. Edit / Copy / Delete live in the
+            // "Manage plan" section, labelled, so nothing gets squeezed.
+            actions={<SheetButton label={plan.retailer_id ? (plan.items.length ? 'Shop & pay' : 'Add products') : 'Choose a shop'} icon="storefront-outline" onPress={() => openPlan(plan)} grow />}
         />
+    );
+}
+
+/** Labelled secondary actions; wraps to two lines on narrow screens. */
+function ManageRow({ onEdit, onCopy, onDelete }: { onEdit: () => void; onCopy: () => void; onDelete: () => void }) {
+    const { theme, border } = useListTokens();
+    const items = [
+        { label: 'Edit details', hint: 'Name, budget, date', icon: 'create-outline' as const, color: theme.text, onPress: onEdit },
+        { label: 'Duplicate', hint: 'e.g. for another child', icon: 'copy-outline' as const, color: theme.text, onPress: onCopy },
+        { label: 'Delete plan', hint: 'From this phone', icon: 'trash-outline' as const, color: '#dc2626', onPress: onDelete },
+    ];
+    return (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {items.map((a) => (
+                <Pressable
+                    key={a.label}
+                    onPress={a.onPress}
+                    accessibilityRole="button"
+                    accessibilityLabel={a.label}
+                    style={{ flexGrow: 1, flexBasis: 140, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: border, ...webPointer }}
+                >
+                    <Ionicons name={a.icon} size={18} color={a.color} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text numberOfLines={1} style={{ color: a.color, fontFamily: theme.font.bold, fontSize: 13 }}>
+                            {a.label}
+                        </Text>
+                        <Text numberOfLines={1} style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>
+                            {a.hint}
+                        </Text>
+                    </View>
+                </Pressable>
+            ))}
+        </View>
     );
 }
 
