@@ -181,11 +181,17 @@ export function useNearbyShops() {
             setError(null);
             try {
                 const location = coords ? { latitude: coords.latitude, longitude: coords.longitude } : undefined;
-                // Shopper endpoint: any signed-in user, no business subscription needed.
-                const res: any =
+                const payload =
                     mode === 'NEARBY'
-                        ? await retailersApi.clientOrdersAction({ action: 'GetAdjacentRetailersByLocation', location, categories: categoryIds, radius_km: 30 })
-                        : await retailersApi.clientOrdersAction({ action: 'GetRetailersByCountyAndCategories', county, categories: categoryIds, ...(location ? { location } : {}) });
+                        ? { action: 'GetAdjacentRetailersByLocation', location, categories: categoryIds, radius_km: 30 }
+                        : { action: 'GetRetailersByCountyAndCategories', county, categories: categoryIds, ...(location ? { location } : {}) };
+                // Shopper endpoint: any signed-in user, no business subscription needed.
+                let res: any = await retailersApi.clientOrdersAction(payload);
+                // A server not yet updated doesn't know these actions there: use the
+                // older receipts endpoint (needs a subscribed business).
+                if (!res?.ok && /is unknown/i.test(JSON.stringify(res?.data ?? ''))) {
+                    res = await retailersApi.retailerReceiptsAction(payload as any);
+                }
                 if (id !== reqId.current) return;
                 if (!res?.ok) {
                     setError(apiError(res, 'Could not load shops.'));
