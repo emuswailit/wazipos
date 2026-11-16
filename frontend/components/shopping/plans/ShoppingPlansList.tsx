@@ -1,6 +1,6 @@
 // components/shopping/plans/ShoppingPlansList.tsx
 //
-// Planner: shopping plans (wishlists) kept on this phone. Each plan is a basket
+// My Plans: shopping plans (wishlists) kept on this phone. Each plan is a basket
 // at one real shop, priced with that shop's real prices, checked against a
 // budget — e.g. "Back to school · Amani (Grade 4)", KES 15,000. When ready,
 // open it in the shop and pay by M-Pesa: it becomes a customer order.
@@ -37,11 +37,11 @@ function badges(p: ShoppingPlan): AdminBadge[] {
 }
 
 const config: AdminListConfig<ShoppingPlan> = {
-    title: 'Planner',
+    title: 'My Plans',
     noun: ['plan', 'plans'],
     icon: 'calendar-outline',
     searchPlaceholder: 'Search plans, shops or people…',
-    addLabel: 'New plan',
+    addLabel: 'Add new plan',
     emptyTitle: 'Plan before you pay',
     emptyMessage: 'Make a list at a real shop with real prices — back to school, monthly groceries — set a budget, and pay by M-Pesa when you’re ready.',
     keyOf: (p) => p.id,

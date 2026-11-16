@@ -119,7 +119,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             },
             {
                 id: 4,
-                title: 'Planner',
+                title: 'My Plans',
                 // Shopping plans (wishlists) on this phone: real prices, budgets, pay when ready.
                 route: '/plans',
                 allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'InternetServiceProviderSuperAdmin'],

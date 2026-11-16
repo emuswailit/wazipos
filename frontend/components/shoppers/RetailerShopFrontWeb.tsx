@@ -581,9 +581,9 @@ export default function RetailerShopFrontWeb({
             const p = await cart.saveAsPlan(d);
             setSavePlanOpen(false);
             if (p) {
-                alert("Plan saved", `“${p.title}” is on this phone with ${p.items.length} item${p.items.length === 1 ? "" : "s"}. Open it from Shopping → Planner and pay by M-Pesa when you’re ready.`, [
+                alert("Plan saved", `“${p.title}” is on this phone with ${p.items.length} item${p.items.length === 1 ? "" : "s"}. Open it from Shopping → My Plans and pay by M-Pesa when you’re ready.`, [
                     { text: "Keep shopping", style: "cancel" },
-                    { text: "Open Planner", onPress: () => router.push("/plans" as any) },
+                    { text: "Open My Plans", onPress: () => router.push("/plans" as any) },
                 ], "success");
             }
         } finally {
@@ -1636,7 +1636,7 @@ export default function RetailerShopFrontWeb({
                         await cart.completePlan();
                         alert("Plan paid", `“${title}” is now an order. Follow it in Shopping → Orders.`, [
                             { text: "My orders", onPress: () => router.replace("/myOrders" as any) },
-                            { text: "Planner", onPress: () => router.replace("/plans" as any) },
+                            { text: "My Plans", onPress: () => router.replace("/plans" as any) },
                         ], "success");
                     }
                 }}
