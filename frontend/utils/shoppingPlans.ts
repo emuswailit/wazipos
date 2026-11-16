@@ -23,6 +23,8 @@ export interface ShoppingPlan {
     budget?: number;
     /** When the lines' prices were last checked against the shop's stock. */
     prices_checked_at?: string;
+    /** Last check per line (keyed by retailer_receipt). */
+    checks?: Record<string, LineCheck>;
     retailer_id?: string;
     retailer_name?: string;
     retailer_type?: string;
@@ -83,6 +85,109 @@ export async function duplicatePlan(userId: string, id: string, title?: string):
     if (!src) return null;
     const { id: _old, created: _c, updated: _u, ...rest } = src;
     return upsertPlan(userId, newPlanId(), { ...rest, title: title || `${src.title} (copy)` });
+}
+
+/* --------------------------------------------------------------- live check */
+
+/** How a planned line stands against the shop's stock right now. */
+export interface LineCheck {
+    state: 'OK' | 'LOW' | 'OUT' | 'GONE';
+    /** Set when the price differs from what the plan had: the previous price. */
+    price_was?: number;
+    price_now?: number;
+    /** Units the shop has now. */
+    available?: number;
+}
+
+export interface PlanCheckSummary {
+    before: number;
+    after: number;
+    up: number;
+    down: number;
+    low: string[];
+    out: string[];
+    gone: string[];
+}
+
+const receiptKey = (r: any) => String(r?.remote_id || r?.id || '');
+const titleOf = (it: CustomerOrderItem) => it.title || it.receipt_details?.product_title || 'An item';
+
+/** The line re-priced at `price` (all totals recomputed). */
+export function repriceItem(it: CustomerOrderItem, price: number): CustomerOrderItem {
+    const q = lineQty(it);
+    return {
+        ...it,
+        item_net_price: String(price),
+        item_net_price_total: (price * q).toFixed(2),
+        receipt_details: it.receipt_details ? { ...it.receipt_details, final_unit_selling_price: String(price) } : it.receipt_details,
+        updated: new Date().toISOString(),
+    };
+}
+
+/**
+ * Compares the plan with the shop's live stock (`receipts`): new prices go
+ * into the lines, and each line gets a state (in stock / low / out / no longer
+ * sold). A price change stays flagged ("was KES x") until the next change.
+ */
+export function checkPlan(
+    plan: ShoppingPlan,
+    receipts: any[],
+    priceOf: (r: any) => number,
+): { items: CustomerOrderItem[]; checks: Record<string, LineCheck>; changed: CustomerOrderItem[]; summary: PlanCheckSummary } {
+    const byId = new Map<string, any>();
+    for (const r of receipts) {
+        const k = receiptKey(r);
+        if (k) byId.set(k, r);
+    }
+    const summary: PlanCheckSummary = { before: 0, after: 0, up: 0, down: 0, low: [], out: [], gone: [] };
+    const checks: Record<string, LineCheck> = {};
+    const changed: CustomerOrderItem[] = [];
+    const items = plan.items.map((it) => {
+        const id = String(it.retailer_receipt);
+        const q = lineQty(it);
+        const was = linePrice(it);
+        summary.before += was * q;
+        const prev = plan.checks?.[id];
+        const r = byId.get(id);
+        if (!r) {
+            summary.gone.push(titleOf(it));
+            summary.after += was * q;
+            checks[id] = { state: 'GONE', price_was: prev?.price_was, price_now: was, available: 0 };
+            return it;
+        }
+        const now = priceOf(r);
+        const available = Number(r.current_unit_quantity ?? 0);
+        const state: LineCheck['state'] = available <= 0 ? 'OUT' : available < q ? 'LOW' : 'OK';
+        if (state === 'OUT') summary.out.push(titleOf(it));
+        if (state === 'LOW') summary.low.push(`${titleOf(it)} (${available} left)`);
+        summary.after += now * q;
+        if (Math.abs(now - was) > 0.004) {
+            if (now > was) summary.up += 1;
+            else summary.down += 1;
+            const next = repriceItem(it, now);
+            changed.push(next);
+            checks[id] = { state, price_was: was, price_now: now, available };
+            return next;
+        }
+        checks[id] = { state, price_was: prev?.price_was, price_now: now, available };
+        return it;
+    });
+    return { items, checks, changed, summary };
+}
+
+/** One message about what changed, or null when nothing did. */
+export function describeCheck(s: PlanCheckSummary): string | null {
+    const kes = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
+    const parts: string[] = [];
+    if (s.up || s.down) {
+        const moves = [s.up ? `${s.up} went up` : null, s.down ? `${s.down} went down` : null].filter(Boolean).join(', ');
+        parts.push(`Prices changed (${moves}). Total ${kes(s.before)} → ${kes(s.after)}.`);
+    }
+    const list = (a: string[]) => `${a.slice(0, 3).join(', ')}${a.length > 3 ? ` and ${a.length - 3} more` : ''}`;
+    if (s.out.length) parts.push(`Out of stock now: ${list(s.out)}.`);
+    if (s.low.length) parts.push(`Not enough in stock: ${list(s.low)}.`);
+    if (s.gone.length) parts.push(`No longer sold here: ${list(s.gone)}. Remove or swap them before paying.`);
+    return parts.length ? parts.join('\n\n') : null;
 }
 
 /* --------------------------------------------------------------- figures */

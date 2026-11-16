@@ -21,7 +21,7 @@ import React, {
     useState,
 } from "react";
 import { Platform } from "react-native";
-import { deletePlan, getPlan, newPlanId, planToOrder, upsertPlan, type ShoppingPlan } from "@/utils/shoppingPlans";
+import { deletePlan, getPlan, newPlanId, planToOrder, repriceItem, upsertPlan, type LineCheck, type ShoppingPlan } from "@/utils/shoppingPlans";
 
 export interface ShopperCartLine {
     receiptId: string;
@@ -193,6 +193,9 @@ interface ShopperCartValue {
     saveAsPlan: (details: { title: string; for_whom?: string; need_by?: string; note?: string }) => Promise<ShoppingPlan | null>;
     /** Removes the open plan (after it was paid for and became an order). */
     completePlan: () => Promise<void>;
+    /** Writes a live stock check into the open plan: new prices into its lines,
+     *  and each line's state (see utils/shoppingPlans checkPlan). */
+    applyPlanCheck: (items: CustomerOrderItem[], checks: Record<string, LineCheck>) => Promise<void>;
 }
 
 const ShopperCartContext = createContext<ShopperCartValue | undefined>(
@@ -485,6 +488,30 @@ export function ShopperCartProvider({
         setOrder(null);
     }, [userId, planId]);
 
+    const applyPlanCheck = useCallback(
+        async (items: CustomerOrderItem[], checks: Record<string, LineCheck>) => {
+            if (!planId) return;
+            // New prices into the cart (lines the shopper changed meanwhile keep theirs).
+            const fresh = new Map(items.map((i) => [String(i.retailer_receipt), i]));
+            setOrder((prev) =>
+                prev
+                    ? {
+                        ...prev,
+                        order_items: (prev.order_items ?? []).map((i) => {
+                            const f = fresh.get(String(i.retailer_receipt));
+                            if (!f) return i;
+                            const price = Number(f.receipt_details?.final_unit_selling_price ?? f.item_net_price ?? 0);
+                            return repriceItem(i, price);
+                        }),
+                    }
+                    : prev,
+            );
+            const p = await upsertPlan(userId, planId, { checks, prices_checked_at: new Date().toISOString() });
+            setPlan(p);
+        },
+        [userId, planId],
+    );
+
     const { itemCount, totalUnits, subtotal } = useMemo(() => {
         const items = order?.order_items ?? [];
         let units = 0;
@@ -515,8 +542,9 @@ export function ShopperCartProvider({
             plan,
             saveAsPlan,
             completePlan,
+            applyPlanCheck,
         }),
-        [order, lines, isReady, itemCount, totalUnits, subtotal, getQuantity, hasLine, addOrUpdate, setQuantity, removeLine, clear, plan, saveAsPlan, completePlan],
+        [order, lines, isReady, itemCount, totalUnits, subtotal, getQuantity, hasLine, addOrUpdate, setQuantity, removeLine, clear, plan, saveAsPlan, completePlan, applyPlanCheck],
     );
 
     return (

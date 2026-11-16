@@ -3,6 +3,7 @@ import type { DeliveryMethod } from "@/components/common/DeliveryMethodSelector"
 import RecordPaymentModal from "@/components/common/RecordPaymentModal";
 import { useAlert } from "@/components/common/AlertProvider";
 import { PlanBanner, PlanFormSheet, type PlanDetails } from "@/components/shopping/plans/PlanParts";
+import { checkPlan, describeCheck } from "@/utils/shoppingPlans";
 import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { useShopperCart } from "@/context/ShopperCartContext";
@@ -639,46 +640,14 @@ export default function RetailerShopFrontWeb({
     const repricedRef = useRef<string | null>(null);
     useEffect(() => {
         const plan = cart.plan;
-        if (!plan || !products.length || repricedRef.current === plan.id) return;
+        if (!plan || status !== "loaded" || repricedRef.current === plan.id) return;
         repricedRef.current = plan.id;
-        const byId = new Map<string, RetailerReceipt>();
-        for (const r of products) {
-            const id = String((r as any).remote_id || (r as any).id || "");
-            if (id) byId.set(id, r);
-        }
-        let before = 0;
-        let after = 0;
-        let changed = 0;
-        const gone: string[] = [];
-        const short: string[] = [];
-        for (const it of plan.items) {
-            const qty = Number(it.purchased_quantity ?? 0);
-            const was = Number(it.receipt_details?.final_unit_selling_price ?? it.item_net_price ?? 0);
-            before += was * qty;
-            const r = byId.get(String(it.retailer_receipt));
-            if (!r) {
-                gone.push(it.title || "An item");
-                after += was * qty;
-                continue;
-            }
-            const now = getReceiptPrice(r);
-            after += now * qty;
-            if (Math.abs(now - was) > 0.004) {
-                changed += 1;
-                cart.addOrUpdate(r, qty);
-            }
-            if (Number(r.current_unit_quantity ?? 0) < qty) short.push(it.title || "An item");
-        }
-        if (!changed && !gone.length && !short.length) return;
-        const fmt = (n: number) => `KES ${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-        const parts = [
-            changed ? `${changed} price${changed === 1 ? "" : "s"} changed since you saved this plan: total ${fmt(before)} → ${fmt(after)}.` : null,
-            short.length ? `Not enough in stock now: ${short.slice(0, 3).join(", ")}${short.length > 3 ? "…" : ""}.` : null,
-            gone.length ? `No longer sold here: ${gone.slice(0, 3).join(", ")}${gone.length > 3 ? "…" : ""}. Remove or swap them before paying.` : null,
-        ].filter(Boolean);
-        alert("Plan updated to today’s prices", parts.join("\n\n"), undefined, gone.length || short.length ? "danger" : "default");
+        const { items, checks, summary } = checkPlan(plan, products, getReceiptPrice);
+        void cart.applyPlanCheck(items, checks);
+        const msg = describeCheck(summary);
+        if (msg) alert("Plan updated to today’s prices", msg, undefined, summary.out.length || summary.low.length || summary.gone.length ? "danger" : "default");
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cart.plan?.id, products]);
+    }, [cart.plan?.id, status, products]);
 
     const borderColor = isDarkMode ? "#1e293b" : "#e8edf2";
     const subtleBg = isDarkMode ? "#0f172a" : "#f1f5f9";

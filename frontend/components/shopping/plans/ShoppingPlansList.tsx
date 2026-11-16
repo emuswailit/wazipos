@@ -13,9 +13,11 @@ import { useAlert } from '@/components/common/AlertProvider';
 import { AdminDetailsSheet, AdminListView, DetailsDock, SheetButton, formatDate, useListTokens, type AdminBadge, type AdminListConfig } from '@/components/common/listScreen';
 import { useAuth } from '@/context/AuthContext';
 import { usePaged } from '@/hooks/useCachedList';
-import { deletePlan, duplicatePlan, lineQty, linePrice, newPlanId, planTotal, planUnits, upsertPlan, useShoppingPlans, type ShoppingPlan } from '@/utils/shoppingPlans';
+import { PlanLineFlag } from '@/components/shoppers/RetailerCartPanel';
+import { getReceiptPrice, useRetailerInventory } from '@/hooks/useRetailerInventory';
+import { checkPlan, deletePlan, describeCheck, duplicatePlan, lineQty, linePrice, newPlanId, planTotal, planUnits, upsertPlan, useShoppingPlans, type ShoppingPlan } from '@/utils/shoppingPlans';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, useWindowDimensions, View } from 'react-native';
 
 import { PlanFormSheet, type PlanDetails } from './PlanParts';
@@ -142,7 +144,7 @@ export default function ShoppingPlansList() {
         if (c) setViewingId(c.id);
     };
 
-    const details = viewing ? <PlanDetailsSheet plan={viewing} onClose={() => setViewingId(null)} onEdit={() => setForm({ mode: 'edit', plan: viewing })} onCopy={() => copy(viewing)} onDelete={() => remove(viewing)} /> : null;
+    const details = viewing ? <PlanDetailsSheet key={viewing.id} plan={viewing} userId={userId} onClose={() => setViewingId(null)} onEdit={() => setForm({ mode: 'edit', plan: viewing })} onCopy={() => copy(viewing)} onDelete={() => remove(viewing)} /> : null;
 
     return (
         <>
@@ -190,9 +192,24 @@ export default function ShoppingPlansList() {
     );
 }
 
-function PlanDetailsSheet({ plan, onClose, onEdit, onCopy, onDelete }: { plan: ShoppingPlan; onClose: () => void; onEdit: () => void; onCopy: () => void; onDelete: () => void }) {
+function PlanDetailsSheet({ plan, userId, onClose, onEdit, onCopy, onDelete }: { plan: ShoppingPlan; userId: string; onClose: () => void; onEdit: () => void; onCopy: () => void; onDelete: () => void }) {
     const total = planTotal(plan);
     const o = overBy(plan);
+
+    // Coming back to a plan: check it against the shop's live stock, save the
+    // new prices on the phone, and say what changed.
+    const { products, status } = useRetailerInventory(plan.retailer_id || null);
+    const checkedRef = useRef<string | null>(null);
+    const [checkNote, setCheckNote] = useState<string | null>(null);
+    useEffect(() => {
+        if (!plan.retailer_id || status !== 'loaded' || checkedRef.current === plan.id) return;
+        checkedRef.current = plan.id;
+        const { items, checks, summary } = checkPlan(plan, products, getReceiptPrice);
+        void upsertPlan(userId, plan.id, { items, checks, prices_checked_at: new Date().toISOString() });
+        setCheckNote(describeCheck(summary) ?? 'Checked just now: prices and stock are unchanged.');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [plan.id, status, products]);
+    const checking = !!plan.retailer_id && status === 'loading';
     return (
         <AdminDetailsSheet
             visible
@@ -209,6 +226,9 @@ function PlanDetailsSheet({ plan, onClose, onEdit, onCopy, onDelete }: { plan: S
                 { label: o > 0 ? 'Over' : 'Left', value: plan.budget ? kes(Math.abs(o)) : '—', color: plan.budget ? (o > 0 ? '#f43f5e' : '#10b981') : undefined },
             ]}
             sections={[
+                ...(checking || checkNote
+                    ? [{ title: 'Today at the shop', icon: 'pulse-outline' as const, children: <CheckNote text={checking ? 'Checking prices and stock at the shop…' : checkNote!} /> }]
+                    : []),
                 { title: `Items (${plan.items.length})`, icon: 'basket-outline', children: <PlanLines plan={plan} /> },
                 {
                     title: 'About',
@@ -216,21 +236,31 @@ function PlanDetailsSheet({ plan, onClose, onEdit, onCopy, onDelete }: { plan: S
                     fields: [
                         { label: 'Shop', value: [plan.retailer_name, plan.retailer_location].filter(Boolean).join(' · ') },
                         { label: 'Note', value: plan.note ?? '' },
-                        { label: 'Prices', value: `As saved ${formatDate(plan.updated)} · refreshed from the shop when you open it` },
+                        { label: 'Prices', value: plan.prices_checked_at ? `Checked with the shop ${formatDate(plan.prices_checked_at)}` : `As saved ${formatDate(plan.updated)}` },
                         { label: 'Kept', value: 'On this phone only' },
                     ],
                 },
             ]}
             actions={
-                <>
-                    <SheetButton label={plan.retailer_id ? (plan.items.length ? 'Open & pay' : 'Add products') : 'Choose shop'} icon="storefront-outline" onPress={() => openPlan(plan)} grow />
-                    <SheetButton label="Edit" icon="create-outline" variant="secondary" onPress={onEdit} />
-                    <SheetButton label="Copy" icon="copy-outline" variant="secondary" onPress={onCopy} />
-                    <SheetButton label="Delete" icon="trash-outline" variant="danger" onPress={onDelete} />
-                </>
+                // Main action on its own row; four buttons don't fit one row on a phone.
+                <View style={{ flex: 1, gap: 8 }}>
+                    <View style={{ flexDirection: 'row' }}>
+                        <SheetButton label={plan.retailer_id ? (plan.items.length ? 'Open in shop & pay' : 'Add products') : 'Choose a shop'} icon="storefront-outline" onPress={() => openPlan(plan)} grow />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <SheetButton label="Edit" icon="create-outline" variant="secondary" onPress={onEdit} grow />
+                        <SheetButton label="Copy" icon="copy-outline" variant="secondary" onPress={onCopy} grow />
+                        <SheetButton label="Delete" icon="trash-outline" variant="danger" onPress={onDelete} grow />
+                    </View>
+                </View>
             }
         />
     );
+}
+
+function CheckNote({ text }: { text: string }) {
+    const { theme } = useListTokens();
+    return <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13, lineHeight: 19 }}>{text}</Text>;
 }
 
 function PlanLines({ plan }: { plan: ShoppingPlan }) {
@@ -247,6 +277,7 @@ function PlanLines({ plan }: { plan: ShoppingPlan }) {
                         <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>
                             {lineQty(it)} × {kes(linePrice(it))}
                         </Text>
+                        <PlanLineFlag check={plan.checks?.[String(it.retailer_receipt)]} quantity={lineQty(it)} />
                     </View>
                     <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{kes(lineQty(it) * linePrice(it))}</Text>
                 </View>

@@ -12,6 +12,7 @@ import {
 } from "@/context/ShopperCartContext";
 import type { CustomerOrder } from "@/databases/types";
 import { Ionicons } from "@expo/vector-icons";
+import type { LineCheck } from "@/utils/shoppingPlans";
 import {
     AlertCircle,
     CheckCircle2,
@@ -201,6 +202,31 @@ const QuantityInput: React.FC<{
         </View>
     );
 };
+
+/* ── Plan line flag: price change / stock state from the last live check ── */
+
+export function PlanLineFlag({ check, quantity }: { check?: LineCheck; quantity: number }) {
+    if (!check) return null;
+    const flags: { text: string; color: string }[] = [];
+    if (check.state === "GONE") flags.push({ text: "No longer sold here", color: "#dc2626" });
+    else if (check.state === "OUT") flags.push({ text: "Out of stock", color: "#dc2626" });
+    else if (check.state === "LOW" || (check.available != null && check.available < quantity))
+        flags.push({ text: `Only ${check.available ?? 0} in stock`, color: "#d97706" });
+    if (check.price_was != null && check.price_now != null && Math.abs(check.price_now - check.price_was) > 0.004) {
+        const up = check.price_now > check.price_was;
+        flags.push({ text: `${up ? "▲" : "▼"} was KES ${formatMoney(check.price_was)}`, color: up ? "#dc2626" : "#16a34a" });
+    }
+    if (!flags.length) return null;
+    return (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+            {flags.map((f) => (
+                <Text key={f.text} style={{ fontSize: 10, fontWeight: "700", color: f.color, backgroundColor: `${f.color}14`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" }}>
+                    {f.text}
+                </Text>
+            ))}
+        </View>
+    );
+}
 
 /* ── Props ──────────────────────────────────────────────────── */
 
@@ -437,6 +463,7 @@ export default function RetailerCartPanel({
                                     <Text style={{ marginTop: 3, fontFamily: theme.font.regular, fontSize: 10, color: theme.textDark }}>
                                         KES {formatMoney(l.unitPrice)} / {l.unit}
                                     </Text>
+                                    <PlanLineFlag check={plan?.checks?.[l.receiptId]} quantity={l.quantity} />
                                 </View>
 
                                 <TouchableOpacity
