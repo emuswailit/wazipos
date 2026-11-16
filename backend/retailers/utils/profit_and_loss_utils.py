@@ -185,6 +185,15 @@ def _revenue(entity, start, end):
         )
     )["value"] or Decimal("0.00")
 
+    # Counter discounts (given at the till) live on the order lines and are
+    # taken off order_net_price_total next to the line discounts, so report
+    # both or the statement does not add up:
+    #   net sales = gross − discounts + delivery  (tax excluded)
+    counter_discount = _items_qs(entity, start, end).aggregate(
+        value=Coalesce(Sum("item_counter_price_discount_amount_total"), ZERO),
+    )["value"] or Decimal("0.00")
+    item_discount = agg["discount"] or Decimal("0.00")
+
     gross = agg["gross"] or Decimal("0.00")
     tax = agg["tax"] or Decimal("0.00")
     net = agg["net"] or Decimal("0.00")
@@ -197,7 +206,9 @@ def _revenue(entity, start, end):
         "orders_count": agg["orders_count"] or 0,
         "gross_sales": str(gross),
         "tax_collected": str(tax),
-        "discounts": str(agg["discount"] or "0.00"),
+        "discounts": str(item_discount + counter_discount),
+        "item_discounts": str(item_discount),
+        "counter_discounts": str(counter_discount),
         "shipping_charged": str(agg["shipping"] or "0.00"),
         "net_sales": str(net_of_tax),
         "returns_value": str(returns_value),
