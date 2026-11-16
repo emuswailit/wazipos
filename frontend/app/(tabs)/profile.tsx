@@ -5,6 +5,7 @@
 // and a catch-all "Other details" section, so no field the token carries is hidden.
 // Empty fields are left out rather than shown as "—".
 
+import VerifyContactsCard from '@/components/auth/VerifyContactsCard';
 import { useAuth, type UserRole } from '@/context/AuthContext';
 import { isTrueFlag } from '@/utils/flags';
 import {
@@ -459,6 +460,8 @@ export default function ProfileScreen() {
         >
             <View style={{ width: '100%', maxWidth: 1100, alignSelf: 'center' }}>
                 {header}
+                {/* Reminder until phone (SMS code) and email (emailed link) are confirmed. */}
+                <VerifyContactsCard />
                 {stats}
 
                 {isWide ? (
