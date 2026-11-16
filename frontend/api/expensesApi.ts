@@ -88,7 +88,7 @@ interface ActionResponse<T = unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Internal dispatcher — logs every request and response as JSON
+// Internal dispatcher
 // ---------------------------------------------------------------------------
 
 const EXPENSES_ENDPOINT = "/expenses/entity";
@@ -96,42 +96,8 @@ const EXPENSES_ENDPOINT = "/expenses/entity";
 const dispatch = async <T = unknown>(
     payload: Record<string, unknown>,
 ): Promise<{ data: ActionResponse<T> }> => {
-    console.log(
-        "[expensesApi] →",
-        EXPENSES_ENDPOINT,
-        JSON.stringify(payload, null, 2),
-    );
-
-    try {
-        const res = await client.post<ActionResponse<T>>(
-            EXPENSES_ENDPOINT,
-            payload,
-        );
-        console.log(
-            "[expensesApi] ←",
-            EXPENSES_ENDPOINT,
-            JSON.stringify(res.data, null, 2),
-        );
-        return res as unknown as { data: ActionResponse<T> };
-    } catch (e: any) {
-        console.log(
-            "[expensesApi] ✕",
-            EXPENSES_ENDPOINT,
-            JSON.stringify(
-                {
-                    message: e?.message,
-                    code: e?.code,
-                    status: e?.response?.status,
-                    statusText: e?.response?.statusText,
-                    responseData: e?.response?.data,
-                    requestPayload: payload,
-                },
-                null,
-                2,
-            ),
-        );
-        throw e;
-    }
+    const res = await client.post<ActionResponse<T>>(EXPENSES_ENDPOINT, payload);
+    return res as unknown as { data: ActionResponse<T> };
 };
 
 // ---------------------------------------------------------------------------
