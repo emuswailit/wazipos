@@ -265,7 +265,11 @@ function PlanDetailsSheet({ plan, userId, onClose, onEdit, onCopy, onDelete }: {
             ]}
             // Footer: one clear main action. Edit / Copy / Delete live in the
             // "Manage plan" section, labelled, so nothing gets squeezed.
-            actions={<SheetButton label={plan.retailer_id ? (plan.items.length ? 'Shop & pay' : 'Add products') : 'Choose a shop'} icon="storefront-outline" onPress={() => openPlan(plan)} grow />}
+            actions={<SheetButton label={plan.retailer_id ? (plan.items.length ? 'Shop & pay' : 'Add products') : 'Choose a shop'} icon="storefront-outline" onPress={() => {
+                // Close the sheet first: on phones it is a modal and would stay over the shop.
+                onClose();
+                setTimeout(() => openPlan(plan), 60);
+            }} grow />}
         />
     );
 }
