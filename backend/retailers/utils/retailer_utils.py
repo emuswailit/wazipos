@@ -3658,14 +3658,35 @@ def create_customer_order(data, user):
                     order_created.delete()
                     return [agent_error], None
 
+        # PRICING IS THE SERVER'S. Prices sent by the app are not trusted:
+        #   - shoppers (anyone not staff of the selling shop): the stock record's
+        #     price, no discount and no free units from the request;
+        #   - the shop's own staff (till): may set a counter price / discount, but
+        #     never below the stock's landed cost (buying price + shipping share).
+        # Every line must be stock of the selling shop.
+        pricing_staff = bool(entity) and getattr(user, "entity_id", None) == entity.id
+
+        def _receipt_price(r):
+            return _to_decimal(r.final_unit_selling_price or r.unit_selling_price or 0)
+
+        def _landed_cost(r):
+            return _to_decimal(r.unit_buying_price or 0) + _to_decimal(getattr(r, "allocated_shipping_per_unit", 0) or 0)
+
+        def _reject(msg):
+            order_created.delete()
+            return [msg], None
+
         for item in order_items:
             sale_unit = str(item.get("sale_unit") or "FULL").upper()
             if sale_unit == "PART":
                 # Parts (e.g. 2.5 kg, 3 tots): priced from the receipt's part price, server side.
                 part_qty = _to_decimal(item.get("part_quantity") or item.get("purchased_quantity") or 0)
                 part_receipt = RetailerReceipts.objects.select_related("product").get(id=item["retailer_receipt"])
+                if entity and part_receipt.entity_id != entity.id:
+                    return _reject("An item in this order is not sold by this shop")
                 part_price = _to_decimal(part_receipt.part_selling_price)
-                part_discount = _to_decimal(item.get("item_price_discount") or item.get("item_discount") or 0)
+                part_discount = _to_decimal(item.get("item_price_discount") or item.get("item_discount") or 0) if pricing_staff else Decimal("0.00")
+                part_discount = min(max(part_discount, Decimal("0.00")), part_price)
                 vat = str(getattr(part_receipt.product, "is_vatable", "false")).lower() == "true"
                 part_tax = _q(part_price * Decimal("0.16")) if vat else Decimal("0.00")
                 CustomerOrderItems.objects.create(
@@ -3691,11 +3712,8 @@ def create_customer_order(data, user):
                 )
                 continue
             purchased_qty = _to_int(item["purchased_quantity"])
-            discount_quantity = _to_int(item.get("discount_quantity", 0))
-            final_unit = _to_decimal(item["final_unit_selling_price"])
-            
-            # 🟢 FIX: Check for both item_price_discount and item_discount from frontend
-            discount_unit = _to_decimal(item.get("item_price_discount") or item.get("item_discount") or 0)
+            if purchased_qty <= 0:
+                return _reject("Quantities must be at least 1")
 
             # 🟢 FIX: Changed models.RetailerReceipts to RetailerReceipts
             retailer_receipt = RetailerReceipts.objects.filter(
@@ -3707,7 +3725,34 @@ def create_customer_order(data, user):
                     f"Receipt {item['retailer_receipt']} no longer "
                     f"available for the requested quantity"
                 )
+                order_created.delete()
                 return errors, None
+            if entity and retailer_receipt.entity_id != entity.id:
+                return _reject("An item in this order is not sold by this shop")
+
+            shelf_price = _receipt_price(retailer_receipt)
+            if pricing_staff:
+                # Till: counter price / discount allowed, within limits.
+                final_unit = _to_decimal(item.get("final_unit_selling_price") or shelf_price)
+                discount_unit = _to_decimal(item.get("item_price_discount") or item.get("item_discount") or 0)
+                discount_quantity = max(_to_int(item.get("discount_quantity", 0)), 0)
+                discount_unit = min(max(discount_unit, Decimal("0.00")), final_unit)
+                cost = _landed_cost(retailer_receipt)
+                if final_unit - discount_unit < cost and cost > 0:
+                    return _reject(
+                        f"{retailer_receipt.product.title}: price after discount (KES {final_unit - discount_unit}) "
+                        f"is below its cost (KES {cost})"
+                    )
+            else:
+                # Shopper: the shop's price, nothing from the request.
+                final_unit = shelf_price
+                discount_unit = Decimal("0.00")
+                discount_quantity = 0
+                sent = item.get("final_unit_selling_price")
+                if sent not in (None, "") and _to_decimal(sent) != final_unit:
+                    create_log("info", f"Order {order_created.id}: price for receipt {retailer_receipt.id} sent as {sent}, charged {final_unit}")
+            if final_unit <= 0:
+                return _reject(f"{retailer_receipt.product.title} has no price set; the shop must set one before it can be sold")
 
             item_price_total = _q(final_unit * purchased_qty)
             item_price_discount_total = _q(discount_unit * purchased_qty)
