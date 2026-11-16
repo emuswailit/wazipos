@@ -1,0 +1,68 @@
+# What EAS Build leaves out of the upload.
+#
+# EAS reads this file only from the git repo root (here), and while it exists
+# it is used INSTEAD OF every .gitignore in the repo. So it repeats what the
+# .gitignore files ignore, plus everything the app build never needs.
+# The app is in frontend/ (run `eas build` from there).
+
+# ---------------------------------------------------------------- not the app
+backend/
+docker/
+frontend-js/
+frontend-jsx/
+.idea/
+.vscode/
+.expo/
+README.md
+requirements.txt
+setup.cfg
+
+# Python leftovers anywhere
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+my_env/
+env/
+
+# ---------------------------------------------------------------- frontend/
+# dependencies (EAS installs them from package-lock.json)
+node_modules/
+
+# Expo / web export
+frontend/.expo/
+frontend/web-build/
+frontend/dist/
+frontend/expo-env.d.ts
+
+# generated native folders (EAS runs prebuild; uploading them would make EAS
+# build them as-is and skip app.json config)
+frontend/ios/
+frontend/android/
+frontend/.kotlin/
+
+# editor and agent folders and notes
+frontend/.vscode/
+frontend/.claude/
+frontend/.kilo/
+frontend/AGENTS.md
+frontend/CLAUDE.md
+
+# secrets and signing (EAS uses the credentials stored on Expo)
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+.env*.local
+
+# Metro / debug / OS
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.DS_Store
+*.tsbuildinfo
