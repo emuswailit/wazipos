@@ -1,6 +1,8 @@
 // components/wifi/WifiManager.tsx
 //
-// Wi-Fi hotspot business (entity type InternetServiceProvider), one mobile-first screen with four tabs:
+// Wi-Fi hotspot business (entity type InternetServiceProvider). One component, one
+// route per model (app/(hotspots)/wifiRouters, wifiTarrifs, wifiSubscriptions,
+// wifiPayments), each with full CRUD:
 //   Routers        hotspots (IP, NAS id, brand / model, contact) — add / edit / switch off
 //   Packages       what customers buy: price for a length of time on a router
 //   Subscriptions  who is connected, until when
@@ -9,7 +11,7 @@
 // list on wide screens, each list kept on the device for offline viewing.
 
 import { apiError, isOk } from '@/api/deliveriesApi';
-import wifiApi, { DURATION_LABELS, lengthLabel, type Duration, type WifiPayment, type WifiRouter, type WifiSubscription, type WifiTariff } from '@/api/wifiApi';
+import wifiApi, { DURATION_LABELS, isManualPayment, lengthLabel, type Duration, type WifiPayment, type WifiRouter, type WifiSubscription, type WifiTariff } from '@/api/wifiApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { CustomTextField } from '@/components/common/CustomTextField';
 import {
@@ -32,7 +34,8 @@ import React, { useMemo, useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import * as Yup from 'yup';
 
-type Tab = 'ROUTERS' | 'PACKAGES' | 'SUBSCRIPTIONS' | 'PAYMENTS';
+export type WifiTab = 'ROUTERS' | 'PACKAGES' | 'SUBSCRIPTIONS' | 'PAYMENTS';
+type Tab = WifiTab;
 
 const kes = (v: unknown) => `KES ${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const on = (v?: string) => String(v ?? 'true').toLowerCase() === 'true';
@@ -93,7 +96,8 @@ const subsConfig: AdminListConfig<WifiSubscription> = {
     noun: ['subscription', 'subscriptions'],
     icon: 'people-outline',
     searchPlaceholder: 'Search device, username…',
-    emptyMessage: 'Customers who buy a package appear here while they’re connected.',
+    addLabel: 'Add subscription',
+    emptyMessage: 'Customers who buy a package appear here. You can also connect a device by hand.',
     keyOf: (s) => s.id,
     titleOf: (s) => s.username || s.mac_address || 'Device',
     subtitleOf: (s) => [s.mac_address, `until ${when(s.valid_to)}`].filter(Boolean).join(' · '),
@@ -115,7 +119,8 @@ const paymentsConfig: AdminListConfig<WifiPayment> = {
     noun: ['payment', 'payments'],
     icon: 'wallet-outline',
     searchPlaceholder: 'Search package, account, M-Pesa code…',
-    emptyMessage: 'Package payments appear here.',
+    addLabel: 'Record payment',
+    emptyMessage: 'M-Pesa package payments appear here. Record cash payments by hand.',
     keyOf: (p) => p.id,
     titleOf: (p) => p.tariff_title || 'Package',
     subtitleOf: (p) => [p.account, p.provider_reference_number || p.reference_number].filter(Boolean).join(' · '),
@@ -134,10 +139,9 @@ const paymentsConfig: AdminListConfig<WifiPayment> = {
     ],
 };
 
-export default function WifiManager() {
+export default function WifiManager({ tab }: { tab: Tab }) {
     const alert = useAlert();
     const { width } = useWindowDimensions();
-    const [tab, setTab] = useState<Tab>('ROUTERS');
     const [query, setQuery] = useState('');
     const [viewing, setViewing] = useState<any | null>(null);
     const [editing, setEditing] = useState<any | null>(null);
@@ -145,10 +149,11 @@ export default function WifiManager() {
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
-    const routers = useCachedList<WifiRouter>({ key: 'wifi_routers', fetch: wifiApi.routers, pick: rows });
-    const tariffs = useCachedList<WifiTariff>({ key: 'wifi_tariffs', fetch: wifiApi.tariffs, pick: rows });
-    const subs = useCachedList<WifiSubscription>({ key: 'wifi_subscriptions', fetch: wifiApi.subscriptions, pick: rows, pollMs: 60000 });
-    const pays = useCachedList<WifiPayment>({ key: 'wifi_payments', fetch: wifiApi.payments, pick: rows, pollMs: 60000 });
+    // Only what this screen needs: its own list, plus routers (for packages) or packages (for subscriptions / payments).
+    const routers = useCachedList<WifiRouter>({ key: 'wifi_routers', fetch: wifiApi.routers, pick: rows, enabled: tab === 'ROUTERS' || tab === 'PACKAGES' });
+    const tariffs = useCachedList<WifiTariff>({ key: 'wifi_tariffs', fetch: wifiApi.tariffs, pick: rows, enabled: tab !== 'ROUTERS' });
+    const subs = useCachedList<WifiSubscription>({ key: 'wifi_subscriptions', fetch: wifiApi.subscriptions, pick: rows, pollMs: 60000, enabled: tab === 'SUBSCRIPTIONS' });
+    const pays = useCachedList<WifiPayment>({ key: 'wifi_payments', fetch: wifiApi.payments, pick: rows, pollMs: 60000, enabled: tab === 'PAYMENTS' });
 
     const list: any = tab === 'ROUTERS' ? routers : tab === 'PACKAGES' ? tariffs : tab === 'SUBSCRIPTIONS' ? subs : pays;
     const config: AdminListConfig<any> = tab === 'ROUTERS' ? routersConfig : tab === 'PACKAGES' ? packagesConfig : tab === 'SUBSCRIPTIONS' ? subsConfig : paymentsConfig;
@@ -160,7 +165,7 @@ export default function WifiManager() {
     }, [list.items, query, config]);
     const paged = usePaged(filtered, `${tab}|${query}`);
 
-    const editable = tab === 'ROUTERS' || tab === 'PACKAGES';
+    const editable = (x: any | null) => tab !== 'PAYMENTS' || !x || isManualPayment(x);
     const openForm = (item: any | null) => {
         if (!list.isOnline) return alert('You’re offline', 'Changes need an internet connection.');
         setViewing(null);
@@ -168,24 +173,20 @@ export default function WifiManager() {
         setFormError(null);
         setFormOpen(true);
     };
-    const switchTab = (t: Tab) => {
-        setTab(t);
-        setQuery('');
-        setViewing(null);
-    };
 
     const save = async (details: Record<string, any>) => {
         setSaving(true);
         setFormError(null);
         try {
+            const body = editing ? { ...details, id: editing.id } : details;
             const res: any =
                 tab === 'ROUTERS'
-                    ? editing
-                        ? await wifiApi.updateRouter({ ...details, id: editing.id })
-                        : await wifiApi.createRouter(details)
-                    : editing
-                      ? await wifiApi.updateTariff({ ...details, id: editing.id })
-                      : await wifiApi.createTariff(details);
+                    ? await (editing ? wifiApi.updateRouter(body) : wifiApi.createRouter(body))
+                    : tab === 'PACKAGES'
+                      ? await (editing ? wifiApi.updateTariff(body) : wifiApi.createTariff(body))
+                      : tab === 'SUBSCRIPTIONS'
+                        ? await (editing ? wifiApi.updateSubscription(body) : wifiApi.createSubscription(body))
+                        : await (editing ? wifiApi.updatePayment(body) : wifiApi.createPayment(body));
             if (!isOk(res)) return setFormError(apiError(res, 'Could not save.'));
             setFormOpen(false);
             setEditing(null);
@@ -197,21 +198,32 @@ export default function WifiManager() {
         }
     };
 
-    const removePackage = (t: WifiTariff) =>
-        alert('Delete package', `Delete “${t.title}”? Customers can no longer buy it.`, [
+    /** Delete the open record (after confirming). */
+    const remove = (x: any) => {
+        const noun = config.noun[0];
+        const what = config.titleOf(x);
+        const warn: Record<Tab, string> = {
+            ROUTERS: 'Packages on it must be deleted first.',
+            PACKAGES: 'Customers can no longer buy it.',
+            SUBSCRIPTIONS: 'The device loses its connection record.',
+            PAYMENTS: 'Only payments you recorded can be deleted.',
+        };
+        alert(`Delete ${noun}`, `Delete “${what}”? ${warn[tab]}`, [
             { text: 'Keep', style: 'cancel' },
             {
                 text: 'Delete',
                 style: 'destructive',
                 onPress: async () => {
-                    const res: any = await wifiApi.deleteTariff(t.id).catch(() => null);
+                    const fn = tab === 'ROUTERS' ? wifiApi.deleteRouter : tab === 'PACKAGES' ? wifiApi.deleteTariff : tab === 'SUBSCRIPTIONS' ? wifiApi.deleteSubscription : wifiApi.deletePayment;
+                    const res: any = await fn(x.id).catch(() => null);
                     if (isOk(res)) {
                         setViewing(null);
-                        tariffs.patch((x) => x.filter((p) => p.id !== t.id));
-                    } else alert('Not deleted', apiError(res, 'Could not delete the package.'), undefined, 'danger');
+                        list.patch((items: any[]) => items.filter((i) => i.id !== x.id));
+                    } else alert('Not deleted', apiError(res, `Could not delete the ${noun}.`), undefined, 'danger');
                 },
             },
         ], 'danger');
+    };
 
     const live = (s: WifiSubscription) => on(s.is_active);
     const today = new Date().toDateString();
@@ -237,15 +249,8 @@ export default function WifiManager() {
                         config={config}
                         item={viewing}
                         onClose={() => setViewing(null)}
-                        onEdit={editable ? (x) => openForm(x) : undefined}
-                        actions={
-                            tab === 'PACKAGES' && viewing ? (
-                                <View>
-                                    {/* Delete sits next to Edit */}
-                                    <DeleteButton onPress={() => removePackage(viewing)} />
-                                </View>
-                            ) : null
-                        }
+                        onEdit={viewing && editable(viewing) ? (x) => openForm(x) : undefined}
+                        actions={viewing && editable(viewing) ? <DeleteButton onPress={() => remove(viewing)} /> : null}
                     />
                 }
             >
@@ -261,28 +266,30 @@ export default function WifiManager() {
                     lastSyncedTime={list.lastSynced}
                     error={list.error}
                     {...paged}
-                    onOpenCreate={editable ? () => openForm(null) : undefined}
+                    onOpenCreate={() => openForm(null)}
                     onPressItem={setViewing}
-                    onEditItem={editable ? openForm : undefined}
+                    onEditItem={(x) => (editable(x) ? openForm(x) : setViewing(x))}
+                    rowActions={(x) => [
+                        { icon: 'eye-outline', label: 'View', onPress: () => setViewing(x) },
+                        ...(editable(x)
+                            ? [
+                                  { icon: 'create-outline' as const, label: 'Edit', onPress: () => openForm(x), tone: 'primary' as const },
+                                  { icon: 'trash-outline' as const, label: 'Delete', onPress: () => remove(x), tone: 'danger' as const },
+                              ]
+                            : []),
+                    ]}
                     stats={stats}
-                    filters={{
-                        options: [
-                            { key: 'ROUTERS', label: 'Routers', icon: 'wifi-outline', count: routers.items.length },
-                            { key: 'PACKAGES', label: 'Packages', icon: 'pricetags-outline', count: tariffs.items.length },
-                            { key: 'SUBSCRIPTIONS', label: 'Subscriptions', icon: 'people-outline', count: subs.items.length },
-                            { key: 'PAYMENTS', label: 'Payments', icon: 'wallet-outline', count: pays.items.length },
-                        ],
-                        value: tab,
-                        onChange: switchTab,
-                        allKey: 'ROUTERS',
-                    }}
                 />
             </DetailsDock>
             {tab === 'ROUTERS' ? (
                 <RouterForm visible={formOpen} initial={editing} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
             ) : tab === 'PACKAGES' ? (
                 <PackageForm visible={formOpen} initial={editing} routers={routers.items} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
-            ) : null}
+            ) : tab === 'SUBSCRIPTIONS' ? (
+                <SubscriptionForm visible={formOpen} initial={editing} tariffs={tariffs.items} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
+            ) : (
+                <PaymentForm visible={formOpen} initial={editing} tariffs={tariffs.items} saving={saving} error={formError} onClose={() => !saving && setFormOpen(false)} onSave={save} />
+            )}
         </View>
     );
 }
@@ -432,6 +439,159 @@ function PackageForm({ visible, initial, routers, saving, error, onClose, onSave
                     ) : null}
                     <FormSection title="Status">
                         <SwitchField name="is_active" label="On sale" hint="Switch off to stop selling it without deleting it." />
+                    </FormSection>
+                </AdminFormSheet>
+            )}
+        </Formik>
+    );
+}
+
+/** "2026-11-16T14:05" for a date-time text box (local time). */
+const localInput = (iso?: string | null) => {
+    const d = iso ? new Date(iso) : new Date();
+    if (isNaN(d.getTime())) return '';
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const toIso = (v: string) => {
+    const d = new Date(v.trim().replace(' ', 'T'));
+    return isNaN(d.getTime()) ? undefined : d.toISOString();
+};
+
+function SubscriptionForm({ visible, initial, tariffs, saving, error, onClose, onSave }: FormProps<WifiSubscription> & { tariffs: WifiTariff[] }) {
+    const onSale = tariffs.filter((t) => on(t.is_active));
+    return (
+        <Formik
+            key={`${visible}-${initial?.id ?? 'new'}`}
+            initialValues={{
+                tariff_selected: initial?.tariff_selected ?? onSale[0]?.id ?? '',
+                mac_address: initial?.mac_address ?? '',
+                username: initial?.username ?? '',
+                password: '',
+                valid_from: localInput(initial?.valid_from),
+                valid_to: initial ? localInput(initial.valid_to) : '',
+                is_active: initial ? on(initial.is_active) : true,
+            }}
+            validationSchema={Yup.object({
+                mac_address: Yup.string().trim().required("Enter the device's MAC address"),
+                tariff_selected: initial ? Yup.string() : Yup.string().required('Pick the package'),
+            })}
+            onSubmit={(v) =>
+                onSave({
+                    tariff_selected: v.tariff_selected || undefined,
+                    mac_address: v.mac_address.trim().toUpperCase(),
+                    username: v.username.trim() || undefined,
+                    password: v.password.trim() || undefined,
+                    valid_from: toIso(v.valid_from),
+                    // Blank: the package's length from the start time.
+                    valid_to: v.valid_to.trim() ? toIso(v.valid_to) : undefined,
+                    is_active: v.is_active ? 'true' : 'false',
+                })
+            }
+        >
+            {(f) => (
+                <AdminFormSheet
+                    visible={visible}
+                    onClose={onClose}
+                    title={initial ? 'Edit subscription' : 'New subscription'}
+                    subtitle={initial?.username ?? 'Connect a device by hand'}
+                    icon="people-outline"
+                    submitLabel={initial ? 'Save changes' : 'Connect device'}
+                    submitting={saving}
+                    error={error}
+                    onSubmit={() => f.handleSubmit()}
+                >
+                    <FormSection title="Package">
+                        {onSale.length ? (
+                            <ChoiceChips<string>
+                                options={onSale.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}` }))}
+                                value={f.values.tariff_selected}
+                                onChange={(id) => f.setFieldValue('tariff_selected', id)}
+                                error={typeof f.errors.tariff_selected === 'string' ? f.errors.tariff_selected : undefined}
+                            />
+                        ) : (
+                            <CustomTextField label="Package" value="Add a package first (Packages)" editable={false} />
+                        )}
+                    </FormSection>
+                    <FormSection title="Device">
+                        <CustomTextField name="mac_address" label="MAC address" required placeholder="e.g. A4:5E:60:12:34:56" autoCapitalize="characters" />
+                        <FormRow>
+                            <CustomTextField name="username" label="Username" placeholder="Made up if blank" autoCapitalize="none" />
+                            <CustomTextField name="password" label={initial ? 'New password' : 'Password'} placeholder={initial ? 'Leave blank to keep' : 'Made up if blank'} autoCapitalize="none" />
+                        </FormRow>
+                    </FormSection>
+                    <FormSection title="Time" hint="Leave the end blank to use the package's length.">
+                        <FormRow>
+                            <CustomTextField name="valid_from" label="From" placeholder="YYYY-MM-DD HH:MM" autoCapitalize="none" />
+                            <CustomTextField name="valid_to" label="Until" placeholder="From + package length" autoCapitalize="none" />
+                        </FormRow>
+                        {initial ? <SwitchField name="is_active" label="Active" hint="Switch off to cut the device off early." /> : null}
+                    </FormSection>
+                </AdminFormSheet>
+            )}
+        </Formik>
+    );
+}
+
+const PAY_STATUSES = ['SUCCESS', 'PENDING', 'FAILED', 'CANCELLED'] as const;
+
+function PaymentForm({ visible, initial, tariffs, saving, error, onClose, onSave }: FormProps<WifiPayment> & { tariffs: WifiTariff[] }) {
+    return (
+        <Formik
+            key={`${visible}-${initial?.id ?? 'new'}`}
+            initialValues={{
+                tariff: initial?.tariff ?? tariffs[0]?.id ?? '',
+                amount: initial ? String(Number(initial.amount)) : tariffs[0] ? String(Number(tariffs[0].price)) : '',
+                telco: initial?.telco ?? 'CASH',
+                status: (initial?.status ?? 'SUCCESS') as string,
+                description: initial?.description ?? '',
+            }}
+            validationSchema={Yup.object({
+                tariff: Yup.string().required('Pick the package paid for'),
+                amount: Yup.number().typeError('Enter the amount').moreThan(0, 'Enter the amount').required('Enter the amount'),
+            })}
+            onSubmit={(v) => onSave({ tariff: v.tariff, amount: Number(v.amount), telco: v.telco, status: v.status, description: v.description.trim() })}
+        >
+            {(f) => (
+                <AdminFormSheet
+                    visible={visible}
+                    onClose={onClose}
+                    title={initial ? 'Edit payment' : 'Record payment'}
+                    subtitle={initial?.reference_number ?? 'Cash or other payment taken by staff'}
+                    icon="wallet-outline"
+                    submitLabel={initial ? 'Save changes' : 'Record payment'}
+                    submitting={saving}
+                    error={error}
+                    onSubmit={() => f.handleSubmit()}
+                >
+                    <FormSection title="Package">
+                        {tariffs.length ? (
+                            <ChoiceChips<string>
+                                options={tariffs.map((t) => ({ value: t.id, label: `${t.title} · ${kes(t.price)}` }))}
+                                value={f.values.tariff}
+                                onChange={(id) => {
+                                    f.setFieldValue('tariff', id);
+                                    const t = tariffs.find((x) => x.id === id);
+                                    if (t) f.setFieldValue('amount', String(Number(t.price)));
+                                }}
+                                error={typeof f.errors.tariff === 'string' ? f.errors.tariff : undefined}
+                            />
+                        ) : (
+                            <CustomTextField label="Package" value="Add a package first (Packages)" editable={false} />
+                        )}
+                    </FormSection>
+                    <FormSection title="Payment">
+                        <FormRow>
+                            <CustomTextField name="amount" label="Amount (KES)" required keyboardType="decimal-pad" />
+                            <CustomTextField name="telco" label="Paid by" placeholder="CASH, card…" autoCapitalize="characters" />
+                        </FormRow>
+                        <ChoiceChips<string>
+                            label="Status"
+                            options={PAY_STATUSES.map((st) => ({ value: st, label: PAY_LABEL[st] }))}
+                            value={f.values.status}
+                            onChange={(st) => f.setFieldValue('status', st)}
+                        />
+                        <CustomTextField name="description" label="Note" placeholder="Optional" />
                     </FormSection>
                 </AdminFormSheet>
             )}

@@ -62,6 +62,7 @@ class WifiSubscriptionPaymentsSerializer(serializers.ModelSerializer):
             "description",
             "status",
             "amount",
+            "is_settled",
             "created",
             "updated",
            

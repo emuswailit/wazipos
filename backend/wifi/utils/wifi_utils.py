@@ -194,15 +194,6 @@ def get_wifi_subscriptions(user):
     return wifi_tariff_subscriptions
 
 def get_wifi_subscription_payments(user):
-    wifi_subscription_payments=[]
-    if user.is_staff:
-        if models.WifiSubscriptionPayments.objects.exists():
-            wifi_subscription_payments=models.WifiSubscriptionPayments.objects.all().order_by('-created')
-    else:
-        if not user == user.entity.administrator:
-            return
-        account = UserAccounts.objects.get(owner=user)
-        if account:
-            if models.WifiSubscriptionPayments.objects.filter(entity=user.entity,status="SUCCESS",account=account).exists():
-                wifi_subscription_payments=models.WifiSubscriptionPayments.objects.filter(entity=user.entity,status="SUCCESS",account=account).all().order_by('-created')
-    return wifi_subscription_payments
+    """The business's package payments (all statuses), newest first; platform staff see every business."""
+    qs = models.WifiSubscriptionPayments.objects.select_related("tariff").order_by("-created")
+    return qs if user.is_staff and not getattr(user, "entity_id", None) else qs.filter(entity=user.entity)
