@@ -4,13 +4,16 @@
 //   1. Continue with Google / Facebook (placeholders until their keys are set),
 //      or fill in name, phone, email and password. Gender, date of birth and an
 //      ID / passport (number + photo) are optional, under "More details".
-//   2. The server creates the account (default WAZIPOS entity), replies with a
-//      session, and texts a consent code. The person enters it here — their
-//      consent to SMS and calls from vendors and their staff — or skips it
-//      (they can confirm later at /consent). Then they're signed in.
+//   2. Confirm phone: the server creates the account (default WAZIPOS entity),
+//      replies with a session and texts a 6-digit code. Entering it proves the
+//      phone is theirs (and is their consent to SMS and calls from sellers).
+//      They can resend it, or do it later.
+//   3. Confirm email: a link is emailed; the email is verified only by opening
+//      it (/verify-email). They can resend it, check, or continue and do it later.
+//   Then they're signed in.
 
 import authService, { type SelfRegisterInput } from '@/api/authApi';
-import adminUsersApi from '@/api/adminUsersApi';
+import verifyApi from '@/api/verifyApi';
 import FacebookSignInButton from '@/components/auth/FacebookSignInButton';
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton';
 import { ChoiceChips, FormRow } from '@/components/common/listScreen';
@@ -59,7 +62,15 @@ const schema = Yup.object({
     accepted_terms: Yup.boolean().oneOf([true], 'Accept the terms to continue'),
 });
 
-type Pending = { token: string; phone: string; consentSent: boolean; consentError: string | null };
+type Pending = {
+    token: string;
+    phone: string;
+    email: string;
+    consentSent: boolean;
+    consentError: string | null;
+    emailLinkSent: boolean;
+    emailLinkError: string | null;
+};
 
 export default function RegisterScreen() {
     const { theme, login } = useAuth();
@@ -103,7 +114,7 @@ export default function RegisterScreen() {
             <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View className="w-full rounded-3xl p-5 md:p-8" style={[card, { gap: 18 }]}>
                     {pending ? (
-                        <ConsentStep pending={pending} onDone={() => void signIn(pending.token)} />
+                        <VerifySteps pending={pending} onDone={() => void signIn(pending.token)} />
                     ) : (
                         <>
                             {/* Header */}
@@ -164,7 +175,15 @@ export default function RegisterScreen() {
                                         const res: any = await authService.register(input, v.identifier_type ? doc : null);
                                         const token = res.data?.tokens?.access;
                                         if (res.ok && String(res.data?.response_code) === '0' && token) {
-                                            setPending({ token, phone: input.phone, consentSent: !!res.data?.consent_sent, consentError: res.data?.consent_error ?? null });
+                                            setPending({
+                                                token,
+                                                phone: input.phone,
+                                                email: input.email,
+                                                consentSent: !!res.data?.consent_sent,
+                                                consentError: res.data?.consent_error ?? null,
+                                                emailLinkSent: !!res.data?.email_link_sent,
+                                                emailLinkError: res.data?.email_link_error ?? null,
+                                            });
                                         } else {
                                             const errs = res.data?.errors;
                                             setErrors(Array.isArray(errs) && errs.length ? errs : [res.data?.response_message || res.problem || 'Your account could not be created.']);
@@ -313,66 +332,202 @@ export default function RegisterScreen() {
     );
 }
 
-/** After sign-up: the consent code texted to their phone (or skip for now). */
-function ConsentStep({ pending, onDone }: { pending: Pending; onDone: () => void }) {
+const errText = (res: any, fallback: string) => {
+    const e = res?.data?.errors;
+    return (Array.isArray(e) && e.join(' ')) || res?.data?.response_message || fallback;
+};
+
+/** Account created → Confirm phone → Confirm email → signed in. */
+function VerifySteps({ pending, onDone }: { pending: Pending; onDone: () => void }) {
+    const [step, setStep] = useState<'PHONE' | 'EMAIL'>('PHONE');
+    const [phoneOk, setPhoneOk] = useState(false);
+    return (
+        <View style={{ gap: 18 }}>
+            <Steps current={step === 'PHONE' ? 1 : 2} phoneOk={phoneOk} />
+            {step === 'PHONE' ? (
+                <PhoneStep
+                    pending={pending}
+                    onNext={(ok) => {
+                        setPhoneOk(ok);
+                        setStep('EMAIL');
+                    }}
+                />
+            ) : (
+                <EmailStep pending={pending} onDone={onDone} />
+            )}
+        </View>
+    );
+}
+
+function Steps({ current, phoneOk }: { current: number; phoneOk: boolean }) {
+    const { theme } = useAuth();
+    const items = ['Your details', 'Confirm phone', 'Confirm email'];
+    return (
+        <View className="flex-row items-center" style={{ gap: 6 }}>
+            {items.map((label, i) => {
+                const done = i < current && (i !== 1 || phoneOk);
+                const skipped = i < current && i === 1 && !phoneOk;
+                const active = i === current;
+                const color = done ? '#10b981' : active ? theme.primary : skipped ? '#f59e0b' : theme.textDark;
+                return (
+                    <React.Fragment key={label}>
+                        <View className="flex-row items-center" style={{ gap: 6, flexShrink: 1 }}>
+                            <View className="w-6 h-6 rounded-full items-center justify-center" style={{ backgroundColor: done || active ? color : 'transparent', borderWidth: done || active ? 0 : 1, borderColor: color }}>
+                                {done ? <Ionicons name="checkmark" size={14} color="#fff" /> : <Text style={{ color: active ? '#fff' : color, fontFamily: theme.font.bold, fontSize: 11 }}>{i + 1}</Text>}
+                            </View>
+                            <Text numberOfLines={1} style={{ color, fontFamily: active ? theme.font.bold : theme.font.medium, fontSize: 12, flexShrink: 1 }}>
+                                {label}
+                            </Text>
+                        </View>
+                        {i < items.length - 1 ? <View className="flex-1 h-px" style={{ minWidth: 8, backgroundColor: done ? '#10b981' : theme.border }} /> : null}
+                    </React.Fragment>
+                );
+            })}
+        </View>
+    );
+}
+
+function PhoneStep({ pending, onNext }: { pending: Pending; onNext: (confirmed: boolean) => void }) {
     const { theme } = useAuth();
     const [code, setCode] = useState('');
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState<'confirm' | 'send' | null>(null);
+    const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(
+        pending.consentSent ? null : { text: `We couldn't text ${pending.phone} just now${pending.consentError ? ` (${pending.consentError})` : ''}. Tap “Send a new code”.`, ok: false },
+    );
 
     const confirm = async () => {
-        setBusy(true);
-        setError(null);
+        setBusy('confirm');
+        setMsg(null);
         try {
-            const res: any = await adminUsersApi.confirmOwnConsent(pending.phone, code);
-            if (res.ok && String(res.data?.response_code) === '0') onDone();
-            else {
-                const errs = res.data?.errors;
-                setError((Array.isArray(errs) && errs.join(' ')) || res.data?.response_message || 'That code did not work.');
-            }
+            const res: any = await verifyApi.confirmPhone(code, pending.token);
+            if (res.ok && String(res.data?.response_code) === '0') onNext(true);
+            else setMsg({ text: errText(res, 'That code did not work.'), ok: false });
         } catch (e: any) {
-            setError(e?.message || 'Could not reach the server.');
+            setMsg({ text: e?.message || 'Could not reach the server.', ok: false });
         } finally {
-            setBusy(false);
+            setBusy(null);
+        }
+    };
+    const resend = async () => {
+        setBusy('send');
+        setMsg(null);
+        try {
+            const res: any = await verifyApi.sendPhoneCode(pending.token);
+            if (res.ok && String(res.data?.response_code) === '0') {
+                setCode('');
+                setMsg({ text: `A new code was sent to ${pending.phone}.`, ok: true });
+            } else setMsg({ text: errText(res, 'The code could not be sent.'), ok: false });
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Could not reach the server.', ok: false });
+        } finally {
+            setBusy(null);
         }
     };
 
     return (
         <View style={{ gap: 16 }}>
-            <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: 'rgba(16,185,129,0.12)' }}>
-                <Ionicons name="checkmark-circle" size={26} color="#10b981" />
+            <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: `${theme.primary}14` }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={24} color={theme.primary} />
             </View>
             <View style={{ gap: 6 }}>
-                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 24 }}>Your account is ready</Text>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 24 }}>Confirm your phone</Text>
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 14, lineHeight: 20 }}>
-                    {pending.consentSent
-                        ? `We texted a 6-digit code to ${pending.phone}. Entering it lets sellers and their staff send you SMS and call you about your orders.`
-                        : `We couldn't text ${pending.phone} right now${pending.consentError ? ` (${pending.consentError})` : ''}. You can continue and confirm later.`}
+                    Your account is created. Enter the 6-digit code we texted to {pending.phone}. It shows the number is yours and lets sellers send you SMS and call you about your orders.
                 </Text>
             </View>
-            {pending.consentSent ? (
-                <CustomTextField
-                    label="6-digit code"
-                    value={code}
-                    onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
-                    placeholder="••••••"
-                    keyboardType="number-pad"
-                    maxLength={6}
-                />
-            ) : null}
-            {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>{error}</Text> : null}
-            {pending.consentSent ? (
-                <Pressable
-                    onPress={() => void confirm()}
-                    disabled={busy || code.length !== 6}
-                    className="h-12 rounded-xl items-center justify-center"
-                    style={{ backgroundColor: theme.primary, opacity: busy || code.length !== 6 ? 0.6 : 1 }}
-                >
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>Confirm & continue</Text>}
+            <CustomTextField
+                label="6-digit code"
+                value={code}
+                onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                placeholder="••••••"
+                keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                autoComplete="sms-otp"
+                maxLength={6}
+            />
+            {msg ? <Text style={{ color: msg.ok ? '#10b981' : '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>{msg.text}</Text> : null}
+            <Pressable
+                onPress={() => void confirm()}
+                disabled={!!busy || code.length !== 6}
+                className="h-12 rounded-xl items-center justify-center"
+                style={{ backgroundColor: theme.primary, opacity: busy || code.length !== 6 ? 0.6 : 1 }}
+            >
+                {busy === 'confirm' ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>Confirm phone</Text>}
+            </Pressable>
+            <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
+                <Pressable onPress={() => void resend()} disabled={!!busy} hitSlop={8}>
+                    <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 13 }}>{busy === 'send' ? 'Sending…' : 'Send a new code'}</Text>
                 </Pressable>
+                <Pressable onPress={() => onNext(false)} disabled={!!busy} hitSlop={8}>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 13 }}>Do this later</Text>
+                </Pressable>
+            </View>
+        </View>
+    );
+}
+
+function EmailStep({ pending, onDone }: { pending: Pending; onDone: () => void }) {
+    const { theme } = useAuth();
+    const [busy, setBusy] = useState<'check' | 'send' | null>(null);
+    const [verified, setVerified] = useState(false);
+    const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(
+        pending.emailLinkSent ? null : { text: `We couldn't email ${pending.email} just now${pending.emailLinkError ? ` (${pending.emailLinkError})` : ''}. Tap “Send a new link”.`, ok: false },
+    );
+
+    const check = async () => {
+        setBusy('check');
+        setMsg(null);
+        try {
+            const res: any = await verifyApi.status(pending.token);
+            const v = res.data?.verification;
+            if (res.ok && v?.email_verified) setVerified(true);
+            else setMsg({ text: 'Not confirmed yet. Open the link in the email, then check again.', ok: false });
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Could not reach the server.', ok: false });
+        } finally {
+            setBusy(null);
+        }
+    };
+    const resend = async () => {
+        setBusy('send');
+        setMsg(null);
+        try {
+            const res: any = await verifyApi.sendEmailLink(pending.token);
+            if (res.ok && String(res.data?.response_code) === '0') setMsg({ text: `A new link was sent to ${pending.email}.`, ok: true });
+            else setMsg({ text: errText(res, 'The email could not be sent.'), ok: false });
+        } catch (e: any) {
+            setMsg({ text: e?.message || 'Could not reach the server.', ok: false });
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    return (
+        <View style={{ gap: 16 }}>
+            <View className="w-12 h-12 rounded-2xl items-center justify-center" style={{ backgroundColor: verified ? 'rgba(16,185,129,0.12)' : `${theme.primary}14` }}>
+                <Ionicons name={verified ? 'mail-open' : 'mail-outline'} size={24} color={verified ? '#10b981' : theme.primary} />
+            </View>
+            <View style={{ gap: 6 }}>
+                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 24 }}>{verified ? 'Email confirmed' : 'Confirm your email'}</Text>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 14, lineHeight: 20 }}>
+                    {verified
+                        ? `Thank you. ${pending.email} is confirmed.`
+                        : `We sent a link to ${pending.email}. Open it on any device to confirm your email. You can do this later; the link works for 3 days.`}
+                </Text>
+            </View>
+            {msg ? <Text style={{ color: msg.ok ? '#10b981' : '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>{msg.text}</Text> : null}
+            {!verified ? (
+                <View className="flex-row" style={{ gap: 10 }}>
+                    <Pressable onPress={() => void check()} disabled={!!busy} className="flex-1 h-11 rounded-xl items-center justify-center" style={{ borderWidth: 1, borderColor: theme.border }}>
+                        {busy === 'check' ? <ActivityIndicator color={theme.primary} /> : <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }}>I’ve opened it</Text>}
+                    </Pressable>
+                    <Pressable onPress={() => void resend()} disabled={!!busy} className="flex-1 h-11 rounded-xl items-center justify-center" style={{ borderWidth: 1, borderColor: theme.border }}>
+                        {busy === 'send' ? <ActivityIndicator color={theme.primary} /> : <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }}>Send a new link</Text>}
+                    </Pressable>
+                </View>
             ) : null}
-            <Pressable onPress={onDone} className="h-11 rounded-xl items-center justify-center" style={{ borderWidth: 1, borderColor: theme.border }}>
-                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{pending.consentSent ? 'Skip for now' : 'Continue'}</Text>
+            <Pressable onPress={onDone} className="h-12 rounded-xl items-center justify-center" style={{ backgroundColor: theme.primary }}>
+                <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>{verified ? 'Continue to WaziPOS' : 'Continue — I’ll confirm later'}</Text>
             </Pressable>
         </View>
     );

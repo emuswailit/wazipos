@@ -172,6 +172,21 @@ def request_email_verification(user):
     return list(errors or []), bool(sent)
 
 
+def my_verification(user):
+    """Where the signed-in person's own phone and email verification stand."""
+    latest = _latest_consent(user)
+    return {
+        "phone": user.phone,
+        "phone_verified": str(user.phone_otp_verified).lower() == "true",
+        "phone_code_pending": bool(latest and latest.status == models.ContactConsent.Status.PENDING),
+        "phone_sms_error": latest.sms_error if latest and latest.status == "PENDING" else None,
+        "email": user.email if has_real_email(user) else None,
+        "has_email": has_real_email(user),
+        "email_verified": str(user.is_email_verified).lower() == "true",
+        "email_link_sent_at": user.email_token_sent_at.isoformat() if user.email_token_sent_at else None,
+    }
+
+
 def confirm_email(user_id, token):
     """Public: the person opened the emailed link. Returns (errors, user)."""
     user = models.Users.objects.filter(id=user_id).first() if user_id else None

@@ -712,6 +712,29 @@ def usersAPIView(request):
     except KeyError:
         raise exceptions.ValidationError("Action is not supplied")
 
+    # ---- verifying my own phone (SMS code) and email (emailed link) ----
+    if action in ("GetMyVerification", "SendMyPhoneCode", "ConfirmMyPhone", "SendMyEmailLink"):
+        from authentication.utils import admin_users as au
+
+        me = request.user
+        if action == "SendMyPhoneCode":
+            if not me.phone:
+                return custom_errors_response(1, "Code not sent", ["Add a phone number first"])
+            errors, _ = au.request_contact_consent(me)
+            if errors:
+                return custom_errors_response(1, "Code not sent", errors)
+        elif action == "ConfirmMyPhone":
+            errors, _ = au.confirm_contact_consent(me, request.data.get("code"), via="USER")
+            if errors:
+                return custom_errors_response(1, "Phone not confirmed", errors)
+            me.refresh_from_db()
+        elif action == "SendMyEmailLink":
+            errors, sent = au.request_email_verification(me)
+            if errors or not sent:
+                return custom_errors_response(1, "Link not sent", errors or ["The email could not be sent"])
+            me.refresh_from_db()
+        return custom_success_message(0, "Verification", au.my_verification(me), "verification")
+
     # ---- becoming a seller: complete profile, then open a shop ----
     if action in ("GetSellerReadiness", "CompleteSellerProfile", "CreateMyBusiness"):
         from authentication.utils import seller_onboarding as so
@@ -2814,11 +2837,8 @@ class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
                 user.documents.add(doc)
 
         sms_errors, _ = au.request_contact_consent(user)
-        send_email({
-            "email_body": f"Hi {first.title()}, your WaziPOS account is ready. Sign in with {email} or your phone number.",
-            "to_email": email,
-            "email_subject": "Welcome to WaziPOS",
-        })
+        # The email is confirmed only by the link sent to it.
+        email_errors, email_sent = au.request_email_verification(user)
 
         tokens = user.tokens()
         return JsonResponse(
@@ -2828,6 +2848,8 @@ class SelfRegisterView(CreateModelMixin, generics.GenericAPIView):
                 "tokens": tokens,
                 "consent_sent": not sms_errors,
                 "consent_error": sms_errors[0] if sms_errors else None,
+                "email_link_sent": bool(email_sent),
+                "email_link_error": email_errors[0] if email_errors else None,
                 "user": {"id": str(user.id), "email": user.email, "phone": user.phone, "name": f"{first} {last}".title()},
             },
             status=status.HTTP_201_CREATED,
