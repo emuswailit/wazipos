@@ -35,6 +35,12 @@ interface Props {
     noMatchText?: string;
     dropdownMaxHeight?: number;
     onAfterSelect?: (id: string, title: string) => void;
+    /**
+     * Show the list inside the layout (pushing the fields below down) instead of
+     * floating over them — use when a field sits right under the picker on phones,
+     * where a floating list can swallow the tap meant for that field.
+     */
+    inline?: boolean;
 }
 
 /* =========================================================
@@ -63,6 +69,7 @@ export default function CustomAutocompletePicker({
     noMatchText = "No matches.",
     dropdownMaxHeight = 200,
     onAfterSelect,
+    inline = false,
 }: Props) {
     const [field, meta, helpers] = useField<string>(name);
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -189,10 +196,9 @@ export default function CustomAutocompletePicker({
                 {dropdownOpen && (
                     <View
                         style={{
-                            position: "absolute",
-                            top: "100%",
-                            left: 0,
-                            right: 0,
+                            position: inline ? "relative" : "absolute",
+                            ...(inline ? null : { top: "100%" as any, left: 0, right: 0 }),
+                            width: inline ? "100%" : undefined,
                             marginTop: 4,
                             backgroundColor: theme.panel,
                             borderColor: baseDelimiter,

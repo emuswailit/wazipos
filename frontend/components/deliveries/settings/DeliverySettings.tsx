@@ -349,6 +349,12 @@ function AgentForm({ visible, onClose, initial, saving, error, onSave }: FormPro
         () => employeesList.filter((e) => e.user_id).map((e) => ({ id: String(e.user_id), title: e.title || 'Employee' })),
         [employeesList],
     );
+    /** The employee's phone on file (pre-fills the delivery person's phone; still editable). */
+    const phoneOf = (userId: string) => {
+        const e: any = employeesList.find((x) => String(x.user_id) === String(userId));
+        const p = String(e?.phone ?? '').trim();
+        return p && p !== 'None' ? p : '';
+    };
 
     return (
         <Formik
@@ -398,9 +404,23 @@ function AgentForm({ visible, onClose, initial, saving, error, onSave }: FormPro
                                 isDarkMode={isDarkMode}
                                 placeholder="Search employees…"
                                 emptyText="No employees yet. Add the person under Employees first."
+                                // The list opens inline so it never covers the Phone field below.
+                                inline
+                                onAfterSelect={(id) => {
+                                    if (!f.values.phone.trim()) f.setFieldValue('phone', phoneOf(id));
+                                }}
                             />
                         )}
-                        <CustomTextField name="phone" label="Phone" placeholder="e.g. 0712345678" keyboardType="phone-pad" />
+                        <CustomTextField
+                            name="phone"
+                            label="Phone"
+                            placeholder="e.g. 0712345678"
+                            keyboardType="phone-pad"
+                            inputMode="tel"
+                            autoComplete="tel"
+                            editable
+                            hint="Customers and your team call this number about deliveries."
+                        />
                     </FormSection>
                     <FormSection title="How they travel" hint="Delivery options offer this mode; it is priced by your rate for it.">
                         <ChoiceChips<DeliveryMode> options={modeOptions(LOCAL_MODES)} value={f.values.mode} onChange={(m) => f.setFieldValue('mode', m)} />
