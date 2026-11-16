@@ -17,6 +17,7 @@
 //
 // On native, the RN Modal is kept — it works there.
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useShopperCart } from "@/context/ShopperCartContext";
 import type { RetailerReceipt } from "@/databases/types";
@@ -32,6 +33,7 @@ import React, { useEffect, useState } from "react";
 import {
     Image,
     Modal,
+    useWindowDimensions,
     Platform,
     Text,
     TextInput,
@@ -120,6 +122,13 @@ export default function RetailerQuantityModal({
 }: RetailerQuantityModalProps) {
     const { theme, isDarkMode } = useAuth();
     const cart = useShopperCart();
+    // Phones and narrow browser windows: a bottom sheet across the full width;
+    // wider screens: a centred card.
+    const { width: winW } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
+    const compact = winW < 640;
+    const btnH = compact ? 48 : 42;
+    const stepH = compact ? 52 : 44;
     const { getQuantity, addOrUpdate, removeLine } = cart;
 
     const [qtyText, setQtyText] = useState("1");
@@ -170,15 +179,16 @@ export default function RetailerQuantityModal({
     const overlay = (
         <View
             style={{
-                position: "absolute",
+                // Web: pinned to the viewport (not the scrolled page) so it never scrolls off.
+                position: (isWeb ? "fixed" : "absolute") as any,
                 top: 0,
                 left: 0,
                 right: 0,
                 bottom: 0,
                 zIndex: 9999,
                 alignItems: "center",
-                justifyContent: "center",
-                padding: 16,
+                justifyContent: compact ? "flex-end" : "center",
+                padding: compact ? 0 : 16,
             }}
         >
             {/* Backdrop */}
@@ -199,14 +209,24 @@ export default function RetailerQuantityModal({
                 {...pressHandlers(() => { }, true)}
                 style={{
                     width: "100%",
-                    maxWidth: 420,
+                    maxWidth: compact ? undefined : 420,
+                    maxHeight: compact ? "92%" : "90%",
                     backgroundColor: theme.panel,
-                    borderRadius: 18,
-                    borderWidth: 1,
+                    borderRadius: compact ? 0 : 18,
+                    borderTopLeftRadius: compact ? 24 : 18,
+                    borderTopRightRadius: compact ? 24 : 18,
+                    borderWidth: compact ? 0 : 1,
                     borderColor,
                     overflow: "hidden",
+                    paddingBottom: compact ? Math.max(insets.bottom, 8) : 0,
+                    ...(isWeb ? ({ boxShadow: compact ? "0 -8px 32px rgba(15,23,42,0.18)" : "0 24px 64px rgba(15,23,42,0.28)" } as any) : null),
                 }}
             >
+                {compact ? (
+                    <View style={{ alignItems: "center", paddingTop: 10 }}>
+                        <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: borderColor }} />
+                    </View>
+                ) : null}
                 {/* Header */}
                 <View
                     style={{
@@ -337,7 +357,7 @@ export default function RetailerQuantityModal({
                             borderColor,
                             backgroundColor: subtleBg,
                             paddingHorizontal: 6,
-                            height: 44,
+                            height: stepH,
                         }}
                     >
                         <View
@@ -347,8 +367,8 @@ export default function RetailerQuantityModal({
                             accessibilityRole="button"
                             accessibilityLabel="Decrease quantity"
                             style={{
-                                width: 34,
-                                height: 34,
+                                width: compact ? 44 : 34,
+                                height: compact ? 44 : 34,
                                 borderRadius: 8,
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -384,8 +404,8 @@ export default function RetailerQuantityModal({
                             accessibilityRole="button"
                             accessibilityLabel="Increase quantity"
                             style={{
-                                width: 34,
-                                height: 34,
+                                width: compact ? 44 : 34,
+                                height: compact ? 44 : 34,
                                 borderRadius: 8,
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -428,8 +448,8 @@ export default function RetailerQuantityModal({
                             accessibilityRole="button"
                             accessibilityLabel="Remove from cart"
                             style={{
-                                width: 42,
-                                height: 42,
+                                width: btnH,
+                                height: btnH,
                                 borderRadius: 10,
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -450,7 +470,7 @@ export default function RetailerQuantityModal({
                         accessibilityLabel="Cancel"
                         style={{
                             flex: 1,
-                            height: 42,
+                            height: btnH,
                             borderRadius: 10,
                             alignItems: "center",
                             justifyContent: "center",
@@ -460,6 +480,9 @@ export default function RetailerQuantityModal({
                         }}
                     >
                         <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.8}
                             style={{
                                 fontFamily: theme.font.bold,
                                 fontSize: theme.fontSize.sm,
@@ -479,7 +502,7 @@ export default function RetailerQuantityModal({
                         accessibilityState={{ disabled: !canSubmit }}
                         style={{
                             flex: 1,
-                            height: 42,
+                            height: btnH,
                             borderRadius: 10,
                             alignItems: "center",
                             justifyContent: "center",
@@ -514,7 +537,7 @@ export default function RetailerQuantityModal({
         <Modal
             visible={visible}
             transparent
-            animationType="fade"
+            animationType={compact ? "slide" : "fade"}
             onRequestClose={onClose}
             statusBarTranslucent
         >
