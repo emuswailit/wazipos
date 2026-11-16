@@ -62,18 +62,27 @@ def backtest_forecasts(period_end: date | None = None) -> dict:
         .annotate(actual=Sum("quantity"))
     )
 
+    # Actual demand per (entity, product, tier, day). Facts are only written
+    # on days with activity, so a missing day means nothing sold: actual 0.
+    actual_map = {
+        (a["entity_id"], a["product_id"], a["tier"], a["fact_date"]): float(a["actual"] or 0)
+        for a in actuals
+    }
+    # Only score days that have fully happened.
+    scored_until = min(period_end, date.today() - timedelta(days=1))
+
     # Group forecasts by the accuracy key
     buckets = defaultdict(list)
     for f in forecasts:
+        if f["forecast_date"] > scored_until:
+            continue
         key = (
             f["entity_id"], f["product_id"], f["tier"],
             f["model_name"], f["segment"],
         )
         actual = actual_map.get((
             f["entity_id"], f["product_id"], f["tier"], f["forecast_date"],
-        ))
-        if actual is None:
-            continue  # no actual recorded for that day
+        ), 0.0)
         buckets[key].append((
             float(f["point_forecast"] or 0),
             actual,
