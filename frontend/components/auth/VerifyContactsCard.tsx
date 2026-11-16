@@ -9,7 +9,7 @@
 import verifyApi, { type MyVerification } from '@/api/verifyApi';
 import { useAuth } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
@@ -19,7 +19,8 @@ const errText = (res: any, fallback: string) => {
     return (Array.isArray(e) && e.join(' ')) || res?.data?.response_message || fallback;
 };
 
-export default function VerifyContactsCard() {
+/** `compact`: a one-line reminder (home) that opens Profile, where the full card is. */
+export default function VerifyContactsCard({ compact = false }: { compact?: boolean } = {}) {
     const { theme } = useAuth();
     const [v, setV] = useState<MyVerification | null>(null);
     const [code, setCode] = useState('');
@@ -77,6 +78,26 @@ export default function VerifyContactsCard() {
     const phoneTodo = !!v.phone && !v.phone_verified;
     const emailTodo = v.has_email && !v.email_verified;
     if (!phoneTodo && !emailTodo) return msg?.ok ? <Done text={msg.text} /> : null;
+
+    if (compact) {
+        const what = phoneTodo && emailTodo ? 'phone and email' : phoneTodo ? 'phone' : 'email';
+        return (
+            <Pressable
+                onPress={() => router.push('/(tabs)/profile' as any)}
+                accessibilityRole="button"
+                accessibilityLabel={`Confirm your ${what}`}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)', backgroundColor: 'rgba(245,158,11,0.07)', paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, ...webPointer }}
+            >
+                <Ionicons name="shield-half-outline" size={18} color="#d97706" />
+                <Text numberOfLines={2} style={{ flex: 1, color: theme.text, fontFamily: theme.font.medium, fontSize: 13 }}>
+                    <Text style={{ fontFamily: theme.font.bold }}>Confirm your {what}</Text>
+                    {phoneTodo && v.phone_code_pending ? ': enter the code we texted you' : emailTodo && !phoneTodo ? ': open the link we emailed you' : ''}
+                </Text>
+                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12.5 }}>Confirm</Text>
+                <Ionicons name="chevron-forward" size={15} color={theme.primary} />
+            </Pressable>
+        );
+    }
 
     const border = 'rgba(245,158,11,0.35)';
     const smallBtn = (label: string, onPress: () => void, loading: boolean, primary = false, disabled = false) => (

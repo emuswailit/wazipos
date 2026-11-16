@@ -13,9 +13,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useWindowDimensions } from 'react-native';
 
 import AdminUserEditModal from './AdminUserEditModal';
-import { CONSENT_META, usersConfig } from './usersConfig';
+import { CONSENT_META, emailUnconfirmed, phoneUnconfirmed, usersConfig } from './usersConfig';
 
-type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'WITH_ID' | ConsentStatus;
+type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'WITH_ID' | 'PHONE_TODO' | 'EMAIL_TODO' | ConsentStatus;
 
 const errorText = (res: any, fallback: string) => {
     const errs = res?.data?.errors;
@@ -90,6 +90,8 @@ export default function AdminUsersList() {
             if (filter === 'ACTIVE' && !u.is_active) return false;
             if (filter === 'INACTIVE' && u.is_active) return false;
             if (filter === 'WITH_ID' && !u.identifier_number) return false;
+            if (filter === 'PHONE_TODO' && !phoneUnconfirmed(u)) return false;
+            if (filter === 'EMAIL_TODO' && !emailUnconfirmed(u)) return false;
             if (filter in CONSENT_META && u.consent_status !== filter) return false;
             if (!q) return true;
             return hit(u.name) || hit(u.email) || hit(u.phone) || hit(u.identifier_number) || hit(u.entity_title);
@@ -101,6 +103,8 @@ export default function AdminUsersList() {
         return {
             active: users.filter((u) => u.is_active).length,
             withId: users.filter((u) => !!u.identifier_number).length,
+            phoneTodo: users.filter(phoneUnconfirmed).length,
+            emailTodo: users.filter(emailUnconfirmed).length,
             confirmed: by('CONFIRMED'),
             pending: by('PENDING'),
             expired: by('EXPIRED'),
@@ -195,7 +199,8 @@ export default function AdminUsersList() {
                     stats={[
                         { label: 'Users', value: users.length.toLocaleString() },
                         { label: 'Active', value: counts.active.toLocaleString(), color: '#10b981' },
-                        { label: 'Consented', value: counts.confirmed.toLocaleString(), color: '#10b981' },
+                        { label: 'Phone unconfirmed', value: counts.phoneTodo.toLocaleString(), color: counts.phoneTodo ? '#f59e0b' : undefined },
+                        { label: 'Email unconfirmed', value: counts.emailTodo.toLocaleString(), color: counts.emailTodo ? '#f59e0b' : undefined },
                         { label: 'Awaiting code', value: counts.pending.toLocaleString(), color: counts.pending ? '#f59e0b' : undefined },
                     ]}
                     filters={{
@@ -203,6 +208,8 @@ export default function AdminUsersList() {
                             { key: 'ALL', label: 'All', icon: 'apps-outline', count: users.length },
                             { key: 'ACTIVE', label: 'Active', icon: 'ellipse', count: counts.active },
                             { key: 'INACTIVE', label: 'Inactive', icon: 'pause-circle-outline', count: users.length - counts.active },
+                            { key: 'PHONE_TODO', label: 'Phone unconfirmed', icon: 'phone-portrait-outline', count: counts.phoneTodo },
+                            { key: 'EMAIL_TODO', label: 'Email unconfirmed', icon: 'mail-outline', count: counts.emailTodo },
                             { key: 'CONFIRMED', label: 'Consent given', icon: 'shield-checkmark-outline', count: counts.confirmed },
                             { key: 'PENDING', label: 'Awaiting code', icon: 'chatbubble-ellipses-outline', count: counts.pending },
                             { key: 'EXPIRED', label: 'Code expired', icon: 'time-outline', count: counts.expired },

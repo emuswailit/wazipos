@@ -1,5 +1,6 @@
 // components/common/ClientDashboard.tsx
 
+import VerifyContactsCard from '@/components/auth/VerifyContactsCard';
 import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
 import { useApi } from '@/hooks/useApi';
@@ -1097,6 +1098,8 @@ export default function ClientDashboard({
             contentContainerStyle={{ padding: 12, paddingBottom: 64 }}
             showsVerticalScrollIndicator={false}
         >
+            {/* Until phone and email are confirmed: one line → Profile. */}
+            <VerifyContactsCard compact />
             {/* Header */}
             <View className="mb-4 flex-row items-start">
                 <View className="flex-1 pr-2">
