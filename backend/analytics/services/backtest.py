@@ -58,6 +58,7 @@ def backtest_forecasts(period_end: date | None = None) -> dict:
     actuals = (
         DemandFact.objects
         .filter(fact_date__gte=period_start, fact_date__lte=period_end)
+        .exclude(source_type="adjustment")  # write-offs are not demand (as in forecast.py)
         .values("entity_id", "product_id", "tier", "fact_date")
         .annotate(actual=Sum("quantity"))
     )

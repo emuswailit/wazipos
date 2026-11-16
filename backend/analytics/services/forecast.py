@@ -44,6 +44,13 @@ MIN_HISTORY_DAYS = 14
 # How far back to look for history
 HISTORY_WINDOW_DAYS = 180
 
+# Forecast runs kept (the backtest scores the last 30 days of forecasts).
+KEEP_RUNS_DAYS = 45
+
+# Facts that are not demand: expired / damaged stock written off. Counting
+# them made products that expire a lot look busier, so we ordered more of them.
+NON_DEMAND_SOURCES = ("adjustment",)
+
 
 def build_forecasts(
     run_date: date | None = None,
@@ -65,14 +72,22 @@ def build_forecasts(
         .distinct("entity_id", "product_id", "tier")
     )
 
+    # All history for the window in ONE query (was one query per product).
+    histories = _load_histories(run_date)
+
     all_forecasts = []
     for profile in profiles.iterator(chunk_size=200):
-        forecasts = _forecast_for_profile(profile, run_date, horizon_days)
+        history = histories.get((profile.entity_id, profile.product_id, profile.tier), [])
+        forecasts = _forecast_for_profile(profile, run_date, horizon_days, history)
         all_forecasts.extend(forecasts)
 
     with transaction.atomic():
-        # Delete only this run's forecasts (don't touch prior run_dates)
+        # Replace this run's forecasts, and drop runs older than the
+        # backtest needs (the table otherwise grows by horizon × products a day).
         DemandForecast.objects.filter(run_date=run_date).delete()
+        purged, _ = DemandForecast.objects.filter(
+            run_date__lt=run_date - timedelta(days=KEEP_RUNS_DAYS),
+        ).delete()
         if all_forecasts:
             DemandForecast.objects.bulk_create(all_forecasts, batch_size=1000)
 
@@ -80,6 +95,7 @@ def build_forecasts(
         "run_date": run_date.isoformat(),
         "horizon_days": horizon_days,
         "forecasts_created": len(all_forecasts),
+        "old_forecasts_purged": purged,
     }
 
 
@@ -87,16 +103,17 @@ def build_forecasts(
 # Per-product forecast
 # =====================================================================
 
-def _forecast_for_profile(profile, run_date, horizon_days):
+def _forecast_for_profile(profile, run_date, horizon_days, history=None):
     """
     Produce DemandForecast rows for one product profile.
     """
-    history = _get_history(
-        entity_id=profile.entity_id,
-        product_id=profile.product_id,
-        tier=profile.tier,
-        run_date=run_date,
-    )
+    if history is None:
+        history = _get_history(
+            entity_id=profile.entity_id,
+            product_id=profile.product_id,
+            tier=profile.tier,
+            run_date=run_date,
+        )
 
     series = _to_series(history, run_date)
 
@@ -127,8 +144,30 @@ def _forecast_for_profile(profile, run_date, horizon_days):
     return forecasts
 
 
+def _load_histories(run_date):
+    """
+    Daily net demand for every (entity, product, tier) in the history
+    window, in one query: {(entity_id, product_id, tier): [(date, qty), …]}.
+    """
+    since = run_date - timedelta(days=HISTORY_WINDOW_DAYS)
+    rows = (
+        DemandFact.objects
+        .filter(fact_date__gte=since, fact_date__lte=run_date)
+        .exclude(source_type__in=NON_DEMAND_SOURCES)
+        .values("entity_id", "product_id", "tier", "fact_date")
+        .annotate(total=Sum("quantity"))
+        .order_by("entity_id", "product_id", "tier", "fact_date")
+    )
+    out = defaultdict(list)
+    for r in rows.iterator(chunk_size=5000):
+        out[(r["entity_id"], r["product_id"], r["tier"])].append(
+            (r["fact_date"], float(r["total"] or 0))
+        )
+    return out
+
+
 def _get_history(entity_id, product_id, tier, run_date):
-    """Daily net demand for the history window."""
+    """Daily net demand for the history window (one product)."""
     since = run_date - timedelta(days=HISTORY_WINDOW_DAYS)
     rows = (
         DemandFact.objects
@@ -139,6 +178,7 @@ def _get_history(entity_id, product_id, tier, run_date):
             fact_date__gte=since,
             fact_date__lte=run_date,
         )
+        .exclude(source_type__in=NON_DEMAND_SOURCES)
         .values("fact_date")
         .annotate(total=Sum("quantity"))
         .order_by("fact_date")

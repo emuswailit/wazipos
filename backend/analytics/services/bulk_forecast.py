@@ -12,13 +12,18 @@ For retailer-tier queries, enriches each product with:
 """
 
 import logging
+from collections import defaultdict
 from datetime import date
+from math import ceil, sqrt
 
-from django.db.models import Count, Sum
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Max, Sum
 
 from analytics.models import DemandForecast
 from analytics.services.campaign_advisor import suggest_campaigns_for_product
-from analytics.services.offer_advisor import suggest_offers_for_product
+from analytics.services.offer_advisor import offer_lots_qs, suggest_offers_for_product
+
+# Open wholesale orders: placed but not yet in stock.
+CLOSED_ORDER_STATUSES = ("RECEIVED", "COMPLETED", "CANCELLED")
 
 logger = logging.getLogger(__name__)
 
@@ -63,34 +68,67 @@ def get_bulk_forecast(
     if product_ids:
         qs = qs.filter(product_id__in=product_ids)
 
+    # Daily spread above the median: (p90 − p50). Quantiles don't add up
+    # across days; for independent days the spread of the total is
+    # sqrt(Σ spread²). Summing p90s (as before) made the range far too wide.
+    spread = F("p90") - F("p50")
     agg = (
         qs.values("product_id")
         .annotate(
             total_forecast=Sum("point_forecast"),
-            total_p10=Sum("p10"),
-            total_p90=Sum("p90"),
+            spread_sq=Sum(
+                ExpressionWrapper(spread * spread, output_field=FloatField()),
+            ),
             days_covered=Count("horizon_days"),
+            last_h=Max("horizon_days"),
         )
         .order_by("product_id")
     )
 
+    # Forecasts stop at FORECAST_HORIZON_DAYS. When the order window is
+    # longer, extend each product by the average of its last week.
+    tails = {}
+    longest = qs.aggregate(m=Max("horizon_days"))["m"] or 0
+    if horizon_days > longest > 0:
+        tails = {
+            str(r["product_id"]): (float(r["avg_point"] or 0), float(r["avg_spread_sq"] or 0))
+            for r in qs.filter(horizon_days__gt=max(0, longest - 7))
+            .values("product_id")
+            .annotate(
+                avg_point=Avg("point_forecast"),
+                avg_spread_sq=Avg(ExpressionWrapper(spread * spread, output_field=FloatField())),
+            )
+        }
+
     product_summaries = []
     for row in agg:
-        days = row["days_covered"] or horizon_days
+        pid = str(row["product_id"])
         total = float(row["total_forecast"] or 0)
-        avg_daily = (total / days) if days else 0.0
+        spread_sq = float(row["spread_sq"] or 0)
+        covered = int(row["days_covered"] or 0)
+        missing = max(0, horizon_days - covered)
+        if missing and pid in tails:
+            tail_point, tail_sq = tails[pid]
+            total += tail_point * missing
+            spread_sq += tail_sq * missing
+        avg_daily = total / horizon_days if horizon_days else 0.0
 
         if min_avg_daily_demand is not None and avg_daily < min_avg_daily_demand:
             continue
 
+        band = sqrt(max(spread_sq, 0.0))
         product_summaries.append({
-            "product_id": str(row["product_id"]),
+            "product_id": pid,
             "total_forecast": round(total, 4),
-            "total_p10": round(float(row["total_p10"] or 0), 4),
-            "total_p90": round(float(row["total_p90"] or 0), 4),
+            "total_p10": round(max(0.0, total - band), 4),
+            "total_p90": round(total + band, 4),
             "avg_daily_forecast": round(avg_daily, 4),
-            "days_covered": days,
+            "days_covered": covered,
+            "days_extrapolated": missing if pid in tails else 0,
         })
+
+    # ---- What to order: forecast + safety − on hand − on order ----
+    _attach_order_quantities(product_summaries, entity_id, tier)
 
     # ---- Attach product titles ----
     from products.models import Products
@@ -143,6 +181,79 @@ def get_bulk_forecast(
 
 
 # =====================================================================
+# Order quantities
+# =====================================================================
+
+def _attach_order_quantities(product_summaries, entity_id, tier):
+    """
+    For each product:
+        on_hand          units in stock now
+        on_order         units on open wholesale orders (retailers)
+        safety_stock     p90 − forecast  (covers demand 9 times in 10)
+        suggested_order_quantity = ceil(forecast + safety − on_hand − on_order), ≥ 0
+        days_of_stock    on_hand / average daily demand
+    """
+    if not product_summaries:
+        return
+    ids = [p["product_id"] for p in product_summaries]
+
+    on_hand = defaultdict(float)
+    on_order = defaultdict(float)
+    try:
+        if tier == "RETAILER":
+            from retailers.models import RetailerReceipts
+            from wholesalers.models import RetailerOrderItems
+
+            for r in (
+                RetailerReceipts.objects
+                .filter(entity_id=entity_id, product_id__in=ids, is_active="true")
+                .values("product_id")
+                .annotate(units=Sum("current_unit_quantity"))
+            ):
+                on_hand[str(r["product_id"])] = float(r["units"] or 0)
+
+            for r in (
+                RetailerOrderItems.objects
+                .filter(
+                    retailer_order__retailer_id=entity_id,
+                    wholesaler_receipt__product_id__in=ids,
+                )
+                .exclude(retailer_order__status__in=CLOSED_ORDER_STATUSES)
+                .values("wholesaler_receipt__product_id")
+                .annotate(units=Sum("total_quantity"))
+            ):
+                on_order[str(r["wholesaler_receipt__product_id"])] = float(r["units"] or 0)
+        else:
+            from wholesalers.models import WholesalerReceipts
+
+            for r in (
+                WholesalerReceipts.objects
+                .filter(entity_id=entity_id, product_id__in=ids)
+                .values("product_id")
+                .annotate(units=Sum("current_unit_quantity"))
+            ):
+                on_hand[str(r["product_id"])] = float(r["units"] or 0)
+    except Exception:
+        # Never fail the forecast over stock lookups; quantities fall back to
+        # the plain forecast.
+        logger.exception("bulk_forecast: stock lookup failed for entity=%s", entity_id)
+
+    for p in product_summaries:
+        pid = p["product_id"]
+        stock = on_hand.get(pid, 0.0)
+        coming = on_order.get(pid, 0.0)
+        safety = max(0.0, p["total_p90"] - p["total_forecast"])
+        need = p["total_forecast"] + safety - stock - coming
+        avg = p["avg_daily_forecast"]
+        p["on_hand"] = round(stock, 2)
+        p["on_order"] = round(coming, 2)
+        p["safety_stock"] = round(safety, 2)
+        p["suggested_order_quantity"] = max(0, ceil(need - 1e-9))
+        p["days_of_stock"] = round(stock / avg, 1) if avg > 0 else None
+        p["order_status"] = "ORDER" if p["suggested_order_quantity"] > 0 else "COVERED"
+
+
+# =====================================================================
 # Enrichment
 # =====================================================================
 
@@ -173,6 +284,13 @@ def _enrich_with_offers_and_campaigns(
         for p in Products.objects.filter(id__in=product_ids)
     }
 
+    # All offerable wholesale lots for these products in one query
+    # (was one query per product).
+    lots_by_product = defaultdict(list)
+    if include_offers:
+        for lot in offer_lots_qs().filter(product_id__in=product_ids):
+            lots_by_product[str(lot.product_id)].append(lot)
+
     for p in product_summaries:
         product_obj = product_objs.get(p["product_id"])
         if not product_obj:
@@ -180,12 +298,16 @@ def _enrich_with_offers_and_campaigns(
             p["suggested_campaigns"] = []
             continue
 
+        # Size offers by what we'd actually buy, not total demand.
+        buy = p.get("suggested_order_quantity") or p["total_forecast"]
+
         if include_offers:
             try:
                 p["suggested_offers"] = suggest_offers_for_product(
                     product=product_obj,
                     retailer_entity=retailer_entity,
-                    forecast_total=p["total_forecast"],
+                    forecast_total=buy,
+                    receipts=lots_by_product.get(p["product_id"], []),
                 )
             except Exception:
                 # Log the traceback so operators can spot failures.
@@ -205,7 +327,7 @@ def _enrich_with_offers_and_campaigns(
                 p["suggested_campaigns"] = suggest_campaigns_for_product(
                     product=product_obj,
                     retailer_entity=retailer_entity,
-                    forecast_total=p["total_forecast"],
+                    forecast_total=buy,
                 )
             except Exception:
                 logger.exception(

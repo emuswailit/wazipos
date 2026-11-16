@@ -48,12 +48,25 @@ GOOD_DAYS_TO_EXPIRY = 180
 # Public entry point
 # =====================================================================
 
+def offer_lots_qs(as_of_date: date | None = None):
+    """Wholesale lots that can be offered: in stock, not expiring soon.
+    Callers scoring many products load these once and pass `receipts=`."""
+    cutoff = (as_of_date or date.today()) + timedelta(days=MIN_DAYS_TO_EXPIRY)
+    return (
+        WholesalerReceipts.objects
+        .filter(current_unit_quantity__gt=0)
+        .exclude(expiry_date__isnull=False, expiry_date__lt=cutoff)
+        .select_related("entity", "product")
+    )
+
+
 def suggest_offers_for_product(
     product,
     retailer_entity,
     forecast_total: float,
     as_of_date: date | None = None,
     limit: int = 5,
+    receipts=None,
 ) -> list[dict]:
     """
     Return a ranked list of offer dicts for the given product.
@@ -72,17 +85,8 @@ def suggest_offers_for_product(
     if allowed and entity_type not in allowed:
         return []
 
-    cutoff = as_of_date + timedelta(days=MIN_DAYS_TO_EXPIRY)
-
-    receipts = (
-        WholesalerReceipts.objects
-        .filter(
-            product=product,
-            current_unit_quantity__gt=0,
-        )
-        .exclude(expiry_date__isnull=False, expiry_date__lt=cutoff)
-        .select_related("entity", "product")
-    )
+    if receipts is None:
+        receipts = offer_lots_qs(as_of_date).filter(product=product)
 
     offers = []
     for receipt in receipts:
