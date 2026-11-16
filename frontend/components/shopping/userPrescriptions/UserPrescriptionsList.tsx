@@ -1,26 +1,22 @@
-// components/shopping/prescriptions/UserPrescriptionsList.tsx
+// components/shopping/userPrescriptions/UserPrescriptionsList.tsx
+//
+// The signed-in user's OWN prescriptions (ones sent to a pharmacy by staff live
+// at /entityPrescriptions). Shared list kit: cards on phones, table on wide
+// screens, kept on the device for offline viewing. Live alerts when a pharmacy
+// digitizes, quotes or dispenses one; ?prescription=<id> opens its details.
 
 import retailerPrescriptionsApi from '@/api/retailerPrescriptionsApi';
+import { LiveAlertBanner, type LiveAlert } from '@/components/common/LiveAlertBanner';
+import { AdminListView, formatDate, type AdminBadge, type AdminListConfig } from '@/components/common/listScreen';
+import { useCachedList, usePaged } from '@/hooks/useCachedList';
+import { usePrescriptionEvents } from '@/hooks/usePrescriptionEvents';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 
-import { LiveAlertBanner, type LiveAlert } from '@/components/common/LiveAlertBanner';
-import { usePrescriptionEvents } from '@/hooks/usePrescriptionEvents';
-
 import { CreatePrescriptionModal } from './CreatePrescriptionModal';
+import { resolveImage } from './prescriptionImage';
 import { UserPrescriptionDetailsModal } from './UserPrescriptionDetailsModal';
-import { UserPrescriptionsMobileView } from './UserPrescriptionsMobileView';
-import { UserPrescriptionsWebView } from './UserPrescriptionsWebView';
-
-export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
-
-export interface PrescriptionCounts {
-    total: number;
-    queuing: number;
-    needsVerification: number;
-}
 
 export interface PrescriptionNormalized {
     id: number;
@@ -33,85 +29,99 @@ export interface PrescriptionNormalized {
     ai_extraction_status: string;
     prescription_items?: any[];
     images?: any[];
+    entity_title?: string | null;
+    [k: string]: any;
 }
+
+const items = (p: PrescriptionNormalized) => p.prescription_items || (p as any).items || [];
+const needsCheck = (p: PrescriptionNormalized) => p.ai_extraction_status === 'COMPLETED' && items(p).some((i: any) => i.is_verified === 'false');
+const nice = (s?: string | null) =>
+    String(s || '')
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+const normalize = (p: any): PrescriptionNormalized => ({ ...p, prescription_items: p.prescription_items || p.items || [] });
+
+function badges(p: PrescriptionNormalized): AdminBadge[] {
+    const out: AdminBadge[] = [p.status === 'QUEUING' ? { label: 'Queuing', tone: 'warning', icon: 'time-outline' } : { label: nice(p.status) || 'Open', tone: 'neutral' }];
+    const ai = p.ai_extraction_status;
+    if (needsCheck(p)) out.push({ label: 'Check medicines', tone: 'warning', icon: 'alert-circle-outline' });
+    else if (ai === 'COMPLETED') out.push({ label: 'Digitized', tone: 'success', icon: 'checkmark-done' });
+    else if (ai === 'FAILED') out.push({ label: 'Could not read', tone: 'danger', icon: 'close-circle-outline' });
+    else if (ai) out.push({ label: 'Reading…', tone: 'info', icon: 'sparkles-outline' });
+    return out;
+}
+
+const config: AdminListConfig<PrescriptionNormalized> = {
+    title: 'My prescriptions',
+    noun: ['prescription', 'prescriptions'],
+    icon: 'document-text-outline',
+    searchPlaceholder: 'Search patient or pharmacy…',
+    addLabel: 'Add prescription',
+    emptyMessage: 'Snap a prescription: we read it, and pharmacies near you send quotations.',
+    keyOf: (p) => String(p.id),
+    titleOf: (p) => p.patient_name || 'Prescription',
+    subtitleOf: (p) => [nice(p.patient_gender), p.patient_date_of_birth && `born ${formatDate(p.patient_date_of_birth)}`, p.entity_title].filter(Boolean).join(' · ') || null,
+    avatarOf: (p) => {
+        const uri = resolveImage(p.images?.[0]);
+        return uri ? { uri } : { icon: 'document-text-outline' };
+    },
+    badgesOf: badges,
+    metaOf: (p) => `Added ${formatDate(p.created)}${p.nature ? ` · ${nice(p.nature)}` : ''}`,
+    metaIcon: 'calendar-outline',
+    metricOf: (p) => ({ value: String(items(p).length), label: items(p).length === 1 ? 'medicine' : 'medicines' }),
+    primaryColumn: { label: 'Patient', flex: 1.6 },
+    columns: [
+        { key: 'pharmacy', label: 'Pharmacy', flex: 1.3, render: (p) => p.entity_title || '—' },
+        { key: 'status', label: 'Status', flex: 1, render: (p) => (p.status === 'QUEUING' ? 'Queuing' : nice(p.status) || '—') },
+        { key: 'meds', label: 'Medicines', flex: 0.7, align: 'right', render: (p) => String(items(p).length) },
+        { key: 'added', label: 'Added', flex: 1, render: (p) => formatDate(p.created) },
+    ],
+};
+
+type Filter = 'ALL' | 'QUEUING' | 'CHECK';
 
 export default function UserPrescriptionsList() {
     const router = useRouter();
     const { width } = useWindowDimensions();
-    const isLarge = width >= 900;
-
-    // This screen only ever shows the logged-in user's OWN prescriptions.
-    // Prescriptions sent to a pharmacy live at /entityPrescriptions.
-
-    // --- State ---
-    const [prescriptions, setPrescriptions] = useState<PrescriptionNormalized[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+    const list = useCachedList<PrescriptionNormalized>({
+        key: 'user_prescriptions',
+        fetch: () => retailerPrescriptionsApi.retrieveUserRetailPrescriptionsAction({ action: 'RetrieveUserRetailPrescriptions', page: 1, page_size: 100 }),
+        pick: (d) => (Array.isArray(d) ? d : d?.results ?? []).map(normalize),
+    });
 
     const [query, setQuery] = useState('');
-    const [onlyPending, setOnlyPending] = useState(false);
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState<PageSize>(10);
-
-
-
-
-    const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+    const [filter, setFilter] = useState<Filter>('ALL');
+    const [createOpen, setCreateOpen] = useState(false);
     const [detailsTarget, setDetailsTarget] = useState<PrescriptionNormalized | null>(null);
 
-    // --- Fetch Data ---
-    const fetchData = useCallback(async (isRefresh = false) => {
-        if (isRefresh) setRefreshing(true);
-        try {
-            const res = await retailerPrescriptionsApi.retrieveUserRetailPrescriptionsAction({
-                action: "RetrieveUserRetailPrescriptions",
-                page: 1,
-                page_size: 100,
-            });
-
-            if (res.ok && res.data) {
-                const results = res.data.results || res.data || [];
-                setPrescriptions(Array.isArray(results) ? results : []);
-            }
-        } catch (error) {
-            console.error("Failed to fetch prescriptions", error);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-    const handleRefresh = useCallback(() => fetchData(true), [fetchData]);
-
     /** Swap a fresh prescription into the list (and the open details sheet). */
-    const upsertPrescription = useCallback((fresh: any) => {
-        if (!fresh?.id) return;
-        const normalized = { ...fresh, prescription_items: fresh.prescription_items || fresh.items || [] };
-        setPrescriptions((list) => {
-            const i = list.findIndex((p) => String(p.id) === String(fresh.id));
-            if (i < 0) return [normalized, ...list];
-            const next = list.slice();
-            next[i] = { ...list[i], ...normalized };
-            return next;
-        });
-        setDetailsTarget((p) => (p && String(p.id) === String(fresh.id) ? { ...p, ...normalized } : p));
-    }, []);
+    const upsert = useCallback(
+        (fresh: any) => {
+            if (!fresh?.id) return;
+            const n = normalize(fresh);
+            list.patch((all) => {
+                const i = all.findIndex((p) => String(p.id) === String(fresh.id));
+                if (i < 0) return [n, ...all];
+                const next = all.slice();
+                next[i] = { ...all[i], ...n };
+                return next;
+            });
+            setDetailsTarget((p) => (p && String(p.id) === String(fresh.id) ? { ...p, ...n } : p));
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [list.patch],
+    );
 
-    // --- Live: "your prescription is digitized" from the pharmacy ---
+    // --- Live: digitized / quoted / dispensed. Staff also get their pharmacy's
+    // events on this socket, so only react to prescriptions in this own list.
     const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null);
-    const dismissAlert = useCallback(() => setLiveAlert(null), []);
-    // Pharmacy staff also receive their pharmacy's events on this socket, so
-    // only react to prescriptions that are already in this (own) list.
-    const ownIdsRef = useRef<Set<string>>(new Set());
-    ownIdsRef.current = new Set(prescriptions.map((p) => String(p.id)));
+    const ownIds = useRef<Set<string>>(new Set());
+    ownIds.current = new Set(list.items.map((p) => String(p.id)));
     usePrescriptionEvents(({ event, prescription }) => {
-        if (!prescription?.id || !ownIdsRef.current.has(String(prescription.id))) return;
-        upsertPrescription(prescription);
-        const open = () => setDetailsTarget({ ...prescription, prescription_items: prescription.prescription_items || prescription.items || [] });
+        if (!prescription?.id || !ownIds.current.has(String(prescription.id))) return;
+        upsert(prescription);
+        const open = () => setDetailsTarget(normalize(prescription));
         if (event === 'prescription.digitized') {
             setLiveAlert({
                 id: `dig-${prescription.id}`,
@@ -131,18 +141,14 @@ export default function UserPrescriptionsList() {
                 onPress: open,
             });
         } else if (event === 'prescription.quoted') {
-            const latest = [...(prescription.quotations || [])]
-                .filter((q: any) => q.quoted_at)
-                .sort((a: any, b: any) => String(b.quoted_at).localeCompare(String(a.quoted_at)))[0];
+            const latest = [...(prescription.quotations || [])].filter((q: any) => q.quoted_at).sort((a: any, b: any) => String(b.quoted_at).localeCompare(String(a.quoted_at)))[0];
             setLiveAlert({
                 id: `quote-${prescription.id}-${latest?.id ?? ''}`,
                 title: 'New quotation',
                 message: latest
-                    ? `${latest.entity_title} quoted ${latest.lines?.length ?? 0} medicine${latest.lines?.length === 1 ? '' : 's'} for KES ${Number(latest.order?.total || 0).toLocaleString()}${latest.pickup_required
-                        ? '. Collect in person at the pharmacy'
-                        : latest.delivery_available
-                            ? '. Choose delivery or collection when you pay'
-                            : ''}. Pay by mobile money. Tap to view.`
+                    ? `${latest.entity_title} quoted ${latest.lines?.length ?? 0} medicine${latest.lines?.length === 1 ? '' : 's'} for KES ${Number(latest.order?.total || 0).toLocaleString()}${
+                          latest.pickup_required ? '. Collect in person at the pharmacy' : latest.delivery_available ? '. Choose delivery or collection when you pay' : ''
+                      }. Pay by mobile money. Tap to view.`
                     : 'A pharmacy sent a quotation. Tap to view.',
                 icon: 'pricetags',
                 color: '#6366f1',
@@ -157,110 +163,90 @@ export default function UserPrescriptionsList() {
             if (!id) return;
             try {
                 const res = await retailerPrescriptionsApi.getRetailPrescriptionDetailsAction({ action: 'GetRetailPrescriptionDetails', prescription_id: String(id) });
-                if (res.ok && res.data?.response_code === 0 && res.data?.prescription) upsertPrescription(res.data.prescription);
+                if (res.ok && (res.data as any)?.response_code === 0 && (res.data as any)?.prescription) upsert((res.data as any).prescription);
             } catch {
                 /* the list refresh below still runs */
             }
-            void fetchData();
+            void list.refresh();
         },
-        [upsertPrescription, fetchData]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [upsert, list.refresh],
     );
 
-    // --- Deep link: /…Prescriptions?prescription=<id> opens that prescription's details ---
-    const { prescription: linkedIdParam } = useLocalSearchParams<{ prescription?: string }>();
-    const linkedId = Array.isArray(linkedIdParam) ? linkedIdParam[0] : linkedIdParam;
-    const handledLinkRef = useRef<string | null>(null);
-
+    // --- Deep link: ?prescription=<id> opens that prescription's details.
+    const { prescription: linkedParam } = useLocalSearchParams<{ prescription?: string }>();
+    const linkedId = Array.isArray(linkedParam) ? linkedParam[0] : linkedParam;
+    const handledLink = useRef<string | null>(null);
     useEffect(() => {
-        if (!linkedId || loading || handledLinkRef.current === linkedId) return;
-        handledLinkRef.current = linkedId;
-        // Drop the param so closing the modal (or refreshing) doesn't reopen it
+        if (!linkedId || list.loading || handledLink.current === linkedId) return;
+        handledLink.current = linkedId;
         router.setParams({ prescription: undefined } as any);
-
-        const inList = prescriptions.find(p => String(p.id) === String(linkedId));
-        if (inList) {
-            setDetailsTarget(inList);
-            return;
-        }
-        // Not in the loaded page (older, or another list) — fetch it directly
+        const inList = list.items.find((p) => String(p.id) === String(linkedId));
+        if (inList) return setDetailsTarget(inList);
         let cancelled = false;
         retailerPrescriptionsApi
-            .getRetailPrescriptionDetailsAction({ action: "GetRetailPrescriptionDetails", prescription_id: String(linkedId) })
+            .getRetailPrescriptionDetailsAction({ action: 'GetRetailPrescriptionDetails', prescription_id: String(linkedId) })
             .then((res) => {
                 const found = res.ok ? ((res.data as any)?.prescription ?? null) : null;
-                if (!cancelled && found) setDetailsTarget(found);
+                if (!cancelled && found) setDetailsTarget(normalize(found));
             })
-            .catch((e) => console.error("Failed to load linked prescription", e));
-        return () => { cancelled = true; };
-    }, [linkedId, loading, prescriptions, router]);
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, [linkedId, list.loading, list.items, router]);
 
-    // --- Filtering & Pagination ---
+    const queuing = list.items.filter((p) => p.status === 'QUEUING').length;
+    const toCheck = list.items.filter(needsCheck).length;
     const filtered = useMemo(() => {
-        let base = prescriptions;
-        if (onlyPending) base = base.filter(i => i.status === "QUEUING");
         const q = query.trim().toLowerCase();
-        if (!q) return base;
-        return base.filter(i => String(i.patient_name || '').toLowerCase().includes(q));
-    }, [prescriptions, onlyPending, query]);
-
-    const counts: PrescriptionCounts = useMemo(() => ({
-        total: prescriptions.length,
-        queuing: prescriptions.filter(i => i.status === "QUEUING").length,
-        needsVerification: prescriptions.filter(i =>
-            i.ai_extraction_status === "COMPLETED" &&
-            i.prescription_items?.some((item: any) => item.is_verified === "false")
-        ).length,
-    }), [prescriptions]);
-
-    const totalItems = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-
-    useEffect(() => { setPage(1); }, [query, onlyPending, pageSize]);
-    useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
-
-    const pageStart = (page - 1) * pageSize;
-    const pageEnd = Math.min(pageStart + pageSize, totalItems);
-    const paginated = useMemo(() => filtered.slice(pageStart, pageEnd), [filtered, pageStart, pageEnd]);
-
-    // --- Shared Props ---
-    const sharedProps = {
-        query,
-        setQuery,
-        onlyPending,
-        setOnlyPending,
-        onRefresh: handleRefresh,
-        onOpenCreate: () => setIsCreateModalVisible(true),
-        refreshing,
-        counts,
-        items: paginated,
-        onPressItem: (item: PrescriptionNormalized) => setDetailsTarget(item),
-        page,
-        pageSize,
-        totalItems,
-        totalPages,
-        pageStart,
-        pageEnd,
-        onPrev: () => setPage(p => Math.max(1, p - 1)),
-        onNext: () => setPage(p => Math.min(totalPages, p + 1)),
-        onPageSizeChange: (size: PageSize) => { setPageSize(size); setPage(1); },
-        loading,
-    };
+        return list.items
+            .filter((p) => filter === 'ALL' || (filter === 'QUEUING' ? p.status === 'QUEUING' : needsCheck(p)))
+            .filter((p) => !q || `${p.patient_name ?? ''} ${p.entity_title ?? ''}`.toLowerCase().includes(q))
+            .sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    }, [list.items, query, filter]);
+    const paged = usePaged(filtered, `${query}|${filter}`);
 
     return (
         <>
-            <LiveAlertBanner alert={liveAlert} onDismiss={dismissAlert} />
-            {isLarge ? (
-                <UserPrescriptionsWebView {...sharedProps} />
-            ) : (
-                <UserPrescriptionsMobileView {...sharedProps} />
-            )}
+            <LiveAlertBanner alert={liveAlert} onDismiss={() => setLiveAlert(null)} />
+            <AdminListView<PrescriptionNormalized, Filter>
+                variant={width >= 768 ? 'web' : 'mobile'}
+                config={config}
+                query={query}
+                setQuery={setQuery}
+                onRefresh={list.refresh}
+                refreshing={list.refreshing}
+                sourceLabel={list.sourceLabel}
+                sourceTone={list.source}
+                lastSyncedTime={list.lastSynced}
+                error={list.error}
+                {...paged}
+                onOpenCreate={() => setCreateOpen(true)}
+                onPressItem={setDetailsTarget}
+                stats={[
+                    { label: 'Prescriptions', value: String(list.items.length) },
+                    { label: 'Queuing', value: String(queuing), color: '#f59e0b' },
+                    { label: 'To check', value: String(toCheck), color: toCheck ? '#f43f5e' : undefined },
+                ]}
+                filters={{
+                    options: [
+                        { key: 'ALL', label: 'All', icon: 'apps-outline', count: list.items.length },
+                        { key: 'QUEUING', label: 'Queuing', icon: 'time-outline', count: queuing },
+                        { key: 'CHECK', label: 'Check medicines', icon: 'alert-circle-outline', count: toCheck },
+                    ],
+                    value: filter,
+                    onChange: setFilter,
+                    allKey: 'ALL',
+                }}
+            />
 
             <CreatePrescriptionModal
-                visible={isCreateModalVisible}
-                onClose={() => setIsCreateModalVisible(false)}
-                onSuccess={(id) => {
-                    setIsCreateModalVisible(false);
-                    fetchData();
+                visible={createOpen}
+                onClose={() => setCreateOpen(false)}
+                onSuccess={() => {
+                    setCreateOpen(false);
+                    void list.refresh();
                 }}
             />
 
@@ -269,7 +255,7 @@ export default function UserPrescriptionsList() {
                 onClose={() => setDetailsTarget(null)}
                 onChanged={() => void refreshOne(detailsTarget?.id)}
                 onForwarded={(fresh) => {
-                    upsertPrescription(fresh);
+                    upsert(fresh);
                     setLiveAlert({
                         id: `fwd-${fresh.id}`,
                         title: 'Sent to the pharmacy',

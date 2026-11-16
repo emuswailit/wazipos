@@ -36,7 +36,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Dimensions, Image, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import type { PrescriptionNormalized } from './UserPrescriptionsList';
-import { resolveImage } from './UserPrescriptionsWebView';
+import { resolveImage } from './prescriptionImage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
