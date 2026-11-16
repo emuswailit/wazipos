@@ -21,6 +21,7 @@
 import secrets
 from datetime import timedelta
 
+from decouple import config
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
 from django.db.models import Q
@@ -33,8 +34,10 @@ from utils.logging import create_log
 
 CONSENT_TTL = timedelta(days=7)
 CONSENT_MAX_ATTEMPTS = 5
-CONSENT_PAGE = "https://app.wazipos.co.ke/consent"
-APP_URL = "https://app.wazipos.co.ke"
+# The web app is served at wazipos.co.ke (there is no app. subdomain).
+APP_URL = str(config("WEB_APP_URL", default="https://wazipos.co.ke")).rstrip("/")
+CONSENT_PAGE = f"{APP_URL}/consent"
+API_URL = str(config("API_URL", default="https://api.wazipos.co.ke")).rstrip("/")
 EMAIL_TOKEN_TTL = timedelta(days=3)
 PLACEHOLDER_EMAIL_DOMAIN = "@users.wazipos.co.ke"
 DEFAULT_ENTITY_TITLE = "WAZIPOS"
@@ -152,7 +155,8 @@ def request_email_verification(user):
     user.email_token_expires_at = timezone.now() + EMAIL_TOKEN_TTL
     user.email_token_sent_at = timezone.now()
     user.save(update_fields=["email_token_hash", "email_token_expires_at", "email_token_sent_at"])
-    link = f"{APP_URL}/verify-email?u={user.id}&t={token}"
+    # Opened on the API (always reachable), not the web app: verifyEmailLinkView.
+    link = f"{API_URL}/api/v1/authentication/users/verify-email?u={user.id}&t={token}"
     name = user.first_name.title() if user.first_name else "there"
     body = (
         f"Hello {name},\n\n"

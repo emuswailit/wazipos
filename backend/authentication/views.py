@@ -5175,6 +5175,38 @@ def contactConsentAPIView(request):
     return custom_success_message(0, "Thank you — your consent is recorded", None, "consent")
 
 
+def verifyEmailLinkView(request):
+    """
+    Public GET opened straight from the confirmation email:
+    /api/v1/authentication/users/verify-email?u=<user id>&t=<token>.
+    Confirms the email and shows a small page with the outcome.
+    """
+    from django.http import HttpResponse, HttpResponseNotAllowed
+    from django.utils.html import escape
+
+    from authentication.utils import admin_users as au
+
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+    errors, _ = au.confirm_email(request.GET.get("u"), request.GET.get("t"))
+    if errors:
+        title, message, color, code = "Email not confirmed", escape(errors[0]), "#b91c1c", 400
+        hint = "Open WaziPOS and tap “Send a new link” on your profile to get a new one."
+    else:
+        title, message, color, code = "Email confirmed", "Thank you — your email is confirmed.", "#15803d", 200
+        hint = "You can close this page and continue in WaziPOS."
+    page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · WaziPOS</title>
+<style>body{{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f8fafc;color:#0f172a;
+display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}}
+.card{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px;max-width:420px;width:100%;text-align:center}}
+h1{{font-size:20px;margin:0 0 8px;color:{color}}}p{{margin:8px 0;line-height:1.5}}.hint{{color:#64748b;font-size:14px}}
+a{{display:inline-block;margin-top:16px;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none}}</style>
+</head><body><div class="card"><h1>{title}</h1><p>{message}</p><p class="hint">{hint}</p>
+<a href="{escape(au.APP_URL)}">Open WaziPOS</a></div></body></html>"""
+    return HttpResponse(page, status=code, content_type="text/html; charset=utf-8")
+
+
 def get_or_create_social_user(email, first_name, last_name, method):
     """Like get_or_create_google_user, for any social provider (e.g. Facebook)."""
     email = email.strip().lower()

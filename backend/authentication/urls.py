@@ -59,6 +59,7 @@ urlpatterns = [
     path("users/reference", views.sequenceAPIView, name="users-api-view"),
     path("users/admin", views.adminUsersAPIView, name="admin-users-api-view"),
     path("users/consent", views.contactConsentAPIView, name="contact-consent-api-view"),
+    path("users/verify-email", views.verifyEmailLinkView, name="verify-email-link"),
     path("facebook/", views.FacebookLoginAPIView.as_view(), name="facebook-token-login"),
     path("agents", views.agentsOnlyAPIView, name="agent-users-api-view"),
     path("documents", views.documentsAPIView, name="documents-api-view"),
