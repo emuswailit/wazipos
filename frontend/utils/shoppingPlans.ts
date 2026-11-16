@@ -13,6 +13,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 export interface ShoppingPlan {
     id: string;
+    /** `<user id>:<shop entity id>:<timestamp>`. Unique per plan (no two plans
+     *  share one) and sent as the customer order's draft_id when it is paid. */
+    draft_id?: string;
     title: string;
     /** Who it's for, e.g. "Amani · Grade 4". */
     for_whom?: string;
@@ -42,11 +45,29 @@ const notify = () => listeners.forEach((l) => l());
 
 export const newPlanId = () => `plan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+/** Draft id shared by a plan and the customer order it becomes:
+ *  `<logged-in user id>:<entity id>:<timestamp>` (entity = the shop). */
+export const makeDraftId = (userId: string, entityId?: string | null) => `${userId || 'guest'}:${entityId || 'none'}:${Date.now()}`;
+
+/** The entity segment of a draft id. */
+export const draftEntity = (draftId?: string) => (draftId ? draftId.split(':')[1] ?? '' : '');
+
 export async function loadPlans(userId: string): Promise<ShoppingPlan[]> {
     try {
         const raw = await AsyncStorage.getItem(keyFor(userId));
         const list = raw ? (JSON.parse(raw) as ShoppingPlan[]) : [];
-        return Array.isArray(list) ? list : [];
+        if (!Array.isArray(list)) return [];
+        // One plan per draft id: if a draft id ever got saved twice, keep the latest.
+        const seen = new Set<string>();
+        return list
+            .slice()
+            .sort((a, b) => String(b.updated).localeCompare(String(a.updated)))
+            .filter((p) => {
+                if (!p.draft_id) return true;
+                if (seen.has(p.draft_id)) return false;
+                seen.add(p.draft_id);
+                return true;
+            });
     } catch {
         return [];
     }
@@ -61,15 +82,20 @@ export async function getPlan(userId: string, id: string): Promise<ShoppingPlan 
     return (await loadPlans(userId)).find((p) => p.id === id) ?? null;
 }
 
-/** Inserts or merges `patch` into plan `id` (creating it if missing). */
+/** Inserts or merges `patch` into plan `id` (creating it if missing). A new
+ *  plan whose draft_id already exists merges into that plan instead. */
 export async function upsertPlan(userId: string, id: string, patch: Partial<ShoppingPlan>): Promise<ShoppingPlan> {
     const plans = await loadPlans(userId);
     const now = new Date().toISOString();
-    const i = plans.findIndex((p) => p.id === id);
+    let i = plans.findIndex((p) => p.id === id);
+    if (i < 0 && patch.draft_id) {
+        i = plans.findIndex((p) => p.draft_id === patch.draft_id);
+        if (i >= 0) id = plans[i].id;
+    }
     const next: ShoppingPlan =
         i >= 0
             ? { ...plans[i], ...patch, id, updated: now }
-            : { title: 'My plan', items: [], created: now, ...patch, id, updated: now };
+            : { title: 'My plan', items: [], created: now, draft_id: makeDraftId(userId, patch.retailer_id), ...patch, id, updated: now };
     if (i >= 0) plans[i] = next;
     else plans.unshift(next);
     await saveAll(userId, plans);
@@ -80,11 +106,27 @@ export async function deletePlan(userId: string, id: string) {
     await saveAll(userId, (await loadPlans(userId)).filter((p) => p.id !== id));
 }
 
+/** "Back to school" → "Back to school 2" (next free number; old "(copy)" tails dropped). */
+export function nextCopyTitle(title: string, existing: string[]): string {
+    const base = title.replace(/(\s*\(copy\))+$/i, '').replace(/\s+\d+$/, '').trim() || 'My plan';
+    const taken = new Set(existing.map((t) => t.trim().toLowerCase()));
+    for (let n = 2; n < 1000; n++) {
+        const t = `${base} ${n}`;
+        if (!taken.has(t.toLowerCase())) return t;
+    }
+    return `${base} ${Date.now()}`;
+}
+
 export async function duplicatePlan(userId: string, id: string, title?: string): Promise<ShoppingPlan | null> {
-    const src = await getPlan(userId, id);
+    const plans = await loadPlans(userId);
+    const src = plans.find((p) => p.id === id);
     if (!src) return null;
-    const { id: _old, created: _c, updated: _u, ...rest } = src;
-    return upsertPlan(userId, newPlanId(), { ...rest, title: title || `${src.title} (copy)` });
+    const { id: _old, created: _c, updated: _u, draft_id: _d, ...rest } = src;
+    return upsertPlan(userId, newPlanId(), {
+        ...rest,
+        draft_id: makeDraftId(userId, src.retailer_id),
+        title: title || nextCopyTitle(src.title, plans.map((p) => p.title)),
+    });
 }
 
 /* --------------------------------------------------------------- live check */
@@ -200,7 +242,7 @@ export const planUnits = (p: ShoppingPlan) => p.items.reduce((s, it) => s + line
 /** The plan as a draft customer order, so the shop front cart and checkout work on it. */
 export function planToOrder(p: ShoppingPlan): CustomerOrder {
     return {
-        draft_id: p.id,
+        draft_id: p.draft_id || p.id, // same draft id as the plan
         remote_id: '',
         status: 'draft',
         synced: 'FALSE',

@@ -21,7 +21,7 @@ import React, {
     useState,
 } from "react";
 import { Platform } from "react-native";
-import { deletePlan, getPlan, newPlanId, planToOrder, repriceItem, upsertPlan, type LineCheck, type ShoppingPlan } from "@/utils/shoppingPlans";
+import { deletePlan, draftEntity, getPlan, makeDraftId, newPlanId, planToOrder, repriceItem, upsertPlan, type LineCheck, type ShoppingPlan } from "@/utils/shoppingPlans";
 
 export interface ShopperCartLine {
     receiptId: string;
@@ -258,6 +258,11 @@ export function ShopperCartProvider({
                     const p = await upsertPlan(userId, planId, {
                         ...(existing ?? { title: "My plan" }),
                         items: sameShop ? existing?.items ?? [] : [],
+                        // userId:shopId:timestamp — new once the plan is pinned to a shop.
+                        draft_id:
+                            existing?.draft_id && draftEntity(existing.draft_id) === retailerId
+                                ? existing.draft_id
+                                : makeDraftId(userId, retailerId),
                         retailer_id: retailerId,
                         retailer_name: retailerName,
                         retailer_type: one(params.type) || existing?.retailer_type,
@@ -457,6 +462,9 @@ export function ShopperCartProvider({
             if (!userId || !retailerId || !order) return null;
             const p = await upsertPlan(userId, newPlanId(), {
                 ...details,
+                // Keep the cart's draft id (userId:shopId:timestamp): the plan and
+                // the customer order it becomes share it.
+                draft_id: order.draft_id || makeDraftId(userId, retailerId),
                 items: order.order_items ?? [],
                 retailer_id: retailerId,
                 retailer_name: retailerName,

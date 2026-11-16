@@ -15,7 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { usePaged } from '@/hooks/useCachedList';
 import { PlanLineFlag } from '@/components/shoppers/RetailerCartPanel';
 import { getReceiptPrice, useRetailerInventory } from '@/hooks/useRetailerInventory';
-import { checkPlan, deletePlan, describeCheck, duplicatePlan, lineQty, linePrice, newPlanId, planTotal, planUnits, upsertPlan, useShoppingPlans, type ShoppingPlan } from '@/utils/shoppingPlans';
+import { checkPlan, deletePlan, describeCheck, duplicatePlan, lineQty, linePrice, makeDraftId, newPlanId, nextCopyTitle, planTotal, planUnits, upsertPlan, useShoppingPlans, type ShoppingPlan } from '@/utils/shoppingPlans';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -116,15 +116,24 @@ export default function ShoppingPlansList() {
     const ready = plans.filter((p) => !!p.retailer_id && p.items.length > 0).length;
     const noShop = plans.filter((p) => !p.retailer_id).length;
 
+    const busy = useRef(false); // one save per tap (no double-created plans)
     const submit = async (d: PlanDetails) => {
-        if (form?.mode === 'edit' && form.plan) {
-            await upsertPlan(userId, form.plan.id, { ...d, budget: d.budget });
+        if (busy.current) return;
+        busy.current = true;
+        try {
+            if (form?.mode === 'edit' && form.plan) {
+                await upsertPlan(userId, form.plan.id, { ...d, budget: d.budget });
+                setForm(null);
+                return;
+            }
+            // Draft id userId:entityId:timestamp — re-issued with the shop's id
+            // when a shop is chosen; the paid customer order uses the same one.
+            const p = await upsertPlan(userId, newPlanId(), { ...d, items: [], draft_id: makeDraftId(userId, user?.entity_id || user?.entity) });
             setForm(null);
-            return;
+            openPlan(p); // → choose a shop, then add products
+        } finally {
+            busy.current = false;
         }
-        const p = await upsertPlan(userId, newPlanId(), { ...d, items: [] });
-        setForm(null);
-        openPlan(p); // → choose a shop, then add products
     };
 
     const remove = (p: ShoppingPlan) =>
@@ -140,9 +149,20 @@ export default function ShoppingPlansList() {
             },
         ], 'danger');
 
-    const copy = async (p: ShoppingPlan) => {
-        const c = await duplicatePlan(userId, p.id);
-        if (c) setViewingId(c.id);
+    // Duplicating asks first (it used to copy on a single tap, so repeated
+    // taps stacked "(copy) (copy)" plans).
+    const copy = (p: ShoppingPlan) => {
+        const name = nextCopyTitle(p.title, plans.map((x) => x.title));
+        alert('Duplicate plan', `Make a copy of “${p.title}” named “${name}”? Handy for a second child with the same list.`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Duplicate',
+                onPress: async () => {
+                    const c = await duplicatePlan(userId, p.id, name);
+                    if (c) setViewingId(c.id);
+                },
+            },
+        ]);
     };
 
     const details = viewing ? <PlanDetailsSheet key={viewing.id} plan={viewing} userId={userId} onClose={() => setViewingId(null)} onEdit={() => setForm({ mode: 'edit', plan: viewing })} onCopy={() => copy(viewing)} onDelete={() => remove(viewing)} /> : null;
