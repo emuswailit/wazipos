@@ -10,6 +10,13 @@
 # number. It is confirmed when the person enters it (public ConfirmContactConsent)
 # or reads it out to the staff member registering them (AdminConfirmConsent).
 # Codes are stored hashed, expire, and allow a few attempts.
+#
+# Confirming the code also proves the phone is the person's: the user is marked
+# phone-verified (phone_otp_verified, phone_verified_at). A new phone clears it.
+#
+# Email: a one-time link (hashed token, EMAIL_TOKEN_TTL) is emailed when a user is
+# created with an email or the email changes; opening it (public ConfirmEmail)
+# marks the email verified. Placeholder logins (<phone>@users.wazipos.co.ke) get none.
 
 import secrets
 from datetime import timedelta
@@ -21,12 +28,15 @@ from django.utils import timezone
 from rest_framework import exceptions
 
 from authentication import models
-from core.utils import normalize_phone, send_sms
+from core.utils import normalize_phone, send_email, send_sms
 from utils.logging import create_log
 
 CONSENT_TTL = timedelta(days=7)
 CONSENT_MAX_ATTEMPTS = 5
 CONSENT_PAGE = "https://app.wazipos.co.ke/consent"
+APP_URL = "https://app.wazipos.co.ke"
+EMAIL_TOKEN_TTL = timedelta(days=3)
+PLACEHOLDER_EMAIL_DOMAIN = "@users.wazipos.co.ke"
 DEFAULT_ENTITY_TITLE = "WAZIPOS"
 
 
@@ -119,7 +129,66 @@ def confirm_contact_consent(user, code, confirmed_by=None, via="USER"):
     consent.confirmed_by = confirmed_by
     consent.confirmed_via = via
     consent.save(update_fields=["status", "confirmed_at", "confirmed_by", "confirmed_via", "updated"])
+    # The code reached this number and came back: the phone is the person's.
+    if normalize_phone(user.phone or "") == normalize_phone(consent.phone or ""):
+        user.phone_otp_verified = "true"
+        user.phone_verified_at = consent.confirmed_at
+        user.save(update_fields=["phone_otp_verified", "phone_verified_at"])
     return [], consent
+
+
+# ---------------------------------------------------------------- email link
+
+def has_real_email(user) -> bool:
+    return bool(user.email) and not user.email.lower().endswith(PLACEHOLDER_EMAIL_DOMAIN)
+
+
+def request_email_verification(user):
+    """Email a one-time verification link. Returns (errors, sent)."""
+    if not has_real_email(user):
+        return ["This user has no email address"], False
+    token = secrets.token_urlsafe(32)
+    user.email_token_hash = make_password(token)
+    user.email_token_expires_at = timezone.now() + EMAIL_TOKEN_TTL
+    user.email_token_sent_at = timezone.now()
+    user.save(update_fields=["email_token_hash", "email_token_expires_at", "email_token_sent_at"])
+    link = f"{APP_URL}/verify-email?u={user.id}&t={token}"
+    name = user.first_name.title() if user.first_name else "there"
+    body = (
+        f"Hello {name},\n\n"
+        f"Please confirm that {user.email} is your email address for WaziPOS:\n\n{link}\n\n"
+        f"The link works for {EMAIL_TOKEN_TTL.days} days. If you did not expect this, ignore this email."
+    )
+    html = (
+        f"<p>Hello {name},</p><p>Please confirm that <b>{user.email}</b> is your email address for WaziPOS.</p>"
+        f'<p><a href="{link}" style="background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Confirm my email</a></p>'
+        f"<p>The link works for {EMAIL_TOKEN_TTL.days} days. If you did not expect this, ignore this email.</p>"
+    )
+    try:
+        errors, sent = send_email(to=user.email, subject="Confirm your email for WaziPOS", body=body, html_body=html)
+    except Exception as e:  # never fail a save over email
+        create_log("error", f"Email verification for {user.id} failed: {e}")
+        return [str(e)], False
+    return list(errors or []), bool(sent)
+
+
+def confirm_email(user_id, token):
+    """Public: the person opened the emailed link. Returns (errors, user)."""
+    user = models.Users.objects.filter(id=user_id).first() if user_id else None
+    if not user or not token:
+        return ["This link is not valid"], None
+    if user.email_verified_at and not user.email_token_hash:
+        return [], user  # already confirmed
+    if not user.email_token_hash or not check_password(str(token), user.email_token_hash):
+        return ["This link is not valid or was replaced by a newer one"], None
+    if user.email_token_expires_at and user.email_token_expires_at < timezone.now():
+        return ["This link has expired; ask for a new one"], None
+    user.is_email_verified = "true"
+    user.email_verified_at = timezone.now()
+    user.email_token_hash = None
+    user.email_token_expires_at = None
+    user.save(update_fields=["is_email_verified", "email_verified_at", "email_token_hash", "email_token_expires_at"])
+    return [], user
 
 
 def confirm_consent_by_phone(phone, code):
@@ -174,6 +243,12 @@ def admin_user_out(user, request=None):
         "consent_status": consent_status(user),
         "consent_confirmed_at": latest.confirmed_at.isoformat() if latest and latest.confirmed_at else None,
         "consent_sms_error": latest.sms_error if latest and latest.status == "PENDING" else None,
+        "phone_verified": str(user.phone_otp_verified).lower() == "true",
+        "phone_verified_at": user.phone_verified_at.isoformat() if user.phone_verified_at else None,
+        "has_email": has_real_email(user),
+        "email_verified": str(user.is_email_verified).lower() == "true",
+        "email_verified_at": user.email_verified_at.isoformat() if user.email_verified_at else None,
+        "email_link_sent_at": user.email_token_sent_at.isoformat() if user.email_token_sent_at else None,
         "created": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -255,6 +330,7 @@ def admin_save_user(data, files, admin, user=None):
 
     creating = user is None
     phone_changed = False
+    email_changed = False
     with transaction.atomic():
         if creating:
             client_role = models.Roles.objects.filter(value="Client").first()
@@ -265,14 +341,21 @@ def admin_save_user(data, files, admin, user=None):
             user = models.Users(email=login_email, registration_method="Admin", owner=admin)
             user.set_unusable_password()
         else:
-            if email:
+            if email and email != (user.email or "").lower():
                 user.email = email
+                email_changed = True
         user.first_name = first
         user.middle_name = _clean(data, "middle_name") or None
         user.last_name = last
         if phone and phone != normalize_phone(user.phone or ""):
             phone_changed = True
             user.phone = phone
+            # A new number is not proven yet.
+            user.phone_otp_verified = "false"
+            user.phone_verified_at = None
+        if email_changed:
+            user.is_email_verified = "false"
+            user.email_verified_at = None
         user.gender = gender or None
         user.date_of_birth = dob
         user.identifier_type = id_type or "false"
@@ -299,4 +382,7 @@ def admin_save_user(data, files, admin, user=None):
     if creating or phone_changed:
         sms_errors, _ = request_contact_consent(user, requested_by=admin)
         note = sms_errors[0] if sms_errors else "Consent code sent by SMS"
+    # Email ownership is confirmed later, from the emailed link.
+    if (creating and has_real_email(user)) or email_changed:
+        request_email_verification(user)
     return [], user, note

@@ -141,8 +141,9 @@ function GlobalAppShellLayout() {
   React.useEffect(() => {
     const inAuthGroup = segments.includes('(auth)');
     const inWelcome = segments.includes('welcome');
-    // A restaurant's QR menu (/menu/<restaurant>) is open to everyone, signed in or not.
-    if (segments[0] === 'menu') return;
+    // A restaurant's QR menu (/menu/<restaurant>) and the email confirmation link
+    // (/verify-email) are open to everyone, signed in or not.
+    if (segments[0] === 'menu' || segments[0] === 'verify-email') return;
 
     if (!user && !inAuthGroup && !inWelcome) {
       router.replace('/welcome');
@@ -156,8 +157,9 @@ function GlobalAppShellLayout() {
   const inAuthGroup = segments.includes('(auth)');
   const inWelcome = segments.includes('welcome');
   const inPublicMenu = segments[0] === 'menu';
+  const inVerifyEmail = segments[0] === 'verify-email';
 
-  if (inAuthGroup || inWelcome || inPublicMenu) {
+  if (inAuthGroup || inWelcome || inPublicMenu || inVerifyEmail) {
     // Login / register / password reset / welcome: keep content clear of the status bar
     // and the system navigation bar (Android draws edge-to-edge).
     return (
@@ -180,6 +182,7 @@ function GlobalAppShellLayout() {
           {inAuthGroup && <Stack.Screen name="(auth)" />}
           {inWelcome && <Stack.Screen name="welcome" />}
           {inPublicMenu && <Stack.Screen name="menu/[entity]" />}
+          {inVerifyEmail && <Stack.Screen name="verify-email/index" />}
         </Stack>
       </View>
     );

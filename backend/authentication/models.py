@@ -1739,6 +1739,14 @@ class Users(AbstractBaseUser, PermissionsMixin):
     is_email_verified = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )
+    # Phone ownership: confirmed when the person reads out / enters the SMS
+    # code (ContactConsent). Cleared when the phone changes.
+    phone_verified_at = models.DateTimeField(null=True, blank=True)
+    # Email ownership: a one-time link (hashed token) emailed to the address.
+    email_verified_at = models.DateTimeField(null=True, blank=True)
+    email_token_hash = models.CharField(max_length=128, null=True, blank=True)
+    email_token_expires_at = models.DateTimeField(null=True, blank=True)
+    email_token_sent_at = models.DateTimeField(null=True, blank=True)
     is_verified = models.CharField(
         max_length=50, choices=TRUE_FALSE_OPTIONS, default="false"
     )

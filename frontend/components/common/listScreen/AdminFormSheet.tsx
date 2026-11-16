@@ -34,6 +34,13 @@ interface AdminFormSheetProps {
     error?: string | null;
     width?: number;
     children: React.ReactNode;
+    /** Multi-step forms: label / action of the left button (default Cancel → onClose). */
+    cancelLabel?: string;
+    onCancel?: () => void;
+    submitIcon?: React.ComponentProps<typeof SheetButton>['icon'];
+    submitDisabled?: boolean;
+    /** Shown above the error and fields (e.g. a step indicator). */
+    header?: React.ReactNode;
 }
 
 export function AdminFormSheet({
@@ -48,6 +55,11 @@ export function AdminFormSheet({
     error,
     width = 640,
     children,
+    cancelLabel = 'Cancel',
+    onCancel,
+    submitIcon = 'checkmark',
+    submitDisabled,
+    header,
 }: AdminFormSheetProps) {
     const wide = useSheetIsWide();
     return (
@@ -61,11 +73,12 @@ export function AdminFormSheet({
             dismissible={!submitting}
             footer={
                 <>
-                    <SheetButton label="Cancel" variant="ghost" onPress={onClose} disabled={submitting} grow={!wide} />
-                    <SheetButton label={submitLabel} icon="checkmark" onPress={onSubmit} loading={submitting} grow={!wide} />
+                    <SheetButton label={cancelLabel} variant="ghost" onPress={onCancel ?? onClose} disabled={submitting} grow={!wide} />
+                    <SheetButton label={submitLabel} icon={submitIcon} onPress={onSubmit} loading={submitting} disabled={submitDisabled} grow={!wide} />
                 </>
             }
         >
+            {header}
             {error ? <FormErrorBanner message={error} /> : null}
             {children}
         </AdminSheet>

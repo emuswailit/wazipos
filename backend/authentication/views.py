@@ -1034,6 +1034,14 @@ def adminUsersAPIView(request):
         out = au.admin_user_out(saved, request)
         out["consent_note"] = note
         return custom_success_message(0, "User created" if target is None else "User updated", out, "user")
+    if action == "AdminSendEmailVerification":
+        target = models.Users.objects.filter(id=request.data.get("user")).first()
+        if not target:
+            return custom_errors_response(1, "Link not sent", ["User for provided ID does not exist"])
+        errors, sent = au.request_email_verification(target)
+        if errors or not sent:
+            return custom_errors_response(1, "Link not sent", errors or ["The email could not be sent"])
+        return custom_success_message(0, "Verification link emailed", au.admin_user_out(target, request), "user")
     if action == "AdminSendConsent":
         target = models.Users.objects.filter(id=request.data.get("user")).first()
         if not target:
@@ -5122,6 +5130,12 @@ def contactConsentAPIView(request):
     """
     from authentication.utils import admin_users as au
 
+    if request.data.get("action") == "ConfirmEmail":
+        # The person opened the link emailed to them: {"user", "token"}.
+        errors, _ = au.confirm_email(request.data.get("user"), request.data.get("token"))
+        if errors:
+            return custom_errors_response(1, "Email not confirmed", errors)
+        return custom_success_message(0, "Thank you — your email is confirmed", None, "email")
     if request.data.get("action") != "ConfirmContactConsent":
         raise exceptions.ValidationError("Action is unknown")
     errors, _ = au.confirm_consent_by_phone(request.data.get("phone"), request.data.get("code"))

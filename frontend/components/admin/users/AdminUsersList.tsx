@@ -7,7 +7,6 @@
 import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
 import adminUsersApi, { type AdminUser, type AdminUserDetails, type ConsentStatus, type PickedDocument } from '@/api/adminUsersApi';
 import { AdminListView } from '@/components/admin/kit';
-import { useAlert } from '@/components/common/AlertProvider';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,7 +26,6 @@ const errorText = (res: any, fallback: string) => {
 export default function AdminUsersList() {
     const { width } = useWindowDimensions();
     const isLarge = width >= 768;
-    const alert = useAlert();
 
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -140,34 +138,28 @@ export default function AdminUsersList() {
     }, [saving]);
 
     const submit = useCallback(
-        async (details: AdminUserDetails, doc: PickedDocument | null) => {
+        async (details: AdminUserDetails, doc: PickedDocument | null): Promise<AdminUser | null> => {
             setSaving(true);
             setFormError(null);
             try {
                 const res: any = editing ? await adminUsersApi.updateUser(editing.id, details, doc) : await adminUsersApi.createUser(details, doc);
                 if (res.ok && String(res.data?.response_code) === '0') {
+                    // The form stays open: next it confirms the phone, then shows where
+                    // phone and email stand (AdminUserEditModal steps 3–4).
                     const saved: AdminUser = res.data.user;
                     upsert(saved);
-                    setFormOpen(false);
-                    setEditing(null);
-                    const note = saved.consent_note;
-                    const smsFailed = !!note && note !== 'Consent code sent by SMS';
-                    alert(
-                        editing ? 'User updated' : 'User created',
-                        note ? (smsFailed ? `${note}. Open the user to resend the code.` : `${note} to ${saved.phone}.`) : `${saved.name} was saved.`,
-                        undefined,
-                        smsFailed ? 'danger' : 'success',
-                    );
-                } else {
-                    setFormError(errorText(res, 'Could not save the user.'));
+                    return saved;
                 }
+                setFormError(errorText(res, 'Could not save the user.'));
+                return null;
             } catch (e: any) {
                 setFormError(e?.message || 'Could not reach the server.');
+                return null;
             } finally {
                 setSaving(false);
             }
         },
-        [editing, upsert, alert],
+        [editing, upsert],
     );
 
     return (

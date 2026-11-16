@@ -41,6 +41,14 @@ export interface AdminUser {
     consent_status: ConsentStatus;
     consent_confirmed_at: string | null;
     consent_sms_error: string | null;
+    /** Phone proven: the SMS code came back (read out or entered). */
+    phone_verified?: boolean;
+    phone_verified_at?: string | null;
+    /** False when the login is a placeholder (<phone>@users.wazipos.co.ke). */
+    has_email?: boolean;
+    email_verified?: boolean;
+    email_verified_at?: string | null;
+    email_link_sent_at?: string | null;
     created: string | null;
     /** After a save: what happened with the consent SMS. */
     consent_note?: string | null;
@@ -89,6 +97,11 @@ export default {
     sendConsent: (user: string) => call('AdminSendConsent', { user }),
     /** The person read their code out to the admin. */
     confirmConsent: (user: string, code: string) => call('AdminConfirmConsent', { user, code }),
+    /** Email the user a one-time verification link (again). */
+    sendEmailVerification: (user: string) => call('AdminSendEmailVerification', { user }),
+    /** Public: the person opened the emailed link (/verify-email?u=&t=). */
+    confirmEmail: (user: string, token: string): Promise<ApiResponse<any>> =>
+        clientOpen.post('/authentication/users/consent', { action: 'ConfirmEmail', user, token }),
     /** Public: the person enters the code themselves. */
     confirmOwnConsent: (phone: string, code: string): Promise<ApiResponse<any>> =>
         clientOpen.post('/authentication/users/consent', { action: 'ConfirmContactConsent', phone, code }),
