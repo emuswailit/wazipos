@@ -615,8 +615,13 @@ export default function RetailerCartPanel({
                                     ...webPointer,
                                 }}
                             >
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: "#fff" }}>
-                                    Close order
+                                <Text
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                    style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: "#fff", paddingHorizontal: 12 }}
+                                >
+                                    {isDelivery ? "Pay with M-Pesa · delivery" : "Pay with M-Pesa · pickup"}
                                 </Text>
                             </TouchableOpacity>
                         </>

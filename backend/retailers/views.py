@@ -443,6 +443,22 @@ def clientOrdersAPIView(request):
                 1, "Customer order not created", errors
             )
 
+    elif action in ("GetAdjacentRetailersByLocation", "GetRetailersByCountyAndCategories"):
+        # Shoppers browsing shops and pharmacies (Adjacent Stores): any signed-in
+        # user, no business subscription needed.
+        finder = (
+            retailer_utils.get_adjacent_retailer_by_location
+            if action == "GetAdjacentRetailersByLocation"
+            else retailer_utils.get_retailers_by_county_and_categories
+        )
+        errors, entities = finder(request.data, request.user)
+        if errors:
+            return custom_errors_response(1, "Could not retrieve shops", errors)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(entities, request)
+        serializer = EntitySerializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
+
     elif action == "RetrieveOwnOrders":
         own_orders = retailer_utils.get_own_orders(request.data, request.user)
         paginator = PageNumberPagination()

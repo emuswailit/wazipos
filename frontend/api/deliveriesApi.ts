@@ -34,6 +34,11 @@ export interface DeliveryOption {
     method: 'LOCAL' | 'COURIER';
     total: string;
     legs: DeliveryOptionLeg[];
+    /** Shopper checkout: walking delivery (under 5 km), rider, or long-haul courier (over 20 km). */
+    group?: 'WALK' | 'RIDER' | 'COURIER';
+    group_label?: string;
+    /** Road km from the shop to the shopper. */
+    distance_km?: string;
 }
 
 export interface DeliveryOptionsResult {

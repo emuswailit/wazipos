@@ -59,7 +59,7 @@ DEFAULT_ITEM_KG = Decimal("0.50")
 
 # What each mode can do: (mode, max kg, max km). None = no limit.
 MODE_LIMITS = [
-    (DeliveryMode.FOOT, Decimal("5"), Decimal("1.5")),
+    (DeliveryMode.FOOT, Decimal("5"), Decimal("5")),  # walking delivery persons: up to 5 km
     (DeliveryMode.BICYCLE, Decimal("15"), Decimal("6")),
     (DeliveryMode.MOTORBIKE, Decimal("40"), Decimal("40")),
     (DeliveryMode.CAR, Decimal("300"), None),
@@ -215,10 +215,11 @@ def _person_providers(seller):
     return list(by_provider.values())
 
 
-def _best_person_leg(provider, agents, km, kg):
-    """Cheapest mode the provider's delivery persons can do for this distance and weight."""
+def _best_person_leg(provider, agents, km, kg, modes=None):
+    """Cheapest mode the provider's delivery persons can do for this distance and weight (optionally only `modes`)."""
     best = None
-    for mode in {a.mode for a in agents if a.mode in LOCAL_MODES}:
+    allowed = set(modes) if modes else LOCAL_MODES
+    for mode in {a.mode for a in agents if a.mode in allowed}:
         limit = next(((mk, mm) for m, mk, mm in MODE_LIMITS if m == mode), (None, None))
         if (limit[0] is not None and kg > limit[0]) or (limit[1] is not None and km > limit[1]):
             continue
@@ -306,6 +307,88 @@ def delivery_options(seller, origin, destination, kg):
     return options
 
 
+# ---------------------------------------------------------------- shopper checkout tiers
+#
+# What a shopper is offered depends on how far they are from the shop (road km):
+#   under 5 km   walking delivery persons and riders
+#   5 - 20 km    riders
+#   over 20 km   riders and long-haul couriers (riders only as far as a rider goes)
+WALK_MAX_KM = Decimal("5")
+COURIER_FROM_KM = Decimal("20")
+DELIVERY_GROUPS = {
+    "WALK": ("Walking delivery", (DeliveryMode.FOOT,)),
+    "RIDER": ("Rider", (DeliveryMode.BICYCLE, DeliveryMode.MOTORBIKE)),
+}
+
+
+def _courier_options(seller, providers, origin, destination, kg):
+    """A delivery person to the courier's office, then the courier to the buyer's nearest office."""
+    options = []
+    couriers = DeliveryPartner.objects.filter(entity=seller, kind=DeliveryPartner.Kind.COURIER, is_active=True).select_related("partner")
+    for cp in couriers:
+        courier = cp.partner
+        origin_cp, dest_cp = _nearest_point(courier, origin), _nearest_point(courier, destination)
+        if not origin_cp or not dest_cp:
+            continue
+        hand_km = km_between(origin, origin_cp.location)
+        hand = None
+        for provider, agents in providers:
+            best = _best_person_leg(provider, agents, hand_km, kg)
+            if best and (hand is None or best[1] < hand[2]):
+                hand = (provider, best[0], best[1])
+        if not hand:
+            continue
+        transit_km = km_between(origin_cp.location, dest_cp.location)
+        options.append({
+            "key": f"COURIER:{courier.id}",
+            "method": Shipment.Method.COURIER,
+            "group": "COURIER",
+            "group_label": "Long-haul courier",
+            "legs": [
+                _leg(ShipmentLeg.Kind.HANDOVER, hand[1], hand[0], hand_km, hand[2],
+                     origin_point=origin, destination_point=origin_cp.location, destination_collection_point=origin_cp),
+                _leg(ShipmentLeg.Kind.TRANSIT, DeliveryMode.COURIER, courier, transit_km,
+                     price(rate_for(courier, DeliveryMode.COURIER), transit_km, kg),
+                     origin_collection_point=origin_cp, origin_point=origin_cp.location,
+                     destination_collection_point=dest_cp, destination_point=dest_cp.location),
+            ],
+        })
+    return options
+
+
+def tiered_delivery_options(seller, origin, destination, kg):
+    """
+    Shopper checkout: the delivery choices for this distance (see the tiers
+    above), one option per provider and kind of deliverer, each fully priced,
+    cheapest first. option = {key, method, group, group_label, distance_km, legs, total}.
+    """
+    providers = _person_providers(seller)
+    km = km_between(origin, destination)
+    groups = ["WALK", "RIDER"] if km < WALK_MAX_KM else ["RIDER"]
+    options = []
+    for provider, agents in providers:
+        for group in groups:
+            label, modes = DELIVERY_GROUPS[group]
+            best = _best_person_leg(provider, agents, km, kg, modes=modes)
+            if best:
+                mode, cost = best
+                options.append({
+                    "key": f"LOCAL:{provider.id}:{group}",
+                    "method": Shipment.Method.LOCAL,
+                    "group": group,
+                    "group_label": label,
+                    "legs": [_leg(ShipmentLeg.Kind.LOCAL, mode, provider, km, cost,
+                                  origin_point=origin, destination_point=destination)],
+                })
+    if km > COURIER_FROM_KM:
+        options += _courier_options(seller, providers, origin, destination, kg)
+    for opt in options:
+        opt["total"] = _q(sum((leg["cost"] for leg in opt["legs"]), Decimal("0")))
+        opt["distance_km"] = km
+    options.sort(key=lambda o: o["total"])
+    return options
+
+
 def retailer_order_delivery_options(order):
     """Options for a retailer order (wholesaler -> retailer). Returns (errors, options, kg)."""
     seller, buyer = order.wholesaler, order.retailer
@@ -376,7 +459,7 @@ def checkout_delivery_options(seller, destination, items):
     if not destination:
         return ["Share your delivery location to see delivery options"], [], Decimal("0")
     kg = checkout_items_weight(items)
-    return [], delivery_options(seller, origin, destination, kg), kg
+    return [], tiered_delivery_options(seller, origin, destination, kg), kg
 
 
 def _create_quoted_shipment(*, seller, user, chosen, kg, origin, destination, recipient_name, recipient_phone, **order_link):

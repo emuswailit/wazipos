@@ -26,6 +26,14 @@ export interface RetailerShopFrontProps {
     retailerType?: string;
     /** Pre-formatted location string, e.g. "Kidera, Bungoma". */
     retailerLocation?: string;
+    /** Where the shop is (prices delivery from it). */
+    retailerLat?: number;
+    retailerLng?: number;
+    /** Where the shopper is (Adjacent Stores): delivery is priced to it straight away. */
+    shopperLat?: number;
+    shopperLng?: number;
+    /** Km from the shopper to the shop. */
+    distanceKm?: number;
 
     /** Back handler — usually `() => router.back()`. */
     onBack: () => void;

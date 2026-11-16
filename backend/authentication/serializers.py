@@ -713,7 +713,13 @@ class FavoriteEntitySerializer(serializers.ModelSerializer):
         return None
 
     def get_farness(self, obj):
-        """Returns the farness string from the related Locations model"""
+        """Km from the shopper when the query measured it (annotated `distance`), else the stored value."""
+        d = getattr(obj, "distance", None)
+        if d is not None:
+            try:
+                return round(d.km, 2)
+            except AttributeError:
+                pass
         try:
             location = obj.locations
             if location:
@@ -2666,7 +2672,13 @@ class EntitySerializer(serializers.ModelSerializer):
         return None
 
     def get_farness(self, obj):
-        """Returns the farness string from the related Locations model"""
+        """Km from the shopper when the query measured it (annotated `distance`), else the stored value."""
+        d = getattr(obj, "distance", None)
+        if d is not None:
+            try:
+                return round(d.km, 2)
+            except AttributeError:
+                pass
         try:
             location = obj.locations
             if location:

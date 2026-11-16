@@ -21,7 +21,17 @@ export default function ShopFrontRoute() {
         name?: string;
         type?: string;
         location?: string;
+        lat?: string;
+        lng?: string;
+        userLat?: string;
+        userLng?: string;
+        distance?: string;
     }>();
+    const one = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v);
+    const num = (v?: string | string[]) => {
+        const n = Number(one(v));
+        return one(v) !== undefined && one(v) !== '' && Number.isFinite(n) ? n : undefined;
+    };
 
     const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
@@ -44,6 +54,11 @@ export default function ShopFrontRoute() {
                     ? params.location[0]
                     : params.location
             }
+            retailerLat={num(params.lat)}
+            retailerLng={num(params.lng)}
+            shopperLat={num(params.userLat)}
+            shopperLng={num(params.userLng)}
+            distanceKm={num(params.distance)}
             onBack={() => router.back()}
         />
     );

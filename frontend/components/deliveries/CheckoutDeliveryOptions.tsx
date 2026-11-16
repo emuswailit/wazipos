@@ -100,12 +100,31 @@ export function CheckoutDeliveryOptions({ retailerId, latitude, longitude, lines
         );
     }
 
+    // How far the shopper is, and what that distance allows (backend logistics tiers).
+    const km = Number((options ?? [])[0]?.distance_km);
+    const tier = !Number.isFinite(km)
+        ? null
+        : km < 5
+          ? 'Walking delivery or a rider'
+          : km <= 20
+            ? 'A rider'
+            : 'A rider or a long-haul courier';
+
     return (
         <View style={{ gap: 8 }}>
+            {tier ? (
+                <View className="flex-row items-center gap-1.5">
+                    <Ionicons name="navigate-outline" size={14} color={theme.textDark} />
+                    <Text className="flex-1" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                        You're {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`} away: {tier.toLowerCase()} can bring it.
+                    </Text>
+                </View>
+            ) : null}
             {(options ?? []).map((opt) => {
                 const active = selectedKey === opt.key;
                 const courier = opt.method === 'COURIER';
                 const via = courier ? opt.legs.find((l) => l.kind === 'TRANSIT')?.provider_title : opt.legs[0]?.provider_title;
+                const icon = opt.group === 'WALK' ? 'walk-outline' : opt.group === 'COURIER' || courier ? 'airplane-outline' : 'bicycle-outline';
                 return (
                     <Pressable
                         key={opt.key}
@@ -117,9 +136,10 @@ export function CheckoutDeliveryOptions({ retailerId, latitude, longitude, lines
                     >
                         <View className="flex-row items-center gap-2">
                             <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={active ? theme.primary : theme.textDark} />
+                            <Ionicons name={icon as any} size={18} color={active ? theme.primary : theme.textDark} />
                             <View className="flex-1 min-w-0">
-                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }}>
-                                    {courier ? `Courier · ${via || 'courier'}` : `Delivered to you · ${via || 'delivery'}`}
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }} numberOfLines={1}>
+                                    {opt.group_label ?? (courier ? 'Courier' : 'Delivered to you')} · {via || (courier ? 'courier' : 'delivery')}
                                 </Text>
                                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>
                                     {courier ? `Collect at ${opt.legs[opt.legs.length - 1]?.to_title ?? 'the office nearest you'}` : 'Straight to your location'}

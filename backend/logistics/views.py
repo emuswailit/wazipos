@@ -311,7 +311,14 @@ def _option_out(option):
             "distance_km": str(leg["distance_km"]),
             "cost": str(leg["cost"]),
         })
-    return {"key": option["key"], "method": option["method"], "total": str(option["total"]), "legs": legs}
+    out = {"key": option["key"], "method": option["method"], "total": str(option["total"]), "legs": legs}
+    # Shopper checkout: walking delivery / rider / long-haul courier, and how far the shopper is.
+    if option.get("group"):
+        out["group"] = option["group"]
+        out["group_label"] = option.get("group_label")
+    if option.get("distance_km") is not None:
+        out["distance_km"] = str(option["distance_km"])
+    return out
 
 
 def _is_platform_admin(user):

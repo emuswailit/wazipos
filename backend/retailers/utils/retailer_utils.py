@@ -4822,7 +4822,27 @@ def get_retailers_by_county_and_categories(data, user):
         # Filter the entities to only those with matching inventory
         entities = entities.filter(id__in=valid_entity_ids)
 
+    # Shopper's location known: how far each shop is, nearest first.
+    here = _shopper_point(data)
+    if here is not None:
+        from django.contrib.gis.db.models.functions import Distance as _Distance
+
+        entities = entities.annotate(distance=_Distance("locations__point", here)).order_by("distance")
     return [], entities
+
+
+def _shopper_point(data):
+    """The shopper's location from {location: {latitude, longitude}} (or top-level), else None."""
+    loc = data.get("location") or {}
+    lat = loc.get("latitude", data.get("latitude"))
+    lng = loc.get("longitude", data.get("longitude"))
+    try:
+        lat, lng = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180) or (lat == 0 and lng == 0):
+        return None
+    return Point(lng, lat, srid=4326)
 
 
 from django.contrib.gis.geos import Point
@@ -4831,64 +4851,37 @@ from django.contrib.gis.measure import D
 from django.db.models import Q
 from authentication.models import Entities
 
+# Businesses a shopper buys from: shops, supermarkets / groceries and pharmacies.
+SHOP_TYPES = ("GeneralRetailer", "PharmaceuticalRetailer", "Grocery")
+
+
 def get_adjacent_retailer_by_location(data, user):
     """
-    Retrieves entities based on a nested location payload, with an optional 
-    categories filter.
+    Shops and pharmacies near the shopper, nearest first, each annotated with
+    `distance` (EntitySerializer shows it as farness, in km).
+    {location: {latitude, longitude}, categories?: [ids], radius_km?: 1-100 (default 30)}
     """
-    # 1. Extract from the nested 'location' object
-    location_data = data.get("location", {})
-    lat = location_data.get("latitude")
-    lng = location_data.get("longitude")
-
-    if lat is None or lng is None:
+    here = _shopper_point(data)
+    if here is None:
         return ["Location coordinates (latitude and longitude) are required."], None
-
     try:
-        lat = float(lat)
-        lng = float(lng)
-    except (ValueError, TypeError):
-        return ["Invalid coordinate format."], None
+        radius = min(max(float(data.get("radius_km") or 30), 1), 100)
+    except (TypeError, ValueError):
+        radius = 30
 
-    # 2. Create the GeoDjango Point (Note: Point takes Longitude, Latitude)
-    user_location = Point(lng, lat, srid=4326)
-
-    # 3. Base Query: Active Entities with a valid Location
-    entities = Entities.objects.filter(
-        is_active=True, 
-        locations__point__isnull=False
-    )
-
-    # 4. Optional Category Filter
+    entities = Entities.objects.filter(is_active=True, entity_type__in=SHOP_TYPES, locations__point__isnull=False)
     category_ids = data.get("categories", [])
     if category_ids and isinstance(category_ids, list):
         entities = entities.filter(categories__id__in=category_ids)
 
-    # 5. Annotate Distance, Filter Radius, and Sort
     entities = (
-        entities
-        .annotate(distance=Distance("locations__point", user_location))
-        .filter(distance__lte=D(km=50))
+        entities.annotate(distance=Distance("locations__point", here))
+        .filter(distance__lte=D(km=radius))
         .distinct()
         .order_by("distance")
         .select_related("country", "county", "constituency")
         .prefetch_related("categories")
     )
-
-    # 6. Dynamically attach 'farness' to the location instance
-    for entity in entities:
-        locations = entity.locations
-        
-        # 🌟 FIX: Handle both single objects (OneToOne/ForeignKey) and Managers (ManyToMany)
-        if hasattr(locations, "first"):
-            location = locations.first()
-        else:
-            location = locations
-
-        if location and hasattr(entity, 'distance'):
-            # Convert meters to km and assign to the location's farness field
-            location.farness = round(entity.distance.km, 2)
-
     return [], entities
 
 

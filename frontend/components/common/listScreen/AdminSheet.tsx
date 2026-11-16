@@ -324,6 +324,9 @@ export function SheetButton({
     grow?: boolean;
 }) {
     const { theme, border } = useListTokens();
+    // Narrow phones: smaller label and padding so the label fits the button.
+    const { width: winW } = useWindowDimensions();
+    const fontSize = winW < 360 ? 12 : winW < 400 ? 13 : 14;
     const off = disabled || loading;
     const bg = variant === 'primary' ? theme.primary : variant === 'danger' ? '#f43f5e' : variant === 'secondary' ? `${theme.primary}12` : 'transparent';
     const fg = variant === 'primary' || variant === 'danger' ? '#fff' : variant === 'secondary' ? theme.primary : theme.text;
@@ -343,7 +346,7 @@ export function SheetButton({
                 gap: 6,
                 height: 44,
                 minHeight: 44,
-                paddingHorizontal: 20,
+                paddingHorizontal: winW < 400 ? 12 : 20,
                 borderRadius: 16,
                 backgroundColor: bg,
                 borderWidth: variant === 'ghost' ? 1 : 0,
@@ -354,8 +357,8 @@ export function SheetButton({
                 ...webPointer,
             })}
         >
-            {icon ? <Ionicons name={loading ? 'hourglass-outline' : icon} size={16} color={fg} /> : null}
-            <Text style={{ flexShrink: 1, color: fg, fontFamily: theme.font.bold, fontSize: 14 }} numberOfLines={1}>
+            {icon ? <Ionicons name={loading ? 'hourglass-outline' : icon} size={fontSize + 2} color={fg} /> : null}
+            <Text style={{ flexShrink: 1, color: fg, fontFamily: theme.font.bold, fontSize }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                 {loading ? loadingLabel : label}
             </Text>
         </Pressable>

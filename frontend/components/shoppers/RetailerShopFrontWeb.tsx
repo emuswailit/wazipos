@@ -67,10 +67,7 @@ import type { RetailerShopFrontProps } from "./RetailerShopFront";
 
 type AppTheme = ReturnType<typeof useAuth>["theme"];
 
-interface ExtendedProps extends RetailerShopFrontProps {
-    retailerLat?: number;
-    retailerLng?: number;
-}
+type ExtendedProps = RetailerShopFrontProps;
 
 const isWeb = Platform.OS === "web";
 const webNoOutline = isWeb ? ({ outlineStyle: "none" } as any) : undefined;
@@ -435,9 +432,15 @@ const ProductCard: React.FC<ProductCardProps> = ({
                     >
                         <ShoppingCart size={13} color={ctaForeground} />
                         <Text
-                            className="ml-1.5 text-[12px] font-semibold tracking-wide"
+                            className="ml-1.5 font-semibold tracking-wide"
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.75}
                             style={{
+                                flexShrink: 1,
                                 fontFamily: theme.font.semibold,
+                                // Narrow cards (two per row on phones): a smaller label that still fits.
+                                fontSize: width < 150 ? 10.5 : width < 180 ? 11 : 12,
                                 color: ctaForeground,
                             }}
                         >
@@ -553,6 +556,8 @@ export default function RetailerShopFrontWeb({
     onBack,
     retailerLat = 0.0,
     retailerLng = 0.0,
+    shopperLat,
+    shopperLng,
 }: ExtendedProps) {
     const { theme, isDarkMode } = useAuth();
     const { width: windowWidth } = useWindowDimensions();
@@ -571,7 +576,12 @@ export default function RetailerShopFrontWeb({
     const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("PICKUP");
     // Delivery: the shopper's location and the chosen option (priced by the
     // server for that location); its total is the delivery fee.
-    const [customerAddress, setCustomerAddress] = useState<CustomerAddress | null>(null);
+    // Opened from Adjacent Stores: start with the shopper's current location pinned.
+    const [customerAddress, setCustomerAddress] = useState<CustomerAddress | null>(() =>
+        shopperLat !== undefined && shopperLng !== undefined
+            ? { name: "", phone: "", label: "My current location", latitude: shopperLat, longitude: shopperLng }
+            : null,
+    );
     const [deliveryOptionKey, setDeliveryOptionKey] = useState<string | null>(null);
     const [shippingCost, setShippingCost] = useState<number | null>(null);
 
@@ -665,7 +675,11 @@ export default function RetailerShopFrontWeb({
     const customerConfig = useMemo<RecordPaymentConfig>(
         () => ({
             ...CUSTOMER_PAYMENT_CONFIG,
-            // Shoppers pay online orders by mobile money only.
+            // A shopper's own order at this shop: the shopper endpoint (the staff one files
+            // orders under the user's own business). Paid by mobile money only (system till);
+            // the order's payment is followed live over the payment WebSocket.
+            api: 'retailClient',
+            paymentAction: 'CreateCustomerOrderByCustomer',
             allowedMethodTitles: ['MOBILE MONEY'],
             buildPaymentPayload: ({ selectedMethod, mobileNumber }) => {
                 const order = payingOrder;
@@ -693,8 +707,10 @@ export default function RetailerShopFrontWeb({
                 const isDelivery = deliveryMethod === "DELIVERY" && !!deliveryOptionKey;
 
                 return {
-                    action: CUSTOMER_PAYMENT_CONFIG.paymentAction,
+                    action: 'CreateCustomerOrderByCustomer',
                     customer_order_details: {
+                        // The shop being bought from (else the order lands on the shopper's own business).
+                        entity: retailerId,
                         city_name: "",
                         customer_name: customerAddress?.name ?? "",
                         customer_phone: customerAddress?.phone || mobileNumber,
@@ -702,9 +718,9 @@ export default function RetailerShopFrontWeb({
                         destination_longitude: isDelivery ? (customerAddress?.longitude ?? null) : null,
                         draft_id: order?.draft_id ?? "",
                         farness: "",
-                        order_channel: "ANDROID",
+                        order_channel: Platform.OS === "web" ? "WEB" : Platform.OS === "ios" ? "IOS" : "ANDROID",
                         order_items: orderItems,
-                        order_origin: "STAFF",
+                        order_origin: "CUSTOMER",
                         origin_latitude: retailerLat,
                         origin_longitude: retailerLng,
                         payment_account_number: mobileNumber,
@@ -719,6 +735,7 @@ export default function RetailerShopFrontWeb({
             },
         }),
         [
+            retailerId,
             payingOrder,
             deliveryMethod,
             deliveryOptionKey,

@@ -489,6 +489,9 @@ export default function RetailerQuantityModal({
                         }}
                     >
                         <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.8}
                             style={{
                                 fontFamily: theme.font.bold,
                                 fontSize: theme.fontSize.sm,

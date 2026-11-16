@@ -1,9 +1,6 @@
-import { Platform } from "react-native";
+// app/(retailers)/shopFront/index.tsx — Adjacent Stores: shops and pharmacies near the shopper.
+// One responsive screen for phones, tablets and the web (components/shoppers/AdjacentShopsScreen).
 
-import AdjacentShoppingMobileScreen from "@/components/shoppers/AdjacentShoppingMobileScreen";
-import AdjacentShoppingWebScreen from "@/components/shoppers/AdjacentShoppingWebScreen";
+import AdjacentShopsScreen from "@/components/shoppers/AdjacentShopsScreen";
 
-const AdjacentShoppingScreen =
-    Platform.OS === "web" ? AdjacentShoppingWebScreen : AdjacentShoppingMobileScreen;
-
-export default AdjacentShoppingScreen;
+export default AdjacentShopsScreen;
