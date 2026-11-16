@@ -29,7 +29,7 @@ const shadow = (strength = 0.08): any =>
 
 interface Offering {
     key: string;
-    role: 'customer' | 'retailer' | 'wholesaler' | 'restaurant' | 'delivery';
+    role: 'customer' | 'retailer' | 'wholesaler' | 'restaurant' | 'delivery' | 'hotspot';
     icon: IconName;
     colors: [string, string];
     title: string;
@@ -129,6 +129,29 @@ const OFFERINGS: Offering[] = [
         ],
         cta: 'Ride with WaziPOS',
     },
+    {
+        key: 'hotspots',
+        role: 'hotspot',
+        icon: 'wifi',
+        colors: ['#0284c7', '#8b5cf6'],
+        title: 'Wi-Fi hotspots',
+        lead: 'Sell internet time — from a business or your home connection.',
+        points: [
+            'Routers, NAS ids and hotspot locations in one place',
+            'Packages by the minute, hour, day, week or month',
+            'Customers pay by M-Pesa and connect at once',
+            'See who is connected and every payment, live',
+        ],
+        cta: 'Start a hotspot',
+    },
+];
+
+/** Sharing home internet: how a household becomes a hotspot business. */
+const HOME_WIFI: { icon: IconName; title: string; text: string }[] = [
+    { icon: 'home', title: 'Your home connection', text: 'Fibre or home internet with a router that supports hotspot login (e.g. MikroTik).' },
+    { icon: 'pricetags', title: 'Set your packages', text: 'Say 1 hour for KES 10 or a day for KES 50 — you choose.' },
+    { icon: 'phone-portrait', title: 'Neighbours pay by M-Pesa', text: 'They pick a package, pay, and get online. No cash to handle.' },
+    { icon: 'wallet', title: 'Get paid out', text: 'Earnings go to your payout account. Track every payment in the app.' },
 ];
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
@@ -231,13 +254,13 @@ export default function WelcomeScreen() {
                 <View style={{ flex: wide ? 1.1 : undefined, gap: 18, alignItems: wide ? 'flex-start' : 'center' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: `${theme.primary}14` }}>
                         <Ionicons name="sparkles" size={14} color={theme.primary} />
-                        <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12.5 }}>Shops · pharmacies · restaurants · wholesalers · riders</Text>
+                        <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 12.5 }}>Shops · pharmacies · restaurants · wholesalers · riders · Wi-Fi hotspots</Text>
                     </View>
                     <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: wide ? 50 : 34, lineHeight: wide ? 58 : 40, letterSpacing: -1.2, textAlign: wide ? 'left' : 'center' }}>
                         Shop, eat, sell and deliver — <Text style={{ color: theme.primary }}>one app.</Text>
                     </Text>
                     <Text style={[muted, { fontSize: 17, lineHeight: 26, maxWidth: 560, textAlign: wide ? 'left' : 'center' }]}>
-                        WaziPOS connects shoppers and diners with the shops, pharmacies, restaurants and wholesalers around them — with M-Pesa payments and live delivery built in.
+                        WaziPOS connects shoppers and diners with the shops, pharmacies, restaurants and wholesalers around them — with M-Pesa payments and live delivery built in. Run a Wi-Fi hotspot, or share your home internet and earn from it.
                     </Text>
                     {!isAuthed ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: wide ? 'flex-start' : 'center' }}>
@@ -250,6 +273,7 @@ export default function WelcomeScreen() {
                             { icon: 'phone-portrait-outline' as IconName, text: 'M-Pesa payments' },
                             { icon: 'navigate-outline' as IconName, text: 'Live delivery tracking' },
                             { icon: 'cloud-offline-outline' as IconName, text: 'Sells offline' },
+                            { icon: 'wifi-outline' as IconName, text: 'Wi-Fi hotspots' },
                         ].map((t) => (
                             <View key={t.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                 <Ionicons name={t.icon} size={16} color="#10b981" />
@@ -263,7 +287,7 @@ export default function WelcomeScreen() {
 
             {/* ---------------- offerings */}
             <View style={[section, { paddingVertical: 40 }]}>
-                <SectionTitle eyebrow="Everything on WaziPOS" title="Built for everyone in the chain" sub="One account. Shop and dine as a customer, and open a shop, pharmacy, restaurant or wholesale business when you're ready." />
+                <SectionTitle eyebrow="Everything on WaziPOS" title="Built for everyone in the chain" sub="One account. Shop and dine as a customer, and open a shop, pharmacy, restaurant, wholesale or Wi-Fi hotspot business when you're ready." />
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18, justifyContent: 'center' }}>
                     {OFFERINGS.map((o) => (
                         <View key={o.key} style={[{ width: columns(3), minWidth: wide ? 300 : undefined, borderRadius: 22, borderWidth: 1, borderColor: border, backgroundColor: theme.panel, overflow: 'hidden' }, shadow(0.05)]}>
@@ -295,6 +319,45 @@ export default function WelcomeScreen() {
                             </View>
                         </View>
                     ))}
+                </View>
+            </View>
+
+            {/* ---------------- share your home internet */}
+            <View style={[section, { paddingVertical: 44 }]}>
+                <View style={{ borderRadius: 28, overflow: 'hidden', padding: wide ? 32 : 20, gap: 20, ...gradient('#0284c7', '#7c3aed') }}>
+                    <View style={{ flexDirection: wide ? 'row' : 'column', alignItems: wide ? 'center' : 'flex-start', gap: 16 }}>
+                        <View style={{ flex: 1, gap: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.16)' }}>
+                                <Ionicons name="wifi" size={13} color="#fff" />
+                                <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 12 }}>New · Wi-Fi hotspots</Text>
+                            </View>
+                            <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: wide ? 32 : 24, lineHeight: wide ? 38 : 30, letterSpacing: -0.6 }}>
+                                Share your home internet. Earn from it.
+                            </Text>
+                            <Text style={{ color: 'rgba(255,255,255,0.86)', fontFamily: theme.font.medium, fontSize: 15, lineHeight: 22, maxWidth: 620 }}>
+                                Already run a hotspot? Manage routers, packages, connected customers and payments in WaziPOS. Have home internet with spare capacity? We help you set it up as a hotspot your neighbours pay for by M-Pesa.
+                            </Text>
+                        </View>
+                        <Pressable
+                            onPress={() => (isAuthed ? router.push('/(tabs)/business' as any) : register('hotspot'))}
+                            accessibilityRole="button"
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, height: 48, borderRadius: 14, backgroundColor: '#fff' }}
+                        >
+                            <Ionicons name="wifi" size={18} color="#4f46e5" />
+                            <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: '#4f46e5', fontFamily: theme.font.bold, fontSize: width < 380 ? 13.5 : 15 }}>
+                                {isAuthed ? 'Set up my hotspot' : 'Start a hotspot'}
+                            </Text>
+                        </Pressable>
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                        {HOME_WIFI.map((h) => (
+                            <View key={h.title} style={{ flexGrow: 1, flexBasis: wide ? 0 : 240, padding: 16, borderRadius: 18, gap: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' }}>
+                                <Ionicons name={h.icon} size={22} color="#fff" />
+                                <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>{h.title}</Text>
+                                <Text style={{ color: 'rgba(255,255,255,0.82)', fontFamily: theme.font.medium, fontSize: 13, lineHeight: 18 }}>{h.text}</Text>
+                            </View>
+                        ))}
+                    </View>
                 </View>
             </View>
 

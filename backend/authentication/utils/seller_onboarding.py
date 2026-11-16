@@ -22,6 +22,7 @@ SELF_SERVICE_TYPES = {
     "PharmaceuticalWholesaler": "Pharmaceutical wholesaler",
     "Restaurant": "Restaurant / eatery",
     "Hotel": "Hotel / lodge (rooms + restaurant)",
+    "InternetServiceProvider": "Wi-Fi hotspot (business or shared home internet)",
 }
 ID_TYPES = ("NationalId", "Passport")
 
