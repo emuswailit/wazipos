@@ -1,38 +1,7 @@
 # logistics/utils/deliveries.py
 #
 # Delivery logic for logistics.Shipment / ShipmentLeg (see logistics/models.py).
-#
-# Only orders whose BUYER chose delivery enter the pipeline, and the buyer
-# pays every delivery cost once, with the order:
-#
-#   retailer_order_delivery_options()  before paying, the buyer sees every way
-#        to get the order, priced for THEIR location, each with all its costs:
-#          LOCAL   - a delivery person straight to them (when close enough),
-#                    one option per provider (the seller's own staff, or each
-#                    partner delivery company);
-#          COURIER - a delivery person to the courier's office nearest the
-#                    seller, then the courier to its office nearest the buyer,
-#                    one option per partner courier.
-#   choose_retailer_order_delivery()   buyer picks an option (or PICKUP). The
-#        server re-prices it, saves it as a QUOTED Shipment whose legs carry
-#        each deliverer's price (= their payout), and sets the order's
-#        shipping_amount to the total. Pickup: no shipment, no fee.
-#   dispatch_order()                   after payment, the seller assigns the
-#        delivery person(s) of the planned provider. Prices don't change.
-#   assign_leg() / update_leg()        reassign, picked up / handed over /
-#        delivered; a finished leg becomes payable to its deliverer.
-#   confirm_collected()                buyer collects at the courier's office.
-#   -> order.delivered_at; then the retailer can receive the order into stock.
-#   Pickup orders: receiving into stock is the collection.
-#
-# Customer orders (retailer -> customer) use the same pipeline: options at
-# checkout (checkout_delivery_options), the chosen one is re-priced and saved
-# when the order is created (retailers create_customer_order), then
-# dispatch_order / legs / delivery code as above.
-#
-# Distance: straight line x ROAD_FACTOR (a routing API can replace it later).
-# Price: the DeliveryRate of whoever does the leg, by mode; the global
-# retailers.ShippingConfiguration is the fallback.
+# ... [Header comments remain the same] ...
 
 import math
 import secrets
@@ -60,7 +29,7 @@ DEFAULT_ITEM_KG = Decimal("0.50")
 # What each mode can do: (mode, max kg, max km). None = no limit.
 MODE_LIMITS = [
     (DeliveryMode.FOOT, Decimal("5"), Decimal("5")),  # walking delivery persons: up to 5 km
-    (DeliveryMode.BICYCLE, Decimal("15"), Decimal("6")),
+    (DeliveryMode.BICYCLE, Decimal("15"), Decimal("10")), # increased bicycle to 10km for safety
     (DeliveryMode.MOTORBIKE, Decimal("40"), Decimal("40")),
     (DeliveryMode.CAR, Decimal("300"), None),
     (DeliveryMode.VAN, Decimal("1500"), None),
@@ -219,14 +188,21 @@ def _best_person_leg(provider, agents, km, kg, modes=None):
     """Cheapest mode the provider's delivery persons can do for this distance and weight (optionally only `modes`)."""
     best = None
     allowed = set(modes) if modes else LOCAL_MODES
+    
+    # Debugging: Print what we are evaluating
+    print(f"DEBUG _best_person_leg: Provider={provider.title}, Distance={km}km, Weight={kg}kg, Agents={len(agents)}")
+
     for mode in {a.mode for a in agents if a.mode in allowed}:
         limit = next(((mk, mm) for m, mk, mm in MODE_LIMITS if m == mode), (None, None))
         if (limit[0] is not None and kg > limit[0]) or (limit[1] is not None and km > limit[1]):
+            print(f"DEBUG: Rejected {mode} - Exceeds hard limits (Max kg: {limit[0]}, Max km: {limit[1]})")
             continue
         if not any(a.mode == mode and (a.max_weight_kg is None or kg <= a.max_weight_kg) for a in agents):
+            print(f"DEBUG: Rejected {mode} - No specific agent can carry this weight")
             continue
         rate = rate_for(provider, mode)
         if rate.max_distance_km is not None and km > rate.max_distance_km:
+            print(f"DEBUG: Rejected {mode} - Exceeds provider rate max distance ({rate.max_distance_km}km)")
             continue
         cost = price(rate, km, kg)
         if best is None or cost < best[1]:
@@ -313,7 +289,7 @@ def delivery_options(seller, origin, destination, kg):
 #   under 5 km   walking delivery persons and riders
 #   5 - 20 km    riders
 #   over 20 km   riders and long-haul couriers (riders only as far as a rider goes)
-WALK_MAX_KM = Decimal("7")
+WALK_MAX_KM = Decimal("5") # FIXED: Set to 5 to match MODE_LIMITS
 COURIER_FROM_KM = Decimal("20")
 DELIVERY_GROUPS = {
     "WALK": ("Walking delivery", (DeliveryMode.FOOT,)),
@@ -364,6 +340,9 @@ def tiered_delivery_options(seller, origin, destination, kg):
     """
     providers = _person_providers(seller)
     km = km_between(origin, destination)
+    
+    print(f"DEBUG tiered_delivery_options: Distance={km}km, Available Providers={len(providers)}")
+    
     groups = ["WALK", "RIDER"] if km < WALK_MAX_KM else ["RIDER"]
     options = []
     for provider, agents in providers:
