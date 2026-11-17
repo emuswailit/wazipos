@@ -166,3 +166,14 @@ class ExpiryRiskAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+from analytics.models import ApiAccessLog  # noqa: E402
+
+
+@admin.register(ApiAccessLog)
+class ApiAccessLogAdmin(admin.ModelAdmin):
+    list_display = ("created", "ip", "method", "path", "action", "status_code", "duration_ms", "user_label", "entity_title")
+    list_filter = ("method", "status_code")
+    search_fields = ("ip", "path", "action", "user_label", "entity_title")
+    date_hierarchy = "created"
+    readonly_fields = [f.name for f in ApiAccessLog._meta.fields]

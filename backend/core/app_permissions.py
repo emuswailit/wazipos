@@ -649,7 +649,10 @@ class PharmacySuperintendentPermission(permissions.BasePermission):
             )
 
 class AdminRoleOnly(permissions.BasePermission):
-    """Platform administrators only: the signed-in user must hold the "Admin" role."""
+    """
+    Platform administrators only: staff / superusers, or users holding the
+    "Admin" role — the same rule as authentication.utils.admin_users.is_platform_admin.
+    """
 
     message = "Only administrators can do this."
 
@@ -657,6 +660,6 @@ class AdminRoleOnly(permissions.BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             raise exceptions.ValidationError("Please log in")
-        if user.roles.filter(value="Admin").exists():
+        if user.is_staff or user.is_superuser or user.roles.filter(value="Admin").exists():
             return True
         raise exceptions.ValidationError(["Only administrators can do this."])

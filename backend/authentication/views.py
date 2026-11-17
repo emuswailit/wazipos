@@ -1032,7 +1032,7 @@ def usersAPIView(request):
 
 
 @api_view(["POST"])
-@permission_classes([AdminRoleOnly])  # users with the Admin role only (was is_staff)
+@permission_classes([AdminRoleOnly])  # platform admins: staff, superusers or the Admin role
 def adminUsersAPIView(request):
     try:
         action = request.data["action"]

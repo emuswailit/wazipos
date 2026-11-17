@@ -313,7 +313,7 @@ def delivery_options(seller, origin, destination, kg):
 #   under 5 km   walking delivery persons and riders
 #   5 - 20 km    riders
 #   over 20 km   riders and long-haul couriers (riders only as far as a rider goes)
-WALK_MAX_KM = Decimal("5")
+WALK_MAX_KM = Decimal("7")
 COURIER_FROM_KM = Decimal("20")
 DELIVERY_GROUPS = {
     "WALK": ("Walking delivery", (DeliveryMode.FOOT,)),
