@@ -7,14 +7,88 @@
 
 import { isWeb, useListTokens, webPointer } from '@/components/common/listScreen/tokens';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useId, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { IconName } from './AdminListView';
 import { useDetailsDock } from './DetailsDock';
 
 const SHEET_WIDE_MIN_WIDTH = 640;
+/** Phones: gap between a sheet and the bottom of the screen (above the nav bar / home indicator). */
+export const SHEET_BOTTOM_MARGIN = 12;
+/** Phones: gap between a sheet and the sides of the screen. */
+export const SHEET_SIDE_MARGIN = 8;
+
+/**
+ * Pixel height the body may use, for sheets with `scroll={false}` that bring
+ * their own ScrollView. On native a ScrollView does not shrink under a parent's
+ * maxHeight, so a long form pushed the footer (Save) off the sheet: give the
+ * ScrollView `style={{ maxHeight: useSheetBodyMaxHeight() }}` instead.
+ */
+const SheetBodyMaxHeight = React.createContext<number | undefined>(undefined);
+export const useSheetBodyMaxHeight = () => React.useContext(SheetBodyMaxHeight);
+
+/**
+ * Bare phone bottom-sheet frame for hand-built sheets: a modal whose panel
+ * floats clear of the status bar and the bottom edge (nav bar + margin), with
+ * a pixel height cap from the measured space (percentage heights hide content
+ * on native), the tap-to-close backdrop BEHIND the panel (wrapping the panel
+ * stole its scroll touches), and the iOS keyboard handled.
+ * `size`: 'fit' (content height, capped) or a fraction of the space, e.g. 0.65.
+ * Inside, give a ScrollView `style={{ flexShrink: 1 }}` so pinned buttons stay visible.
+ */
+export function FloatingSheet({
+    visible,
+    onClose,
+    size = 'fit',
+    animationType = 'slide',
+    panelStyle,
+    children,
+}: {
+    visible: boolean;
+    onClose: () => void;
+    size?: 'fit' | number;
+    animationType?: 'slide' | 'fade' | 'none';
+    panelStyle?: any;
+    children: React.ReactNode;
+}) {
+    const { theme } = useListTokens();
+    const insets = useSafeAreaInsets();
+    const { height: winHeight } = useWindowDimensions();
+    const [availH, setAvailH] = useState(0);
+    const padTop = insets.top + 16;
+    const padBottom = insets.bottom + SHEET_BOTTOM_MARGIN;
+    const room = Math.max(200, (availH || winHeight) - padTop - padBottom);
+    const sizeStyle = size === 'fit' ? { maxHeight: room } : { height: Math.round(room * Math.min(1, size)) };
+    return (
+        <Modal visible={visible} transparent animationType={animationType} statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+                <View
+                    onLayout={(e) => {
+                        const h = Math.round(e.nativeEvent.layout.height);
+                        setAvailH((prev) => (Math.abs(prev - h) < 1 ? prev : h));
+                    }}
+                    style={{ flex: 1, justifyContent: 'flex-end', paddingTop: padTop, paddingBottom: padBottom, paddingHorizontal: SHEET_SIDE_MARGIN }}
+                >
+                    <Pressable
+                        onPress={onClose}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close"
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.5)' }}
+                    />
+                    <View style={[{ backgroundColor: theme.panel, borderRadius: 24, overflow: 'hidden', elevation: 12 }, sizeStyle, panelStyle]}>{children}</View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
+
+/** A ScrollView for `scroll={false}` sheets, capped to the sheet body's pixel height. */
+export function SheetScrollView({ style, ...rest }: React.ComponentProps<typeof ScrollView>) {
+    const maxHeight = useSheetBodyMaxHeight();
+    return <ScrollView {...rest} style={[{ flexGrow: 0, flexShrink: 1 }, style, maxHeight ? { maxHeight } : null]} />;
+}
 
 interface AdminSheetProps {
     visible: boolean;
@@ -173,12 +247,43 @@ function ModalSheet({
     const insets = useSafeAreaInsets();
     const wide = winWidth >= SHEET_WIDE_MIN_WIDTH;
 
+    // Height actually available inside the modal (measured): the window size
+    // misses the status / navigation bars a translucent modal draws under, which
+    // let the sheet run past the bottom of the screen and hide its footer.
+    const [availH, setAvailH] = useState(0);
+    const containerRef = useRef<View>(null);
+
+    // Android: KeyboardAvoidingView is iOS-only here, and an edge-to-edge modal
+    // is not resized for the keyboard, so lift the sheet by however much of it
+    // the keyboard covers (0 when the window did resize).
+    const [keyboardLift, setKeyboardLift] = useState(0);
+    useEffect(() => {
+        if (Platform.OS !== 'android' || !visible) return;
+        const show = Keyboard.addListener('keyboardDidShow', (e) => {
+            containerRef.current?.measureInWindow((_x, y, _w, h) => {
+                setKeyboardLift(Math.max(0, Math.round(y + h - e.endCoordinates.screenY)));
+            });
+        });
+        const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardLift(0));
+        return () => {
+            show.remove();
+            hide.remove();
+            setKeyboardLift(0);
+        };
+    }, [visible]);
+
+    // Phones: the sheet floats clear of the status bar and of the bottom edge
+    // (navigation bar / home indicator + a margin), so nothing sits under them.
+    const padTop = wide ? 24 : insets.top + 16;
+    const padBottom = wide ? 24 : insets.bottom + SHEET_BOTTOM_MARGIN + keyboardLift;
+
     // Native layout does not reliably shrink a ScrollView under a percentage
     // maxHeight, so long content pushed the footer (and its buttons) out of the
     // clipped panel. Measure the chrome and cap the body in pixels instead.
     const [chromeH, setChromeH] = useState({ top: 0, footer: 0 });
-    const panelMaxH = wide ? Math.round(winHeight * 0.9) : Math.round(winHeight * 0.92) - insets.top;
-    const bodyMaxH = Math.max(120, panelMaxH - chromeH.top - chromeH.footer);
+    const room = (availH || winHeight) - padTop - padBottom;
+    const panelMaxH = Math.max(200, wide ? Math.min(room, Math.round(winHeight * 0.9)) : room);
+    const bodyMaxH = Math.max(96, panelMaxH - chromeH.top - chromeH.footer);
     const onTopLayout = (h: number) => setChromeH((c) => (Math.abs(c.top - h) < 1 ? c : { ...c, top: h }));
     const onFooterLayout = (h: number) => setChromeH((c) => (Math.abs(c.footer - h) < 1 ? c : { ...c, footer: h }));
     const color = accent ?? theme.primary;
@@ -197,14 +302,37 @@ function ModalSheet({
         : {
             width: '100%' as const,
             maxHeight: panelMaxH,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
+            borderRadius: 24,
+            ...(isWeb ? ({ boxShadow: '0 -8px 32px rgba(15,23,42,0.22)' } as any) : { elevation: 12 }),
         };
 
     return (
-        <Modal visible={visible} transparent animationType={wide ? 'fade' : 'slide'} statusBarTranslucent onRequestClose={close}>
+        <Modal
+            visible={visible}
+            transparent
+            animationType={wide ? 'fade' : 'slide'}
+            statusBarTranslucent
+            // Draw under the Android navigation bar too, so the bottom padding
+            // below (its inset + margin) is what keeps the sheet clear of it.
+            navigationBarTranslucent
+            onRequestClose={close}
+        >
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-                <View style={{ flex: 1, justifyContent: wide ? 'center' : 'flex-end', alignItems: 'center', padding: wide ? 24 : 0 }}>
+                <View
+                    ref={containerRef}
+                    onLayout={(e) => {
+                        const h = Math.round(e.nativeEvent.layout.height);
+                        setAvailH((prev) => (Math.abs(prev - h) < 1 ? prev : h));
+                    }}
+                    style={{
+                        flex: 1,
+                        justifyContent: wide ? 'center' : 'flex-end',
+                        alignItems: 'center',
+                        paddingTop: padTop,
+                        paddingBottom: padBottom,
+                        paddingHorizontal: wide ? 24 : SHEET_SIDE_MARGIN,
+                    }}
+                >
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Close"
@@ -261,14 +389,16 @@ function ModalSheet({
                         {scroll ? (
                             <ScrollView
                                 style={{ flexGrow: 0, flexShrink: 1, maxHeight: bodyMaxH }}
-                                contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: footer ? 20 : 20 + (wide ? 0 : insets.bottom) }}
+                                contentContainerStyle={{ padding: 20, gap: 18 }}
                                 keyboardShouldPersistTaps="handled"
                                 showsVerticalScrollIndicator={false}
                             >
                                 {children}
                             </ScrollView>
                         ) : (
-                            <View style={{ flexShrink: 1, maxHeight: bodyMaxH }}>{children}</View>
+                            <View style={{ flexShrink: 1, maxHeight: bodyMaxH, overflow: 'hidden' }}>
+                                <SheetBodyMaxHeight.Provider value={bodyMaxH}>{children}</SheetBodyMaxHeight.Provider>
+                            </View>
                         )}
 
                         {/* Footer */}
@@ -284,7 +414,7 @@ function ModalSheet({
                                     paddingTop: 12,
                                     borderTopWidth: 1,
                                     borderTopColor: divider,
-                                    paddingBottom: 12 + (wide ? 0 : insets.bottom),
+                                    paddingBottom: 14,
                                     flexShrink: 0,
                                 }}
                             >

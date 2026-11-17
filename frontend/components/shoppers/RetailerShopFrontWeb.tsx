@@ -148,7 +148,7 @@ interface ProductCardProps {
     onAddToCart: (receipt: RetailerReceipt) => void;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({
+const ProductCardBase: React.FC<ProductCardProps> = ({
     product,
     width,
     theme,
@@ -457,6 +457,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
     );
 };
 
+// Memoized: the grid re-renders on every cart change (extraData), and only the
+// card whose quantity changed should redraw — keeps native scrolling smooth.
+const ProductCard = React.memo(ProductCardBase);
+
 const CategoriesRail: React.FC<{
     categories: { name: string; count: number }[];
     selected: string;
@@ -582,7 +586,7 @@ export default function RetailerShopFrontWeb({
             const p = await cart.saveAsPlan(d);
             setSavePlanOpen(false);
             if (p) {
-                alert("Plan saved", `“${p.title}” is on this phone with ${p.items.length} item${p.items.length === 1 ? "" : "s"}. Open it from Shopping → My Plans and pay by M-Pesa when you’re ready.`, [
+                alert("Plan saved", `“${p.title}” is on this phone with ${p.items.length} item${p.items.length === 1 ? "" : "s"}. Open it from Shopping → My Plans and pay by mobile money when you’re ready.`, [
                     { text: "Keep shopping", style: "cancel" },
                     { text: "Open My Plans", onPress: () => router.push("/plans" as any) },
                 ], "success");
@@ -593,7 +597,7 @@ export default function RetailerShopFrontWeb({
     };
     const offerPlanInstead = () => {
         if (cart.plan || cart.itemCount === 0) return;
-        alert("Not ready to pay?", "Save this basket as a plan. It stays on your phone, and you can pay for it by M-Pesa whenever you’re ready.", [
+        alert("Not ready to pay?", "Save this basket as a plan. It stays on your phone, and you can pay for it by mobile money whenever you’re ready.", [
             { text: "Not now", style: "cancel" },
             { text: "Save as plan", onPress: () => setSavePlanOpen(true) },
         ]);
@@ -702,7 +706,7 @@ export default function RetailerShopFrontWeb({
     const cartItemCount = cart.itemCount;
     const topPad = isWeb ? 16 : 54;
 
-    /* ---- Before M-Pesa: re-check the cart against the shop's current stock.
+    /* ---- Before mobile money: re-check the cart against the shop's current stock.
      *      The server charges today's prices whatever the app shows, so say
      *      what changed first; items out of stock or no longer sold block payment. ---- */
     const [checkingOut, setCheckingOut] = useState(false);
@@ -1215,6 +1219,13 @@ export default function RetailerShopFrontWeb({
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
                     extraData={cart.lines}
+                    // Native scrolling: render in small batches, keep a modest
+                    // window, and detach off-screen rows on Android.
+                    initialNumToRender={8}
+                    maxToRenderPerBatch={6}
+                    updateCellsBatchingPeriod={40}
+                    windowSize={7}
+                    removeClippedSubviews={Platform.OS === "android"}
                     ListEmptyComponent={
                         <View className="flex-1 items-center justify-center py-16">
                             <Package
@@ -1603,14 +1614,19 @@ export default function RetailerShopFrontWeb({
                     onRequestClose={() => setCartSheetOpen(false)}
                     statusBarTranslucent
                 >
-                    <Pressable
-                        onPress={() => setCartSheetOpen(false)}
-                        className="flex-1 bg-black/50 justify-end"
-                    >
+                    {/* Full height at all times, so the item list always has room
+                        to scroll. The tap-to-close backdrop sits BEHIND the sheet,
+                        not around it: a Pressable wrapping the sheet takes the
+                        touches its ScrollViews need on native. */}
+                    <View className="flex-1 bg-black/50">
                         <Pressable
-                            onPress={(e) => e.stopPropagation?.()}
-                            className="rounded-t-[22px] max-h-[85%] min-h-[320px] overflow-hidden"
-                            style={{ backgroundColor: theme.panel }}
+                            onPress={() => setCartSheetOpen(false)}
+                            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                            accessibilityLabel="Close cart"
+                        />
+                        <View
+                            className="flex-1 rounded-t-[22px] overflow-hidden"
+                            style={{ backgroundColor: theme.panel, marginTop: insets.top + 12 }}
                         >
                             <View className="items-center pt-2.5 pb-1">
                                 <View
@@ -1619,8 +1635,8 @@ export default function RetailerShopFrontWeb({
                                 />
                             </View>
                             <View className="flex-1 min-h-0">{cartPanel}</View>
-                        </Pressable>
-                    </Pressable>
+                        </View>
+                    </View>
                 </Modal>
             )}
 

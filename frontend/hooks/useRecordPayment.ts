@@ -43,6 +43,10 @@ interface UseRecordPaymentResult {
     mobileNumber: string;
     setMobileNumber: (v: string) => void;
     isLoadingMethods: boolean;
+    /** Why the methods could not be loaded (none on hand and the fetch failed). */
+    methodsError: string | null;
+    /** Fetch the payment methods again (the dialog calls it when the list is empty). */
+    reloadMethods: () => Promise<void>;
     isSubmitting: boolean;
     errorMessage: string | null;
     clearError: () => void;
@@ -167,16 +171,20 @@ export function useRecordPayment(
     orderId: string,
     config: RecordPaymentConfig = CUSTOMER_ORDER_PAYMENT_CONFIG,
 ): UseRecordPaymentResult {
-    const { paymentMethodsList, isPaymentSyncing } = usePaymentMethodsSync();
+    const { paymentMethodsList, isPaymentSyncing, paymentMethodsError, triggerPaymentMethodsFetch } = usePaymentMethodsSync();
 
     const allowed = config.allowedMethodTitles;
-    const paymentMethods = useMemo(
-        () => paymentMethodsList
+    const paymentMethods = useMemo(() => {
+        // Titles compared loosely ("Mobile Money" = "MOBILE MONEY"), so a stored
+        // copy or a renamed method is not filtered out of the dialog.
+        const norm = (t: unknown) => String(t ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+        const allowedSet = allowed ? new Set(allowed.map(norm)) : null;
+        return paymentMethodsList
             .filter((m) => m.active !== false)
-            .filter((m) => !allowed || allowed.includes(String(m.title)))
-            .map((m) => ({ id: String(m.id), title: String(m.title) })),
-        [paymentMethodsList, allowed]
-    );
+            .filter((m) => !allowedSet || allowedSet.has(norm(m.title)))
+            .map((m) => ({ id: String(m.id), title: String(m.title) }));
+    }, [paymentMethodsList, allowed]);
+    const methodsError = paymentMethods.length === 0 ? paymentMethodsError : null;
 
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
     // A single allowed method (e.g. mobile money for prescriptions) is pre-selected.
@@ -261,6 +269,8 @@ export function useRecordPayment(
         mobileNumber,
         setMobileNumber,
         isLoadingMethods: isPaymentSyncing,
+        methodsError,
+        reloadMethods: triggerPaymentMethodsFetch,
         isSubmitting,
         errorMessage,
         clearError: () => setErrorMessage(null),

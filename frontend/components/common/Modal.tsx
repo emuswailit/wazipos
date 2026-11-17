@@ -1,13 +1,17 @@
 import { useAuth } from "@/context/AuthContext";
-import { ReactNode, useEffect, useId } from "react";
+import { ReactNode, useEffect, useId, useState } from "react";
 import { useDetailsDock } from "@/components/common/listScreen/DetailsDock";
+import { SHEET_BOTTOM_MARGIN, SHEET_SIDE_MARGIN } from "@/components/common/listScreen/AdminSheet";
 import {
+    KeyboardAvoidingView,
     Platform,
     Pressable,
     Modal as RNModal,
     Text,
+    useWindowDimensions,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
     visible: boolean;
@@ -18,6 +22,12 @@ interface Props {
     hideHeader?: boolean;
     /** Details: inside a <DetailsDock> on a wide screen, show beside the list instead of popping up. */
     dockable?: boolean;
+    /**
+     * Phones: size the sheet to its content (alerts, short messages). Default:
+     * the sheet takes its full height, so content laid out with flex: 1 (forms
+     * with a pinned Save) has room — under a content-sized panel it collapsed.
+     */
+    fitContent?: boolean;
 }
 
 export function Modal({
@@ -28,6 +38,7 @@ export function Modal({
     maxHeightRatio = 0.92,
     hideHeader = false,
     dockable = false,
+    fitContent = false,
 }: Props) {
     const { theme } = useAuth();
     const dock = useDetailsDock();
@@ -102,31 +113,81 @@ export function Modal({
     }
 
     return (
+        <NativeSheet visible={visible} onClose={onClose} title={title} hideHeader={hideHeader} maxHeightRatio={maxHeightRatio} fitContent={fitContent}>
+            {children}
+        </NativeSheet>
+    );
+}
+
+/**
+ * Phones: a sheet that floats clear of the status bar and the bottom edge
+ * (navigation bar + margin). Its height is capped in pixels from the measured
+ * space — a percentage maxHeight with a flex:1 body hid the content on native —
+ * and the backdrop sits behind the panel (a Pressable around the panel took
+ * the touches its ScrollViews need).
+ */
+function NativeSheet({
+    visible,
+    onClose,
+    title,
+    hideHeader,
+    maxHeightRatio,
+    fitContent,
+    children,
+}: {
+    fitContent: boolean;
+    visible: boolean;
+    onClose: () => void;
+    title?: string;
+    hideHeader: boolean;
+    maxHeightRatio: number;
+    children: ReactNode;
+}) {
+    const { theme } = useAuth();
+    const insets = useSafeAreaInsets();
+    const { height: winHeight } = useWindowDimensions();
+    const [availH, setAvailH] = useState(0);
+    const padTop = insets.top + 16;
+    const padBottom = insets.bottom + SHEET_BOTTOM_MARGIN;
+    const panelMaxH = Math.max(200, Math.round(((availH || winHeight) - padTop - padBottom) * Math.min(1, maxHeightRatio / 0.92)));
+
+    return (
         <RNModal
             visible={visible}
             transparent
             animationType="slide"
             onRequestClose={onClose}
             statusBarTranslucent
+            navigationBarTranslucent
         >
-            <Pressable
-                onPress={onClose}
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+            <View
+                onLayout={(e) => {
+                    const h = Math.round(e.nativeEvent.layout.height);
+                    setAvailH((prev) => (Math.abs(prev - h) < 1 ? prev : h));
+                }}
                 style={{
                     flex: 1,
-                    backgroundColor: "rgba(0,0,0,0.6)",
                     justifyContent: "flex-end",
+                    paddingTop: padTop,
+                    paddingBottom: padBottom,
+                    paddingHorizontal: SHEET_SIDE_MARGIN,
                 }}
             >
                 <Pressable
-                    onPress={(e) => e.stopPropagation()}
+                    onPress={onClose}
+                    accessibilityLabel="Close"
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)" }}
+                />
+                <View
                     style={{
-                        maxHeight: panelMaxHeight,
+                        ...(fitContent ? { maxHeight: panelMaxH } : { height: panelMaxH }),
                         backgroundColor: theme.surface,
-                        borderTopColor: theme.border,
-                        borderTopWidth: 1,
-                        borderTopLeftRadius: 24,
-                        borderTopRightRadius: 24,
+                        borderColor: theme.border,
+                        borderWidth: 1,
+                        borderRadius: 24,
                         overflow: "hidden",
+                        elevation: 12,
                     }}
                 >
                     <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 4 }}>
@@ -142,9 +203,10 @@ export function Modal({
 
                     {!hideHeader ? <Header title={title} onClose={onClose} /> : null}
 
-                    <View style={{ flex: 1 }}>{children}</View>
-                </Pressable>
-            </Pressable>
+                    <View style={fitContent ? { flexShrink: 1, minHeight: 0 } : { flex: 1, minHeight: 0 }}>{children}</View>
+                </View>
+            </View>
+            </KeyboardAvoidingView>
         </RNModal>
     );
 }

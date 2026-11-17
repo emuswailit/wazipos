@@ -111,6 +111,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
                 onClose={() => dismiss()}
                 title={current?.title ?? ""}
                 maxHeightRatio={0.6}
+                fitContent
             >
                 <View style={{ padding: 20, gap: 16 }}>
                     {/* Accent bar — one for every non-default tone */}

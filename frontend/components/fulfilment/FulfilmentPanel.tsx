@@ -9,8 +9,8 @@
 // orders). Delivery orders are dispatched from the Delivery section once Ready.
 // Buyer: sees the progress and, while it waits at the counter, the pickup code.
 
-import fulfilmentApi, { STAGE_LABELS, type Fulfilment, type FulfilmentStage } from '@/api/fulfilmentApi';
 import { apiError, isOk, type OrderLink } from '@/api/deliveriesApi';
+import fulfilmentApi, { STAGE_LABELS, type Fulfilment, type FulfilmentStage } from '@/api/fulfilmentApi';
 import { formatDateTime, SheetButton, useListTokens } from '@/components/common/listScreen';
 import { useAuth } from '@/context/AuthContext';
 import { useEmployeesSync } from '@/context/EmployeesSyncContext';
@@ -41,18 +41,26 @@ export function FulfilmentPanel({ link, viewer, pickup, paid, version, onChanged
     const { theme, border, chipBg } = useListTokens();
     const isSeller = viewer === 'seller';
     const isCustomer = 'customer_order' in link;
+
     const [f, setF] = useState<Fulfilment | null>(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null); // Added to catch load failures
 
     const linkKey = JSON.stringify(link);
+
     const load = useCallback(async () => {
         try {
             const res: any = await fulfilmentApi.get(JSON.parse(linkKey));
-            if (isOk(res)) setF(res.data?.fulfilment ?? null);
-        } catch {
-            /* keep what we have */
+            if (isOk(res)) {
+                setF(res.data?.fulfilment ?? null);
+                setLoadError(null);
+            } else {
+                setLoadError(apiError(res, 'Could not load preparation status.'));
+            }
+        } catch (e: any) {
+            setLoadError(e?.message || 'Could not reach the server.');
         } finally {
             setLoading(false);
         }
@@ -72,6 +80,7 @@ export function FulfilmentPanel({ link, viewer, pickup, paid, version, onChanged
                 return false;
             }
             setF(res.data?.fulfilment ?? null);
+            setLoadError(null); // Clear any previous load errors since we now have fresh data
             onChanged?.();
             return true;
         } catch (e: any) {
@@ -82,6 +91,26 @@ export function FulfilmentPanel({ link, viewer, pickup, paid, version, onChanged
         }
     };
 
+    const [resending, setResending] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
+    const resendCode = async () => {
+        setResending(true);
+        setError(null);
+        setNotice(null);
+        try {
+            const res: any = await fulfilmentApi.resendPickupCode(link);
+            if (!isOk(res)) {
+                setError(apiError(res, 'Could not send the pickup code.'));
+                return;
+            }
+            setNotice(String(res.data?.response_message || 'Pickup code sent.'));
+        } catch (e: any) {
+            setError(e?.message || 'Could not reach the server.');
+        } finally {
+            setResending(false);
+        }
+    };
+
     const stage: FulfilmentStage = f?.stage ?? 'PENDING';
 
     if (loading) {
@@ -89,6 +118,23 @@ export function FulfilmentPanel({ link, viewer, pickup, paid, version, onChanged
             <View className="flex-row items-center gap-2 py-2">
                 <ActivityIndicator size="small" color={theme.primary} />
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>Loading preparation…</Text>
+            </View>
+        );
+    }
+
+    // Added: Show UI error if the initial fetch failed, instead of assuming PENDING
+    if (loadError) {
+        return (
+            <View className="rounded-2xl p-3" style={{ borderWidth: 1, borderColor: border, gap: 10 }}>
+                <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12 }}>{loadError}</Text>
+                <SheetButton
+                    label="Try again"
+                    icon="refresh"
+                    onPress={() => {
+                        setLoading(true);
+                        void load();
+                    }}
+                />
             </View>
         );
     }
@@ -196,11 +242,24 @@ export function FulfilmentPanel({ link, viewer, pickup, paid, version, onChanged
                         />
                     </View>
                 ) : stage === 'READY' && pickup ? (
-                    <CollectStep
-                        codeRequired={isCustomer}
-                        busy={busy}
-                        onSubmit={(data) => run(() => fulfilmentApi.confirmCollection(link, data), 'Could not record the collection.')}
-                    />
+                    <View style={{ gap: 8 }}>
+                        <CollectStep
+                            codeRequired={isCustomer}
+                            busy={busy}
+                            onSubmit={(data) => run(() => fulfilmentApi.confirmCollection(link, data), 'Could not record the collection.')}
+                        />
+                        {/* The customer lost or never got the SMS: send the same code again. */}
+                        <SheetButton
+                            label="Resend pickup code"
+                            icon="chatbubble-ellipses-outline"
+                            variant="secondary"
+                            loading={resending}
+                            loadingLabel="Sending…"
+                            disabled={busy}
+                            onPress={() => void resendCode()}
+                        />
+                        {notice ? <Text style={{ color: '#10b981', fontFamily: theme.font.medium, fontSize: 12 }}>{notice}</Text> : null}
+                    </View>
                 ) : stage === 'READY' ? (
                     <Text style={muted}>Ready — assign a delivery person in the Delivery section to dispatch it.</Text>
                 ) : null

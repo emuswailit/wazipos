@@ -73,6 +73,8 @@ export default {
     startPreparing: (link: OrderLink, preparer?: string | null, notes?: string) => call('StartPreparing', { ...link, preparer, notes }),
     markPacked: (link: OrderLink, data: { packer?: string | null; package_count?: number; package_weight_kg?: string }) => call('MarkPacked', { ...link, ...data }),
     markReady: (link: OrderLink) => call('MarkReady', link),
+    /** Seller: SMS / push the buyer's pickup code again (same code; once a minute). */
+    resendPickupCode: (link: OrderLink) => call('ResendPickupCode', link),
     confirmCollection: (
         link: OrderLink,
         data: { collector_name: string; collector_phone?: string; collector_id_number?: string; pickup_code?: string },

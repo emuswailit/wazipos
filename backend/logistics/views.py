@@ -605,6 +605,7 @@ def fulfilmentAPIView(request):
       GetFulfilment {retailer_order | customer_order}                       (seller or buyer)
       StartPreparing {preparer?, notes?} / MarkPacked {packer?, package_count?, package_weight_kg?}
       MarkReady / ConfirmCollection {collector_name, collector_phone?, collector_id_number?, pickup_code?}
+      ResendPickupCode   (seller; READY pickup orders — same code, once a minute)
     """
     from .utils import fulfilment as ff
 
@@ -649,4 +650,10 @@ def fulfilmentAPIView(request):
         return _fulfilment_response(ff.mark_ready(request.data, request.user), "Ready")
     if action == "ConfirmCollection":
         return _fulfilment_response(ff.confirm_collection(request.data, request.user), "Collected")
+    if action == "ResendPickupCode":
+        errors, result = ff.resend_pickup_code(request.data, request.user)
+        if errors:
+            return custom_errors_response(1, "Pickup code not sent", errors)
+        f, sent_to = result
+        return custom_success_message(0, f"Pickup code sent to {', '.join(sent_to)}", ff.fulfilment_out(f), "fulfilment")
     raise exceptions.ValidationError(f"Action {action} is unknown")

@@ -21,6 +21,8 @@ interface PaymentMethodsContextType {
     paymentMethodsList: PaymentMethodItem[];
     isPaymentSyncing: boolean;
     isPaymentRefreshing: boolean;
+    /** Set when the last fetch failed (e.g. no network); null otherwise. */
+    paymentMethodsError: string | null;
     triggerPaymentMethodsFetch: () => Promise<void>;
     forcePaymentMethodsRefresh: () => Promise<void>;
 }
@@ -324,6 +326,9 @@ export const PaymentMethodsSyncProvider: React.FC<{
             paymentMethodsList,
             isPaymentSyncing: getMethodsApi.loading,
             isPaymentRefreshing,
+            paymentMethodsError: getMethodsApi.error
+                ? getMethodsApi.errorMessage || 'Could not load payment methods.'
+                : null,
             triggerPaymentMethodsFetch:
                 runRemotePaymentMethodsSynchronizer,
             forcePaymentMethodsRefresh,
@@ -331,6 +336,8 @@ export const PaymentMethodsSyncProvider: React.FC<{
         [
             paymentMethodsList,
             getMethodsApi.loading,
+            getMethodsApi.error,
+            getMethodsApi.errorMessage,
             isPaymentRefreshing,
             runRemotePaymentMethodsSynchronizer,
             forcePaymentMethodsRefresh,

@@ -4,17 +4,16 @@ import { DateField } from '@/components/common/DateField';
 import LocationPinPicker from '@/components/common/LocationPinPicker';
 import type { LatLng } from '@/components/common/locationPinShared';
 import { StaffDeliveryPlanner, type StaffDeliveryState } from '@/components/deliveries/StaffDeliveryPlanner';
+import { FloatingSheet } from '@/components/common/listScreen/AdminSheet';
 import { useAuth } from '@/context/AuthContext';
 import React from 'react';
 import {
     ActivityIndicator,
-    Modal,
     Platform,
     ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
     useWindowDimensions,
     View,
 } from 'react-native';
@@ -213,11 +212,10 @@ export const FulfillmentModal: React.FC<FulfillmentModalProps> = ({
     const isSubmitDisabled = isSaving || !controlProps.selectedPaymentMethodId;
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-            <TouchableWithoutFeedback onPress={onClose}>
-                <View className="flex-1 bg-black/40 justify-end">
-                    <TouchableWithoutFeedback onPress={() => { }}>
-                        <View style={{ backgroundColor: theme.panel }} className="rounded-t-3xl border-t border-slate-200 dark:border-slate-800 p-6 pb-8 max-h-[85%]">
+        // FloatingSheet: clear of the bottom edge, height capped in pixels, backdrop
+        // behind the panel — so the list scrolls and the Pay button stays visible.
+        <FloatingSheet visible={visible} onClose={onClose}>
+                        <View style={{ backgroundColor: theme.panel, flexShrink: 1, minHeight: 0 }} className="p-6 pb-5">
                             <View className="items-center mb-4">
                                 <View className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
                             </View>
@@ -231,7 +229,7 @@ export const FulfillmentModal: React.FC<FulfillmentModalProps> = ({
                                 </TouchableOpacity>
                             </View>
 
-                            <ScrollView className="mb-4" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            <ScrollView className="mb-4" style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                                 <FulfillmentControls {...controlProps} />
                             </ScrollView>
 
@@ -251,9 +249,6 @@ export const FulfillmentModal: React.FC<FulfillmentModalProps> = ({
                             </TouchableOpacity>
 
                         </View>
-                    </TouchableWithoutFeedback>
-                </View>
-            </TouchableWithoutFeedback>
-        </Modal>
+        </FloatingSheet>
     );
-};
+};

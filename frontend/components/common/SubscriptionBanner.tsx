@@ -1,6 +1,7 @@
 // components/common/SubscriptionBanner.tsx
 
 import { SubscriptionFormModal } from '@/components/admin/subscriptions/SubscriptionFormModal';
+import { FloatingSheet } from '@/components/common/listScreen/AdminSheet';
 import { useAuth } from '@/context/AuthContext';
 import { useSubscriptionSync } from '@/context/SubscriptionSyncContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +9,6 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    Modal,
     Pressable,
     StyleSheet,
     Text,
@@ -206,36 +206,21 @@ export function SubscriptionBanner() {
 
             {/* Mobile Bottom Sheet Modal */}
             {isMobile && (
-                <Modal
+                <FloatingSheet
                     visible={isBottomSheetOpen}
-                    transparent
-                    animationType="slide"
-                    onRequestClose={() => setIsBottomSheetOpen(false)}
+                    onClose={() => setIsBottomSheetOpen(false)}
+                    panelStyle={{ borderColor: theme.border, borderWidth: 1 }}
                 >
-                    {/* Overlay */}
-                    <Pressable
-                        style={styles.overlay}
-                        onPress={() => setIsBottomSheetOpen(false)}
-                    />
-
-                    {/* Sheet Container */}
-                    <View
-                        style={[
-                            styles.sheetContainer,
-                            { backgroundColor: theme.panel, borderColor: theme.border, borderWidth: 1 }
-                        ]}
-                    >
-                        {/* Drag Handle */}
-                        <View className="items-center py-3">
-                            <View className="w-10 h-1 rounded-full" style={{ backgroundColor: theme.border }} />
-                        </View>
-
-                        {/* Content */}
-                        <View className="px-5 pb-8">
-                            <BannerContent isSheet />
-                        </View>
+                    {/* Drag Handle */}
+                    <View className="items-center py-3">
+                        <View className="w-10 h-1 rounded-full" style={{ backgroundColor: theme.border }} />
                     </View>
-                </Modal>
+
+                    {/* Content */}
+                    <View className="px-5 pb-6">
+                        <BannerContent isSheet />
+                    </View>
+                </FloatingSheet>
             )}
 
             {/* ─────────────────────────────────────────────────────────────
@@ -271,4 +256,4 @@ const styles = StyleSheet.create({
         borderBottomLeftRadius: 0,
         borderBottomRightRadius: 0,
     },
-});
+});

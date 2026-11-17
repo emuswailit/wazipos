@@ -238,6 +238,43 @@ def mark_ready(data, user):
     return [], f
 
 
+RESEND_PICKUP_CODE_COOLDOWN = 60  # seconds between resends of one order's code
+
+
+def resend_pickup_code(data, user):
+    """
+    Seller: send the buyer their pickup code again (SMS + push to the same
+    contacts as "ready"), e.g. the customer lost the message at the counter.
+    The code itself does not change. Returns (errors, (fulfilment, sent_to)).
+    """
+    from django.core.cache import cache
+
+    errors, order, kind, f = _ready_to_work(data, user)
+    if errors:
+        return errors, None
+    if delivery_requested(order):
+        return ["This order is for delivery; it has no pickup code"], None
+    if f.stage != Stage.READY or not f.pickup_code:
+        return ["The pickup code is sent once the order is ready for collection"], None
+    phones, tokens, _ = _buyer_contacts(order, kind)
+    if not phones and not tokens:
+        return ["The customer has no phone number or app to send the code to"], None
+    key = f"pickup-code-resend:{f.id}"
+    if not cache.add(key, 1, RESEND_PICKUP_CODE_COOLDOWN):
+        return ["The code was just sent. Wait a minute before sending it again"], None
+
+    ref, seller = _order_ref(order, kind), f.entity.title
+    with transaction.atomic():  # notify_buyer sends on commit
+        notify_buyer(
+            order, kind, "Your pickup code",
+            f"Your order {ref} is ready for collection at {seller}. "
+            f"Pickup code {f.pickup_code}. Give it only when you collect the goods.",
+        )
+    sent_to = [f"{p[:-3]}***" if len(p) > 4 else p for p in phones] or ["the WaziPOS app"]
+    create_log("info", f"Pickup code resent for fulfilment {f.id} by {user.id}")
+    return [], (f, sent_to)
+
+
 def confirm_collection(data, user):
     """
     Seller: the buyer (or someone they sent) collected a pickup order.

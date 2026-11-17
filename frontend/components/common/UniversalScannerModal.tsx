@@ -1,6 +1,7 @@
+import { FloatingSheet } from '@/components/common/listScreen/AdminSheet';
 import { useAuth } from '@/context/AuthContext';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 let CameraView: any, useCameraPermissions: any;
 if (Platform.OS !== 'web') {
     try {
@@ -58,11 +59,8 @@ export const UniversalScannerModal: React.FC<UniversalScannerModalProps> = ({ vi
     const translateY = laserAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 220] });
     if (!visible) return null;
     return (
-        <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
-            <TouchableWithoutFeedback onPress={onClose}>
-                <View className="flex-1 bg-black/40 justify-end">
-                    <TouchableWithoutFeedback onPress={() => { }}>
-                        <View style={{ backgroundColor: theme.panel + 'E6' }} className="h-[65%] rounded-t-3xl border-t border-slate-200/40 dark:border-slate-800/40 shadow-2xl relative overflow-hidden p-5 pb-8 flex-col justify-between pt-6">
+        <FloatingSheet visible={visible} onClose={onClose} size={0.7} animationType="fade" panelStyle={{ backgroundColor: theme.panel + 'E6' }}>
+                        <View className="flex-1 relative overflow-hidden p-5 pb-6 flex-col justify-between pt-6">
                             <View className="flex-row justify-between items-center z-50">
                                 <View className="flex-col">
                                     <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }} className="font-black">Continuous Barcode Scanner</Text>
@@ -96,9 +94,6 @@ export const UniversalScannerModal: React.FC<UniversalScannerModalProps> = ({ vi
                                 <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs }} className="text-emerald-500 font-bold uppercase tracking-widest animate-pulse">● Lens Stream Active</Text>
                             </View>
                         </View>
-                    </TouchableWithoutFeedback>
-                </View>
-            </TouchableWithoutFeedback>
-        </Modal>
+        </FloatingSheet>
     );
 };

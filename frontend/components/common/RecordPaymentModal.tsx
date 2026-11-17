@@ -47,10 +47,20 @@ export default function RecordPaymentModal({
         mobileNumber,
         setMobileNumber,
         isLoadingMethods,
+        methodsError,
+        reloadMethods,
         errorMessage,
         clearError,
         submit,
     } = useRecordPayment(orderId, config);
+
+    // Nothing to choose from when the dialog opens (first launch with no saved
+    // copy, or the start-up fetch failed): fetch the methods again.
+    const noMethods = paymentMethods.length === 0;
+    useEffect(() => {
+        if (isOpen && noMethods && !isLoadingMethods) void reloadMethods();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     const [loading, setLoading] = useState(false);
     const [waitingForPin, setWaitingForPin] = useState(false);
@@ -393,7 +403,7 @@ export default function RecordPaymentModal({
                                     Check your phone
                                 </Text>
                                 <Text className="mt-2 text-center text-[13px] px-4" style={{ fontFamily: theme.font.regular, color: theme.textDark }}>
-                                    Please enter your PIN to authorize the {lastWsData?.payment_method_title || 'M-Pesa'} payment.
+                                    Please enter your PIN to authorize the {lastWsData?.payment_method_title || 'mobile money'} payment.
                                 </Text>
                                 <Text className="mt-4 text-center text-[11px] font-bold" style={{ fontFamily: theme.font.bold, color: '#f59e0b' }}>
                                     Time remaining: {countdown}s
@@ -414,9 +424,21 @@ export default function RecordPaymentModal({
                             </View>
                         ) : (
                             <>
-                                {isLoadingMethods ? (
+                                {isLoadingMethods && noMethods ? (
                                     <View className="py-8 items-center">
                                         <ActivityIndicator color={theme.primary} />
+                                    </View>
+                                ) : noMethods ? (
+                                    <View className="py-6 items-center">
+                                        <Text className="text-center" style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: theme.fontSize.sm }}>
+                                            No payment methods loaded
+                                        </Text>
+                                        <Text className="text-center mt-1 px-2" style={{ color: theme.textDark, fontFamily: theme.font.regular, fontSize: theme.fontSize.xs }}>
+                                            {methodsError ? `${methodsError} ` : ''}Check your connection and try again.
+                                        </Text>
+                                        <Pressable onPress={() => void reloadMethods()} className="mt-4 px-5 py-2.5 rounded-xl items-center justify-center" style={{ backgroundColor: theme.primary }}>
+                                            <Text className="uppercase tracking-wide text-[12px] font-bold text-white" style={{ fontFamily: theme.font.bold }}>Try again</Text>
+                                        </Pressable>
                                     </View>
                                 ) : (
                                     <>
@@ -444,7 +466,7 @@ export default function RecordPaymentModal({
                                         {isMobileMoney ? (
                                             <View className="mt-3">
                                                 <Text className="uppercase tracking-widest mb-2" style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 10 }}>
-                                                    M-Pesa phone number
+                                                    Mobile money phone number
                                                 </Text>
                                                 <View className="flex-row items-center rounded-xl border px-3 h-11" style={{ borderColor, backgroundColor: inputBg }}>
                                                     <Smartphone size={16} color={theme.textDark} />

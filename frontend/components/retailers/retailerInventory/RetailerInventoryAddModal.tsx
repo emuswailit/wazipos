@@ -36,7 +36,7 @@ import {
 } from 'react-native';
 import * as Yup from 'yup';
 
-import { AdminSheet, SheetButton, useSheetIsWide } from '@/components/common/listScreen';
+import { AdminSheet, SheetButton, SheetScrollView, useSheetIsWide } from '@/components/common/listScreen';
 import ScannerViewfinder from './ScannerViewfinder';
 
 /* =========================================================
@@ -908,7 +908,7 @@ function ModalBody({
                 }
             >
             {/* Form body */}
-            <ScrollView
+            <SheetScrollView
                 keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled
                 showsVerticalScrollIndicator={false}
@@ -917,7 +917,8 @@ function ModalBody({
                     paddingTop: 16,
                     paddingBottom: 24,
                 }}
-                style={{ flexGrow: 0, flexShrink: 1 }}
+                // SheetScrollView: capped in pixels by the sheet, so the footer
+                // (Update / Save item) stays on screen on native however long the form is.
                 className="w-full"
             >
                 <View className="w-full gap-y-4">
@@ -1232,7 +1233,7 @@ function ModalBody({
                         </View>
                     </View>
                 </View>
-            </ScrollView>
+            </SheetScrollView>
             </AdminSheet>
         </FormikProvider>
     );
