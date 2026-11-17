@@ -46,7 +46,7 @@ export default function MenuQrSheet({ visible, onClose, table }: { visible: bool
         if (!w) return;
         w.document.write(
             `<html><head><title>${esc(qr.label)}</title><style>body{font-family:system-ui,sans-serif;text-align:center;padding:32px}h1{font-size:26px;margin:0 0 4px}p{color:#475569;margin:6px 0}img{width:320px;height:320px}</style></head>` +
-                `<body><h1>${esc(qr.label)}</h1><p>Scan to see the menu and order</p><img src="${qr.image}" alt="Menu QR code" onload="window.print()"/><p>Food and drinks · pay with M-Pesa or to your waiter</p></body></html>`,
+                `<body><h1>${esc(qr.label)}</h1><p>Scan to see the menu and order</p><img src="${qr.image}" alt="Menu QR code" onload="window.print()"/><p>Food and drinks · pay with mobile money or to your waiter</p></body></html>`,
         );
         w.document.close();
     };

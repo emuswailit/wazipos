@@ -118,7 +118,7 @@ const qrMenuApi = {
     staffMenu: () => staff('GetWalkInMenu'),
     staffPlace: (input: WalkInOrderInput) => staff('PlaceWalkInOrder', input),
     staffOrder: (token: string) => staff('GetWalkInOrder', { token }),
-    /** Take payment at the counter: a method (cash, card…) recorded now, or one M-Pesa prompt for the whole bill. */
+    /** Take payment at the counter: a method (cash, card…) recorded now, or one mobile money prompt for the whole bill. */
     staffPay: (token: string, how: { payment_method?: string | null; mobile_money_phone?: string }) => staff('PayWalkInOrder', { token, ...how }),
     staffRefreshPayment: (token: string, reference: string) => staff('RefreshWalkInPayment', { token, reference }),
     /** The restaurant's menu QR code (optionally for one table). */

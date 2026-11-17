@@ -161,7 +161,7 @@ def initiate_mobile_money(order, payment_method, user, phone):
     client follows on ws/requisitions/payment/<ref>/.
     """
     if not phone:
-        return ["Enter the M-Pesa phone number to charge"], None
+        return ["Enter the mobile money phone number to charge"], None
     due = amount_due(order)
     if due <= 0:
         return ["This order is already paid"], None

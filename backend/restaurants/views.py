@@ -1440,7 +1440,7 @@ def diningAPIView(request):
         if errors:
             return fail("Payment not taken", errors)
         if payment:
-            return ok("Check the customer's phone for the M-Pesa prompt", {"tab": b.tab_out(tab), "reference": payment.reference_number}, "payment")
+            return ok("Check the customer's phone for the mobile money prompt", {"tab": b.tab_out(tab), "reference": payment.reference_number}, "payment")
         return ok("Payment recorded", {"tab": b.tab_out(tab), "reference": None}, "payment")
     if action == "RefreshBarPayment":
         errors, payment = b.refresh_tab_payment(request.data, request.user)

@@ -3,7 +3,7 @@
 // My Plans: shopping plans (wishlists) kept on this phone. Each plan is a basket
 // at one real shop, priced with that shop's real prices, checked against a
 // budget — e.g. "Back to school · Amani (Grade 4)", KES 15,000. When ready,
-// open it in the shop and pay by M-Pesa: it becomes a customer order.
+// open it in the shop and pay by mobile money: it becomes a customer order.
 //
 // Build flow mirrors a new shopping order: name the plan → choose a nearby
 // shop (Adjacent Stores) → add products in the shop front, which saves into
@@ -46,7 +46,7 @@ const config: AdminListConfig<ShoppingPlan> = {
     searchPlaceholder: 'Search plans, shops or people…',
     addLabel: 'Add new plan',
     emptyTitle: 'Plan before you pay',
-    emptyMessage: 'Make a list at a real shop with real prices — back to school, monthly groceries — set a budget, and pay by M-Pesa when you’re ready.',
+    emptyMessage: 'Make a list at a real shop with real prices — back to school, monthly groceries — set a budget, and pay by mobile money when you’re ready.',
     keyOf: (p) => p.id,
     titleOf: (p) => p.title,
     subtitleOf: (p) => [p.retailer_name || 'No shop yet', p.for_whom].filter(Boolean).join(' · '),

@@ -1,6 +1,6 @@
 // components/wholesalers/payments/WholesalePaymentsList.tsx
 //
-// Money received on retailer orders: every payment (M-Pesa, cash, bank…), its
+// Money received on retailer orders: every payment (mobile money, cash, bank…), its
 // order and retailer, the platform commission and what is paid out.
 // Shared list kit: cards on phones, a table on wide screens. Offline-first:
 // opens from the copy saved on this device and refreshes when online and every
@@ -62,7 +62,7 @@ const config: AdminListConfig<WholesalePayment> = {
     title: 'Payments',
     noun: ['payment', 'payments'],
     icon: 'wallet-outline',
-    searchPlaceholder: 'Search retailer, order, M-Pesa code…',
+    searchPlaceholder: 'Search retailer, order, mobile money code…',
     emptyTitle: 'No payments yet',
     emptyMessage: 'Payments retailers make on their orders appear here.',
     keyOf: (p) => p.id,

@@ -229,7 +229,7 @@ export default function RoomBooker({
                     <CustomTextField label="Requests" value={notes} onChangeText={setNotes} placeholder="e.g. Late arrival, ground floor" maxLength={300} />
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>
                         {mode === 'guest'
-                            ? `You can pay now with M-Pesa or at the hotel.${picked?.amenities.includes('free_cancellation') ? ' Free cancellation before check-in.' : ''}`
+                            ? `You can pay now with mobile money or at the hotel.${picked?.amenities.includes('free_cancellation') ? ' Free cancellation before check-in.' : ''}`
                             : 'The booking is confirmed straight away. Take payment now or at check-out.'}
                     </Text>
                     {formError ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13 }}>{formError}</Text> : null}

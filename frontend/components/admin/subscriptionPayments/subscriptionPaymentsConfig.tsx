@@ -1,6 +1,6 @@
 // components/admin/subscriptionPayments/subscriptionPaymentsConfig.tsx
 //
-// How a subscription payment (M-Pesa charge) is shown in the admin list.
+// How a subscription payment (mobile money charge) is shown in the admin list.
 
 import { CellText, formatDateTime, textOr, type AdminBadge, type AdminListConfig } from '@/components/admin/kit';
 import type { SubscriptionPaymentNormalized } from '@/databases/types';
@@ -38,7 +38,7 @@ export const subscriptionPaymentsConfig: AdminListConfig<SubscriptionPaymentNorm
     primaryColumn: { label: 'Reference', flex: 2 },
     columns: [
         { key: 'status', label: 'Status', flex: 1, render: (p) => <CellText strong>{paymentBadge(p).label}</CellText> },
-        { key: 'psp', label: 'M-Pesa ref', flex: 1.5, render: (p) => textOr(p.psp_reference_number) },
+        { key: 'psp', label: 'Mobile money ref', flex: 1.5, render: (p) => textOr(p.psp_reference_number) },
         { key: 'entity', label: 'Entity', flex: 1.6, render: (p) => textOr(p.entity_title) },
         { key: 'amount', label: 'Amount', flex: 1.2, align: 'right', render: (p) => <CellText strong align="right">{formatKES(p.amount)}</CellText> },
         { key: 'date', label: 'Date', flex: 1.5, render: (p) => formatDateTime(p.created) },

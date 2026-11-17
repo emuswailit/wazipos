@@ -671,7 +671,7 @@ export default function RetailerCartPanel({
                                     minimumFontScale={0.8}
                                     style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: "#fff", paddingHorizontal: 12 }}
                                 >
-                                    {planTitle ? "Pay plan with M-Pesa · " : "Pay with M-Pesa · "}
+                                    {planTitle ? "Pay plan with mobile money · " : "Pay with mobile money · "}
                                     {isDelivery ? "delivery" : "pickup"}
                                 </Text>
                             </TouchableOpacity>

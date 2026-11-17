@@ -1,7 +1,7 @@
 // components/restaurants/walkin/StaffWalkIn.tsx
 //
 // The restaurant POS: staff take a walk-in customer's food and drinks on one
-// pad, then take payment on the spot — cash (or card / bank), or one M-Pesa
+// pad, then take payment on the spot — cash (or card / bank), or one mobile money
 // prompt to the customer's phone for the whole bill — like New Customer Order
 // in a shop. Food lands on the orders board (kitchen), drinks on a bar tab.
 // "Pay later" leaves the order unpaid, to be settled from the board / the bar.
@@ -45,7 +45,7 @@ function TakePayment({ order, onOrder }: { order: WalkInOrder; onOrder: (o: Walk
     const isMomo = String(method?.title ?? '').toUpperCase() === 'MOBILE MONEY';
     const due = Number(order.due);
 
-    // Follow the M-Pesa prompt until the customer enters their PIN (or it fails).
+    // Follow the mobile money prompt until the customer enters their PIN (or it fails).
     useEffect(() => {
         if (payment?.status !== 'PENDING' || !payment.reference) return;
         const t = setInterval(async () => {
@@ -64,7 +64,7 @@ function TakePayment({ order, onOrder }: { order: WalkInOrder; onOrder: (o: Walk
 
     const take = async () => {
         setError(null);
-        if (isMomo && phone.replace(/\D/g, '').length < 9) return setError("Enter the customer's M-Pesa number.");
+        if (isMomo && phone.replace(/\D/g, '').length < 9) return setError("Enter the customer's mobile money number.");
         setBusy(true);
         try {
             const res: any = await qrMenuApi.staffPay(order.token, isMomo ? { mobile_money_phone: phone.trim() } : { payment_method: methodId });
@@ -105,14 +105,14 @@ function TakePayment({ order, onOrder }: { order: WalkInOrder; onOrder: (o: Walk
             ) : (
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>Payment methods aren’t loaded on this device yet — it will be recorded as cash.</Text>
             )}
-            {isMomo ? <CustomTextField label="Customer’s M-Pesa number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="07…" editable={!waiting} /> : null}
+            {isMomo ? <CustomTextField label="Customer’s mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="07…" editable={!waiting} /> : null}
             {waiting ? (
                 <View className="flex-row items-center rounded-xl p-3" style={{ gap: 10, backgroundColor: 'rgba(59,130,246,0.10)' }}>
                     <ActivityIndicator color="#3b82f6" />
-                    <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13 }}>Prompt sent. Waiting for the customer to enter their M-Pesa PIN…</Text>
+                    <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13 }}>Prompt sent. Waiting for the customer to enter their mobile money PIN…</Text>
                 </View>
             ) : (
-                <SheetButton label={isMomo ? `Send M-Pesa prompt · ${kes(due)}` : `Record payment · ${kes(due)}`} icon={isMomo ? 'phone-portrait-outline' : 'checkmark'} loading={busy} loadingLabel={isMomo ? 'Sending…' : 'Saving…'} onPress={() => void take()} />
+                <SheetButton label={isMomo ? `Send mobile money prompt · ${kes(due)}` : `Record payment · ${kes(due)}`} icon={isMomo ? 'phone-portrait-outline' : 'checkmark'} loading={busy} loadingLabel={isMomo ? 'Sending…' : 'Saving…'} onPress={() => void take()} />
             )}
             {payment?.status === 'FAILED' ? (
                 <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13 }}>{payment.description || 'The payment did not go through.'} Try again or pick another method.</Text>

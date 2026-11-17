@@ -9,7 +9,7 @@
 #   drinks     SaveDrink (from a Product or by name), ReceiveDrinks (+ bottles),
 #              CountDrink (set the counted stock), WasteDrink (spills / breakage)
 #   tabs       OpenBarTab {items}, AddToBarTab {items}, VoidBarItem, PayBarTab
-#              (cash/card by staff, or M-Pesa STK), CloseBarTab, CancelBarTab
+#              (cash/card by staff, or mobile money STK), CloseBarTab, CancelBarTab
 #
 # Every write takes an optional draft_id: the app sends writes made offline when
 # it reconnects, and a repeated draft_id returns the first result (no double
@@ -364,7 +364,7 @@ def _record(order, user, method_id=None):
 
 
 def pay_tab(data, user):
-    """Staff record cash/card; or M-Pesa STK to the customer's phone (system till)."""
+    """Staff record cash/card; or mobile money STK to the customer's phone (system till)."""
     order = rm.BarInventoryOrder.objects.filter(id=data.get("order"), entity=user.entity).first()
     if not order:
         return ["Tab not found"], None, None

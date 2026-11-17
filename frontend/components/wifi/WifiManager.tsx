@@ -7,7 +7,7 @@
 //   Routers        hotspots (IP, NAS id, brand / model, contact) — add / edit / switch off
 //   Packages       what customers buy: price for a length of time on a router
 //   Subscriptions  who is connected, until when
-//   Payments       M-Pesa payments for packages
+//   Payments       mobile money payments for packages
 // Shared list kit (cards on phones, table on wide screens), details beside the
 // list on wide screens, each list kept on the device for offline viewing.
 
@@ -119,7 +119,7 @@ const paymentsConfig: AdminListConfig<WifiPayment> = {
     title: 'Payments',
     noun: ['payment', 'payments'],
     icon: 'wallet-outline',
-    searchPlaceholder: 'Search package, account, M-Pesa code…',
+    searchPlaceholder: 'Search package, account, mobile money code…',
     emptyMessage: 'Customers’ package payments appear here.',
     keyOf: (p) => p.id,
     titleOf: (p) => p.tariff_title || 'Package',
@@ -128,7 +128,7 @@ const paymentsConfig: AdminListConfig<WifiPayment> = {
     badgesOf: (p) => [{ label: PAY_LABEL[p.status] ?? p.status, tone: PAY_TONE[p.status] ?? 'neutral' }],
     metaOf: (p) => when(p.created),
     metaIcon: 'time-outline',
-    metricOf: (p) => ({ value: kes(p.amount), label: p.telco || 'M-Pesa', color: p.status === 'SUCCESS' ? '#10b981' : undefined }),
+    metricOf: (p) => ({ value: kes(p.amount), label: p.telco || 'Mobile money', color: p.status === 'SUCCESS' ? '#10b981' : undefined }),
     primaryColumn: { label: 'Package', flex: 1.4 },
     columns: [
         { key: 'account', label: 'Paid from', flex: 1.1, render: (p) => p.account || '—' },

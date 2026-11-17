@@ -115,7 +115,7 @@ export function PlanBanner({ plan, onDone }: { plan: ShoppingPlan; onDone: () =>
                     Planning: {plan.title}
                 </Text>
                 <Text numberOfLines={1} style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>
-                    {bits ? `${bits} · ` : ''}Saved on this phone · pay by M-Pesa when ready
+                    {bits ? `${bits} · ` : ''}Saved on this phone · pay by mobile money when ready
                 </Text>
             </View>
             <Pressable onPress={onDone} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, height: 34, borderRadius: 10, backgroundColor: '#8b5cf6', ...webPointer }}>

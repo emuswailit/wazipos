@@ -29,7 +29,7 @@ export function SubscriptionPaymentsDetailsModal({ item: p, onClose }: Props) {
                     icon: 'barcode-outline',
                     fields: [
                         { label: 'Reference', value: textOr(p?.reference_number, ''), mono: true },
-                        { label: 'M-Pesa reference', value: textOr(p?.psp_reference_number, ''), mono: true },
+                        { label: 'Mobile money reference', value: textOr(p?.psp_reference_number, ''), mono: true },
                         { label: 'Provider reference', value: textOr(p?.provider_reference_number, ''), mono: true },
                         { label: 'Payment ID', value: textOr(p?.id, ''), mono: true, full: true },
                     ],

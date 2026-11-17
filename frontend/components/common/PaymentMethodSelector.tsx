@@ -4,7 +4,7 @@
 // - Data source: usePaymentMethodsSync()
 // - Formik-aware via `name` (falls back to controlled mode)
 // - Emits the full PaymentMethodItem on select
-// - Optional M-Pesa (mobile money) phone field
+// - Optional mobile money phone field
 // - Mobile Money requires internet — auto-blocked when offline
 // - Evenly spread pills, NativeWind layout, useAuth() colors
 
@@ -179,7 +179,7 @@ function SelectorInner({
         [methods, selectedId]
     );
 
-    /* -------- Detect M-Pesa style -------- */
+    /* -------- Detect mobile money -------- */
     const isMobileMoneyMethod = (m: PaymentMethodItem | null) =>
         m != null &&
         String(m.title ?? '')
@@ -349,7 +349,7 @@ function SelectorInner({
                 </View>
             ) : null}
 
-            {/* -------- M-Pesa phone -------- */}
+            {/* -------- mobile money phone -------- */}
             {showMpesa ? (
                 <View className="mt-4 w-full">
                     <Text
@@ -359,7 +359,7 @@ function SelectorInner({
                             fontFamily: theme.font.bold,
                         }}
                     >
-                        M-Pesa Mobile Subscriber Phone *
+                        Mobile Money Phone Number *
                     </Text>
                     <TextInput
                         keyboardType="phone-pad"

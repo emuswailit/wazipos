@@ -180,7 +180,7 @@ export default function DeliveryPayouts() {
                     <TextInput
                         value={reference}
                         onChangeText={setReference}
-                        placeholder="Payment reference (e.g. M-Pesa or bank ref)"
+                        placeholder="Payment reference (e.g. mobile money or bank ref)"
                         placeholderTextColor={theme.textDark}
                         className="rounded-xl px-3"
                         style={{ height: 42, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.medium }}

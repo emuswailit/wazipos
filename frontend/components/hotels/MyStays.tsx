@@ -1,6 +1,6 @@
 // components/hotels/MyStays.tsx
 //
-// A guest's hotel bookings: dates, room, status, paying with M-Pesa and
+// A guest's hotel bookings: dates, room, status, paying with mobile money and
 // cancelling before check-in.
 
 import { errorText, isOk } from '@/api/diningApi';

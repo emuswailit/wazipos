@@ -1,7 +1,7 @@
 // components/restaurants/owner/bar/BarTabs.tsx
 //
 // Open bar tabs: running bills per guest / table. Void a line (stock returns),
-// add a round, take payment (cash, or M-Pesa prompt to the guest's phone),
+// add a round, take payment (cash, or mobile money prompt to the guest's phone),
 // close when paid, or cancel an unpaid tab.
 
 import diningApi, { errorText, isOk, type BarTab } from '@/api/diningApi';
@@ -156,12 +156,12 @@ function TabSheet({ tab, bar, onClose, onAddRound }: { tab: BarTab; bar: BarData
                         {waitingRef ? (
                             <View className="flex-row items-center rounded-xl p-3" style={{ gap: 8, backgroundColor: `${theme.primary}0d` }}>
                                 <ActivityIndicator color={theme.primary} />
-                                <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12.5 }}>Waiting for the guest's M-Pesa PIN…</Text>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 12.5 }}>Waiting for the guest's mobile money PIN…</Text>
                             </View>
                         ) : (
                             <View className="flex-row items-end" style={{ gap: 8 }}>
                                 <View style={{ flex: 1 }}>
-                                    <CustomTextField label="Guest's M-Pesa number" value={phone} onChangeText={setPhone} placeholder="0712345678" keyboardType="phone-pad" />
+                                    <CustomTextField label="Guest's mobile money number" value={phone} onChangeText={setPhone} placeholder="0712345678" keyboardType="phone-pad" />
                                 </View>
                                 <SheetButton label="Send prompt" icon="phone-portrait-outline" variant="secondary" loading={busy === 'mpesa'} loadingLabel="Sending…" disabled={phone.trim().length < 9 || !bar.isOnline} onPress={() => void mpesa()} />
                             </View>

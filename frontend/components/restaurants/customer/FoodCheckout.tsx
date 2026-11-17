@@ -176,7 +176,7 @@ export function FoodCheckout({ visible, onClose, restaurant, items, cart, initia
                             <Text style={muted}>
                                 {placed.service_type === 'DELIVERY'
                                     ? 'Pay now so the kitchen can start — delivery orders are prepared once paid.'
-                                    : 'Pay now with M-Pesa, or pay at the restaurant.'}
+                                    : 'Pay now with mobile money, or pay at the restaurant.'}
                             </Text>
                             <FoodPayment order={placed} onPaid={(o) => setPlaced(o)} />
                             {placed.service_type !== 'DELIVERY' ? <SheetButton label="I'll pay at the restaurant" variant="ghost" onPress={onClose} /> : null}

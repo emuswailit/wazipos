@@ -225,7 +225,7 @@ def guest_pay(data):
         return ["This is already paid"], None
     phone = str(data.get("mobile_money_phone") or "").strip()
     if not phone:
-        return ["Enter the M-Pesa phone number to charge"], None
+        return ["Enter the mobile money phone number to charge"], None
     method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
     if not method:
         return ["Mobile money isn't set up; please pay the waiter"], None
@@ -275,7 +275,7 @@ def staff_pay(data, user):
     """
     Counter payment for a walk-in order — food and drinks together.
     {token, payment_method?, mobile_money_phone?}
-      mobile_money_phone: one M-Pesa prompt for everything due (the food and the
+      mobile_money_phone: one mobile money prompt for everything due (the food and the
         drinks payments share its reference); follow it with staff_refresh.
       otherwise: recorded as paid now with the method picked (cash by default).
     Returns (errors, {status, reference?, description?}).
@@ -303,7 +303,7 @@ def staff_pay(data, user):
         if title == "CREDIT":
             return ["Credit isn't taken at the counter — leave the order unpaid instead"], None
         if title == "MOBILE MONEY":
-            return ["Enter the customer's M-Pesa number"], None
+            return ["Enter the customer's mobile money number"], None
         with transaction.atomic():
             if food_due > 0:
                 errors, _ = d.record_cash({"food_order": str(food.id), "payment_method": str(method.id)}, user)
@@ -339,7 +339,7 @@ def staff_pay(data, user):
 
 
 def staff_refresh(data, user):
-    """Follow a counter M-Pesa prompt: settles the food and drinks payments behind its reference."""
+    """Follow a counter mobile money prompt: settles the food and drinks payments behind its reference."""
     food, tab = _orders(str(data.get("token") or "").strip(), user.entity)
     reference = str(data.get("reference") or "").strip()
     if not reference or (not food and not tab):

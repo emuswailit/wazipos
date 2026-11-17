@@ -23,7 +23,7 @@ const config: AdminListConfig<PayoutAccount> = {
     searchPlaceholder: 'Search accounts…',
     addLabel: 'Add payout account',
     emptyTitle: 'No payout account yet',
-    emptyMessage: 'Add the M-Pesa, bank or other account your delivery earnings should be paid to.',
+    emptyMessage: 'Add the mobile money, bank or other account your delivery earnings should be paid to.',
     keyOf: (a, i) => `${a.id}-${i}`,
     titleOf: (a) => a.account_name,
     subtitleOf: (a) => destinationOf(a),

@@ -2,7 +2,7 @@
 //
 // Wi-Fi hotspot business — POST /wifi/ (backend wifi/views.py wifiAPIView).
 // Routers (hotspots), packages (tariffs: price for a length of time),
-// customers' subscriptions and their M-Pesa payments.
+// customers' subscriptions and their mobile money payments.
 
 import type { ApiResponse } from 'apisauce';
 

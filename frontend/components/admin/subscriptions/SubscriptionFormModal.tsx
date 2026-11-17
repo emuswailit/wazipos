@@ -257,7 +257,7 @@ export function SubscriptionFormModal({ visible, onClose, onSuccess }: Props) {
                                 isOpen: true,
                                 title: "Connection Lost",
                                 envelope: null,
-                                fallbackMessage: "The live connection dropped. Please check your M-Pesa and try again.",
+                                fallbackMessage: "The live connection dropped. Please check your mobile money and try again.",
                             });
                         }
                     };
@@ -375,7 +375,7 @@ export function SubscriptionFormModal({ visible, onClose, onSuccess }: Props) {
                                         Check your phone
                                     </Text>
                                     <Text className="mt-2 text-center text-[13px] px-4" style={{ fontFamily: theme.font.regular, color: theme.colors.textMuted }}>
-                                        Please enter your M-Pesa/Airtel PIN to authorize the payment of {amount ? `KES ${amount.toLocaleString()}` : 'the subscription'} for {months} {months === 1 ? 'month' : 'months'}.
+                                        Please enter your mobile money PIN to authorize the payment of {amount ? `KES ${amount.toLocaleString()}` : 'the subscription'} for {months} {months === 1 ? 'month' : 'months'}.
                                     </Text>
 
                                     <Text className="mt-4 text-center text-[11px] font-bold" style={{ fontFamily: theme.font.bold, color: theme.colors.warning }}>
@@ -404,7 +404,7 @@ export function SubscriptionFormModal({ visible, onClose, onSuccess }: Props) {
                             ) : (
                                 <>
                                     <Text className="text-[13px] mb-4" style={{ fontFamily: theme.font.regular, color: theme.colors.textMuted }}>
-                                        Enter your M-Pesa or Airtel Money number. You will receive an STK push to authorize the payment.
+                                        Enter your mobile money number. You will receive an STK push to authorize the payment.
                                     </Text>
 
                                     <View className="flex-row items-center rounded-xl border px-3 h-12" style={{ borderColor, backgroundColor: inputBg }}>

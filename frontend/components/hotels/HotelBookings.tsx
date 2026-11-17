@@ -2,7 +2,7 @@
 //
 // The front desk: stays to come, guests in house and past stays. Confirm a
 // booking, check the guest in and out, take payment (cash / card at the desk,
-// or an M-Pesa prompt to the guest's phone), and book a room for a walk-in or
+// or a mobile money prompt to the guest's phone), and book a room for a walk-in or
 // phone guest. Hotels only. Refreshes every 30 s.
 
 import { errorText, isOk } from '@/api/diningApi';
@@ -203,7 +203,7 @@ function StaySheet({ booking, onClose, onChanged, today }: { booking: RoomBookin
     const [methodId, setMethodId] = useState<string>('');
     useEffect(() => setError(null), [booking?.id]);
 
-    // At the desk: cash, card, bank… or mobile money (an M-Pesa prompt). Never credit.
+    // At the desk: cash, card, bank… or mobile money (a prompt to the guest's phone). Never credit.
     const methods = useMemo(() => {
         const list = (paymentMethodsList ?? []).filter((m: any) => m?.active !== false && String(m?.title ?? '').toUpperCase() !== 'CREDIT');
         const rank = (t: string) => (t === 'CASH' ? 0 : t === 'MOBILE MONEY' ? 1 : 2);
@@ -269,7 +269,7 @@ function StaySheet({ booking, onClose, onChanged, today }: { booking: RoomBookin
                             <ChoiceChips<string> label="Paid by" options={methods.map((m: any) => ({ value: String(m.id), label: String(m.title).charAt(0) + String(m.title).slice(1).toLowerCase() }))} value={methodId} onChange={setMethodId} />
                         ) : null}
                         {isMomo ? (
-                            <RoomPayment booking={booking} defaultPhone={booking.guest_phone ?? ''} onPaid={onChanged} label={`Send M-Pesa prompt · ${kes(due)}`} />
+                            <RoomPayment booking={booking} defaultPhone={booking.guest_phone ?? ''} onPaid={onChanged} label={`Send mobile money prompt · ${kes(due)}`} />
                         ) : (
                             <SheetButton label={`Record payment · ${kes(due)}`} icon="checkmark" loading={busy === 'pay'} disabled={!!busy && busy !== 'pay'} onPress={() => void act('pay', () => hotelApi.recordPayment(booking.id, methodId || null))} />
                         )}

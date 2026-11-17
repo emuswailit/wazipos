@@ -35,7 +35,7 @@ import urllib.parse
 def hotspot_login_view(request):
     """
     Handles the landing page logic (GET) by looking up subscriptions natively 
-    in Kenyan local time, and initializes M-Pesa STK checkouts (POST).
+    in Kenyan local time, and initializes mobile money STK checkouts (POST).
     """
     tariffs = []
     router_obj = None

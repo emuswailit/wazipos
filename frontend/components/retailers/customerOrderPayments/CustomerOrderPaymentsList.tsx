@@ -69,7 +69,7 @@ const config: AdminListConfig<CustomerOrderPaymentItem> = {
     title: 'Payments',
     noun: ['payment', 'payments'],
     icon: 'wallet-outline',
-    searchPlaceholder: 'Search order, customer, phone, M-Pesa code…',
+    searchPlaceholder: 'Search order, customer, phone, mobile money code…',
     emptyTitle: 'No payments yet',
     emptyMessage: 'Payments on customer orders appear here as they come in.',
     keyOf: (p, i) => String(p.id || p.reference_number || i),
@@ -210,7 +210,7 @@ function PaymentSheet({ payment, onClose }: { payment: CustomerOrderPaymentItem 
                 {row('Customer phone', payment.customer_phone)}
                 {row('Method', methodOf(payment))}
                 {row('Network', payment.telco)}
-                {row('M-Pesa / provider code', payment.provider_reference_number)}
+                {row('Mobile money code', payment.provider_reference_number)}
                 {row('Our reference', payment.reference_number)}
                 {row('Gateway reference', payment.psp_reference_number)}
                 {row('Charge', Number(payment.transaction_charge) > 0 ? `KES ${formatKES(Number(payment.transaction_charge))}` : null)}

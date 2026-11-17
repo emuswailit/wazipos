@@ -340,7 +340,7 @@ export default function OrderPad({
                     <CustomTextField label="Anything we should know?" value={notes} onChangeText={setNotes} placeholder="e.g. No onions, extra cold" maxLength={280} />
                     {mode === 'guest' ? (
                         <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
-                            After ordering you can pay with M-Pesa on this page, or pay your waiter.
+                            After ordering you can pay with mobile money on this page, or pay your waiter.
                         </Text>
                     ) : null}
                     {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13 }}>{error}</Text> : null}

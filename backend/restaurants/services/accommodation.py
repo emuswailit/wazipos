@@ -15,7 +15,7 @@
 #   BookRoom (a walk-in / phone booking for a guest)
 #   UpdateRoomBooking {booking, status}   CONFIRMED · CHECKED_IN · CHECKED_OUT · CANCELLED · NO_SHOW
 #   RecordRoomPayment {booking, payment_method}   cash / card at the desk
-#   PayRoomBooking {booking, mobile_money_phone}  M-Pesa prompt to the guest
+#   PayRoomBooking {booking, mobile_money_phone}  mobile money prompt to the guest
 #
 # A room is one bookable room (or one of several identical ones: add each).
 # It is free for [check-in, check-out) when no live stay overlaps those nights;
@@ -235,7 +235,7 @@ def _can_touch(booking, user):
 
 
 def pay_mobile_money(data, user):
-    """M-Pesa prompt for what's due on a stay (the guest, or staff at the desk). Returns (errors, payment)."""
+    """Mobile money prompt for what's due on a stay (the guest, or staff at the desk). Returns (errors, payment)."""
     from authentication.utils.utils import generate_reference_number, use_reference_number
     from payments.models import PaymentMethods
     from payments.utils.system_till import push_to_system_till
@@ -251,7 +251,7 @@ def pay_mobile_money(data, user):
         return ["This stay is already paid"], None
     phone = str(data.get("mobile_money_phone") or "").strip()
     if not phone:
-        return ["Enter the M-Pesa phone number to charge"], None
+        return ["Enter the mobile money phone number to charge"], None
     method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
     if not method:
         return ["Mobile money isn't set up"], None
@@ -309,7 +309,7 @@ def record_payment(data, user):
     if not method:
         return ["Pick a payment method"], None
     if str(method.title).upper() in ("CREDIT", "MOBILE MONEY"):
-        return ["Record cash, card or bank here — use the M-Pesa prompt for mobile money"], None
+        return ["Record cash, card or bank here — use the mobile money prompt for that"], None
     rm.RoomBookingPayment.objects.create(
         entity=booking.entity, owner=user, booking=booking, payment_method=method,
         reference_number=f"CASH{secrets.token_hex(4).upper()}", status="SUCCESS",

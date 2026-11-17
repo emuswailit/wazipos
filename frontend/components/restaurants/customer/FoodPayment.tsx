@@ -47,7 +47,7 @@ export function FoodPayment({ order, onPaid }: { order: FoodOrder; onPaid: (o: F
             }
             if (tries > 45 && timer.current) {
                 clearInterval(timer.current);
-                setError('Still waiting for the payment. Check your M-Pesa messages, then refresh your orders.');
+                setError('Still waiting for the payment. Check your mobile money messages, then refresh your orders.');
             }
         }, 4000);
     };
@@ -75,7 +75,7 @@ export function FoodPayment({ order, onPaid }: { order: FoodOrder; onPaid: (o: F
                 <ActivityIndicator color={theme.primary} />
                 <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>Check your phone</Text>
                 <Text className="text-center" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>
-                    Enter your M-Pesa PIN to pay {kes(order.amount_due)}. This updates by itself.
+                    Enter your mobile money PIN to pay {kes(order.amount_due)}. This updates by itself.
                 </Text>
             </View>
         );
@@ -83,7 +83,7 @@ export function FoodPayment({ order, onPaid }: { order: FoodOrder; onPaid: (o: F
 
     return (
         <View style={{ gap: 10 }}>
-            <CustomTextField label="M-Pesa number" value={phone} onChangeText={setPhone} placeholder="0712345678" keyboardType="phone-pad" />
+            <CustomTextField label="Mobile money number" value={phone} onChangeText={setPhone} placeholder="0712345678" keyboardType="phone-pad" />
             {error ? (
                 <View className="flex-row items-center rounded-xl px-3 py-2" style={{ gap: 6, backgroundColor: 'rgba(244,63,94,0.10)' }}>
                     <Ionicons name="alert-circle" size={15} color="#f43f5e" />

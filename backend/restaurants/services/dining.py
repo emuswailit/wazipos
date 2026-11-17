@@ -352,7 +352,7 @@ def pay_mobile_money(data, user):
         return ["This order is already paid"], None
     phone = str(data.get("mobile_money_phone") or "").strip()
     if not phone:
-        return ["Enter the M-Pesa phone number to charge"], None
+        return ["Enter the mobile money phone number to charge"], None
     method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
     if not method:
         return ["Mobile money isn't set up"], None

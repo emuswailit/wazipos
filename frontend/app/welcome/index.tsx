@@ -50,7 +50,7 @@ const OFFERINGS: Offering[] = [
             'Find shops and products nearby',
             'Upload a prescription and compare pharmacy quotes',
             'Delivery to your door or pickup',
-            'Pay by M-Pesa and track every order live',
+            'Pay by mobile money and track every order live',
         ],
         cta: 'Start shopping',
     },
@@ -139,7 +139,7 @@ const OFFERINGS: Offering[] = [
         points: [
             'Routers, NAS ids and hotspot locations in one place',
             'Packages by the minute, hour, day, week or month',
-            'Customers pay by M-Pesa and connect at once',
+            'Customers pay by mobile money and connect at once',
             'See who is connected and every payment, live',
         ],
         cta: 'Start a hotspot',
@@ -150,14 +150,14 @@ const OFFERINGS: Offering[] = [
 const HOME_WIFI: { icon: IconName; title: string; text: string }[] = [
     { icon: 'home', title: 'Your home connection', text: 'Fibre or home internet with a router that supports hotspot login (e.g. MikroTik).' },
     { icon: 'pricetags', title: 'Set your packages', text: 'Say 1 hour for KES 10 or a day for KES 50 — you choose.' },
-    { icon: 'phone-portrait', title: 'Neighbours pay by M-Pesa', text: 'They pick a package, pay, and get online. No cash to handle.' },
+    { icon: 'phone-portrait', title: 'Neighbours pay by mobile money', text: 'They pick a package, pay, and get online. No cash to handle.' },
     { icon: 'wallet', title: 'Get paid out', text: 'Earnings go to your payout account. Track every payment in the app.' },
 ];
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
     { icon: 'person-add', title: 'Create a free account', text: 'Email, phone or Google. Shopping needs nothing more.' },
     { icon: 'storefront', title: 'Shop — or open your business', text: 'Add your phone, ID and business location to start selling.' },
-    { icon: 'flash', title: 'Pay and track live', text: 'M-Pesa payments, live order status and delivery tracking.' },
+    { icon: 'flash', title: 'Pay and track live', text: 'Mobile money payments, live order status and delivery tracking.' },
 ];
 
 const SIGN_IN: { icon: IconName; color: string; title: string; text: string; soon?: boolean }[] = [
@@ -168,7 +168,7 @@ const SIGN_IN: { icon: IconName; color: string; title: string; text: string; soo
 ];
 
 const TRUST: { icon: IconName; title: string; text: string }[] = [
-    { icon: 'phone-portrait', title: 'M-Pesa by JamboPay', text: 'Payments go through JamboPay; sellers are paid out to their accounts.' },
+    { icon: 'phone-portrait', title: 'Mobile money by JamboPay', text: 'Payments go through JamboPay; sellers are paid out to their accounts.' },
     { icon: 'cloud-offline', title: 'Works offline', text: 'Counter and wholesale cash sales are saved on the device and sync later.' },
     { icon: 'shield-checkmark', title: 'Verified sellers', text: 'Business owners add an ID or passport and their business location.' },
     { icon: 'chatbubble-ellipses', title: 'You choose who contacts you', text: 'A one-time SMS code records your consent to calls and messages.' },
@@ -260,7 +260,7 @@ export default function WelcomeScreen() {
                         Shop, eat, sell and deliver — <Text style={{ color: theme.primary }}>one app.</Text>
                     </Text>
                     <Text style={[muted, { fontSize: 17, lineHeight: 26, maxWidth: 560, textAlign: wide ? 'left' : 'center' }]}>
-                        WaziPOS connects shoppers and diners with the shops, pharmacies, restaurants and wholesalers around them — with M-Pesa payments and live delivery built in. Run a Wi-Fi hotspot, or share your home internet and earn from it.
+                        WaziPOS connects shoppers and diners with the shops, pharmacies, restaurants and wholesalers around them — with mobile money payments and live delivery built in. Run a Wi-Fi hotspot, or share your home internet and earn from it.
                     </Text>
                     {!isAuthed ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: wide ? 'flex-start' : 'center' }}>
@@ -270,7 +270,7 @@ export default function WelcomeScreen() {
                     ) : null}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: wide ? 'flex-start' : 'center' }}>
                         {[
-                            { icon: 'phone-portrait-outline' as IconName, text: 'M-Pesa payments' },
+                            { icon: 'phone-portrait-outline' as IconName, text: 'Mobile money payments' },
                             { icon: 'navigate-outline' as IconName, text: 'Live delivery tracking' },
                             { icon: 'cloud-offline-outline' as IconName, text: 'Sells offline' },
                             { icon: 'wifi-outline' as IconName, text: 'Wi-Fi hotspots' },
@@ -335,7 +335,7 @@ export default function WelcomeScreen() {
                                 Share your home internet. Earn from it.
                             </Text>
                             <Text style={{ color: 'rgba(255,255,255,0.86)', fontFamily: theme.font.medium, fontSize: 15, lineHeight: 22, maxWidth: 620 }}>
-                                Already run a hotspot? Manage routers, packages, connected customers and payments in WaziPOS. Have home internet with spare capacity? We help you set it up as a hotspot your neighbours pay for by M-Pesa.
+                                Already run a hotspot? Manage routers, packages, connected customers and payments in WaziPOS. Have home internet with spare capacity? We help you set it up as a hotspot your neighbours pay for by mobile money.
                             </Text>
                         </View>
                         <Pressable
@@ -508,7 +508,7 @@ function HeroMockup({ theme, isDark, border }: { theme: any; isDark: boolean; bo
                     {row('medkit', '#10b981', 'Prescription quote', '3 pharmacies replied', '—')}
                 </View>
             </View>
-            {card('checkmark-circle', '#10b981', 'M-Pesa received', 'KES 1,240 · JamboPay', { top: 36, left: -6 })}
+            {card('checkmark-circle', '#10b981', 'Mobile money received', 'KES 1,240 · JamboPay', { top: 36, left: -6 })}
             {card('bicycle', '#0ea5e9', 'Rider on the way', 'Arriving in 12 min', { bottom: 52, right: -8 })}
         </View>
     );

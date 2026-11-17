@@ -1,6 +1,6 @@
 // components/hotels/RoomPayment.tsx
 //
-// Pay for a stay by mobile money: an M-Pesa prompt into the system till, then
+// Pay for a stay by mobile money: a mobile money prompt into the system till, then
 // the status is checked every few seconds until the PIN is entered (or it
 // fails). Used by guests, and by hotel staff charging a guest's phone.
 
@@ -48,7 +48,7 @@ export function RoomPayment({ booking, defaultPhone, onPaid, label }: { booking:
             if (tries > 45) {
                 stop();
                 setRef(null);
-                setError('Still waiting for the payment. Check the M-Pesa messages, then refresh.');
+                setError('Still waiting for the payment. Check the mobile money messages, then refresh.');
             }
         }, 4000);
     };
@@ -75,21 +75,21 @@ export function RoomPayment({ booking, defaultPhone, onPaid, label }: { booking:
                 <ActivityIndicator color={theme.primary} />
                 <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>Check the phone</Text>
                 <Text className="text-center" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>
-                    Enter the M-Pesa PIN to pay {kes(booking.amount_due)}. This updates by itself.
+                    Enter the mobile money PIN to pay {kes(booking.amount_due)}. This updates by itself.
                 </Text>
             </View>
         );
     }
     return (
         <View style={{ gap: 10 }}>
-            <CustomTextField label="M-Pesa number" value={phone} onChangeText={setPhone} placeholder="0712345678" keyboardType="phone-pad" />
+            <CustomTextField label="Mobile money number" value={phone} onChangeText={setPhone} placeholder="0712345678" keyboardType="phone-pad" />
             {error ? (
                 <View className="flex-row items-center rounded-xl px-3 py-2" style={{ gap: 6, backgroundColor: 'rgba(244,63,94,0.10)' }}>
                     <Ionicons name="alert-circle" size={15} color="#f43f5e" />
                     <Text className="flex-1" style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12 }}>{error}</Text>
                 </View>
             ) : null}
-            <SheetButton label={label ?? `Pay ${kes(booking.amount_due)} with M-Pesa`} icon="phone-portrait-outline" loading={busy} loadingLabel="Sending prompt…" disabled={phone.replace(/\D/g, '').length < 9} onPress={() => void pay()} />
+            <SheetButton label={label ?? `Pay ${kes(booking.amount_due)} with mobile money`} icon="phone-portrait-outline" loading={busy} loadingLabel="Sending prompt…" disabled={phone.replace(/\D/g, '').length < 9} onPress={() => void pay()} />
         </View>
     );
 }

@@ -1,7 +1,7 @@
 // components/restaurants/walkin/WalkInOrderView.tsx
 //
 // A walk-in order after it's placed: the food (kitchen status) and the drinks,
-// what's due, and — for guests — paying each bill with M-Pesa.
+// what's due, and — for guests — paying each bill with mobile money.
 
 import { STATUS_META } from '@/api/diningApi';
 import qrMenuApi, { type GuestPayment, type WalkInOrder } from '@/api/qrMenuApi';
@@ -35,7 +35,7 @@ export default function WalkInOrderView({
     const [error, setError] = useState<string | null>(null);
     const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Follow a pending M-Pesa prompt until it settles.
+    // Follow a pending mobile money prompt until it settles.
     useEffect(() => {
         if (payment?.status !== 'PENDING') return;
         timer.current = setInterval(async () => {
@@ -56,7 +56,7 @@ export default function WalkInOrderView({
 
     const pay = async (bill: Bill) => {
         setError(null);
-        if (phone.replace(/\D/g, '').length < 9) return setError('Enter the M-Pesa number to charge.');
+        if (phone.replace(/\D/g, '').length < 9) return setError('Enter the mobile money number to charge.');
         setPaying(bill);
         try {
             const res: any = await qrMenuApi.pay(order.token, bill, phone.trim());
@@ -99,7 +99,7 @@ export default function WalkInOrderView({
                         {food.status === 'CANCELLED' ? null : paidPill(foodDue <= 0)}
                     </View>
                     {mode === 'guest' && foodDue > 0 ? (
-                        <SheetButton label={`Pay food with M-Pesa · ${kes(foodDue)}`} icon="phone-portrait-outline" loading={paying === 'FOOD'} loadingLabel="Sending prompt…" disabled={waiting || !!paying} onPress={() => void pay('FOOD')} />
+                        <SheetButton label={`Pay food with mobile money · ${kes(foodDue)}`} icon="phone-portrait-outline" loading={paying === 'FOOD'} loadingLabel="Sending prompt…" disabled={waiting || !!paying} onPress={() => void pay('FOOD')} />
                     ) : null}
                 </View>
             ) : null}
@@ -117,14 +117,14 @@ export default function WalkInOrderView({
                         {tab.status === 'CANCELLED' ? null : paidPill(tabDue <= 0)}
                     </View>
                     {mode === 'guest' && tabDue > 0 ? (
-                        <SheetButton label={`Pay drinks with M-Pesa · ${kes(tabDue)}`} icon="phone-portrait-outline" loading={paying === 'DRINKS'} loadingLabel="Sending prompt…" disabled={waiting || !!paying} onPress={() => void pay('DRINKS')} />
+                        <SheetButton label={`Pay drinks with mobile money · ${kes(tabDue)}`} icon="phone-portrait-outline" loading={paying === 'DRINKS'} loadingLabel="Sending prompt…" disabled={waiting || !!paying} onPress={() => void pay('DRINKS')} />
                     ) : null}
                 </View>
             ) : null}
 
             {mode === 'guest' && foodDue + tabDue > 0 ? (
                 <View className="rounded-2xl p-4" style={{ ...card, gap: 10 }}>
-                    <CustomTextField label="M-Pesa number to charge" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="07…" />
+                    <CustomTextField label="Mobile money number to charge" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="07…" />
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
                         {food && tab ? 'Food and drinks are paid separately. ' : ''}You can also pay your waiter.
                     </Text>
@@ -139,7 +139,7 @@ export default function WalkInOrderView({
                         color={payment.status === 'SUCCESS' ? '#10b981' : payment.status === 'FAILED' ? '#f43f5e' : '#3b82f6'}
                     />
                     <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13 }}>
-                        {payment.status === 'PENDING' ? 'Check your phone and enter your M-Pesa PIN.' : payment.status === 'SUCCESS' ? 'Payment received. Thank you!' : payment.description || 'The payment did not go through. Try again.'}
+                        {payment.status === 'PENDING' ? 'Check your phone and enter your mobile money PIN.' : payment.status === 'SUCCESS' ? 'Payment received. Thank you!' : payment.description || 'The payment did not go through. Try again.'}
                     </Text>
                 </View>
             ) : null}

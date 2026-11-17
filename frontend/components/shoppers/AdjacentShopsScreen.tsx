@@ -10,7 +10,7 @@
 //         over 20 km   rider or long-haul courier
 //   - Second line: browse by county / sub-county (location off, or further afield).
 //   - Tapping a shop opens its shop front with the shopper's location, so
-//     delivery is priced straight away and the order is paid by M-Pesa.
+//     delivery is priced straight away and the order is paid by mobile money.
 
 import ApiResponseModal from '@/components/common/ApiResponseModal';
 import LocationFilterBar from '@/components/common/LocationFilterBar';

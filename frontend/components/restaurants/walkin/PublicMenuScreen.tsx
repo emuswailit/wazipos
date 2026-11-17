@@ -2,7 +2,7 @@
 //
 // The page a restaurant's QR code opens — no sign-in. Guests see the food menu
 // and the drinks list, order from their table (as many rounds as they like),
-// follow each order and pay with M-Pesa (or pay the waiter). Orders are
+// follow each order and pay with mobile money (or pay the waiter). Orders are
 // remembered on the phone, so reopening the page (or scanning again) shows them.
 
 import { errorText, isOk } from '@/api/diningApi';
