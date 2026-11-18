@@ -1,0 +1,461 @@
+[
+    {
+        "model": "authentication.Entities",
+        "pk": "c4a1b8f2-7e3d-4b9a-8f1c-2d5e6a7b8c9d",
+        "fields": {
+            "title": "Phillips Pharmaceuticals Limited",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "e5b2c9a3-8f4e-4c0b-9a2d-3e6f7b8c9d0e",
+        "fields": {
+            "title": "Harleys Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "f6c3d0b4-9a5f-4d1c-8b3e-4f7a8c9d0e1f",
+        "fields": {
+            "title": "Surgipharm Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "a7d4e1c5-0b6a-4e2d-9c4f-5a8b9d0e1f2a",
+        "fields": {
+            "title": "Sai Pharmaceuticals Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "b8e5f2d6-1c7b-4f3e-8d5a-6b9c0e1f2a3b",
+        "fields": {
+            "title": "Radiance Pharmaceuticals",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "c9f6a3e7-2d8c-4a4f-9e6b-7c0d1f2a3b4c",
+        "fields": {
+            "title": "Goodman Agencies Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "d0a7b4f8-3e9d-4b5a-8f7c-8d1e2a3b4c5d",
+        "fields": {
+            "title": "Mac Naughton [K] Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "e1b8c5a9-4f0e-4c6b-9a8d-9e2f3b4c5d6e",
+        "fields": {
+            "title": "Unisel Pharma [K] Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "f2c9d6b0-5a1f-4d7c-8b9e-0f3a4c5d6e7f",
+        "fields": {
+            "title": "Ken-Bangla Pharmaceuticals",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "a3d0e7c1-6b2a-4e8d-9c0f-1a4b5d6e7f8a",
+        "fields": {
+            "title": "Globe Pharmacy Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "b4e1f8d2-7c3b-4f9e-8d1a-2b5c6e7f8a9b",
+        "fields": {
+            "title": "Laborex Kenya Eurapharma",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "c5f2a9e3-8d4c-4a0f-9e2b-3c6d7f8a9b0c",
+        "fields": {
+            "title": "Prodigy Healthcare",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "d6a3b0f4-9e5d-4b1a-8f3c-4d7e8a9b0c1d",
+        "fields": {
+            "title": "Zadchem Pharmacy Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "e7b4c1a5-0f6e-4c2b-9a4d-5e8f9b0c1d2e",
+        "fields": {
+            "title": "Salama Pharmaceuticals Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "f8c5d2b6-1a7f-4d3c-8b5e-6f9a0c1d2e3f",
+        "fields": {
+            "title": "Europa Healthcare Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "a9d6e3c7-2b8a-4e4d-9c6f-7a0b1d2e3f4a",
+        "fields": {
+            "title": "Pharma Specialities Limited",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "b0e7f4d8-3c9b-4f5e-8d7a-8b1c2e3f4a5b",
+        "fields": {
+            "title": "AB Pharmaceuticals Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "c1f8a5e9-4d0c-4a6f-9e8b-9c2d3f4a5b6c",
+        "fields": {
+            "title": "Simba Pharmaceuticals Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "d2a9b6f0-5e1d-4b7a-8f9c-0d3e4a5b6c7d",
+        "fields": {
+            "title": "Widespectrum Enterprises(U) Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Kampala",
+            "country": "19748b33-5d9c-443d-be85-63d078807123",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "e3b0c7a1-6f2e-4c8b-9a0d-1e4f5b6c7d8e",
+        "fields": {
+            "title": "Medox Pharmaceuticals Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "f4c1d8b2-7a3f-4d9c-8b1e-2f5a6c7d8e9f",
+        "fields": {
+            "title": "Pan Pharmaceuticals Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "a5d2e9c3-8b4a-4e0d-9c2f-3a6b7d8e9f0a",
+        "fields": {
+            "title": "Medisel [Kenya] Limited",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "b6e3f0d4-9c5b-4f1e-8d3a-4b7c8e9f0a1b",
+        "fields": {
+            "title": "Chemoquip Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "c7f4a1e5-0d6c-4a2f-9e4b-5c8d9f0a1b2c",
+        "fields": {
+            "title": "Phillip Pharmaceuticals Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "d8a5b2f6-1e7d-4b3a-8f5c-6d9e0a1b2c3d",
+        "fields": {
+            "title": "Bayer E. Africa Ltd",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "e9b6c3a7-2f8e-4c4b-9a6d-7e0f1b2c3d4e",
+        "fields": {
+            "title": "Crown Healthcare",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    },
+    {
+        "model": "authentication.Entities",
+        "pk": "f0c7d4b8-3a9f-4d5c-8b7e-8f1a2c3d4e5f",
+        "fields": {
+            "title": "PSM Pharmaceuticals Ltd.",
+            "categories": [],
+            "phone": "",
+            "road": "",
+            "building": "",
+            "entity_type": "PharmaceuticalDistributor",
+            "town": "Nairobi",
+            "country": "b4d0e91b-1600-4e1d-b147-f3f1c7e2f35f",
+            "registration": "",
+            "created": "2021-11-15 00:00:00",
+            "updated": "2021-11-15 00:00:00"
+        }
+    }
+]
