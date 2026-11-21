@@ -176,3 +176,35 @@ class ClientEntitiesConsumer(AsyncJsonWebsocketConsumer):
                     'client_entities': json.loads(self.datum),
                     
                 })
+
+class AccessLogsConsumer(AsyncJsonWebsocketConsumer):
+    """
+    ws/authentication/access-logs/ — platform admins only. Sends
+    {"event": "access_logs.created", "logs": [...]} as the access-log writer
+    saves new rows (authentication/access_logs.py: broadcast_logs).
+    """
+
+    group = "admin-access-logs"
+
+    async def connect(self):
+        user = self.scope.get("user")
+        if not user or not user.is_authenticated:
+            await self.close(code=self.scope.get("close_code") or 4001)
+            return
+        if not await self._is_admin(user):
+            await self.close(code=4004)
+            return
+        await self.channel_layer.group_add(self.group, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.group, self.channel_name)
+
+    @database_sync_to_async
+    def _is_admin(self, user):
+        from authentication.utils.admin_users import is_platform_admin
+
+        return is_platform_admin(user)
+
+    async def access_logs_created(self, event):
+        await self.send_json({"event": "access_logs.created", "logs": event.get("logs", [])})

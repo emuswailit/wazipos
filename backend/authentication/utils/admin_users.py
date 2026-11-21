@@ -293,8 +293,13 @@ def _clean(data, key):
     return str(v).strip() if v not in (None, "") else ""
 
 
-def admin_save_user(data, files, admin, user=None):
-    """Create (user=None) or update a user. Returns (errors, user, consent_note)."""
+def admin_save_user(data, files, admin, user=None, creating_agent=None, allowed_entities=None):
+    """
+    Create (user=None) or update a user. Returns (errors, user, consent_note).
+
+    Agents (authentication/utils/agents.py) pass creating_agent, recorded on new
+    users, and allowed_entities: the only entities they may attach a user to.
+    """
     errors = []
     first = _clean(data, "first_name")
     last = _clean(data, "last_name")
@@ -339,6 +344,8 @@ def admin_save_user(data, files, admin, user=None):
         entity = models.Entities.objects.filter(id=data["entity"]).first()
         if not entity:
             errors.append("Entity for provided ID does not exist")
+        elif allowed_entities is not None and not allowed_entities.filter(id=entity.id).exists():
+            errors.append("You can only attach users to your own entities")
     gender = _clean(data, "gender")
     if gender and gender not in ("Female", "Male", "Other"):
         errors.append("Pick a valid gender")
@@ -357,7 +364,10 @@ def admin_save_user(data, files, admin, user=None):
                 raise exceptions.APIException("System roles are not set up")
             # Email is the login id; people registered at a counter may not have one.
             login_email = email or f"{phone}@users.wazipos.co.ke"
-            user = models.Users(email=login_email, registration_method="Admin", owner=admin)
+            user = models.Users(
+                email=login_email, registration_method="Agent" if creating_agent else "Admin",
+                owner=admin, creating_agent=creating_agent,
+            )
             user.set_unusable_password()
         else:
             if email and email != (user.email or "").lower():

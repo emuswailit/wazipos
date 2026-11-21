@@ -1,13 +1,18 @@
 # core/access_log.py
 #
-# Logs every request to the API (api.wazipos.co.ke) into analytics.ApiAccessLog:
-# the caller's IP, the signed-in user (and their business) when there is one,
-# the method, path and "action" of command endpoints, the status and the time
-# taken. Admins see it under Admin -> Access logs (analytics/access-logs).
+# Logs every request to the API (api.wazipos.co.ke) into authentication.AccessLogs
+# and streams the new rows to admins (ws/authentication/access-logs/).
 #
+# - Not signed in: the caller's IP and the endpoint (method + path), with the
+#   status and time taken. Nothing else.
+# - Signed in: also the user and business, the backend app reached (retailers,
+#   wholesalers, ...), the URL (secret query values redacted), the "action" of
+#   command endpoints, the source (web / Android / iOS / script) and the screen
+#   of our app that sent it. Our apps send X-Client-Source and X-Client-Route;
+#   other callers are classified from the user agent.
 # - Never slows a request: rows go into an in-memory queue and a background
-#   thread writes them in batches (bulk_create). If the queue is full (DB down),
-#   rows are dropped rather than holding requests up.
+#   thread writes them in batches (bulk_create), then broadcasts them. If the
+#   queue is full (DB down), rows are dropped rather than holding requests up.
 # - Never stores request bodies or tokens: only the "action" name is read, and
 #   only from small JSON bodies.
 # - The user: API calls use JWT, so Django's middleware sees an anonymous user;
@@ -24,6 +29,7 @@ import queue
 import threading
 import time
 from datetime import timedelta
+from urllib.parse import parse_qsl, urlencode
 
 from decouple import config
 
@@ -32,8 +38,11 @@ ENABLED = str(config("ACCESS_LOG_ENABLED", default="true")).lower() not in ("0",
 
 # Not worth a row: preflights, files, dev reload, and the log screen reading itself.
 SKIP_METHODS = {"OPTIONS", "HEAD"}
-SKIP_PREFIXES = ("/static/", "/media/", "/__reload__/", "/favicon", "/api/v1/analytics/access-logs")
+SKIP_PREFIXES = ("/static/", "/media/", "/__reload__/", "/favicon", "/api/v1/authentication/access-logs")
 MAX_BODY_FOR_ACTION = 64 * 1024
+# Query-string values never written to the log.
+SECRET_PARAMS = {"token", "access", "refresh", "password", "otp", "code", "key", "secret", "signature", "pin"}
+SOURCES = {"WEB", "ANDROID", "IOS", "SCRIPT"}
 
 _QUEUE: "queue.Queue[dict]" = queue.Queue(maxsize=20000)
 _BATCH = 200
@@ -126,6 +135,55 @@ def _user_label(user) -> str:
     return (name or contact or str(user.pk))[:200]
 
 
+
+def _source(request) -> str:
+    """WEB / ANDROID / IOS / SCRIPT / UNKNOWN: what the request came from."""
+    claimed = (request.META.get("HTTP_X_CLIENT_SOURCE") or "").strip().upper()
+    if claimed in SOURCES:
+        return claimed
+    ua = request.META.get("HTTP_USER_AGENT") or ""
+    if not ua:
+        return "UNKNOWN"
+    low = ua.lower()
+    if "okhttp" in low or "dalvik" in low:
+        return "ANDROID"
+    if "cfnetwork" in low or "darwin" in low:
+        return "IOS"
+    if low.startswith("mozilla/"):
+        return "WEB"
+    if any(k in low for k in ("curl", "python", "postman", "insomnia", "httpie", "wget", "go-http", "java", "node", "axios")):
+        return "SCRIPT"
+    return "UNKNOWN"
+
+
+def _app_reached(request) -> str:
+    """The backend app that handled the request: the view's package, else the first path segment."""
+    match = getattr(request, "resolver_match", None)
+    func = getattr(match, "func", None) if match else None
+    module = getattr(getattr(func, "cls", None) or func, "__module__", "") if func else ""
+    if module:
+        return module.split(".")[0][:60]
+    parts = [p for p in request.path.split("/") if p]
+    if len(parts) >= 3 and parts[0] == "api":
+        return parts[2][:60]  # /api/v1/<app>/...
+    return (parts[0] if parts else "")[:60]
+
+
+def _url(request) -> str:
+    """The URL that was called, with secret query values redacted."""
+    query = request.META.get("QUERY_STRING", "")
+    path = request.path
+    if query:
+        pairs = [(k, "***" if k.lower() in SECRET_PARAMS else v) for k, v in parse_qsl(query, keep_blank_values=True)]
+        path = f"{path}?{urlencode(pairs)}"
+    try:
+        host = request.get_host()
+    except Exception:  # DisallowedHost
+        host = ""
+    scheme = "https" if request.is_secure() else request.scheme or "http"
+    return (f"{scheme}://{host}{path}" if host else path)[:500]
+
+
 # ---------------------------------------------------------------- the writer
 
 def _ensure_writer():
@@ -156,9 +214,11 @@ def _writer_loop():
         try:
             close_old_connections()
             if rows:
-                from analytics.models import ApiAccessLog
+                from authentication.access_logs import broadcast_logs
+                from authentication.models import AccessLogs
 
-                ApiAccessLog.objects.bulk_create([ApiAccessLog(**r) for r in rows], batch_size=_BATCH)
+                created = AccessLogs.objects.bulk_create([AccessLogs(**r) for r in rows], batch_size=_BATCH)
+                broadcast_logs(created)
             if time.monotonic() - last_prune > _PRUNE_EVERY_SECONDS:
                 last_prune = time.monotonic()
                 prune_access_logs()
@@ -174,10 +234,10 @@ def prune_access_logs(days: int | None = None) -> int:
     """Delete rows older than the retention period. Returns how many."""
     from django.utils import timezone
 
-    from analytics.models import ApiAccessLog
+    from authentication.models import AccessLogs
 
     cutoff = timezone.now() - timedelta(days=days or RETENTION_DAYS)
-    deleted, _ = ApiAccessLog.objects.filter(created__lt=cutoff).delete()
+    deleted, _ = AccessLogs.objects.filter(created__lt=cutoff).delete()
     return deleted
 
 
@@ -206,22 +266,28 @@ class AccessLogMiddleware:
         from django.utils import timezone
 
         user = _request_user(request)
-        entity = getattr(user, "entity", None) if user else None
         row = {
             "created": timezone.now(),
             "ip": client_ip(request),
             "method": request.method[:8],
-            "path": request.path[:300],
-            "action": action,
+            "endpoint": request.path[:300],
             "status_code": getattr(response, "status_code", 0) or 0,
             "duration_ms": int((time.monotonic() - started) * 1000),
-            "user_id": getattr(user, "pk", None),
-            "user_label": _user_label(user) if user else "",
-            "entity_ref": str(getattr(entity, "pk", "") or "")[:64],
-            "entity_title": (getattr(entity, "title", "") or "")[:200],
-            "user_agent": (request.META.get("HTTP_USER_AGENT") or "")[:300],
-            "origin": (request.META.get("HTTP_ORIGIN") or request.META.get("HTTP_REFERER") or "")[:200],
         }
+        if user is not None:  # the rest only for signed-in callers
+            entity = getattr(user, "entity", None)
+            row.update({
+                "user_id": user.pk,
+                "user_label": _user_label(user),
+                "entity_ref": str(getattr(entity, "pk", "") or "")[:64],
+                "entity_title": (getattr(entity, "title", "") or "")[:200],
+                "app": _app_reached(request),
+                "url": _url(request),
+                "action": action,
+                "source": _source(request),
+                "client_route": (request.META.get("HTTP_X_CLIENT_ROUTE") or "")[:200],
+                "user_agent": (request.META.get("HTTP_USER_AGENT") or "")[:300],
+            })
         try:
             ipaddress.ip_address(row["ip"])
         except ValueError:

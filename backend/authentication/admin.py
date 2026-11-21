@@ -366,3 +366,26 @@ class CategoriesAdmin(admin.ModelAdmin):
         "updated",
     )
     search_fields = ("title",)
+
+@admin.register(models.AccessLogs)
+class AccessLogsAdmin(admin.ModelAdmin):
+    list_display = ("created", "ip", "method", "endpoint", "app", "action", "source", "status_code", "duration_ms", "user_label", "entity_title")
+    list_filter = ("source", "app", "method", "status_code")
+    search_fields = ("ip", "endpoint", "action", "app", "user_label", "entity_title", "client_route")
+    date_hierarchy = "created"
+    readonly_fields = [f.name for f in models.AccessLogs._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(models.AgentCommissions)
+class AgentCommissionsAdmin(admin.ModelAdmin):
+    list_display = ("created", "agent", "entity", "payment_amount", "percentage", "amount", "platform_amount", "status", "paid_at")
+    list_filter = ("status",)
+    search_fields = ("agent__user__email", "agent__user__phone", "entity__title", "subscription_payment__reference_number")
+    date_hierarchy = "created"
+    readonly_fields = ("agent", "entity", "subscription_payment", "payment_amount", "percentage", "amount", "platform_amount", "created", "updated")

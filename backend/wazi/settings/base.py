@@ -286,6 +286,12 @@ CSRF_TRUSTED_ORIGINS = [
 
 CORS_ORIGIN_WHITELIST = ("http://localhost:3000",)
 
+# Our apps say where a request came from (core/access_log.py). Without these,
+# browsers would refuse every request at the CORS preflight.
+from corsheaders.defaults import default_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*default_headers, "x-client-source", "x-client-route")
+
 CORS_ALLOWED_ORIGINS = [
     "https://wazipos.co.ke",
     "http://localhost:5173",

@@ -7,5 +7,7 @@ authentication_websocket_urlpatterns = [
     path("ws/authentication/agents/users/",consumers.AgentUsersConsumer.as_asgi()),
     path("ws/authentication/agents/entities/",consumers.AgentEntitiesConsumer.as_asgi()),
     path("ws/authentication/clients/entities/",consumers.ClientEntitiesConsumer.as_asgi()),
+    # Admins: API requests as they happen (authentication/access_logs.py)
+    path("ws/authentication/access-logs/", consumers.AccessLogsConsumer.as_asgi()),
 
 ]

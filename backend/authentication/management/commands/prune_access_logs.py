@@ -1,4 +1,4 @@
-# analytics/management/commands/prune_access_logs.py
+# authentication/management/commands/prune_access_logs.py
 #
 #   python manage.py prune_access_logs            # older than ACCESS_LOG_RETENTION_DAYS (90)
 #   python manage.py prune_access_logs --days 30

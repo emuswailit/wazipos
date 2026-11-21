@@ -685,11 +685,14 @@ class Agents(EntityRelatedModel):
     )
     approved_on = models.DateTimeField(auto_now_add=True)
     entities = models.ManyToManyField("authentication.Entities", related_name="agent_entities", blank=True)
+    # The agent's share (percent) of every subscription fee paid by an entity
+    # they brought in (Entities.agent). See AgentCommissions.
+    commission_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return str(self.user.email)
+        return str(self.user.email) if self.user_id else f"Agent {self.pk}"
             
 class Organizations(models.Model):
     ORGANIZATION_TYPE = (
@@ -1677,6 +1680,7 @@ class Users(AbstractBaseUser, PermissionsMixin):
         ('Google', 'Google'),
         ('Facebook', 'Facebook'),
         ('Admin', 'Admin'),
+        ('Agent', 'Agent'),
     ]
     GENDER_CHOICES = (
         ("Female", "Female"),
@@ -1960,6 +1964,22 @@ class Users(AbstractBaseUser, PermissionsMixin):
             agent = Agents.objects.filter(user=self, is_active=True).first()
             decodeJTW["agent_id"] = f"{agent.id}"
             decodeJTW["is_agent"] = "true"
+            # Agents see the Agent panel: their users and their entities.
+            from authentication.utils.agents import agent_role
+
+            role = agent_role()
+            if role and not any(r.get("value") == role.value for r in roles):
+                roles.append(dict(
+                    id=str(role.id),
+                    cluster=str(role.cluster_id),
+                    owner=str(role.owner_id),
+                    entity=str(role.entity_id),
+                    entity_title=str(role.entity.title),
+                    level=role.level,
+                    title=role.title,
+                    value=role.value,
+                ))
+            decodeJTW["roles"] = roles
         else:
             decodeJTW["agent_id"] = ""
             decodeJTW["is_agent"] = "false"
@@ -2811,3 +2831,105 @@ class ContactConsent(models.Model):
 
     def __str__(self):
         return f"{self.phone} ({self.status})"
+
+
+# ---------------------------------------------------------------- access logs
+
+from django.utils import timezone as django_timezone  # noqa: E402  (this module's `timezone` is datetime's)
+
+
+class AccessLogs(models.Model):
+    """
+    One request to the API (api.wazipos.co.ke). Written in batches by
+    core.access_log.AccessLogMiddleware, streamed live to admins over
+    ws/authentication/access-logs/ and shown under Admin -> Access logs.
+
+    - Not signed in: only the IP and the endpoint (method + path) are kept,
+      with the outcome (status, time taken).
+    - Signed in: also the user and business, the backend app the request
+      reached, the full URL (secrets in the query string redacted), the
+      "action" of command endpoints, where it came from (web, Android or iOS
+      app, a script) and the screen of our app it was sent from.
+
+    Request bodies and tokens are never stored.
+    """
+
+    class Source(models.TextChoices):
+        WEB = "WEB", _("Web browser")
+        ANDROID = "ANDROID", _("Android app")
+        IOS = "IOS", _("iOS app")
+        SCRIPT = "SCRIPT", _("Script / API client")
+        UNKNOWN = "UNKNOWN", _("Unknown")
+
+    created = models.DateTimeField(default=django_timezone.now, db_index=True)
+    ip = models.GenericIPAddressField(db_index=True)
+    method = models.CharField(max_length=8)
+    endpoint = models.CharField(max_length=300)
+    status_code = models.PositiveSmallIntegerField(default=0)
+    duration_ms = models.PositiveIntegerField(default=0)
+
+    # Signed-in requests only.
+    user = models.ForeignKey(
+        "Users", null=True, blank=True, on_delete=models.SET_NULL, related_name="access_logs",
+    )
+    app = models.CharField(max_length=60, blank=True, default="", db_index=True)
+    url = models.CharField(max_length=500, blank=True, default="")
+    action = models.CharField(max_length=120, blank=True, default="", db_index=True)
+    source = models.CharField(max_length=10, choices=Source.choices, blank=True, default="", db_index=True)
+    client_route = models.CharField(max_length=200, blank=True, default="")
+    user_agent = models.CharField(max_length=300, blank=True, default="")
+    # Snapshots, so a log line still reads right after the user changes or is deleted.
+    user_label = models.CharField(max_length=200, blank=True, default="")
+    entity_ref = models.CharField(max_length=64, blank=True, default="")
+    entity_title = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Access log"
+        verbose_name_plural = "Access logs"
+        ordering = ["-created"]
+        indexes = [
+            models.Index(fields=["ip", "created"]),
+            models.Index(fields=["user", "created"]),
+        ]
+
+    def __str__(self):
+        return f"{self.created:%Y-%m-%d %H:%M:%S} {self.ip} {self.method} {self.endpoint} {self.status_code}"
+
+
+class AgentCommissions(models.Model):
+    """
+    An agent's share of one subscription payment by an entity they brought in.
+    Written once per successful SubscriptionPayment (subscriptions/tasks.py ->
+    authentication.utils.agents.record_subscription_commission), using the
+    agent's commission_percentage at that moment. The rest is the platform's.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", _("Owed to the agent")
+        PAID = "PAID", _("Paid out")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agent = models.ForeignKey(Agents, related_name="commissions", on_delete=models.PROTECT)
+    entity = models.ForeignKey("Entities", related_name="agent_commissions", on_delete=models.PROTECT)
+    subscription_payment = models.OneToOneField(
+        "subscriptions.SubscriptionPayment", related_name="agent_commission", on_delete=models.PROTECT,
+    )
+    payment_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    platform_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    paid_by = models.ForeignKey(
+        "Users", related_name="agent_commissions_paid", null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Agent commission"
+        verbose_name_plural = "Agent commissions"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.agent} {self.amount} ({self.percentage}% of {self.payment_amount})"

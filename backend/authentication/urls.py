@@ -1,5 +1,7 @@
 from django.urls import path
 from . import views
+from .access_logs import accessLogsAPIView
+from .agents import agentsAdminAPIView, agentsMeAPIView
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 from django.contrib.auth import views as auth_views
@@ -17,6 +19,11 @@ urlpatterns = [
     #     name="accounts-settlement-api-view",
     # ),
     
+    # Admins: who called the API (IP, user, app, action, source). See authentication/access_logs.py.
+    path("access-logs", accessLogsAPIView, name="authentication-access-logs-apiview"),
+    # Agents: admins manage them; agents register users + entities. See authentication/agents.py.
+    path("agents/admin", agentsAdminAPIView, name="authentication-agents-admin-apiview"),
+    path("agents/me", agentsMeAPIView, name="authentication-agents-me-apiview"),
     path("categories", views.categoriesAPIView, name="categories-api-view"),
     path("clusters", views.clustersAPIView, name="clusters-api-view"),
     path("countries", views.countriesAPIView, name="countries-api-view"),

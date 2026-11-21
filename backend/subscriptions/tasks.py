@@ -176,6 +176,10 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
                 is_active="TRUE",
                 owner=payment.owner
             )
+            # The agent who brought the entity in gets their share of the fee.
+            from authentication.utils.agents import record_subscription_commission
+
+            record_subscription_commission(payment)
             create_log("info", f"Successfully created Subscription for payment {payment.reference_number}")
     except Exception as e:
         create_log("error", f"Failed to create Subscription for {payment.reference_number}: {str(e)}")
