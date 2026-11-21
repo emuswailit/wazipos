@@ -139,6 +139,13 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
     """
     Helper to create the actual Subscription once payment succeeds.
     """
+    if getattr(payment, "purpose", "SUBSCRIPTION") == "STOCK_TAKE":
+        # A stock-take fee: mark the stock take paid (and the agent's commission);
+        # no subscription period comes from it.
+        from stocktakes.services import mark_paid
+
+        mark_paid(payment)
+        return
     try:
         with transaction.atomic():
             # Serialise all subscription creation for this entity: lock the entity row first.

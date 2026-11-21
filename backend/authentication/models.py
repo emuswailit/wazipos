@@ -688,6 +688,15 @@ class Agents(EntityRelatedModel):
     # The agent's share (percent) of every subscription fee paid by an entity
     # they brought in (Entities.agent). See AgentCommissions.
     commission_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # Blacklisted by a platform admin: stronger than inactive — the agent can't be
+    # reactivated until the blacklist is lifted, and all their onboarders are
+    # blacklisted with them (authentication.utils.agents.blacklist_agent).
+    is_blacklisted = models.BooleanField(default=False, db_index=True)
+    blacklist_reason = models.CharField(max_length=500, blank=True, default="")
+    blacklisted_at = models.DateTimeField(null=True, blank=True)
+    blacklisted_by = models.ForeignKey(
+        "authentication.Users", related_name="agents_blacklisted", on_delete=models.SET_NULL, null=True, blank=True,
+    )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -1984,6 +1993,28 @@ class Users(AbstractBaseUser, PermissionsMixin):
             decodeJTW["agent_id"] = ""
             decodeJTW["is_agent"] = "false"
 
+        # Onboarders (an agent's stock-take helpers) see the Onboarding screen.
+        # Which businesses, and on which days, is checked on every request.
+        from authentication.utils.agents import active_onboarder, onboarder_role
+
+        if active_onboarder(self):
+            role = onboarder_role()
+            if role and not any(r.get("value") == role.value for r in roles):
+                roles.append(dict(
+                    id=str(role.id),
+                    cluster=str(role.cluster_id),
+                    owner=str(role.owner_id),
+                    entity=str(role.entity_id),
+                    entity_title=str(role.entity.title),
+                    level=role.level,
+                    title=role.title,
+                    value=role.value,
+                ))
+            decodeJTW["is_onboarder"] = "true"
+        else:
+            decodeJTW["is_onboarder"] = "false"
+        decodeJTW["roles"] = roles
+
         if Employees.objects.filter(user=self, entity=self.entity).exists():
             employee = Employees.objects.filter(user=self, entity=self.entity).first()
             decodeJTW["employment_id"] = f"{employee.id}"
@@ -2933,3 +2964,86 @@ class AgentCommissions(models.Model):
 
     def __str__(self):
         return f"{self.agent} {self.amount} ({self.percentage}% of {self.payment_amount})"
+
+
+class AgentOnboarders(models.Model):
+    """
+    A person who works under an agent, helping new retailers and wholesalers
+    onboard — e.g. counting stock to create the initial inventory. Must be a
+    user the agent registered, with a phone, a real email, an ID / passport
+    number and an uploaded identity document
+    (authentication.utils.agents.onboarder_missing).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agent = models.ForeignKey(Agents, related_name="onboarders", on_delete=models.CASCADE)
+    user = models.OneToOneField("Users", related_name="onboarder_profile", on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
+    # Set when the agent is blacklisted; only lifting the agent's blacklist clears it.
+    is_blacklisted = models.BooleanField(default=False, db_index=True)
+    blacklisted_at = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Agent onboarder"
+        verbose_name_plural = "Agent onboarders"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.user} (agent {self.agent_id})"
+
+
+class EntityOnboardings(models.Model):
+    """
+    What an agent agreed with a business they registered:
+    - the negotiated monthly subscription (also written to Entities.monthly_subscription;
+      the agent's commission is their percentage of each payment of it),
+    - whether it starts on a one-month free trial or pays right away,
+    - optional stock-take help to build the first inventory: how many people,
+      what each is paid per day, for how many days, and which onboarders go.
+    """
+
+    class Start(models.TextChoices):
+        TRIAL = "TRIAL", _("One-month free trial")
+        PAY_NOW = "PAY_NOW", _("Pays the subscription right away")
+
+    class StockTakeStatus(models.TextChoices):
+        NOT_NEEDED = "NOT_NEEDED", _("No stock-take help")
+        PLANNED = "PLANNED", _("Planned")
+        IN_PROGRESS = "IN_PROGRESS", _("In progress")
+        DONE = "DONE", _("Done")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    entity = models.OneToOneField("Entities", related_name="onboarding", on_delete=models.CASCADE)
+    agent = models.ForeignKey(Agents, related_name="onboardings", on_delete=models.PROTECT)
+    monthly_subscription = models.DecimalField(max_digits=10, decimal_places=2)
+    subscription_start = models.CharField(max_length=10, choices=Start.choices, default=Start.TRIAL)
+    stock_take_help = models.BooleanField(default=False)
+    stock_take_persons = models.PositiveSmallIntegerField(default=0)
+    stock_take_daily_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Paid per person per day")
+    stock_take_days = models.PositiveSmallIntegerField(default=0)
+    stock_take_status = models.CharField(max_length=12, choices=StockTakeStatus.choices, default=StockTakeStatus.NOT_NEEDED)
+    onboarders = models.ManyToManyField(AgentOnboarders, related_name="stock_takes", blank=True)
+    # The days the onboarders may work on this business (inclusive). Outside them —
+    # or once the stock take is DONE — their access ends until the agent changes
+    # the dates. During them they can only create receipts (authentication/onboarders.py).
+    onboarder_access_from = models.DateField(null=True, blank=True)
+    onboarder_access_to = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Entity onboarding"
+        verbose_name_plural = "Entity onboardings"
+        ordering = ["-created"]
+
+    @property
+    def stock_take_total(self):
+        if not self.stock_take_help:
+            return 0
+        return self.stock_take_persons * self.stock_take_daily_rate * self.stock_take_days
+
+    def __str__(self):
+        return f"{self.entity} via agent {self.agent_id}"

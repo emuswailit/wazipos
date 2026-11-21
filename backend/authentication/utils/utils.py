@@ -758,6 +758,23 @@ def create_sub_category(data, user):
         raise exceptions.ValidationError(e)
 
 
+def entity_location_errors(entity_details):
+    """
+    Every new entity must have its location captured (GPS at the premises): used
+    for delivery routing, "near me" and the map. Returns a list of errors.
+    """
+    lat, lng = (entity_details or {}).get("latitude"), (entity_details or {}).get("longitude")
+    if lat in (None, "") or lng in (None, ""):
+        return ["Capture the business location (GPS) at its premises"]
+    try:
+        lat, lng = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return ["The location must be GPS coordinates"]
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180) or (lat == 0 and lng == 0):
+        return ["The captured location is not valid. Capture it again at the premises"]
+    return []
+
+
 def validate_create_local_entity_data(data, user):
     errors = []
     
@@ -790,11 +807,8 @@ def validate_create_local_entity_data(data, user):
         if value is None or (isinstance(value, str) and value.strip() == ""):
             errors.append(f"{label} cannot be empty")
 
-    # Validate GPS Coordinates (Optional, but both must be present if one is)
-    latitude = entity_details.get("latitude")
-    longitude = entity_details.get("longitude")
-    if (latitude is not None and longitude is None) or (latitude is None and longitude is not None):
-        errors.append("Both latitude and longitude must be provided together if setting a location.")
+    # Every new entity must have its location (GPS) captured.
+    errors += entity_location_errors(entity_details)
 
     # Validate uniqueness
     title = entity_details.get("title", "")
@@ -849,6 +863,10 @@ def validate_create_international_entity_data(data):
             raise exceptions.ValidationError(
                 f"Entity called {title} already exists in selected country"
             )
+
+    # Every new entity must have its location (GPS) captured.
+    if "entity_details" in data:
+        errors += entity_location_errors(data["entity_details"])
 
     if len(errors) > 0:
         raise exceptions.ValidationError(errors)
@@ -1197,6 +1215,11 @@ def create_local_entity_by_agent(data, user):
     created = None
     employee = None
 
+    # Every new entity must have its location (GPS) captured.
+    errors = entity_location_errors(data.get("entity_details"))
+    if errors:
+        return errors, None
+
     if not "title" in data["entity_details"] or data["entity_details"]["title"]=="":
         errors.append("Title is require")
         return errors, None
@@ -1383,6 +1406,12 @@ def create_international_entity(data, user):
                 for cat in categories:
                     category = authentication_models_validators.verify_category_exists(cat)
                     created.categories.add(category)
+            details = data["entity_details"]
+            Locations.objects.create(
+                entity=created,
+                point=Point(float(details["longitude"]), float(details["latitude"]), srid=4326),
+                farness="",
+            )
             return created
         else:
             return None
@@ -1887,6 +1916,11 @@ def create_corporate_employee(data, user):
        
     else:
         entity =authentication_models_validators.validate_entity(data["entity"])
+        # Only that entity's super admin (or a platform admin) adds its employees.
+        from authentication.utils.admin_users import can_add_employees
+
+        if not can_add_employees(user, entity):
+            return ["Only the business's super admin can add employees to it"], None
     if not "user" in data or data["user"]=="":
         errors.append("User ID is required")
       

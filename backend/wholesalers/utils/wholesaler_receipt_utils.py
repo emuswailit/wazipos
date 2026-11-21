@@ -15,7 +15,14 @@ import pytz
 
 
 
-def create_wholesaler_receipt(data, user):
+def create_wholesaler_receipt(data, user, entity=None, onboarder=None):
+    """
+    Staff: a lot for their own entity. Onboarders (authentication/onboarders.py)
+    pass the wholesaler being onboarded as `entity` and their AgentOnboarders
+    row as `onboarder` (no employee); access was checked by the caller, and
+    onboarders can only create, never update.
+    """
+    target_entity = entity or user.entity
     errors = []
     product_obj = None
     received_unit_quantity = 0
@@ -38,7 +45,9 @@ def create_wholesaler_receipt(data, user):
     except KeyError:
         errors.append(f"Draft ID is required")
 
-    employee_obj = employees_models_validators.validate_employee(user)
+    employee_obj = None if onboarder is not None else employees_models_validators.validate_employee(user)
+    if onboarder is None and employee_obj is None:
+        errors.append(f"You are not an employee at {target_entity.title}")
 
     try:
         product_id = data["wholesaler_receipt_details"]["product"]
@@ -128,7 +137,7 @@ def create_wholesaler_receipt(data, user):
         created = WholesalerReceipts.objects.create(
             product=product_obj,
             received_from=received_from_obj,
-            entity=user.entity,
+            entity=target_entity,
             wholesaler_order_item=wholesaler_order_item_obj,
             batch=batch,
             manufacture_date=manufacture_date,
@@ -142,6 +151,7 @@ def create_wholesaler_receipt(data, user):
             # Sold in parts: price of one part (products/units.py)
             part_selling_price=data["wholesaler_receipt_details"].get("part_selling_price") or 0,
             employee=employee_obj,
+            onboarder=onboarder,
             owner=user
         )
 

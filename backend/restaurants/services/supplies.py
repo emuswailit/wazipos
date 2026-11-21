@@ -120,28 +120,36 @@ def movements(data, user):
     return rm.RestaurantStockMovement.objects.filter(entity=user.entity, stock_id=data.get("stock"))[:100]
 
 
-def _apply(stock, kind, change, user, reason=None, draft_id=None, unit_cost=0):
+def _apply(stock, kind, change, user, reason=None, draft_id=None, unit_cost=0, onboarder=None):
     s = rm.RestaurantStock.objects.select_for_update().get(id=stock.id)
     s.quantity = _q3(Decimal(s.quantity or 0) + change)
     s.save(update_fields=["quantity", "updated"])
     rm.RestaurantStockMovement.objects.create(
         entity=s.entity, owner=user, stock=s, kind=kind, quantity=_q3(change), balance=s.quantity,
         unit_cost=_money(unit_cost or 0), reason=(reason or "")[:200] or None, draft_id=draft_id,
+        onboarder=onboarder,
     )
     return s
 
 
-def _replayed(draft, user):
+def _replayed(draft, entity):
     if not draft:
         return None
-    m = rm.RestaurantStockMovement.objects.filter(entity=user.entity, draft_id=draft).select_related("stock").first()
+    m = rm.RestaurantStockMovement.objects.filter(entity=entity, draft_id=draft).select_related("stock").first()
     return m.stock if m else None
 
 
-def receive(data, user):
+def receive(data, user, entity=None, onboarder=None):
+    """
+    Staff: goods in for their own restaurant / hotel. Onboarders (authentication/
+    onboarders.py) pass the business being onboarded as `entity` and their
+    AgentOnboarders row as `onboarder` (recorded on the movement); access was
+    checked by the caller.
+    """
+    entity = entity or user.entity
     get = lambda k: str(data.get(k) or "").strip()
     draft = get("draft_id") or None
-    done = _replayed(draft, user)
+    done = _replayed(draft, entity)
     if done:
         return [], done
     qty = _d(get("quantity"))
@@ -150,7 +158,7 @@ def receive(data, user):
     cost = _d(get("unit_cost"), "0")
     if cost is None or cost < 0:
         return ["Enter a valid cost"], None
-    stock = rm.RestaurantStock.objects.filter(id=get("stock"), entity=user.entity).first() if get("stock") else None
+    stock = rm.RestaurantStock.objects.filter(id=get("stock"), entity=entity).first() if get("stock") else None
     product = Products.objects.filter(id=get("product")).first() if get("product") else None
     if not stock:
         title = get("title") or (product.title if product else "")
@@ -160,14 +168,14 @@ def receive(data, user):
         if category not in CATEGORIES:
             return ["Pick a category"], None
         # Same product / name already in stock: add to it.
-        existing = rm.RestaurantStock.objects.filter(entity=user.entity).filter(
+        existing = rm.RestaurantStock.objects.filter(entity=entity).filter(
             Q(product=product) if product else Q(title__iexact=title, product__isnull=True)
         ).first()
         stock = existing
     with transaction.atomic():
         if not stock:
             stock = rm.RestaurantStock.objects.create(
-                entity=user.entity, owner=user, product=product, title=(get("title") or product.title)[:256],
+                entity=entity, owner=user, product=product, title=(get("title") or product.title)[:256],
                 category=get("category").upper() or "FOOD", unit=get("unit")[:32] or "unit",
                 reorder_level=_d(get("reorder_level"), "0") or 0, bar_code=(product.bar_code if product else get("bar_code")) or None,
                 draft_id=draft,
@@ -184,14 +192,14 @@ def receive(data, user):
         if get("expiry_date"):
             stock.expiry_date = get("expiry_date")
         stock.save()
-        stock = _apply(stock, "RECEIVE", qty, user, reason=get("supplier_name") or "Received", draft_id=draft, unit_cost=cost)
+        stock = _apply(stock, "RECEIVE", qty, user, reason=get("supplier_name") or "Received", draft_id=draft, unit_cost=cost, onboarder=onboarder)
     return [], stock
 
 
 def use(data, user):
     get = lambda k: str(data.get(k) or "").strip()
     draft = get("draft_id") or None
-    done = _replayed(draft, user)
+    done = _replayed(draft, user.entity)
     if done:
         return [], done
     stock = rm.RestaurantStock.objects.filter(id=get("stock"), entity=user.entity).first()
@@ -227,7 +235,7 @@ def use(data, user):
 def count(data, user):
     get = lambda k: str(data.get(k) or "").strip()
     draft = get("draft_id") or None
-    done = _replayed(draft, user)
+    done = _replayed(draft, user.entity)
     if done:
         return [], done
     stock = rm.RestaurantStock.objects.filter(id=get("stock"), entity=user.entity).first()

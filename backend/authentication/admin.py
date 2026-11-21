@@ -389,3 +389,29 @@ class AgentCommissionsAdmin(admin.ModelAdmin):
     search_fields = ("agent__user__email", "agent__user__phone", "entity__title", "subscription_payment__reference_number")
     date_hierarchy = "created"
     readonly_fields = ("agent", "entity", "subscription_payment", "payment_amount", "percentage", "amount", "platform_amount", "created", "updated")
+
+
+@admin.register(models.AgentOnboarders)
+class AgentOnboardersAdmin(admin.ModelAdmin):
+    """View only: agents manage their own onboarders (authentication/agents.py, agents/me)."""
+
+    list_display = ("user", "agent", "is_active", "is_blacklisted", "created")
+    list_filter = ("is_active", "is_blacklisted")
+    search_fields = ("user__email", "user__phone", "user__first_name", "user__last_name")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(models.EntityOnboardings)
+class EntityOnboardingsAdmin(admin.ModelAdmin):
+    list_display = ("entity", "agent", "monthly_subscription", "subscription_start", "stock_take_help", "stock_take_persons", "stock_take_daily_rate", "stock_take_days", "stock_take_status", "created")
+    list_filter = ("subscription_start", "stock_take_help", "stock_take_status")
+    search_fields = ("entity__title",)
+    filter_horizontal = ("onboarders",)

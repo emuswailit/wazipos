@@ -96,130 +96,154 @@ def subscriptionsDispatcherAPIView(request):
     # 3. INITIATE SUBSCRIPTION PAYMENT
     # ==========================================
     elif action == "InitiateSubscriptionPayment":
-        mobile_money_phone = request.data.get("phone_number")
-        
-        if not mobile_money_phone:
-            return custom_error_response(1, "phone_number is required")
+        return start_subscription_payment(
+            entity, request.user, request.data.get("phone_number"), request.data.get("months", 1),
+        )
 
-        payment_method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
-        if not payment_method:
-            return custom_error_response(1, "Mobile Money payment method not configured")
+    raise exceptions.ValidationError(f"Action {action} is unknown")
 
-        # 🌟 NEW: Fetch the central system till from decouple config
-        system_till = config("WAZIPOS_SYSTEM_TILL", default=None)
-        if not system_till:
-            return custom_error_response(1, "System till number is not configured")
 
-        try:
-            telco, formatted_phone_number = get_telco_by_phone_number(mobile_money_phone)
-        except Exception as e:
-            return custom_error_response(1, f"Invalid phone number: {str(e)}")
+def start_subscription_payment(entity, payer, phone, months=1, amount=None, purpose="SUBSCRIPTION", stock_take=None):
+    """
+    Send a mobile money prompt for `months` of the entity's monthly_subscription
+    to `phone`, and record a PENDING SubscriptionPayment paid by `payer`.
+    The Celery checker / payment WebSocket confirm it and create the Subscription.
+    Used by InitiateSubscriptionPayment and by agents onboarding an entity
+    (authentication/agents.py AgentRequestSubscriptionPayment).
+    """
+    mobile_money_phone = phone
+    
+    if not mobile_money_phone:
+        return custom_error_response(1, "phone_number is required")
 
-        try:
-            months = int(request.data.get("months", 1))
-        except (TypeError, ValueError):
-            return custom_error_response(1, "months must be a whole number")
-        if months < 1 or months > MAX_RENEWAL_MONTHS:
-            return custom_error_response(1, f"months must be between 1 and {MAX_RENEWAL_MONTHS}")
+    payment_method = PaymentMethods.objects.filter(title="MOBILE MONEY").first()
+    if not payment_method:
+        return custom_error_response(1, "Mobile Money payment method not configured")
 
+    # 🌟 NEW: Fetch the central system till from decouple config
+    system_till = config("WAZIPOS_SYSTEM_TILL", default=None)
+    if not system_till:
+        return custom_error_response(1, "System till number is not configured")
+
+    try:
+        telco, formatted_phone_number = get_telco_by_phone_number(mobile_money_phone)
+    except Exception as e:
+        return custom_error_response(1, f"Invalid phone number: {str(e)}")
+
+    try:
+        months = int(months or 1)
+    except (TypeError, ValueError):
+        return custom_error_response(1, "months must be a whole number")
+    if months < 1 or months > MAX_RENEWAL_MONTHS:
+        return custom_error_response(1, f"months must be between 1 and {MAX_RENEWAL_MONTHS}")
+
+    if amount is not None:
+        # A stock take (or another one-off charge): its own agreed amount.
+        import math
+
+        amount = int(math.ceil(float(amount)))
+        months = 1
+        if amount <= 0:
+            return custom_error_response(1, "Nothing to pay")
+    else:
         monthly_amount = int(entity.monthly_subscription or 0)
         if monthly_amount <= 0:
             return custom_error_response(1, "This entity does not have a valid subscription amount configured")
         amount = monthly_amount * months
 
-        reference_number = generate_reference_number(entity, request.user)
-        payload = None
+    reference_number = generate_reference_number(entity, payer)
+    payload = None
 
-        # 5. Build Payload using the System Till
-        if telco == "MPESA":
-            payload = json.dumps({
-                "orderId": reference_number, 
+    # 5. Build Payload using the System Till
+    if telco == "MPESA":
+        payload = json.dumps({
+            "orderId": reference_number, 
+            "amount": amount,
+            "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+            "accountTo": system_till,  # 🌟 Updated here
+            "description": "TOPUP",
+            "modeOfPayment": "MOBILE_MONEY", 
+            "provider": "Mpesa",
+            "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"},
+        })
+    elif telco == "AIRTELMONEY":
+        payload = json.dumps({
+            "orderId": reference_number, 
+            "amount": str(amount),
+            "callBackUrl": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
+            "accountTo": system_till,  # 🌟 Updated here
+            "currency": "KES",
+            "description": "TOPUP", 
+            "modeOfPayment": "MOBILE_MONEY", 
+            "provider": "AIRTELMONEY",
+            "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"},
+        })
+    else:
+        return custom_error_response(1, f"Unsupported telco: {telco}")
+
+    # 6. Authenticate with JamboPay
+    the_data = {
+        "client_id": config("JAMBOPAY_CLIENT_ID"),
+        "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+        "grant_type": config("JAMBOPA_GRANT_TYPE"),
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    
+    try:
+        result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
+        result_json = result.json()
+        token = result_json.get("access_token") if result_json else None
+    except Exception as e:
+        return custom_error_response(1, f"JamboPay Auth failed: {str(e)}")
+
+    if not token:
+        return custom_error_response(1, "Token not generated from JamboPay")
+
+    # 7. Make the Checkout Call
+    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + token, "Accept": "*/*"}
+    
+    try:
+        result = requests.post(config("JAMBOPAY_BASE_URL") + "/checkout/express", data=payload, headers=headers)
+        result_json = result.json()
+        create_log("info", f"result_json {result_json}")
+    except Exception as e:
+        return custom_error_response(1, f"JamboPay Checkout failed: {str(e)}")
+
+    if not result_json or "ref" not in result_json:
+        return custom_error_response(1, "Payment failed at JamboPay")
+
+    # 8. Create Record (No Polling)
+    try:
+        sub_payment = SubscriptionPayment.objects.create(
+            reference_number=reference_number, 
+            psp_reference_number=result_json["ref"],
+            amount=Decimal(str(amount)),
+            months=months,
+            purpose=purpose,
+            stock_take=stock_take,
+            entity=entity,
+            owner=payer, 
+            status="PENDING",
+            description="Waiting for PIN entry."
+        )
+        create_log("info", f"sub_payment created: {sub_payment.id}")
+        use_reference_number(reference_number)
+
+        # Return immediately, WebSocket will handle the rest
+        return custom_success_message(
+            0, "STK push initiated successfully",
+            {
+                "payment_id": sub_payment.id,
+                "reference_number": reference_number,
                 "amount": amount,
-                "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-                "accountTo": system_till,  # 🌟 Updated here
-                "description": "TOPUP",
-                "modeOfPayment": "MOBILE_MONEY", 
-                "provider": "Mpesa",
-                "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"},
-            })
-        elif telco == "AIRTELMONEY":
-            payload = json.dumps({
-                "orderId": reference_number, 
-                "amount": str(amount),
-                "callBackUrl": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
-                "accountTo": system_till,  # 🌟 Updated here
-                "currency": "KES",
-                "description": "TOPUP", 
-                "modeOfPayment": "MOBILE_MONEY", 
-                "provider": "AIRTELMONEY",
-                "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"},
-            })
-        else:
-            return custom_error_response(1, f"Unsupported telco: {telco}")
-
-        # 6. Authenticate with JamboPay
-        the_data = {
-            "client_id": config("JAMBOPAY_CLIENT_ID"),
-            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE"),
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                "months": months,
+                "status": "PENDING",
+                "description": "Waiting for PIN entry.",
+                "jambopay_response": result_json
+            },
+            "payment"
+        )
         
-        try:
-            result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-            result_json = result.json()
-            token = result_json.get("access_token") if result_json else None
-        except Exception as e:
-            return custom_error_response(1, f"JamboPay Auth failed: {str(e)}")
-
-        if not token:
-            return custom_error_response(1, "Token not generated from JamboPay")
-
-        # 7. Make the Checkout Call
-        headers = {"Content-Type": "application/json", "Authorization": "Bearer " + token, "Accept": "*/*"}
-        
-        try:
-            result = requests.post(config("JAMBOPAY_BASE_URL") + "/checkout/express", data=payload, headers=headers)
-            result_json = result.json()
-            create_log("info", f"result_json {result_json}")
-        except Exception as e:
-            return custom_error_response(1, f"JamboPay Checkout failed: {str(e)}")
-
-        if not result_json or "ref" not in result_json:
-            return custom_error_response(1, "Payment failed at JamboPay")
-
-        # 8. Create Record (No Polling)
-        try:
-            sub_payment = SubscriptionPayment.objects.create(
-                reference_number=reference_number, 
-                psp_reference_number=result_json["ref"],
-                amount=Decimal(str(amount)),
-                months=months,
-                entity=entity,
-                owner=request.user, 
-                status="PENDING",
-                description="Waiting for PIN entry."
-            )
-            create_log("info", f"sub_payment created: {sub_payment.id}")
-            use_reference_number(reference_number)
-
-            # Return immediately, WebSocket will handle the rest
-            return custom_success_message(
-                0, "STK push initiated successfully",
-                {
-                    "payment_id": sub_payment.id,
-                    "reference_number": reference_number,
-                    "amount": amount,
-                    "months": months,
-                    "status": "PENDING",
-                    "description": "Waiting for PIN entry.",
-                    "jambopay_response": result_json
-                },
-                "payment"
-            )
-            
-        except Exception as e:
-            create_log("error", str(e))
-            return custom_error_response(1, f"Failed to create payment record: {str(e)}")
-
-    raise exceptions.ValidationError(f"Action {action} is unknown")
+    except Exception as e:
+        create_log("error", str(e))
+        return custom_error_response(1, f"Failed to create payment record: {str(e)}")

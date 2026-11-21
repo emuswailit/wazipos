@@ -163,6 +163,15 @@ def employeesAdminAPIView(request):
         raise exceptions.ValidationError("Action is not supplied")
 
     if request.data["action"] == "CreateEmployee":
+        # Staff join the signed-in user's entity: only that entity's super admin
+        # (or a platform admin) may add them — never an agent.
+        from authentication.utils.admin_users import can_add_employees
+
+        if not can_add_employees(request.user, request.user.entity):
+            return custom_errors_response(
+                1, "Employee could not be created",
+                ["Only the business's super admin can add employees to it"],
+            )
         errors = []
         errors = utils.validate_employee_data(request.data, request.user)
 

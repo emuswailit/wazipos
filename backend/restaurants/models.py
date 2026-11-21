@@ -1340,6 +1340,12 @@ class BarStockMovement(EntityRelatedModel):
     reason = models.CharField(max_length=200, null=True, blank=True)
     order = models.ForeignKey(BarInventoryOrder, related_name="stock_movements", on_delete=models.SET_NULL, null=True, blank=True)
     draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+    # Set when one of an agent's onboarders entered it during onboarding
+    # (authentication/onboarders.py: create-only, on the agent's dates).
+    onboarder = models.ForeignKey(
+        "authentication.AgentOnboarders", related_name="%(class)s_entries",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1408,6 +1414,12 @@ class RestaurantStockMovement(EntityRelatedModel):
     unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     reason = models.CharField(max_length=200, null=True, blank=True)
     draft_id = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+    # Set when one of an agent's onboarders entered it during onboarding
+    # (authentication/onboarders.py: create-only, on the agent's dates).
+    onboarder = models.ForeignKey(
+        "authentication.AgentOnboarders", related_name="%(class)s_entries",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:

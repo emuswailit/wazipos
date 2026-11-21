@@ -49,6 +49,19 @@ def is_platform_admin(user) -> bool:
     return bool(user.is_staff or user.is_superuser or user.roles.filter(value="Admin").exists())
 
 
+def can_add_employees(user, entity) -> bool:
+    """
+    Only an entity's own super admin (a *SuperAdmin role held for that entity), or
+    a platform admin, may add employees to it. Agents register people as users
+    only; they never add staff to a business.
+    """
+    if not user or not user.is_authenticated or not entity:
+        return False
+    if is_platform_admin(user):
+        return True
+    return user.roles.filter(entity=entity, value__endswith="SuperAdmin").exists()
+
+
 def default_entity():
     entity = models.Entities.objects.filter(title=DEFAULT_ENTITY_TITLE).first()
     if not entity:
@@ -268,8 +281,15 @@ def admin_user_out(user, request=None):
         "email_verified": str(user.is_email_verified).lower() == "true",
         "email_verified_at": user.email_verified_at.isoformat() if user.email_verified_at else None,
         "email_link_sent_at": user.email_token_sent_at.isoformat() if user.email_token_sent_at else None,
+        "has_payout_account": _has_payout_account(user),
         "created": user.created_at.isoformat() if user.created_at else None,
     }
+
+
+def _has_payout_account(user):
+    from payments.models import UserPayoutAccounts
+
+    return UserPayoutAccounts.objects.filter(user=user, is_active="true").exists() if user.pk else False
 
 
 def admin_list_users(data):
@@ -293,12 +313,16 @@ def _clean(data, key):
     return str(v).strip() if v not in (None, "") else ""
 
 
-def admin_save_user(data, files, admin, user=None, creating_agent=None, allowed_entities=None):
+def admin_save_user(data, files, admin, user=None, creating_agent=None, entity_locked=False):
     """
     Create (user=None) or update a user. Returns (errors, user, consent_note).
 
-    Agents (authentication/utils/agents.py) pass creating_agent, recorded on new
-    users, and allowed_entities: the only entities they may attach a user to.
+    Agents (authentication/agents.py) pass creating_agent (recorded on new users)
+    and entity_locked=True: a user an agent creates always starts on the default
+    WAZIPOS entity, and an agent can never move a user to another entity. The
+    user moves only when the agent creates a business for them (they become its
+    owner, authentication/utils/agents.py create_entity). Adding staff to a
+    business is for that business's super admin (employees, CreateEmployee).
     """
     errors = []
     first = _clean(data, "first_name")
@@ -340,12 +364,17 @@ def admin_save_user(data, files, admin, user=None, creating_agent=None, allowed_
         errors.append("Pick the identity document type for the uploaded file")
 
     entity = None
-    if _clean(data, "entity"):
+    if entity_locked and _clean(data, "entity"):
+        current = str(user.entity_id) if user and user.entity_id else ""
+        if _clean(data, "entity") != current:
+            errors.append(
+                "Agents can't attach users to a business. New users join WAZIPOS; creating a business "
+                "for a user makes them its owner, and staff are added by the business's super admin."
+            )
+    elif _clean(data, "entity"):
         entity = models.Entities.objects.filter(id=data["entity"]).first()
         if not entity:
             errors.append("Entity for provided ID does not exist")
-        elif allowed_entities is not None and not allowed_entities.filter(id=entity.id).exists():
-            errors.append("You can only attach users to your own entities")
     gender = _clean(data, "gender")
     if gender and gender not in ("Female", "Male", "Other"):
         errors.append("Pick a valid gender")
@@ -389,7 +418,11 @@ def admin_save_user(data, files, admin, user=None, creating_agent=None, allowed_
         user.date_of_birth = dob
         user.identifier_type = id_type or "false"
         user.identifier_number = id_number or None
-        target_entity = entity or (user.entity if not creating and user.entity_id else None) or default_entity()
+        if entity_locked:
+            # Agents: new users start on WAZIPOS; existing users keep their entity.
+            target_entity = (user.entity if not creating and user.entity_id else None) or default_entity()
+        else:
+            target_entity = entity or (user.entity if not creating and user.entity_id else None) or default_entity()
         user.entity = target_entity
         if not user.country_id and target_entity.country_id:
             user.country_id = target_entity.country_id

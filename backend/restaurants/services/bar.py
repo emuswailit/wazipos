@@ -78,15 +78,22 @@ def list_drinks(user):
     return rm.BarInventory.objects.filter(entity=user.entity).select_related("product", "category").order_by("title")
 
 
-def save_drink(data, user):
+def save_drink(data, user, entity=None, create_only=False):
+    """
+    Add or edit a drink. Onboarders (authentication/onboarders.py) pass the
+    business being onboarded as `entity` and create_only=True: new drinks only.
+    """
+    entity = entity or user.entity
     get = lambda k: str(data.get(k) or "").strip()
     drink = None
     if get("id"):
-        drink = rm.BarInventory.objects.filter(id=get("id"), entity=user.entity).first()
+        if create_only:
+            return ["You can add drinks, not change them"], None
+        drink = rm.BarInventory.objects.filter(id=get("id"), entity=entity).first()
         if not drink:
             return ["Drink not found"], None
     elif get("draft_id"):
-        done = rm.BarInventory.objects.filter(entity=user.entity, draft_id=get("draft_id")).first()
+        done = rm.BarInventory.objects.filter(entity=entity, draft_id=get("draft_id")).first()
         if done:
             return [], done
     product = Products.objects.filter(id=get("product")).first() if get("product") else None
@@ -110,7 +117,7 @@ def save_drink(data, user):
     if sells_tots and (tot_price is None or tot_price <= 0):
         return ["Enter the tot price"], None
     with transaction.atomic():
-        drink = drink or rm.BarInventory(entity=user.entity, owner=user, draft_id=get("draft_id") or None)
+        drink = drink or rm.BarInventory(entity=entity, owner=user, draft_id=get("draft_id") or None)
         drink.product = product or drink.product
         drink.title = title
         drink.volume_ml = volume
@@ -131,7 +138,7 @@ def save_drink(data, user):
     return [], drink
 
 
-def _move(drink, kind, bottles, user, reason=None, order=None, draft_id=None, unit_cost=0):
+def _move(drink, kind, bottles, user, reason=None, order=None, draft_id=None, unit_cost=0, onboarder=None):
     """Apply a stock change (row-locked). bottles: signed change."""
     d = rm.BarInventory.objects.select_for_update().get(id=drink.id)
     d.stock_bottles = _bottles(Decimal(d.stock_bottles or 0) + bottles)
@@ -140,6 +147,7 @@ def _move(drink, kind, bottles, user, reason=None, order=None, draft_id=None, un
     rm.BarStockMovement.objects.create(
         entity=d.entity, owner=user, drink=d, kind=kind, bottles=_bottles(bottles), balance=d.stock_bottles,
         unit_cost=_money(unit_cost or 0), reason=(reason or "")[:200] or None, order=order, draft_id=draft_id,
+        onboarder=onboarder,
     )
     return d
 
@@ -148,12 +156,13 @@ def _done(draft_id, entity):
     return bool(draft_id) and rm.BarStockMovement.objects.filter(entity=entity, draft_id=draft_id).exists()
 
 
-def receive_drinks(data, user):
-    drink = rm.BarInventory.objects.filter(id=data.get("drink"), entity=user.entity).first()
+def receive_drinks(data, user, entity=None, onboarder=None):
+    entity = entity or user.entity
+    drink = rm.BarInventory.objects.filter(id=data.get("drink"), entity=entity).first()
     if not drink:
         return ["Drink not found"], None
     draft = str(data.get("draft_id") or "") or None
-    if _done(draft, user.entity):
+    if _done(draft, entity):
         drink.refresh_from_db()
         return [], drink
     bottles = _d(data.get("bottles"))
@@ -166,7 +175,7 @@ def receive_drinks(data, user):
             have = max(Decimal(drink.stock_bottles or 0), Decimal("0"))
             drink.bottle_cost = _money((have * drink.bottle_cost + bottles * cost) / (have + bottles))
             drink.save(update_fields=["bottle_cost", "updated"])
-        drink = _move(drink, "RECEIVE", bottles, user, reason=str(data.get("supplier") or "")[:200], draft_id=draft, unit_cost=cost or 0)
+        drink = _move(drink, "RECEIVE", bottles, user, reason=str(data.get("supplier") or "")[:200], draft_id=draft, unit_cost=cost or 0, onboarder=onboarder)
     return [], drink
 
 

@@ -451,10 +451,22 @@ class RetailerReceipts(EntityRelatedModel):
     in_placement = models.BooleanField(default=False)
     created = models.DateTimeField(default=timezone.now)
     updated = models.DateTimeField(auto_now=True)
+    # Who entered the lot: a staff member (employee), or — while a new shop is
+    # onboarded — one of its agent's onboarders (authentication.AgentOnboarders,
+    # create-only, during the dates the agent set). Exactly one is set.
     employee = models.ForeignKey(
         Employees,
         related_name="employee_creating_receipt",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    onboarder = models.ForeignKey(
+        "authentication.AgentOnboarders",
+        related_name="retailer_receipts",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     owner = models.ForeignKey(
         User,

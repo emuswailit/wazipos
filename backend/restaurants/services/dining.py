@@ -68,7 +68,11 @@ def list_restaurants(data, user):
     from entitylocations.models import Locations
     from logistics.utils.deliveries import km_between
 
-    qs = Entities.objects.filter(entity_type__in=RESTAURANT_TYPES).order_by("title")
+    # kind: RESTAURANT (the Restaurants tab) or HOTEL (the Hotels tab); both when
+    # absent, for app versions that still show them together.
+    kind = str(data.get("kind") or "").upper()
+    types = ["Restaurant"] if kind == "RESTAURANT" else ["Hotel"] if kind == "HOTEL" else RESTAURANT_TYPES
+    qs = Entities.objects.filter(entity_type__in=types).order_by("title")
     q = str(data.get("q") or "").strip()
     if q:
         qs = qs.filter(title__icontains=q)

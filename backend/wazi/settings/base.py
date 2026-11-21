@@ -81,6 +81,8 @@ INSTALLED_APPS = [
     "stats",
     "ussd",
     "analytics",
+    # Stock taking as a service to vendors (stocktakes/models.py)
+    "stocktakes",
 ]
 
 AUTHENTICATION_BACKENDS = (

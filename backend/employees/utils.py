@@ -575,6 +575,12 @@ def create_corporate_employee(data, user):
     else:
         entity = authentication_models_validators.validate_entity(data["employee_details"]["entity"])
 
+    # Only that entity's super admin (or a platform admin) adds its employees.
+    from authentication.utils.admin_users import can_add_employees
+
+    if not can_add_employees(user, entity):
+        return ["Only the business's super admin can add employees to it"], None
+
     if not "user" in data["employee_details"]:
         errors.append("User ID is required")
         return errors, None

@@ -651,8 +651,15 @@ def validate_retailer_receipt_data(data, user):
 
 
 @transaction.atomic
-def create_retailer_receipt_directly(data, user):
+def create_retailer_receipt_directly(data, user, entity=None, onboarder=None):
+    """
+    Staff: a lot for their own entity (they must be an active employee there).
+    Onboarders (authentication/onboarders.py) pass the shop being onboarded as
+    `entity` and their AgentOnboarders row as `onboarder`; access was checked
+    by the caller, and onboarders can only create, never update.
+    """
     errors = []
+    target_entity = entity or user.entity
     
     # 🟢 Wrap the ENTIRE function in a try/except so it NEVER crashes the view
     try:
@@ -671,15 +678,17 @@ def create_retailer_receipt_directly(data, user):
             if existing:
                 return [], existing
 
-        employee = Employees.objects.filter(
-            user=user, entity=user.entity, is_active="true",
-        ).first()
-        if not employee:
-            errors.append(
-                f"You are not an active employee at "
-                f"{titlecase(user.entity.title)}"
-            )
-            return errors, None
+        employee = None
+        if onboarder is None:
+            employee = Employees.objects.filter(
+                user=user, entity=target_entity, is_active="true",
+            ).first()
+            if not employee:
+                errors.append(
+                    f"You are not an active employee at "
+                    f"{titlecase(target_entity.title)}"
+                )
+                return errors, None
 
         manufacture_date = details.get("manufacture_date") or None
         expiry_date = details.get("expiry_date") or None
@@ -742,7 +751,7 @@ def create_retailer_receipt_directly(data, user):
             unit_of_receipt=unit_of_receipt,
             product=product,
             received_from=received_from,
-            entity=user.entity,
+            entity=target_entity,
             owner=user,
             received_unit_quantity=received_unit_quantity,
             current_unit_quantity=received_unit_quantity,
@@ -751,6 +760,7 @@ def create_retailer_receipt_directly(data, user):
             batch=batch,
             bar_code=bar_code,
             employee=employee,
+            onboarder=onboarder,
             draft_id=draft_id,
             retailer_order_item=retailer_order_item,
             unit_buying_price=unit_buying_price,

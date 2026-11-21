@@ -196,10 +196,22 @@ class WholesalerReceipts(EntityRelatedModel):
         ),
     )
 
+    # Who entered the lot: a staff member (employee), or — while a new wholesaler
+    # is onboarded — one of its agent's onboarders (authentication.AgentOnboarders,
+    # create-only, during the dates the agent set). Exactly one is set.
     employee = models.ForeignKey(
         Employees,
         related_name="employee_creating_wholesaler_receipt",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    onboarder = models.ForeignKey(
+        "authentication.AgentOnboarders",
+        related_name="wholesaler_receipts",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     in_placement = models.CharField(
         max_length=50,
