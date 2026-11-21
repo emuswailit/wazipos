@@ -16,6 +16,7 @@ import { Text, useWindowDimensions, View } from 'react-native';
 
 import { FoodStatusPill, kes, PaidPill, when } from '../shared';
 import StaffWalkIn from '../walkin/StaffWalkIn';
+import { useDiningKind } from '../diningKind';
 
 type Filter = 'ALL' | 'RECEIVED' | 'PROCESSING' | 'READY' | 'OUT' | 'BOOKINGS' | 'DONE';
 
@@ -51,6 +52,8 @@ const config: AdminListConfig<FoodOrder> = {
 };
 
 export default function RestaurantOrders() {
+    const { Noun } = useDiningKind();
+    const kindConfig = React.useMemo(() => ({ ...config, title: `${Noun} orders` }), [Noun]);
     const { width } = useWindowDimensions();
     const isLarge = width >= 900;
     const [open, setOpen] = useState<FoodOrder[]>([]);
@@ -131,7 +134,7 @@ export default function RestaurantOrders() {
         <>
             <AdminListView<FoodOrder, Filter>
                 variant={isLarge ? 'web' : 'mobile'}
-                config={config}
+                config={kindConfig}
                 query={query}
                 setQuery={setQuery}
                 onRefresh={load}

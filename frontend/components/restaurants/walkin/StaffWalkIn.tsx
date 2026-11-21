@@ -18,6 +18,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { kes } from '../shared';
 import OrderPad, { type OrderPadInput } from './OrderPad';
 import WalkInOrderView from './WalkInOrderView';
+import { useDiningKind } from '../diningKind';
 
 const METHOD_ICONS: Record<string, any> = { CASH: 'cash-outline', 'MOBILE MONEY': 'phone-portrait-outline', CARD: 'card-outline', BANK: 'business-outline' };
 const nice = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
@@ -123,6 +124,7 @@ function TakePayment({ order, onOrder }: { order: WalkInOrder; onOrder: (o: Walk
 }
 
 export default function StaffWalkIn({ onClose, onPlaced }: { onClose?: () => void; onPlaced?: () => void }) {
+    const { Noun } = useDiningKind();
     const { theme, border } = useListTokens();
     const [menu, setMenu] = useState<WalkInMenu | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -171,7 +173,7 @@ export default function StaffWalkIn({ onClose, onPlaced }: { onClose?: () => voi
                 <View style={{ flex: 1 }}>
                     <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 17 }}>{order ? (paid ? 'Order paid' : 'Take payment') : 'New order'}</Text>
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
-                        {order ? [order.food_order?.reference, order.tab?.reference, order.table].filter(Boolean).join(' · ') : `${menu?.restaurant.title ?? 'Restaurant'} · food and drinks`}
+                        {order ? [order.food_order?.reference, order.tab?.reference, order.table].filter(Boolean).join(' · ') : `${menu?.restaurant.title ?? Noun} · food and drinks`}
                     </Text>
                 </View>
             </View>

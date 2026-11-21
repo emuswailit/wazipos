@@ -12,7 +12,7 @@ import { ActivityIndicator, StatusBar, Text, useWindowDimensions, View } from 'r
 import AdminEntitiesMobileView from './AdminEntitiesMobileView';
 import AdminEntitiesWebView from './AdminEntitiesWebView';
 import AdminEntityDetailsModal from './AdminEntityDetailsModal'; // 🟢 Import Details
-import AdminEntityEditModal from './AdminEntityEditModal';
+import AdminEntityEditModal, { toEntityDetails } from './AdminEntityEditModal';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
@@ -106,29 +106,7 @@ export default function AdminEntitiesList() {
 
     const handleFormSubmit = async (values: any, { resetForm }: any) => {
         try {
-            const entity_details = {
-                title: values.title || "",
-                entity_type: values.entity_type || "",
-                entity_ownership: values.entity_ownership || "PRIVATE",
-                country: values.country || "",
-                county: values.county || null,
-                town: values.town || null,
-                road: values.road || null,
-                building: values.building || null,
-                categories: Array.isArray(values.categories) ? values.categories : [],
-                entity_level: values.entity_level || "0",
-                expanded: false,
-                plan: "",
-
-                bank: values.bank || null,
-                account_name: values.account_name || null,
-                account_number: values.account_number || null,
-                code: values.code || null,
-                latitude: values.latitude || null,
-                longitude: values.longitude || null,
-
-                ...(editingItem ? { id: editingItem.remote_id } : {}),
-            };
+            const entity_details = toEntityDetails(values, editingItem?.remote_id);
 
             const payload = {
                 action: editingItem ? "UpdateEntity" : "CreateLocalEntity",

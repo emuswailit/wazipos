@@ -309,7 +309,8 @@ export const STATUS_META: Record<string, { label: string; tone: 'info' | 'warnin
 
 export default {
     // customers
-    getRestaurants: (params: { q?: string; latitude?: number; longitude?: number } = {}) => call('GetRestaurants', params),
+    /** kind: only restaurants (Restaurants tab) or only hotels (Hotels tab). */
+    getRestaurants: (params: { q?: string; latitude?: number; longitude?: number; kind?: 'RESTAURANT' | 'HOTEL' } = {}) => call('GetRestaurants', params),
     getMenu: (entity: string) => call('GetRestaurantMenu', { entity }),
     getDeliveryOptions: (data: { entity: string; destination_latitude: number; destination_longitude: number; items: { menu_item: string; quantity: number }[]; custom_recipes?: string[] }) =>
         call('GetFoodDeliveryOptions', data),

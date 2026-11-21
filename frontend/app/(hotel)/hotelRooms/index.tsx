@@ -1,4 +1,4 @@
-// app/(dining)/hotelRooms/index.tsx — hotels only (accommodation).
+// app/(hotel)/hotelRooms/index.tsx — hotels only (accommodation).
 
 import HotelRooms from '@/components/hotels/HotelRooms';
 

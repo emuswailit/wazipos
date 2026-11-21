@@ -49,6 +49,8 @@ export interface AdminUser {
     email_verified?: boolean;
     email_verified_at?: string | null;
     email_link_sent_at?: string | null;
+    /** An active payout account (UserPayoutAccounts) is set up. */
+    has_payout_account?: boolean;
     created: string | null;
     /** After a save: what happened with the consent SMS. */
     consent_note?: string | null;
@@ -88,6 +90,16 @@ function asForm(action: string, details: Record<string, any>, doc: PickedDocumen
 
 function save(action: 'AdminCreateUser' | 'AdminUpdateUser', details: Record<string, any>, doc?: PickedDocument | null) {
     return doc ? multipartClient.post(ENDPOINT, asForm(action, details, doc)) : call(action, details);
+}
+
+/** What the users screen and form need; agents use the same shape (api/agentsApi.ts). */
+export interface UsersApi {
+    getUsers: (params?: { q?: string }) => Promise<ApiResponse<any>>;
+    createUser: (details: AdminUserDetails, doc?: PickedDocument | null) => Promise<ApiResponse<any>>;
+    updateUser: (id: string, details: AdminUserDetails, doc?: PickedDocument | null) => Promise<ApiResponse<any>>;
+    sendConsent: (user: string) => Promise<ApiResponse<any>>;
+    confirmConsent: (user: string, code: string) => Promise<ApiResponse<any>>;
+    sendEmailVerification: (user: string) => Promise<ApiResponse<any>>;
 }
 
 export default {

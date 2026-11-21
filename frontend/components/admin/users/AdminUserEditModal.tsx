@@ -10,7 +10,7 @@
 //   4. Done               where phone and email stand. Email is confirmed later
 //                         by the person, from the link emailed to them.
 
-import adminUsersApi, { type AdminUser, type AdminUserDetails, type IdentifierType, type PickedDocument } from '@/api/adminUsersApi';
+import adminUsersApi, { type AdminUser, type AdminUserDetails, type IdentifierType, type PickedDocument, type UsersApi } from '@/api/adminUsersApi';
 import { AdminFormSheet, ChoiceChips, FormRow, FormSection, SheetButton, useListTokens } from '@/components/admin/kit';
 import CustomAutocompletePicker from '@/components/common/CustomAutocompletePicker';
 import { CustomTextField } from '@/components/common/CustomTextField';
@@ -37,6 +37,10 @@ interface Props {
     onSubmit: (details: AdminUserDetails, doc: PickedDocument | null) => Promise<AdminUser | null>;
     /** The record changed outside the form (code sent / confirmed, email link). */
     onUserChanged: (u: AdminUser) => void;
+    /** Defaults to the admin endpoint; agents pass agentUsersApi. */
+    api?: UsersApi;
+    /** Agents: no entity picker — their users start on WAZIPOS (the backend enforces it). */
+    hideEntity?: boolean;
 }
 
 type Step = 'PERSON' | 'IDENTITY' | 'PHONE' | 'DONE';
@@ -78,7 +82,7 @@ const errText = (res: any, fallback: string) => {
     return (Array.isArray(e) && e.join(' ')) || res?.data?.response_message || fallback;
 };
 
-export default function AdminUserEditModal({ visible, onClose, initialData, submitting, error, onSubmit, onUserChanged }: Props) {
+export default function AdminUserEditModal({ visible, onClose, initialData, submitting, error, onSubmit, onUserChanged, api = adminUsersApi, hideEntity }: Props) {
     const { theme, isDarkMode } = useAuth();
     const isEdit = !!initialData;
     const { entitiesList, forceEntitiesRefresh, isEntitiesSyncing } = useEntitiesSync();
@@ -99,7 +103,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
         setSaved(null);
         setCode('');
         setMsg(null);
-        if (entitiesList.length === 0) void forceEntitiesRefresh();
+        if (!hideEntity && entitiesList.length === 0) void forceEntitiesRefresh();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible]);
 
@@ -118,7 +122,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
         setBusy('send');
         setMsg(null);
         try {
-            const res: any = await adminUsersApi.sendConsent(saved.id);
+            const res: any = await api.sendConsent(saved.id);
             if (res.ok && String(res.data?.response_code) === '0') {
                 updateSaved(res.data.user);
                 setCode('');
@@ -136,7 +140,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
         setBusy('confirm');
         setMsg(null);
         try {
-            const res: any = await adminUsersApi.confirmConsent(saved.id, code);
+            const res: any = await api.confirmConsent(saved.id, code);
             if (res.ok && String(res.data?.response_code) === '0') {
                 updateSaved(res.data.user);
                 setCode('');
@@ -154,7 +158,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
         setBusy('email');
         setMsg(null);
         try {
-            const res: any = await adminUsersApi.sendEmailVerification(saved.id);
+            const res: any = await api.sendEmailVerification(saved.id);
             if (res.ok && String(res.data?.response_code) === '0') {
                 updateSaved(res.data.user);
                 setMsg({ text: `Verification link emailed to ${saved.email}.`, ok: true });
@@ -247,7 +251,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
                         cancelLabel={footer.cancelLabel}
                         onCancel={footer.onCancel}
                         error={step === 'IDENTITY' ? error : null}
-                        header={<Stepper step={step} />}
+                        header={<Stepper step={step} noBusiness={hideEntity} />}
                     >
                         {step === 'PERSON' ? (
                             <>
@@ -310,6 +314,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
                                     ) : null}
                                 </FormSection>
 
+                                {hideEntity ? null : (
                                 <FormSection title="Entity" hint="Optional. Without one, the user joins WAZIPOS." zIndex={30}>
                                     <CustomAutocompletePicker
                                         name="entity"
@@ -328,6 +333,7 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
                                         </Pressable>
                                     ) : null}
                                 </FormSection>
+                                )}
 
                                 <FormSection title="Status">
                                     <SwitchField name="is_active" label="Active" hint="Inactive users can't sign in." />
@@ -360,12 +366,14 @@ export default function AdminUserEditModal({ visible, onClose, initialData, subm
 
 /* ------------------------------------------------------------------ steps */
 
-function Stepper({ step }: { step: Step }) {
+function Stepper({ step, noBusiness }: { step: Step; noBusiness?: boolean }) {
     const { theme, border } = useListTokens();
-    const at = STEPS.findIndex((s) => s.key === step);
+    // Agents' form has no entity picker, so that step is only the ID.
+    const steps = noBusiness ? STEPS.map((s) => (s.key === 'IDENTITY' ? { ...s, label: 'ID' } : s)) : STEPS;
+    const at = steps.findIndex((s) => s.key === step);
     return (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-            {STEPS.map((s, i) => {
+            {steps.map((s, i) => {
                 const done = i < at;
                 const current = i === at;
                 const color = done ? '#10b981' : current ? theme.primary : theme.textDark;
@@ -379,7 +387,7 @@ function Stepper({ step }: { step: Step }) {
                                 {s.label}
                             </Text>
                         </View>
-                        {i < STEPS.length - 1 ? <View style={{ flex: 1, minWidth: 8, height: 1, backgroundColor: done ? '#10b981' : border }} /> : null}
+                        {i < steps.length - 1 ? <View style={{ flex: 1, minWidth: 8, height: 1, backgroundColor: done ? '#10b981' : border }} /> : null}
                     </React.Fragment>
                 );
             })}

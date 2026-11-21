@@ -94,7 +94,7 @@ const isWeb = Platform.OS === 'web';
  * Normalizer — entities
  * ======================================================= */
 
-function normalizeEntity(item: any): EntityItem {
+export function normalizeEntity(item: any): EntityItem {
     return {
         id: String(item.id),
         remote_id: String(item.id),

@@ -3,6 +3,7 @@
 // Read-only details for an entity.
 
 import { AdminDetailsSheet, ChipList, textOr } from '@/components/admin/kit';
+import type { ComponentProps, ReactNode } from 'react';
 import type { EntityItem } from '@/databases/types';
 
 import { entityBadges, entityImage, entityTypeLabel } from './entitiesConfig';
@@ -13,11 +14,15 @@ interface Props {
     onEdit: () => void;
     item: EntityItem | null;
     formatDateHandler: (s?: string | null) => string;
+    /** Shown after Location (agents: subscription and onboarding). */
+    extraSections?: ComponentProps<typeof AdminDetailsSheet>['sections'];
+    /** Extra footer buttons, before Edit. */
+    actions?: ReactNode;
 }
 
 const titleCase = (s?: string | null) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : '');
 
-export default function AdminEntityDetailsModal({ visible, onClose, onEdit, item: e, formatDateHandler }: Props) {
+export default function AdminEntityDetailsModal({ visible, onClose, onEdit, item: e, formatDateHandler, extraSections, actions }: Props) {
     const categories = Array.isArray((e as any)?.categories_array) ? (e as any).categories_array.map((c: any) => c?.title).filter(Boolean) : [];
     const phones = [e?.phone, e?.phone1, e?.phone2, e?.phone3].filter(Boolean).map(String);
     const hasBank = !!(e?.bank_title || e?.account_number || e?.bank_code);
@@ -53,6 +58,7 @@ export default function AdminEntityDetailsModal({ visible, onClose, onEdit, item
                         { label: 'Building', value: textOr(e?.building, ''), full: true },
                     ],
                 },
+                ...(extraSections ?? []),
                 ...(hasBank
                     ? [
                         {
@@ -80,6 +86,7 @@ export default function AdminEntityDetailsModal({ visible, onClose, onEdit, item
                 },
             ]}
             onEdit={onEdit}
+            actions={actions}
             editLabel="Edit entity"
         />
     );

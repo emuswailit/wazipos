@@ -18,6 +18,7 @@
 import { create } from "apisauce";
 import { router } from "expo-router";
 import { storageService } from "../hooks/storage";
+import { withClientHeaders } from "../utils/clientContext";
 
 const multipartClient = create({
   baseURL: "https://api.wazipos.co.ke/api/v1/",
@@ -26,6 +27,9 @@ const multipartClient = create({
     // No Content-Type. See the transform below for why.
   },
 });
+
+// Source (web/Android/iOS) and current screen, for the admin access log.
+withClientHeaders(multipartClient);
 
 multipartClient.addAsyncRequestTransform(async (request) => {
   // ── Strip the JSON Content-Type that apisauce injected ─────────

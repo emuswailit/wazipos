@@ -9,10 +9,12 @@ import qrMenuApi, { type MenuQrCode } from '@/api/qrMenuApi';
 import { AdminSheet, SheetButton, useListTokens } from '@/components/common/listScreen';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Platform, Share, Text, View } from 'react-native';
+import { useDiningKind } from '../diningKind';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
 export default function MenuQrSheet({ visible, onClose, table }: { visible: boolean; onClose: () => void; table?: { id: string; title: string } | null }) {
+    const { noun } = useDiningKind();
     const { theme, border } = useListTokens();
     const [qr, setQr] = useState<MenuQrCode | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function MenuQrSheet({ visible, onClose, table }: { visible: bool
     };
 
     return (
-        <AdminSheet visible={visible} onClose={onClose} title="Menu QR code" subtitle={table ? `For ${table.title}` : 'For the whole restaurant'} icon="qr-code-outline" width={460}>
+        <AdminSheet visible={visible} onClose={onClose} title="Menu QR code" subtitle={table ? `For ${table.title}` : `For the whole ${noun}`} icon="qr-code-outline" width={460}>
             <View style={{ gap: 14, alignItems: 'center' }}>
                 {!qr && !error ? <ActivityIndicator color={theme.primary} style={{ marginVertical: 60 }} /> : null}
                 {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13, textAlign: 'center' }}>{error}</Text> : null}

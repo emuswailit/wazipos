@@ -1,4 +1,5 @@
 import { storageService } from "@/hooks/storage";
+import { withClientHeaders } from "@/utils/clientContext";
 import { ApisauceInstance, create } from "apisauce";
 
 const apiClient: ApisauceInstance = create({
@@ -10,6 +11,9 @@ const apiClient: ApisauceInstance = create({
   },
   timeout: 15000,
 });
+
+// Source (web/Android/iOS) and current screen, for the admin access log.
+withClientHeaders(apiClient);
 
 apiClient.addAsyncRequestTransform(async (request) => {
   try {

@@ -2,7 +2,10 @@
 //
 // Register / edit an entity (shop, hospital, bank, …).
 // Bank code only for banks, level only for hospitals; county + town are required in
-// Kenya; GPS + categories only for retailers / wholesalers.
+// Kenya; the GPS location is required for every new entity (the backend checks
+// it too); categories only for retailers / wholesalers.
+// Agents pass ownerOptions (the users they registered): the owner is then
+// picked from that list and is required.
 
 import usersApi, { SearchUserResult } from '@/api/usersApi';
 import { AdminFormSheet, FormRow, FormSection } from '@/components/admin/kit';
@@ -18,9 +21,10 @@ import useApi from '@/hooks/useApi';
 import { useCategories } from '@/hooks/useCategories';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { Formik } from 'formik';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, Text, View } from 'react-native';
+import { Formik, type FormikProps } from 'formik';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, Platform, Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 import * as Yup from 'yup';
 
 interface Props {
@@ -31,6 +35,43 @@ interface Props {
     isSubmittingRemote: boolean;
     onSubmitTrigger: (values: any, formikHelpers: any) => Promise<void>;
     initialData?: any;
+    /** Owners to pick from (agents: their own users). Default: search every user. */
+    ownerOptions?: { id: string; title: string }[];
+    /** Only these entity types (agents: AGENT_ENTITY_TYPES). */
+    allowedTypes?: string[];
+    /** Extra form fields (agents: subscription and onboarding terms), shown after Owner. */
+    extraInitialValues?: Record<string, any>;
+    extraSchema?: Record<string, Yup.AnySchema>;
+    renderExtra?: (formik: FormikProps<any>) => ReactNode;
+}
+
+/** What agents may register (backend authentication/utils/agents.py AGENT_ENTITY_TYPES). */
+export const AGENT_ENTITY_TYPES = ['GeneralRetailer', 'PharmaceuticalRetailer', 'GeneralWholesaler', 'PharmaceuticalWholesaler', 'Restaurant', 'Hotel'];
+
+/** The `entity_details` the backend expects (CreateLocalEntity / UpdateEntity and the agent versions). */
+export function toEntityDetails(values: any, editingRemoteId?: string | null) {
+    return {
+        title: values.title || '',
+        entity_type: values.entity_type || '',
+        entity_ownership: values.entity_ownership || 'PRIVATE',
+        country: values.country || '',
+        county: values.county || null,
+        town: values.town || null,
+        road: values.road || null,
+        building: values.building || null,
+        categories: Array.isArray(values.categories) ? values.categories : [],
+        entity_level: values.entity_level || '0',
+        expanded: false,
+        plan: '',
+        bank: values.bank || null,
+        account_name: values.account_name || null,
+        account_number: values.account_number || null,
+        code: values.code || null,
+        latitude: values.latitude || null,
+        longitude: values.longitude || null,
+        ...(values.owner ? { owner: values.owner } : {}),
+        ...(editingRemoteId ? { id: editingRemoteId } : {}),
+    };
 }
 
 const RAW_ENTITY_TYPES = [
@@ -73,7 +114,7 @@ const schema = Yup.object({
     }),
 });
 
-export default function AdminEntityEditModal({ visible, onClose, isSubmittingRemote, onSubmitTrigger, initialData }: Props) {
+export default function AdminEntityEditModal({ visible, onClose, isSubmittingRemote, onSubmitTrigger, initialData, ownerOptions, allowedTypes, extraInitialValues, extraSchema, renderExtra }: Props) {
     const { theme, isDarkMode } = useAuth();
     const isEdit = !!initialData;
     const { countriesRaw, getCountiesByCountry, entitiesList } = useEntitiesSync();
@@ -119,17 +160,31 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
     }, [searchUsersApi.data]);
 
     const countryOptions = useMemo(() => countriesRaw.map((c) => ({ id: c.id, title: c.title })), [countriesRaw]);
+    const typeOptions = useMemo(
+        () => (allowedTypes ? ENTITY_TYPE_OPTIONS.filter((o) => allowedTypes.includes(o.id)) : ENTITY_TYPE_OPTIONS),
+        [allowedTypes],
+    );
+    const validationSchema = useMemo(
+        () =>
+            schema.shape({
+                ...(ownerOptions ? { owner: Yup.string().required('Pick the owner') } : {}),
+                // Every new entity: capture the GPS location at the premises.
+                ...(isEdit ? {} : { latitude: Yup.number().nullable().required('Capture the business location at its premises') }),
+                ...(extraSchema ?? {}),
+            }),
+        [ownerOptions, extraSchema, isEdit],
+    );
 
     const captureLocation = (setFieldValue: (k: string, v: any) => void) => {
         const warning =
-            'Make sure you are physically at the shop before capturing its location — it is used for delivery routing.\n\nCapture now?';
+            'Make sure you are physically at the business premises before capturing its location — it is used for deliveries and "near me".\n\nCapture now?';
 
         const nativeCapture = async () => {
             setIsFetchingLocation(true);
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
-                    Alert.alert('Location permission needed', 'Allow location access to set the shop location.');
+                    Alert.alert('Location permission needed', 'Allow location access to set the business location.');
                     return;
                 }
                 const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -158,7 +213,7 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                 { enableHighAccuracy: true }
             );
         } else {
-            Alert.alert('Set shop location', warning, [
+            Alert.alert('Set business location', warning, [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Capture', onPress: nativeCapture },
             ]);
@@ -189,8 +244,9 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                 owner: initialData?.owner || '',
                 expanded: false,
                 plan: '',
+                ...(extraInitialValues ?? {}),
             }}
-            validationSchema={schema}
+            validationSchema={validationSchema}
             onSubmit={(values, helpers) => onSubmitTrigger(values, helpers)}
         >
             {(f) => {
@@ -219,17 +275,13 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                                 <CustomAutocompletePicker
                                     name="entity_type"
                                     label="Type"
-                                    options={ENTITY_TYPE_OPTIONS}
+                                    options={typeOptions}
                                     theme={theme}
                                     isDarkMode={isDarkMode}
                                     placeholder="Search entity type…"
                                     initialTitle={humanizeEntityType(initialData?.entity_type || '')}
                                     onAfterSelect={(id) => {
-                                        if (!RETAIL_WHOLESALE_TYPES.includes(id)) {
-                                            setFieldValue('categories', []);
-                                            setFieldValue('latitude', null);
-                                            setFieldValue('longitude', null);
-                                        }
+                                        if (!RETAIL_WHOLESALE_TYPES.includes(id)) setFieldValue('categories', []);
                                         if (id !== 'Hospital') setFieldValue('entity_level', '0');
                                     }}
                                 />
@@ -241,7 +293,22 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                             </FormRow>
                         </FormSection>
 
-                        <FormSection title="Owner" hint="Search by name, phone or ID number." zIndex={60}>
+                        <FormSection
+                            title="Owner"
+                            hint={ownerOptions ? 'One of the users you registered. Register them under My users first.' : 'Search by name, phone or ID number.'}
+                            zIndex={60}
+                        >
+                            {ownerOptions ? (
+                                <CustomAutocompletePicker
+                                    name="owner"
+                                    label="Owner"
+                                    options={ownerOptions}
+                                    theme={theme}
+                                    isDarkMode={isDarkMode}
+                                    placeholder="Search your users…"
+                                    initialTitle={initialData?.owner_details}
+                                />
+                            ) : (
                             <LiveSearchAutocompletePicker
                                 name="owner"
                                 label="Owner"
@@ -256,7 +323,10 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                                 onSearch={handleUserSearch}
                                 initialTitle={initialData?.owner_details}
                             />
+                            )}
                         </FormSection>
+
+                        {renderExtra ? renderExtra(f) : null}
 
                         <FormSection title="Location" zIndex={50}>
                             <FormRow zIndex={50}>
@@ -285,14 +355,13 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
                                 <CustomTextField name="road" label="Road / street" placeholder="e.g. Chaka Road, Kilimani" />
                             </FormRow>
                             <CustomTextField name="building" label="Building / exact spot" placeholder="e.g. Hospihome, House 1" />
-                            {isRetailWholesale ? (
-                                <GpsButton
-                                    latitude={values.latitude}
-                                    longitude={values.longitude}
-                                    busy={isFetchingLocation}
-                                    onPress={() => captureLocation(setFieldValue)}
-                                />
-                            ) : null}
+                            <GpsButton
+                                latitude={values.latitude}
+                                longitude={values.longitude}
+                                busy={isFetchingLocation}
+                                onPress={() => captureLocation(setFieldValue)}
+                                error={f.submitCount > 0 && typeof f.errors.latitude === 'string' ? f.errors.latitude : undefined}
+                            />
                         </FormSection>
 
                         {isKenya ? (
@@ -337,16 +406,17 @@ export default function AdminEntityEditModal({ visible, onClose, isSubmittingRem
     );
 }
 
-function GpsButton({ latitude, longitude, busy, onPress }: { latitude: number | null; longitude: number | null; busy: boolean; onPress: () => void }) {
+function GpsButton({ latitude, longitude, busy, onPress, error }: { latitude: number | null; longitude: number | null; busy: boolean; onPress: () => void; error?: string }) {
     const { theme, chipBg } = useListTokens();
     const set = latitude !== null && latitude !== undefined;
-    const color = set ? '#10b981' : theme.primary;
+    const color = set ? '#10b981' : error ? '#f43f5e' : theme.primary;
     return (
+        <View style={{ gap: 4 }}>
         <Pressable
             onPress={onPress}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel={set ? 'Recapture shop location' : 'Capture shop location'}
+            accessibilityLabel={set ? 'Recapture business location' : 'Capture business location'}
             style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -355,6 +425,8 @@ function GpsButton({ latitude, longitude, busy, onPress }: { latitude: number | 
                 paddingHorizontal: 14,
                 paddingVertical: 12,
                 backgroundColor: set ? 'rgba(16,185,129,0.10)' : chipBg,
+                borderWidth: error && !set ? 1 : 0,
+                borderColor: '#f43f5e',
                 opacity: busy ? 0.7 : pressed ? 0.85 : 1,
                 ...webPointer,
             })}
@@ -364,12 +436,14 @@ function GpsButton({ latitude, longitude, busy, onPress }: { latitude: number | 
             </View>
             <View className="flex-1 min-w-0">
                 <Text style={{ color: set ? '#10b981' : theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }}>
-                    {busy ? 'Getting location…' : set ? 'Shop location set' : 'Capture shop location'}
+                    {busy ? 'Getting location…' : set ? 'Business location set' : 'Capture business location *'}
                 </Text>
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
-                    {set ? `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)} · tap to recapture` : 'Stand at the shop, then tap — used for delivery routing.'}
+                    {set ? `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)} · tap to recapture` : 'Stand at the premises, then tap — used for deliveries and "near me".'}
                 </Text>
             </View>
         </Pressable>
+        {error && !set ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12 }}>{error}</Text> : null}
+        </View>
     );
 }

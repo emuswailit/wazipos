@@ -329,6 +329,36 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 tint: TINTS.violet,
             },
             {
+                // Agents: commission rate, users / entities they registered, commission owed.
+                id: 93,
+                title: 'Agents',
+                route: '/agents?tab=agents',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'HandCoins',
+                tint: TINTS.violet,
+            },
+            {
+                // Stock takes sold by agents, and stocktakers' dues to pay out.
+                id: 94,
+                title: 'Stock takes',
+                route: '/adminStockTakes?tab=adminStockTakes',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'ClipboardCheck',
+                tint: TINTS.violet,
+            },
+            {
+                // Every request to the API: IP, signed-in user and business, action.
+                id: 92,
+                title: 'Access logs',
+                route: '/accessLogs?tab=accessLogs',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Activity',
+                tint: TINTS.violet,
+            },
+            {
                 id: 17,
                 title: 'Subscription payments',
                 route: '/subscriptionPayments?tab=subscriptionPayments',
@@ -346,6 +376,98 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 icon: 'CalendarCheck',
                 tint: TINTS.violet,
             },
+        ],
+    },
+    {
+        // Agents sign up users, then their businesses, and earn a share of the
+        // subscription fees (backend authentication/agents.py). The "Agent" role
+        // is added to the login token for active agents.
+        id: 18,
+        title: 'Agent Panel',
+        route: '/agentUsers',
+        allowedRoles: ['Agent'],
+        showInSidebar: true,
+        icon: 'HandCoins',
+        tint: TINTS.emerald,
+        subRoutes: [
+            {
+                id: 1,
+                title: 'My users',
+                route: '/agentUsers?tab=agentUsers',
+                allowedRoles: ['Agent'],
+                showInSidebar: true,
+                icon: 'Users',
+                tint: TINTS.emerald,
+            },
+            {
+                id: 2,
+                title: 'My entities',
+                route: '/agentEntities?tab=agentEntities',
+                allowedRoles: ['Agent'],
+                showInSidebar: true,
+                icon: 'Store',
+                tint: TINTS.emerald,
+            },
+            {
+                // Stock-take helpers: the agent's own users with phone, email and ID on file.
+                id: 4,
+                title: 'My onboarders',
+                route: '/agentOnboarders?tab=agentOnboarders',
+                allowedRoles: ['Agent'],
+                showInSidebar: true,
+                icon: 'ClipboardList',
+                tint: TINTS.emerald,
+            },
+            {
+                // Paid stock takes sold to the agent's businesses (stocktakes/).
+                id: 5,
+                title: 'Stock takes',
+                route: '/agentStockTakes?tab=agentStockTakes',
+                allowedRoles: ['Agent'],
+                showInSidebar: true,
+                icon: 'ClipboardCheck',
+                tint: TINTS.emerald,
+            },
+            {
+                id: 3,
+                title: 'My commissions',
+                route: '/agentCommissions?tab=agentCommissions',
+                allowedRoles: ['Agent'],
+                showInSidebar: true,
+                icon: 'Wallet',
+                tint: TINTS.emerald,
+            },
+        ],
+    },
+    {
+        // Onboarders: an agent's helpers. Create-only stock entry for the
+        // businesses they're attached to, on the agent's dates (backend
+        // authentication/onboarders.py). "Onboarder" role is added on login.
+        id: 20,
+        title: 'Onboarding',
+        route: '/onboarding',
+        allowedRoles: ['Onboarder'],
+        showInSidebar: true,
+        icon: 'ClipboardList',
+        tint: TINTS.emerald,
+        subRoutes: [
+            { id: 1, title: 'Add stock', route: '/onboarding?tab=onboarding', allowedRoles: ['Onboarder'], showInSidebar: true, icon: 'PackagePlus', tint: TINTS.emerald },
+            // Paid stock takes: blind counts on the booked days (stocktakes/).
+            { id: 2, title: 'Stock takes', route: '/stockTaking?tab=stockTaking', allowedRoles: ['Onboarder'], showInSidebar: true, icon: 'ClipboardCheck', tint: TINTS.emerald },
+        ],
+    },
+    {
+        // A business's stock takes (its super admin): pay, review counted vs book,
+        // decide what changes (stocktakes/, vendor endpoint).
+        id: 21,
+        title: 'Stock takes',
+        route: '/stockTakes',
+        allowedRoles: ['GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
+        showInSidebar: true,
+        icon: 'ClipboardCheck',
+        tint: TINTS.indigo,
+        subRoutes: [
+            { id: 1, title: 'Stock takes', route: '/stockTakes?tab=stockTakes', allowedRoles: ['GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'], showInSidebar: true, icon: 'ClipboardCheck', tint: TINTS.indigo },
         ],
     },
     {
@@ -502,112 +624,61 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
     {
         // Running a restaurant (an entity of type Restaurant): orders & table
         // bookings board, the menu, and tables. Customers use the Restaurants tab.
-        // A hotel (entity type Hotel) gets all of it, plus Stays and Rooms —
-        // accommodation is never shown to restaurants.
+        // Hotels have their own section below (same screens + accommodation).
         id: 17,
         title: 'Restaurant',
         route: '/restaurantOrders',
-        allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
+        allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
         showInSidebar: true,
         icon: 'UtensilsCrossed',
         tint: TINTS.orange,
         subRoutes: [
             {
-                // Hotels only (entity type Hotel): the front desk — stays, check-in / out, payment.
-                id: 9,
-                title: 'Stays',
-                route: '/hotelBookings',
-                allowedRoles: ['HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'CalendarCheck',
-                tint: TINTS.orange,
-            },
-            {
-                // Hotels only: the rooms guests can book.
-                id: 10,
-                title: 'Rooms',
-                route: '/hotelRooms',
-                allowedRoles: ['HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'Building2',
-                tint: TINTS.orange,
-            },
-            {
                 // The restaurant POS: food and drinks for a walk-in customer, paid at the counter.
                 id: 8,
                 title: 'New order',
                 route: '/newRestaurantOrder',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
+                allowedRoles: ['Admin', 'RestaurantSuperAdmin'],
                 showInSidebar: true,
                 icon: 'PlusCircle',
                 tint: TINTS.orange,
             },
-            {
-                id: 1,
-                title: 'Orders & bookings',
-                route: '/restaurantOrders',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'ClipboardList',
-                tint: TINTS.orange,
-            },
-            {
-                id: 2,
-                title: 'Menu',
-                route: '/restaurantMenu',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'BookOpen',
-                tint: TINTS.orange,
-            },
-            {
-                id: 3,
-                title: 'Tables',
-                route: '/restaurantTables',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'Layers',
-                tint: TINTS.orange,
-            },
-            {
-                // Customers' own dishes (ingredients + instructions) to price.
-                id: 4,
-                title: 'Custom requests',
-                route: '/restaurantRecipeRequests',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'ClipboardCheck',
-                tint: TINTS.orange,
-            },
-            {
-                id: 5,
-                title: 'Ingredients',
-                route: '/restaurantIngredients',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'Boxes',
-                tint: TINTS.orange,
-            },
-            {
-                // Drinks billed apart from food: bottles & tots, tabs, bar stock (offline-first).
-                id: 6,
-                title: 'Bar',
-                route: '/restaurantBar',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'ShoppingCart',
-                tint: TINTS.orange,
-            },
-            {
-                // Food stock, cleaning materials, utilities, packaging (offline-first).
-                id: 7,
-                title: 'Supplies',
-                route: '/restaurantSupplies',
-                allowedRoles: ['Admin', 'RestaurantSuperAdmin', 'HotelSuperAdmin'],
-                showInSidebar: true,
-                icon: 'Package',
-                tint: TINTS.orange,
-            },
+            { id: 1, title: 'Orders & bookings', route: '/restaurantOrders', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'ClipboardList', tint: TINTS.orange },
+            { id: 2, title: 'Menu', route: '/restaurantMenu', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'BookOpen', tint: TINTS.orange },
+            { id: 3, title: 'Tables', route: '/restaurantTables', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'Layers', tint: TINTS.orange },
+            // Customers' own dishes (ingredients + instructions) to price.
+            { id: 4, title: 'Custom requests', route: '/restaurantRecipeRequests', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'ClipboardCheck', tint: TINTS.orange },
+            { id: 5, title: 'Ingredients', route: '/restaurantIngredients', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.orange },
+            // Drinks billed apart from food: bottles & tots, tabs, bar stock (offline-first).
+            { id: 6, title: 'Bar', route: '/restaurantBar', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'ShoppingCart', tint: TINTS.orange },
+            // Food stock, cleaning materials, utilities, packaging (offline-first).
+            { id: 7, title: 'Supplies', route: '/restaurantSupplies', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.orange },
+        ],
+    },
+    {
+        // Running a hotel (an entity of type Hotel): its own section — accommodation
+        // (stays, rooms) plus the restaurant screens for its kitchen and bar, worded
+        // for a hotel (app/(hotel)). Customers use the Hotels tab.
+        id: 19,
+        title: 'Hotel',
+        route: '/hotelBookings',
+        allowedRoles: ['HotelSuperAdmin'],
+        showInSidebar: true,
+        icon: 'BedDouble',
+        tint: TINTS.teal,
+        subRoutes: [
+            // The front desk: stays, check-in / out, payment.
+            { id: 1, title: 'Stays', route: '/hotelBookings', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'CalendarCheck', tint: TINTS.teal },
+            // The rooms guests can book.
+            { id: 2, title: 'Rooms', route: '/hotelRooms', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'BedDouble', tint: TINTS.teal },
+            { id: 3, title: 'New order', route: '/newHotelOrder', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'PlusCircle', tint: TINTS.teal },
+            { id: 4, title: 'Orders & bookings', route: '/hotelOrders', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'ClipboardList', tint: TINTS.teal },
+            { id: 5, title: 'Menu', route: '/hotelMenu', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'BookOpen', tint: TINTS.teal },
+            { id: 6, title: 'Tables', route: '/hotelTables', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'Layers', tint: TINTS.teal },
+            { id: 7, title: 'Custom requests', route: '/hotelRecipeRequests', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'ClipboardCheck', tint: TINTS.teal },
+            { id: 8, title: 'Ingredients', route: '/hotelIngredients', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.teal },
+            { id: 9, title: 'Bar', route: '/hotelBar', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'ShoppingCart', tint: TINTS.teal },
+            { id: 10, title: 'Supplies', route: '/hotelSupplies', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.teal },
         ],
     },
     {

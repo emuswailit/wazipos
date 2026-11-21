@@ -3,10 +3,15 @@
 // Admin: every user. Table on wide screens, cards on phones (shared
 // AdminListView); tap to edit, "Add user" to create. Loaded from the server
 // (AdminGetUsers); search, filters and paging run locally.
+// mode="agent": the same screen for an agent — only the users they registered
+// (authentication/agents/me). Their users always start on WAZIPOS: there is no
+// entity picker; creating a business for a user (My entities) moves them onto it.
 
 import { ConfigDetailsSheet, DetailsDock } from '@/components/common/listScreen';
-import adminUsersApi, { type AdminUser, type AdminUserDetails, type ConsentStatus, type PickedDocument } from '@/api/adminUsersApi';
-import { AdminListView } from '@/components/admin/kit';
+import adminUsersApi, { type AdminUser, type AdminUserDetails, type ConsentStatus, type PickedDocument, type UsersApi } from '@/api/adminUsersApi';
+import { agentUsersApi } from '@/api/agentsApi';
+import { AdminListView, SheetButton } from '@/components/admin/kit';
+import AgentPayoutAccountSheet, { type PayoutTarget } from '@/components/agents/AgentPayoutAccountSheet';
 import type { PageSize } from '@/components/common/PaginationBar';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,9 +28,22 @@ const errorText = (res: any, fallback: string) => {
     return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
 };
 
-export default function AdminUsersList() {
+export default function AdminUsersList({ mode = 'admin' }: { mode?: 'admin' | 'agent' }) {
     const { width } = useWindowDimensions();
     const isLarge = width >= 768;
+    const isAgent = mode === 'agent';
+    const api: UsersApi = isAgent ? agentUsersApi : adminUsersApi;
+    const config = useMemo(
+        () =>
+            isAgent
+                ? {
+                    ...usersConfig,
+                    title: 'My users',
+                    emptyMessage: 'Register the people you sign up. Then create their business under My entities.',
+                }
+                : usersConfig,
+        [isAgent],
+    );
 
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -41,6 +59,9 @@ export default function AdminUsersList() {
     const [editing, setEditing] = useState<AdminUser | null>(null);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    // Agents: where the user is paid (needed before they can be a stocktaker).
+    const [payoutFor, setPayoutFor] = useState<PayoutTarget | null>(null);
+
 
     const loadingRef = useRef(false);
     const load = useCallback(async () => {
@@ -48,7 +69,7 @@ export default function AdminUsersList() {
         loadingRef.current = true;
         setRefreshing(true);
         try {
-            const res: any = await adminUsersApi.getUsers();
+            const res: any = await api.getUsers();
             if (res.ok && String(res.data?.response_code) === '0') {
                 setUsers(Array.isArray(res.data?.users) ? res.data.users : []);
                 setLoadError(null);
@@ -62,7 +83,7 @@ export default function AdminUsersList() {
             loadingRef.current = false;
             setRefreshing(false);
         }
-    }, []);
+    }, [api]);
 
     useFocusEffect(
         useCallback(() => {
@@ -134,23 +155,29 @@ export default function AdminUsersList() {
         setFormError(null);
         setFormOpen(true);
     }, []);
+    // Agents: a user just registered goes straight on to their payout account.
+    const justCreated = useRef<AdminUser | null>(null);
     const closeForm = useCallback(() => {
         if (saving) return;
         setFormOpen(false);
         setEditing(null);
         setFormError(null);
-    }, [saving]);
+        const u = justCreated.current;
+        justCreated.current = null;
+        if (isAgent && u && !u.has_payout_account) setPayoutFor({ user: u.id, title: u.name });
+    }, [saving, isAgent]);
 
     const submit = useCallback(
         async (details: AdminUserDetails, doc: PickedDocument | null): Promise<AdminUser | null> => {
             setSaving(true);
             setFormError(null);
             try {
-                const res: any = editing ? await adminUsersApi.updateUser(editing.id, details, doc) : await adminUsersApi.createUser(details, doc);
+                const res: any = editing ? await api.updateUser(editing.id, details, doc) : await api.createUser(details, doc);
                 if (res.ok && String(res.data?.response_code) === '0') {
                     // The form stays open: next it confirms the phone, then shows where
                     // phone and email stand (AdminUserEditModal steps 3–4).
                     const saved: AdminUser = res.data.user;
+                    if (!editing) justCreated.current = saved;
                     upsert(saved);
                     return saved;
                 }
@@ -163,7 +190,7 @@ export default function AdminUsersList() {
                 setSaving(false);
             }
         },
-        [editing, upsert],
+        [api, editing, upsert],
     );
 
     return (
@@ -172,16 +199,27 @@ export default function AdminUsersList() {
                 placeholder="Pick a user to see their details here."
                 pane={
                     <ConfigDetailsSheet
-                        config={usersConfig}
+                        config={config}
                         item={viewing}
                         onClose={() => setViewing(null)}
                         onEdit={(item) => { setViewing(null); openEdit(item); }}
+                        actions={
+                            isAgent && viewing ? (
+                                <SheetButton
+                                    label={viewing.has_payout_account ? 'Payout account' : 'Add payout account'}
+                                    icon="wallet-outline"
+                                    variant="secondary"
+                                    onPress={() => setPayoutFor({ user: viewing.id, title: viewing.name })}
+                                    grow={!isLarge}
+                                />
+                            ) : null
+                        }
                     />
                 }
             >
                 <AdminListView<AdminUser, Filter>
                     variant={isLarge ? 'web' : 'mobile'}
-                    config={usersConfig}
+                    config={config}
                     query={query}
                     setQuery={setQuery}
                     onRefresh={load}
@@ -242,7 +280,10 @@ export default function AdminUsersList() {
                 error={formError}
                 onSubmit={submit}
                 onUserChanged={upsert}
+                api={api}
+                hideEntity={isAgent}
             />
+            {isAgent ? <AgentPayoutAccountSheet target={payoutFor} onClose={() => setPayoutFor(null)} onSaved={() => void load()} /> : null}
         </>
     );
 }

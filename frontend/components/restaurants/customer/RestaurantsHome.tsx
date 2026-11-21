@@ -1,9 +1,11 @@
 // components/restaurants/customer/RestaurantsHome.tsx
 //
-// The Restaurants tab. Everyone: discover restaurants (nearest first when the
-// location is shared), open a menu, order for delivery / pickup or book a
-// table, and follow "My orders". People working in a restaurant also get a
-// shortcut to run it (orders board, menu, tables).
+// The Restaurants tab (kind="restaurant") and the Hotels tab (kind="hotel").
+// Everyone: discover places (nearest first when the location is shared), open a
+// menu, order for delivery / pickup or book a table, and follow "My orders".
+// Hotels are separate: they list only hotels, open on the same menu with
+// "Book a room", and add "My stays". People working in a restaurant / hotel also
+// get a shortcut to run it.
 
 import diningApi, { errorText, isOk, SERVICE_META, type FoodOrder, type Restaurant } from '@/api/diningApi';
 import { ShipmentTracker } from '@/components/deliveries/ShipmentTracker';
@@ -22,16 +24,19 @@ import { HotelStayView } from '@/components/hotels/HotelStayView';
 import { MyStays } from '@/components/hotels/MyStays';
 
 type View_ = 'DISCOVER' | 'ORDERS' | 'STAYS';
+export type DiningPlaceKind = 'restaurant' | 'hotel';
 
-export default function RestaurantsHome() {
+export default function RestaurantsHome({ kind = 'restaurant' }: { kind?: DiningPlaceKind }) {
+    const isHotelTab = kind === 'hotel';
     const { theme } = useListTokens();
     const { user } = useAuth() as any;
     const router = useRouter();
     const [tab, setTab] = useState<View_>('DISCOVER');
     const [open, setOpen] = useState<Restaurant | null>(null);
-    // A hotel is a restaurant with rooms: same screens to run it, plus the front desk.
+    // Each tab offers to run the matching business (Hotel section / Restaurant section).
     const runsHotel = String(user?.entity_type || '') === 'Hotel';
-    const runsRestaurant = runsHotel || String(user?.entity_type || '') === 'Restaurant';
+    const runsRestaurant = String(user?.entity_type || '') === 'Restaurant';
+    const runsThis = isHotelTab ? runsHotel : runsRestaurant;
     const [rooms, setRooms] = useState(false);
 
     if (open && rooms && open.is_hotel) return <HotelStayView hotel={open} onBack={() => setRooms(false)} />;
@@ -53,31 +58,46 @@ export default function RestaurantsHome() {
             <View className="px-4 pt-4" style={{ gap: 12, maxWidth: 900, width: '100%', alignSelf: 'center' }}>
                 <View className="flex-row items-end justify-between" style={{ gap: 8 }}>
                     <View>
-                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26 }}>Restaurants</Text>
-                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>Order in, pick up, book a table — or a room</Text>
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 26 }}>{isHotelTab ? 'Hotels' : 'Restaurants'}</Text>
+                        <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>
+                            {isHotelTab ? 'Book a room — and order from the hotel kitchen' : 'Order in, pick up or book a table'}
+                        </Text>
                     </View>
-                    {runsRestaurant ? (
-                        <SheetButton label={runsHotel ? 'Run my hotel' : 'Run my restaurant'} icon={runsHotel ? 'bed-outline' : 'restaurant-outline'} variant="secondary" onPress={() => router.push((runsHotel ? '/hotelBookings' : '/restaurantOrders') as any)} />
+                    {runsThis ? (
+                        <SheetButton
+                            label={isHotelTab ? 'Run my hotel' : 'Run my restaurant'}
+                            icon={isHotelTab ? 'bed-outline' : 'restaurant-outline'}
+                            variant="secondary"
+                            onPress={() => router.push((isHotelTab ? '/hotelBookings' : '/restaurantOrders') as any)}
+                        />
                     ) : null}
                 </View>
                 <SegmentedControl<View_>
                     value={tab}
                     onChange={setTab}
-                    options={[
-                        { key: 'DISCOVER', label: 'Discover' },
-                        { key: 'ORDERS', label: 'My orders' },
-                        { key: 'STAYS', label: 'My stays' },
-                    ]}
+                    options={
+                        isHotelTab
+                            ? [
+                                { key: 'DISCOVER', label: 'Discover' },
+                                { key: 'STAYS', label: 'My stays' },
+                                { key: 'ORDERS', label: 'My orders' },
+                            ]
+                            : [
+                                { key: 'DISCOVER', label: 'Discover' },
+                                { key: 'ORDERS', label: 'My orders' },
+                            ]
+                    }
                 />
             </View>
-            {tab === 'DISCOVER' ? <Discover onOpen={setOpen} /> : tab === 'ORDERS' ? <MyOrders /> : <MyStays />}
+            {tab === 'DISCOVER' ? <Discover kind={kind} onOpen={setOpen} /> : tab === 'STAYS' && isHotelTab ? <MyStays /> : <MyOrders />}
         </View>
     );
 }
 
 /* ------------------------------------------------------------ discover */
 
-function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
+function Discover({ kind, onOpen }: { kind: DiningPlaceKind; onOpen: (r: Restaurant) => void }) {
+    const isHotelTab = kind === 'hotel';
     const { theme, border, cardShadow } = useListTokens();
     const [q, setQ] = useState('');
     const [here, setHere] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -89,17 +109,19 @@ function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
     const load = useCallback(async () => {
         setRefreshing(true);
         try {
-            const res: any = await diningApi.getRestaurants({ q: q.trim() || undefined, ...(here ?? {}) });
+            const res: any = await diningApi.getRestaurants({ q: q.trim() || undefined, kind: isHotelTab ? 'HOTEL' : 'RESTAURANT', ...(here ?? {}) });
             if (isOk(res)) {
-                setList(res.data.restaurants ?? []);
+                // Older servers ignore `kind`: keep each tab to its own places.
+                const rows: Restaurant[] = res.data.restaurants ?? [];
+                setList(rows.filter((r) => !!r.is_hotel === isHotelTab));
                 setError(null);
-            } else setError(errorText(res, 'Could not load restaurants.'));
+            } else setError(errorText(res, isHotelTab ? 'Could not load hotels.' : 'Could not load restaurants.'));
         } catch (e: any) {
             setError(e?.message || 'Could not reach the server.');
         } finally {
             setRefreshing(false);
         }
-    }, [q, here]);
+    }, [q, here, isHotelTab]);
 
     useEffect(() => {
         const t = setTimeout(() => void load(), 300);
@@ -129,14 +151,14 @@ function Discover({ onOpen }: { onOpen: (r: Restaurant) => void }) {
         >
             <View className="flex-row items-center" style={{ gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                    <SearchField variant="mobile" value={q} onChangeText={setQ} placeholder="Search restaurants and hotels…" />
+                    <SearchField variant="mobile" value={q} onChangeText={setQ} placeholder={isHotelTab ? 'Search hotels…' : 'Search restaurants…'} />
                 </View>
                 <SheetButton label={here ? 'Near me ✓' : 'Near me'} icon="navigate-outline" variant="secondary" loading={locating} loadingLabel="…" onPress={() => void nearMe()} />
             </View>
             {list === null && !error ? <ActivityIndicator color={theme.primary} style={{ marginTop: 30 }} /> : null}
             {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium }}>{error}</Text> : null}
             {list && list.length === 0 ? (
-                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, textAlign: 'center', marginTop: 30 }}>No restaurants found yet.</Text>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, textAlign: 'center', marginTop: 30 }}>{isHotelTab ? 'No hotels found yet.' : 'No restaurants found yet.'}</Text>
             ) : null}
             <View className="flex-row flex-wrap" style={{ gap: 12 }}>
                 {(list ?? []).map((r) => (

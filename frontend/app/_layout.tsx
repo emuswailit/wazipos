@@ -33,13 +33,14 @@ import { AlertProvider } from '@/components/common/AlertProvider';
 import { RetailerProductRequestsSyncProvider } from '@/context/RetailerProductRequestsSyncContext';
 import { ShopperCartProvider } from '@/context/ShopperCartContext';
 import { WholesalerReceiptsSyncProvider } from '@/context/WholesalerReceiptsSyncContext';
+import { useTrackClientRoute } from '@/utils/clientContext';
 import { clearDoseReminders, MEDICATIONS_ROUTE, onDoseReminderTapped, syncMedicationReminders } from '@/utils/medicationReminders';
 import SidebarNavigationList from '@/utils/SidebarNavigationList';
 import WebTopNavbar from '@/utils/WebTopNavbar';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { ShoppingBag, Store, User, UtensilsCrossed } from 'lucide-react-native';
+import { BedDouble, ShoppingBag, Store, User, UtensilsCrossed } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   Image,
@@ -83,12 +84,14 @@ const MOBILE_TAB_BAR_HEIGHT = 56;
 const MOBILE_TABS = [
   { title: 'Shopping', route: '/(tabs)', icon: ShoppingBag },
   { title: 'Restaurants', route: '/(tabs)/restaurants', icon: UtensilsCrossed },
+  { title: 'Hotels', route: '/(tabs)/hotels', icon: BedDouble },
   { title: 'Business', route: '/(tabs)/business', icon: Store },
   { title: 'Profile', route: '/(tabs)/profile', icon: User },
 ] as const;
 
 function GlobalAppShellLayout() {
   useOfflineOrderSync();
+  useTrackClientRoute(); // the screen each API request is sent from (admin access log)
 
   const {
     user,
@@ -215,6 +218,8 @@ function GlobalAppShellLayout() {
       activeTabTitle = 'Shopping';
     } else if (tabSegment === 'restaurants') {
       activeTabTitle = 'Restaurants';
+    } else if (tabSegment === 'hotels') {
+      activeTabTitle = 'Hotels';
     } else if (tabSegment === 'business') {
       activeTabTitle = 'Business';
     } else if (tabSegment === 'profile') {

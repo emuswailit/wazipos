@@ -4,6 +4,7 @@ import type { AxiosRequestConfig } from "axios";
 import { storageService } from "@/hooks/storage";
 // Assuming cache utility path mapping
 import cache from "@/utils/cache";
+import { withClientHeaders } from "@/utils/clientContext";
 
 /**
  * Instantiate the type-safe Apisauce client engine.
@@ -15,6 +16,9 @@ const apiClient: ApisauceInstance = create({
   },
   timeout: 15000, // Highly recommended fail-safe configuration threshold for mobile networks
 });
+
+// Source (web/Android/iOS) and current screen, for the admin access log.
+withClientHeaders(apiClient);
 
 /**
  * Async Request Transform Middleware Interceptor.

@@ -11,7 +11,7 @@ import {
     PlusCircle, Receipt, RefreshCw, Route, ShieldCheck, ShoppingBag,
     ShoppingCart, Sliders, Store, Tag, TestTube, TrendingUp, Undo2, User,
     UserCircle, Users, Wallet, Warehouse, Truck, Bike, PackageCheck, UtensilsCrossed, Wifi,
-    AlertCircle, Banknote, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
+    AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
     Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, type LucideIcon,
 } from "lucide-react-native";
@@ -37,7 +37,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
     Tag, TestTube, TrendingUp, Undo2, User, UserCircle, Users, Wallet, Warehouse,
     Truck, Bike, PackageCheck, UtensilsCrossed, Wifi,
     // Used by navigationData but missing before (they showed as initials, e.g. "PL", "PR").
-    AlertCircle, Banknote, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
+    AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
     Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket,
 };
