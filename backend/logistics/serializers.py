@@ -151,7 +151,7 @@ class DeliveryAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.DeliveryAgent
         fields = ("id", "entity", "entity_title", "user", "name", "mode", "max_weight_kg", "vehicle_registration",
-                  "phone", "is_active", "last_location", "last_seen_at", "created", "updated")
+                  "phone", "is_active", "is_available", "last_location", "last_seen_at", "created", "updated")
         read_only_fields = ("id", "entity", "last_seen_at", "created", "updated")
 
     def get_name(self, obj):
@@ -165,7 +165,7 @@ class DeliveryAgentSerializer(serializers.ModelSerializer):
 class DeliveryRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.DeliveryRate
-        fields = ("id", "entity", "mode", "base_fee", "rate_per_km", "rate_per_kg", "min_fee",
+        fields = ("id", "entity", "mode", "base_fee", "rate_per_km", "rate_per_kg", "min_fee", "value_percent",
                   "max_distance_km", "max_weight_kg", "is_active", "created", "updated")
         read_only_fields = ("id", "entity", "created", "updated")
 

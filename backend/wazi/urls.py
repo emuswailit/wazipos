@@ -90,6 +90,7 @@ urlpatterns = [
     path("api/v1/stats/", include("stats.urls")),
      path("api/v1/analytics/", include("analytics.urls")),
     path("api/v1/stocktakes/", include("stocktakes.urls")),
+    path("api/v1/shopguard/", include("shopguard.urls")),
     path("__reload__/", include("django_browser_reload.urls")),
 ]
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

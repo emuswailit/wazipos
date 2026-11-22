@@ -132,6 +132,17 @@ def stocktakerAPIView(request):
         rows = [sv.count_out(c, blind=True) for c in st.counts.filter(onboarder=onboarder).select_related("counted_by").order_by("-created")]
         return custom_success_message(0, "Counts", rows, "counts")
 
+    if action == "StocktakerGetMyFoundItems":
+        rows = [sv.found_out(f) for f in st.found_items.filter(onboarder=onboarder).select_related("recorded_by")]
+        return custom_success_message(0, "Found items", rows, "found")
+
+    if action == "StocktakerRecordFoundItem":
+        # Goods on site that aren't the business's (no matching item, no shop label, other batch).
+        errors, f = sv.record_found_item(st, onboarder, request.user, data, request.FILES)
+        if errors:
+            return custom_errors_response(1, "Not recorded", errors)
+        return custom_success_message(0, "Recorded", sv.found_out(f), "found")
+
     # No update or delete: a wrong line is removed by the agent and counted again.
     raise exceptions.ValidationError(f"Action {action} is unknown")
 

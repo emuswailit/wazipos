@@ -8,6 +8,52 @@ from drugs.models import Preparation
 from django.db.models import Q
 from utils.logging import create_log
 
+def validate_weights(details, required=True):
+    """
+    Unit weight (kg, required when creating), optional pack weight, optional
+    dimensions (all three or none, cm). Returns (errors, fields to set).
+    """
+    from decimal import Decimal, InvalidOperation
+
+    errors, out = [], {}
+
+    def num(key, label, low, high):
+        v = details.get(key)
+        if v in (None, ""):
+            return None
+        try:
+            d = Decimal(str(v))
+        except (InvalidOperation, ValueError):
+            errors.append(f"Enter the {label} as a number")
+            return None
+        if not (low < d <= high):
+            errors.append(f"The {label} must be above {low} and at most {high}")
+            return None
+        return d
+
+    unit = num("weight_kg", "unit weight (kg)", Decimal("0"), Decimal("5000"))
+    if unit is None and required and not errors:
+        errors.append("Enter the weight of one unit in kg (e.g. 0.25 for 250 g) — deliveries are planned from it")
+    if unit is not None:
+        out["weight_kg"] = unit
+    pack = num("pack_weight_kg", "pack weight (kg)", Decimal("0"), Decimal("20000"))
+    if pack is not None:
+        if unit is not None and pack < unit:
+            errors.append("A full pack can't weigh less than one unit")
+        out["pack_weight_kg"] = pack
+    elif "pack_weight_kg" in details:
+        out["pack_weight_kg"] = None
+    dims = [num(k, f"{k.split('_')[0]} (cm)", Decimal("0"), Decimal("1000")) for k in ("length_cm", "width_cm", "height_cm")]
+    given = [d for d in dims if d is not None]
+    if given and len(given) != 3:
+        errors.append("Give length, width and height together (or none)")
+    elif len(given) == 3:
+        out.update({"length_cm": dims[0], "width_cm": dims[1], "height_cm": dims[2]})
+    if "weight_kg" in out:
+        out["weight_captured"] = True
+    return errors, out
+
+
 def validate_product_data(data):
     errors = []
     preparation = None
@@ -120,7 +166,11 @@ def create_product(data, user):
                 preparation = Preparation.objects.filter(
                     id=preparation_id).first()
     try:
+        weight_errors, weights = validate_weights(data["product_details"], required=True)
+        if weight_errors:
+            raise exceptions.ValidationError(weight_errors)
         created = Products.objects.create(
+            **weights,
             title=data["product_details"]["title"],
             units_per_pack=data["product_details"]["units_per_pack"],
             is_vatable=data["product_details"]["is_vatable"],
@@ -241,6 +291,14 @@ def update_product(data, user=None):
             else:
                 # If the list is empty or invalid, clear the array completely
                 product.allowed_entities = []
+
+        # Weights (deliveries are planned from them)
+        if any(k in product_details for k in ("weight_kg", "pack_weight_kg", "length_cm", "width_cm", "height_cm")):
+            weight_errors, weights = validate_weights(product_details, required=False)
+            if weight_errors:
+                raise exceptions.ValidationError(weight_errors)
+            for key, value in weights.items():
+                setattr(product, key, value)
 
         # Sold in parts (e.g. by the tot / kg): products/units.py
         from products.units_admin import apply_parts_settings

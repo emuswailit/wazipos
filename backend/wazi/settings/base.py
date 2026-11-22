@@ -83,6 +83,8 @@ INSTALLED_APPS = [
     "analytics",
     # Stock taking as a service to vendors (stocktakes/models.py)
     "stocktakes",
+    # Owner-away protection: shifts, blind cash counts, commissions, alerts (shopguard/models.py)
+    "shopguard",
 ]
 
 AUTHENTICATION_BACKENDS = (

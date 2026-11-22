@@ -142,3 +142,34 @@ class StockTakeCounts(models.Model):
 
     def __str__(self):
         return f"{self.title}: {self.counted_quantity} (book {self.book_quantity})"
+
+
+class StockTakeFoundItems(models.Model):
+    """
+    Goods on the premises that are NOT on the business's books: no matching item,
+    no shop label, or a different batch. Often an employee's own stock sold in the
+    shop. Recorded by stocktakers, shown to the vendor, never added to stock.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    stock_take = models.ForeignKey(StockTakes, related_name="found_items", on_delete=models.CASCADE)
+    title = models.CharField(max_length=256)
+    barcode = models.CharField(max_length=64, blank=True, default="")
+    batch_number = models.CharField(max_length=64, blank=True, default="")
+    quantity = models.DecimalField(max_digits=14, decimal_places=3)
+    # The price on the item / shelf, if any (what it would sell for).
+    price_seen = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    where_found = models.CharField(max_length=120, blank=True, default="")
+    note = models.CharField(max_length=200, blank=True, default="")
+    photo = models.ImageField(upload_to="stock_takes/found/", null=True, blank=True)
+    recorded_by = models.ForeignKey("authentication.Users", related_name="stock_take_found_items", on_delete=models.SET_NULL, null=True, blank=True)
+    onboarder = models.ForeignKey("authentication.AgentOnboarders", related_name="stock_take_found_items", on_delete=models.SET_NULL, null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Stock found off the books"
+        verbose_name_plural = "Stock found off the books"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.title} x{self.quantity} (off the books)"

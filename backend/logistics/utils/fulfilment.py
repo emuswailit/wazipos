@@ -312,6 +312,11 @@ def confirm_collection(data, user):
         _set_order_status(order, Stage.COLLECTED)
         order.delivered_at = order.delivered_at or now
         order.save()
+        if kind in ("retailer", "wholesaler"):
+            # B2B pickup: the seller's share of what WaziPOS collected is due now.
+            from payments.utils.order_payouts import release_vendor
+
+            release_vendor(kind, order, None, "Collected by the buyer")
         _broadcast(order, kind)
 
     notify_buyer(

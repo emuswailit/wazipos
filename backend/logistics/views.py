@@ -239,6 +239,9 @@ def logisticsAdminAPIView(request):
 # ---------------------------------------------------------------------------
 
 from .utils import deliveries  # noqa: E402
+from authentication.utils.admin_users import can_add_employees, is_platform_admin  # noqa: E402
+from django.utils import timezone  # noqa: E402
+from authentication.models import CollectionPoints  # noqa: E402
 
 
 def _save_owned(model, serializer_cls, request, extra_validate=None):
@@ -258,19 +261,6 @@ def _save_owned(model, serializer_cls, request, extra_validate=None):
         return custom_errors_response(1, "Not saved", [f"{k}: {', '.join(map(str, v))}" for k, v in ser.errors.items()])
     obj = ser.save(**({} if instance else {"entity": request.user.entity, "owner": request.user}))
     return custom_success_message(0, "Saved", serializer_cls(obj, context={"request": request}).data, "record")
-
-
-def _validate_partner(data, instance):
-    partner_id = data.get("partner") or (instance and instance.partner_id)
-    kind = data.get("kind") or (instance and instance.kind)
-    partner = models.Entities.objects.filter(id=partner_id).first() if partner_id else None
-    if not partner:
-        return "Pick the delivery company or courier"
-    if kind == models.DeliveryPartner.Kind.COURIER and partner.entity_type != "Courier":
-        return f"{partner.title} isn't registered as a courier"
-    if kind == models.DeliveryPartner.Kind.DELIVERY_COMPANY and partner.entity_type != "Delivery":
-        return f"{partner.title} isn't registered as a delivery company"
-    return None
 
 
 def _validate_agent(data, instance, entity=None):
@@ -318,6 +308,23 @@ def _option_out(option):
         out["group_label"] = option.get("group_label")
     if option.get("distance_km") is not None:
         out["distance_km"] = str(option["distance_km"])
+    # Long-haul: the courier, the office the buyer collects from, and the other
+    # offices near them they may pick instead (the key then names that office).
+    if option.get("courier") is not None:
+        out["courier"] = str(option["courier"].id)
+        out["courier_title"] = option["courier"].title
+    # What the price is based on: chargeable weight (actual or packaging volume), the
+    # goods' value (insurance), and the courier's delivery time from its rate chart.
+    if option.get("chargeable_weight_kg") is not None:
+        out["chargeable_weight_kg"] = str(option["chargeable_weight_kg"])
+    if option.get("cargo_value") is not None:
+        out["cargo_value"] = str(option["cargo_value"])
+    if option.get("lead_time_days") is not None:
+        out["lead_time_days"] = option["lead_time_days"]
+    if option.get("collection_point") is not None:
+        cp = option["collection_point"]
+        out["collection_point"] = {"id": str(cp.id), "title": cp.title}
+        out["collection_points"] = option.get("collection_points") or []
     return out
 
 
@@ -394,21 +401,70 @@ def deliveriesAPIView(request):
     action = request.data.get("action")
     entity = request.user.entity
 
-    # ---- setup: partners, own delivery persons, rates ----
-    if action == "GetDeliveryPartners":
-        qs = models.DeliveryPartner.objects.filter(entity=entity).select_related("partner").order_by("kind", "partner__title")
-        return custom_success_message(0, "Delivery partners", serializers.DeliveryPartnerSerializer(qs, many=True).data, "partners")
+    from logistics.utils import platform_providers as pp
+
+    # Delivery companies and couriers: WaziPOS admin onboards and whitelists them
+    # (deliveryProvidersAdminAPIView); their riders / drivers and vehicles are kept
+    # by the company's own super admin (courier dashboard) or by WaziPOS admin.
+    if pp.is_platform_provider(entity) and action in ("SaveDeliveryAgent", "SaveVehicle") and not can_add_employees(request.user, entity):
+        return custom_errors_response(1, "Not allowed", [
+            "Only your company's super admin (or WaziPOS admin) adds riders, drivers and vehicles",
+        ])
+
+    # ---- setup: platform providers (read-only), own delivery persons, rates ----
+    if action in ("GetDeliveryPartners", "GetPlatformProviders"):
+        # The whitelisted delivery companies and couriers every seller can use.
+        rows = [
+            {
+                "id": str(p.provider_id),
+                "title": p.provider.title,
+                "kind": p.kind,
+                "service_radius_km": str(p.service_radius_km),
+                "agents": models.DeliveryAgent.objects.filter(entity_id=p.provider_id, is_active=True).count(),
+                "agents_on_duty": models.DeliveryAgent.objects.filter(entity_id=p.provider_id, is_active=True, is_available=True).count(),
+                "offices": CollectionPoints.objects.filter(entity_id=p.provider_id, is_active=True).count(),
+            }
+            for p in models.PlatformDeliveryProvider.objects.filter(status=models.PlatformDeliveryProvider.Status.WHITELISTED)
+            .select_related("provider").order_by("kind", "provider__title")
+        ]
+        return custom_success_message(0, "WaziPOS delivery providers", rows, "providers")
     if action == "SaveDeliveryPartner":
-        return _save_owned(models.DeliveryPartner, serializers.DeliveryPartnerSerializer, request, _validate_partner)
+        return custom_errors_response(1, "Not allowed", [
+            "Delivery companies and couriers are onboarded and whitelisted by WaziPOS admin; you can use any of them at dispatch",
+        ])
     if action == "GetDeliveryAgents":
-        # Own delivery persons; with "partner": a delivery company's persons (if it is our partner).
+        # Own delivery persons; with "partner": a whitelisted delivery company's persons.
         owner_id = request.data.get("partner") or entity.id
-        if str(owner_id) != str(entity.id) and not models.DeliveryPartner.objects.filter(
-            entity=entity, partner_id=owner_id, is_active=True
+        if str(owner_id) != str(entity.id) and not models.PlatformDeliveryProvider.objects.filter(
+            provider_id=owner_id, status=models.PlatformDeliveryProvider.Status.WHITELISTED
         ).exists():
-            return custom_errors_response(1, "Not allowed", ["That company isn't one of your delivery partners"])
+            return custom_errors_response(1, "Not allowed", ["That company isn't a whitelisted WaziPOS delivery provider"])
         qs = models.DeliveryAgent.objects.filter(entity_id=owner_id).select_related("user", "entity").order_by("-is_active", "mode")
         return custom_success_message(0, "Delivery persons", serializers.DeliveryAgentSerializer(qs, many=True).data, "agents")
+    if action == "SetMyAvailability":
+        # A rider / driver: go on or off duty and share where they are now
+        # {available?, latitude?, longitude?} — sellers searching nearby see them.
+        from django.contrib.gis.geos import Point
+
+        profiles = models.DeliveryAgent.objects.filter(user=request.user, is_active=True)
+        if not profiles.exists():
+            return custom_errors_response(1, "Not a delivery person", ["You aren't registered as a rider or driver"])
+        updates = {}
+        if "available" in request.data:
+            updates["is_available"] = str(request.data.get("available")).lower() in ("true", "1", "yes")
+        lat, lng = request.data.get("latitude"), request.data.get("longitude")
+        if lat not in (None, "") and lng not in (None, ""):
+            try:
+                updates["last_point"] = Point(float(lng), float(lat), srid=4326)
+                updates["last_seen_at"] = timezone.now()
+            except (TypeError, ValueError):
+                return custom_errors_response(1, "Not saved", ["Invalid location"])
+        if updates:
+            profiles.update(**updates)
+        return custom_success_message(0, "Updated", {
+            "available": profiles.filter(is_available=True).exists(),
+            "profiles": serializers.DeliveryAgentSerializer(profiles.select_related("user", "entity"), many=True).data,
+        }, "data")
     if action == "SaveDeliveryAgent":
         return _save_owned(
             models.DeliveryAgent, serializers.DeliveryAgentSerializer, request,
@@ -419,6 +475,32 @@ def deliveriesAPIView(request):
         return custom_success_message(0, "Delivery rates", serializers.DeliveryRateSerializer(qs, many=True).data, "rates")
     if action == "SaveDeliveryRate":
         return _save_owned(models.DeliveryRate, serializers.DeliveryRateSerializer, request)
+
+    # ---- own delivery fleet (logistics/utils/fleet.py) ----
+    if action in ("GetFleet", "SaveVehicle", "GetVehicleLogs", "AddVehicleLog", "GetTrips", "StartTrip", "FinishTrip", "CancelTrip"):
+        from logistics.utils import fleet
+
+        if action == "GetFleet":
+            return custom_success_message(0, "Fleet", {"vehicles": fleet.list_vehicles(entity), "summary": fleet.fleet_summary(entity)}, "data")
+        if action == "SaveVehicle":
+            errors, v = fleet.save_vehicle(entity, request.user, request.data)
+            if errors:
+                return custom_errors_response(1, "Vehicle not saved", errors)
+            return custom_success_message(0, "Vehicle saved", fleet.vehicle_out(v), "vehicle")
+        if action == "GetVehicleLogs":
+            return custom_success_message(0, "Vehicle log", fleet.list_logs(entity, request.data.get("vehicle")), "logs")
+        if action == "AddVehicleLog":
+            errors, log = fleet.add_log(entity, request.user, request.data)
+            if errors:
+                return custom_errors_response(1, "Not saved", errors)
+            return custom_success_message(0, "Saved", fleet.log_out(log), "log")
+        if action == "GetTrips":
+            return custom_success_message(0, "Trips", fleet.list_trips(entity, request.data.get("scope") or "OPEN"), "trips")
+        fn = {"StartTrip": fleet.start_trip, "FinishTrip": fleet.finish_trip, "CancelTrip": fleet.cancel_trip}[action]
+        errors, trip = fn(entity, request.data)
+        if errors:
+            return custom_errors_response(1, "Trip not updated", errors)
+        return custom_success_message(0, "Trip updated", fleet.trip_out(trip), "trip")
 
     # ---- shipments ----
     if action == "GetShipment":
@@ -433,6 +515,12 @@ def deliveriesAPIView(request):
                 food_order_id=request.data["food_order"]).first()
             fo = shipment.food_order if shipment else None
             allowed = bool(fo) and (fo.entity_id == entity.id or request.user.id in (fo.customer_id, fo.owner_id))
+        elif request.data.get("wholesaler_order"):
+            # A wholesaler's order on a distributor: either party.
+            shipment = models.Shipment.objects.prefetch_related("legs").select_related("wholesaler_order").filter(
+                wholesaler_order_id=request.data["wholesaler_order"]).first()
+            wo = shipment.wholesaler_order if shipment else None
+            allowed = bool(wo) and entity.id in (wo.distributor_id, wo.wholesaler_id)
         else:
             shipment = models.Shipment.objects.prefetch_related("legs").filter(retailer_order_id=request.data.get("retailer_order")).first()
             order = shipment.retailer_order if shipment else None
@@ -445,7 +533,7 @@ def deliveriesAPIView(request):
         err, order = deliveries._buyer_order(request.data, request.user)
         if err:
             return custom_errors_response(1, "No delivery options", [err])
-        errors, options, kg = deliveries.retailer_order_delivery_options(order)
+        errors, options, kg = deliveries.retailer_order_delivery_options(order, request.data.get("collection_point") or None)
         if errors:
             return custom_errors_response(1, "No delivery options", errors)
         current = models.Shipment.objects.filter(retailer_order=order).first()
@@ -465,9 +553,42 @@ def deliveriesAPIView(request):
         return custom_success_message(
             0, "Delivery choice saved", RetailerOrdersSerializer(order, context={"request": request}).data, "retailer_order"
         )
+    if action == "GetAllocatableAgents":
+        # Seller staff: who can take this person leg — own delivery persons or a
+        # partner's riders — what it would pay them, and why someone can't.
+        leg = models.ShipmentLeg.objects.select_related("shipment").filter(id=request.data.get("leg")).first()
+        if not leg or leg.shipment.entity_id != entity.id:
+            return custom_errors_response(1, "Not found", ["Delivery leg for provided ID does not exist"])
+        rows = [{
+            "agent": str(r["agent"].id),
+            "name": " ".join(x for x in (r["agent"].user.first_name, r["agent"].user.last_name) if x),
+            "phone": r["agent"].phone or r["agent"].user.phone,
+            "mode": r["agent"].mode,
+            "mode_label": models.DeliveryMode(r["agent"].mode).label,
+            "provider": str(r["provider"].id),
+            "provider_title": r["provider"].title,
+            "own": r["own"],
+            # Platform riders / drivers: how far from the pickup point, and whether that's where they are now.
+            "km_away": str(r["km_away"]) if r.get("km_away") is not None else None,
+            "live_location": bool(r.get("live_location")),
+            "cost": str(r["cost"]),
+            "ok": r["ok"],
+            "reason": r["reason"],
+            # Fleet: the vehicle this driver would take, and the trip being loaded on it (joined).
+            "vehicle": str(r["vehicle"].id) if r.get("vehicle") else None,
+            "vehicle_label": f"{r['vehicle'].registration} · {r['vehicle'].get_kind_display()}" if r.get("vehicle") else None,
+            "vehicle_on_trip": bool(r.get("vehicle") and r["vehicle"].status == models.FleetVehicle.Status.ON_TRIP),
+            "trip": str(r["trip"].id) if r.get("trip") else None,
+        } for r in deliveries.allocatable_agents(leg)]
+        return custom_success_message(0, "Delivery persons", {
+            "leg": str(leg.id), "kind": leg.kind, "distance_km": str(leg.distance_km), "agents": rows,
+            # Courier deliveries: the courier's dispatch offices near our premises (pick one to drop at).
+            "dispatch_offices": deliveries.dispatch_offices(leg),
+        }, "data")
     if action in ("DispatchRetailerOrder", "DispatchOrder"):
-        # Seller, once paid: assign a delivery person of the planned provider
-        # ("retailer_order" or "customer_order").
+        # Seller, once paid and ready: allocate the in-town leg to a delivery person
+        # ("retailer_order", "customer_order", "food_order" or "wholesaler_order"),
+        # with "vehicle" (own fleet) and, for courier deliveries, "dispatch_office".
         return _shipment_response(deliveries.dispatch_order(request.data, request.user), request, "Order dispatched")
     if action == "GetStaffRetailerOrderDeliveryOptions":
         # Wholesaler staff building a retailer order: "retailer" + "order_items"
@@ -475,7 +596,7 @@ def deliveriesAPIView(request):
         retailer = models.Entities.objects.filter(id=request.data.get("retailer")).first()
         if not retailer:
             return custom_errors_response(1, "No delivery options", ["Pick the retailer first"])
-        errors, options, kg = deliveries.staff_retailer_order_delivery_options(entity, retailer, request.data.get("order_items") or [])
+        errors, options, kg = deliveries.staff_retailer_order_delivery_options(entity, retailer, request.data.get("order_items") or [], request.data.get("collection_point") or None)
         if errors:
             return custom_errors_response(1, "No delivery options", errors)
         return custom_success_message(0, "Delivery options", {
@@ -519,7 +640,7 @@ def deliveriesAPIView(request):
             destination = Point(float(request.data["destination_longitude"]), float(request.data["destination_latitude"]), srid=4326)
         except (KeyError, TypeError, ValueError):
             destination = None
-        errors, options, kg = deliveries.checkout_delivery_options(seller, destination, request.data.get("order_items") or [])
+        errors, options, kg = deliveries.checkout_delivery_options(seller, destination, request.data.get("order_items") or [], request.data.get("collection_point") or None)
         if errors:
             return custom_errors_response(1, "No delivery options", errors)
         return custom_success_message(0, "Delivery options", {
@@ -533,6 +654,26 @@ def deliveriesAPIView(request):
     if action == "ConfirmShipmentCollected":
         return _shipment_response(deliveries.confirm_collected(request.data, request.user), request, "Collection confirmed")
     # ---- offices (a courier's collection points, where parcels are handed over / collected) ----
+    # ---- couriers: published rate charts (logistics/utils/rate_charts.py) ----
+    if action in ("GetRateCards", "SaveRateCard", "SaveRateCardLine", "DeleteRateCardLine"):
+        from logistics.utils import rate_charts as rc
+
+        if action == "GetRateCards":
+            return custom_success_message(0, "Rate charts", rc.list_cards(entity), "cards")
+        if action == "SaveRateCard":
+            errors, card = rc.save_card(entity, request.user, request.data)
+            if errors:
+                return custom_errors_response(1, "Rate card not saved", errors)
+            return custom_success_message(0, "Rate card saved", rc.card_out(card), "card")
+        if action == "SaveRateCardLine":
+            errors, line = rc.save_line(entity, request.data)
+            if errors:
+                return custom_errors_response(1, "Line not saved", errors)
+            return custom_success_message(0, "Line saved", rc.line_out(line), "line")
+        errors = rc.delete_line(entity, request.data)
+        if errors:
+            return custom_errors_response(1, "Line not deleted", errors)
+        return custom_success_message(0, "Line deleted", {}, "data")
     if action == "GetMyOffices":
         from authentication.models import CollectionPoints
 
@@ -561,7 +702,6 @@ def deliveriesAPIView(request):
         ids = request.data.get("legs") or []
         if not reference:
             return custom_errors_response(1, "Not marked paid", ["Enter the payment reference"])
-        from django.utils import timezone
 
         with transaction.atomic():
             legs = list(models.ShipmentLeg.objects.select_for_update().filter(id__in=ids, is_payable=True, is_settled=False))
@@ -570,7 +710,27 @@ def deliveriesAPIView(request):
                 leg.settled_at = timezone.now()
                 leg.pay_out_reference_number = reference[:120]
                 leg.save(update_fields=["is_settled", "settled_at", "pay_out_reference_number", "updated"])
+            from payments.utils.order_payouts import mark_legs_paid_manually
+
+            mark_legs_paid_manually([leg.id for leg in legs], reference)
         return custom_success_message(0, f"{len(legs)} payout(s) marked paid", {"count": len(legs)}, "result")
+    if action == "GetOrderPayouts":
+        # Admin: every payout from buyers' payments; others: what they are owed
+        # (their business as a vendor / courier, or themselves as a delivery person).
+        from payments.utils.order_payouts import list_payouts
+
+        admin = _is_platform_admin(request.user) and str(request.data.get("scope") or "") == "ALL"
+        rows = list_payouts(request.data, entity=entity, user=request.user, admin=admin)
+        return custom_success_message(0, "Payouts", rows, "payouts")
+    if action == "RetryOrderPayout":
+        if not _is_platform_admin(request.user):
+            return custom_errors_response(1, "Not allowed", ["Only WaziPOS admins retry payouts"])
+        from payments.utils.order_payouts import retry_payout
+
+        errors = retry_payout(request.data.get("payout"))
+        if errors:
+            return custom_errors_response(1, "Not retried", errors)
+        return custom_success_message(0, "Payout will be retried", {}, "data")
 
     if action == "GetMyDeliveries":
         # The caller's open legs as a delivery person (any employer).
@@ -656,4 +816,106 @@ def fulfilmentAPIView(request):
             return custom_errors_response(1, "Pickup code not sent", errors)
         f, sent_to = result
         return custom_success_message(0, f"Pickup code sent to {', '.join(sent_to)}", ff.fulfilment_out(f), "fulfilment")
+    raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
+# ---------------------------------------------------------------------------
+# WaziPOS admin: platform delivery companies and couriers — logistics/utils/platform_providers.py
+# ---------------------------------------------------------------------------
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+@renderer_classes([JSONRenderer])
+@parser_classes([JSONParser, MultiPartParser])
+def deliveryProvidersAdminAPIView(request):
+    """
+    Central management of delivery companies and couriers (admin only):
+      GetDeliveryProviders {kind?, status?, search?} / SetDeliveryProvider {provider, status?, service_radius_km?, notes?}
+      GetProviderAgents {provider} / SaveProviderAgent {provider, agent?, user, mode, ...} / SearchUsers {q}
+      GetProviderFleet {provider} / SaveProviderVehicle {provider, vehicle?, kind, registration, ...}
+    """
+    from logistics.utils import fleet
+    from logistics.utils import platform_providers as pp
+
+    if not is_platform_admin(request.user):
+        return custom_errors_response(1, "Not allowed", ["Only WaziPOS admin manages delivery companies and couriers"])
+    action = request.data.get("action")
+    if action == "GetDeliveryProviders":
+        return custom_success_message(0, "Delivery providers", pp.list_providers(request.data), "providers")
+    if action == "SetDeliveryProvider":
+        errors, row = pp.set_status(request.user, request.data)
+        if errors:
+            return custom_errors_response(1, "Not saved", errors)
+        return custom_success_message(0, "Saved", row, "provider")
+    if action == "GetProviderAgents":
+        errors, rows = pp.list_agents(request.data)
+        if errors:
+            return custom_errors_response(1, "Not found", errors)
+        return custom_success_message(0, "Riders and drivers", rows, "agents")
+    if action == "SaveProviderAgent":
+        errors, row = pp.save_agent(request.user, request.data)
+        if errors:
+            return custom_errors_response(1, "Not saved", errors)
+        return custom_success_message(0, "Saved", row, "agent")
+    if action == "SearchUsers":
+        return custom_success_message(0, "Users", pp.search_users(request.data), "users")
+    if action in ("GetProviderFleet", "SaveProviderVehicle"):
+        provider = pp._provider(request.data)
+        if not provider:
+            return custom_errors_response(1, "Not found", ["Delivery company or courier not found"])
+        if action == "GetProviderFleet":
+            return custom_success_message(0, "Fleet", {"vehicles": fleet.list_vehicles(provider), "summary": fleet.fleet_summary(provider)}, "data")
+        errors, v = fleet.save_vehicle(provider, request.user, request.data)
+        if errors:
+            return custom_errors_response(1, "Vehicle not saved", errors)
+        return custom_success_message(0, "Vehicle saved", fleet.vehicle_out(v), "vehicle")
+    raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
+# ---------------------------------------------------------------------------
+# Courier / delivery company dashboard — logistics/utils/courier_console.py
+# ---------------------------------------------------------------------------
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+@renderer_classes([JSONRenderer])
+@parser_classes([JSONParser, MultiPartParser])
+def courierAPIView(request):
+    """
+    A courier's / delivery company's own staff (entity type Courier or Delivery):
+      GetCourierDashboard
+      GetParcels {stage: INCOMING|IN_TRANSIT|AWAITING|DONE, office?}
+      ReceiveParcel {leg, waybill_number?} / ArriveParcel {leg} / CollectParcel {shipment, delivery_code}
+      GetRiders / SetRiderAvailability {agent, available}   (availability: super admin)
+    Riders and vehicles are added with SaveDeliveryAgent / SaveVehicle (/logistics/deliveries).
+    """
+    from logistics.utils import courier_console as cc
+    from logistics.utils import platform_providers as pp
+
+    entity = request.user.entity
+    if not pp.is_platform_provider(entity):
+        return custom_errors_response(1, "Not allowed", ["This dashboard is for delivery companies and couriers"])
+    action = request.data.get("action")
+    if action == "GetCourierDashboard":
+        return custom_success_message(0, "Dashboard", cc.dashboard(entity), "data")
+    if action == "GetParcels":
+        errors, rows = cc.list_parcels(entity, request.data)
+        if errors:
+            return custom_errors_response(1, "Not loaded", errors)
+        return custom_success_message(0, "Parcels", rows, "parcels")
+    if action in ("ReceiveParcel", "ArriveParcel", "CollectParcel"):
+        fn = {"ReceiveParcel": cc.receive_parcel, "ArriveParcel": cc.arrive_parcel, "CollectParcel": cc.collect_parcel}[action]
+        errors, row = fn(entity, request.user, request.data)
+        if errors:
+            return custom_errors_response(1, "Not updated", errors)
+        return custom_success_message(0, "Updated", row, "parcel")
+    if action == "GetRiders":
+        return custom_success_message(0, "Riders and drivers", cc.list_riders(entity), "riders")
+    if action == "SetRiderAvailability":
+        if not can_add_employees(request.user, entity):
+            return custom_errors_response(1, "Not allowed", ["Only your company's super admin changes who is on duty"])
+        errors, row = cc.set_rider_availability(entity, request.data)
+        if errors:
+            return custom_errors_response(1, "Not updated", errors)
+        return custom_success_message(0, "Updated", row, "rider")
     raise exceptions.ValidationError(f"Action {action} is unknown")

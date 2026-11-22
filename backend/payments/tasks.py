@@ -496,7 +496,24 @@ def process_wifi_payments():
 
 
 @app.task
+def process_order_payouts():
+    """Pay out what buyers' order payments owe vendors, delivery persons and couriers (payments/utils/order_payouts.py)."""
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+@app.task
 def process_retailer_order_payments():
+    """
+    Replaced by process_order_payouts: retailer-order money is paid to the
+    wholesaler once the goods are released (and shipping to whoever delivers).
+    Kept so the existing beat entry stays valid.
+    """
+    return process_order_payouts()
+
+
+def _legacy_process_retailer_order_payments():
     unsettled_payments =[]
     token=None
 

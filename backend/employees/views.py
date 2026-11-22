@@ -1,9 +1,10 @@
+from django.db import transaction
 from django.db.utils import IntegrityError
 from django.http import request
 from django.shortcuts import get_object_or_404, render
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import FormParser, MultiPartParser
-from authentication.models import Departments, Profiles
+from authentication.models import Departments, Profiles, Users
 from core.views import EntitySafeViewMixin
 from rest_framework import generics, permissions, status, exceptions
 from rest_framework.response import Response
@@ -174,13 +175,34 @@ def employeesAdminAPIView(request):
             )
         errors = []
         errors = utils.validate_employee_data(request.data, request.user)
+        # Employees are paid (sales commission, deliveries) into a USER payout
+        # account: one is set up with the employee unless they already have one.
+        from payments.models import UserPayoutAccounts
+        from payments.utils import admin_payout_accounts as pa
+
+        person = Users.objects.filter(id=(request.data.get("employee_details") or {}).get("user_id") or None).first()
+        payout_details = dict(request.data.get("payout_account_details") or {})
+        payout_details.pop("is_verified", None)
+        if person and not errors:
+            has_account = UserPayoutAccounts.objects.filter(user=person, is_active="true").exists()
+            if payout_details:
+                payout_errors, _ = pa._validate(payout_details, owner_user=person)
+                errors += [f"Payout account: {e}" for e in payout_errors]
+            elif not has_account:
+                errors.append("Add the employee's payout account (where their commission and pay go)")
 
         if len(errors) > 0:
             return custom_errors_response(
                 1, "Employee could not be created", errors
             )
         else:
-            employee = utils.create_employee(request.data, request.user)
+            with transaction.atomic():
+                employee = utils.create_employee(request.data, request.user)
+                if employee and payout_details:
+                    payout_errors, _ = pa.save_user_payout_account({"payout_account_details": payout_details}, employee.user)
+                    if payout_errors:
+                        transaction.set_rollback(True)
+                        return custom_errors_response(1, "Employee could not be created", [f"Payout account: {e}" for e in payout_errors])
             if employee:
                 serializer = serializers.EmployeesSerializer(
                     employee, many=False, context={"request": request}

@@ -32,9 +32,27 @@ app.conf.beat_schedule = {
         "schedule": 30.0,
         "args": None,
     },
-    "process_retailer_order_payments": {
-        "task": "payments.tasks.process_retailer_order_payments",
-        "schedule": 30.0,
+    # Buyers' order payments paid onward: vendors once goods are released, delivery
+    # persons on delivery, couriers on receipt at their dispatch office.
+    # Owner-away protection: idle-shop alerts, open shifts, employee commissions.
+    "run_shop_watch": {
+        "task": "shopguard.tasks.run_shop_watch",
+        "schedule": 600.0,
+        "args": None,
+    },
+    "reconcile_commission_payments": {
+        "task": "shopguard.tasks.reconcile_commission_payments",
+        "schedule": 60.0,
+        "args": None,
+    },
+    "sync_employee_commissions": {
+        "task": "shopguard.tasks.sync_employee_commissions",
+        "schedule": 900.0,
+        "args": None,
+    },
+    "process_order_payouts": {
+        "task": "payments.tasks.process_order_payouts",
+        "schedule": 120.0,
         "args": None,
     },
     "deactivate_expired_price_discounts": {
@@ -151,6 +169,15 @@ app.conf.beat_schedule = {
     # live status, this catches the rest and expires stale payments.
     "reconcile-retailer-order-payments": {
         "task": "wholesalers.tasks.reconcile_retailer_order_payments",
+        "schedule": 60.0,
+        "args": None,
+    },
+
+    # ── Wholesaler orders on distributors: payments reconciliation ──
+    # Same split: the client follows live (RefreshPayment); this catches the
+    # rest and expires stale pushes (distributors/services/payments.py).
+    "reconcile-wholesaler-order-payments": {
+        "task": "distributors.tasks.reconcile_wholesaler_order_payments",
         "schedule": 60.0,
         "args": None,
     },

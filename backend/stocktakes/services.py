@@ -223,10 +223,16 @@ def report(st):
         if (b["kind"], b["item"]) not in counted_keys and b["book_quantity"] > 0
     ]
     value = lambda rows: _money(sum((Decimal(r["variance_value"]) for r in rows), Decimal("0")))
+    found = [found_out(f) for f in st.found_items.select_related("recorded_by")]
+    found_value = _money(sum((Decimal(f["value_seen"] or 0) for f in found), Decimal("0")))
     return {
         "lines": lines,
         "uncounted": uncounted,
+        # Goods on site that aren't the business's (e.g. an employee's own stock).
+        "found": found,
         "summary": {
+            "found": len(found),
+            "found_value": str(found_value),
             "counted": len(lines),
             "matched": len(lines) - len(short) - len(over),
             "short": len(short),
@@ -376,7 +382,7 @@ def submit_stock_take(agent, data):
         return ["Stock take not found"], None
     if st.status not in OPEN:
         return ["This stock take was already submitted or closed"], None
-    if not st.counts.exists():
+    if not st.counts.exists() and not st.found_items.exists():
         return ["Nothing has been counted yet"], None
     with transaction.atomic():
         for a in st.assignments.all():
@@ -390,6 +396,17 @@ def submit_stock_take(agent, data):
         st.submitted_at = timezone.now()
         st.save(update_fields=["status", "submitted_at", "updated"])
         _book_next(st)
+    found = st.found_items.count()
+    if found:
+        # Stock that isn't the business's: the owner hears at once.
+        from shopguard.models import GuardAlerts
+        from shopguard.services import notify_owners
+
+        notify_owners(
+            st.entity, GuardAlerts.Kind.FOUND_STOCK,
+            f"The stock take found {found} item line{'s' if found != 1 else ''} on your premises that "
+            "aren't on your books. Open the stock take report to see them.",
+        )
     return [], st
 
 
@@ -518,6 +535,54 @@ def record_count(st, onboarder, user, data):
             st.status = "COUNTING"
             st.save(update_fields=["status", "updated"])
     return [], c
+
+
+def found_out(f, request=None):
+    qty = Decimal(f.quantity or 0)
+    return {
+        "id": str(f.id),
+        "title": f.title,
+        "barcode": f.barcode,
+        "batch_number": f.batch_number,
+        "quantity": str(qty.normalize() if qty == qty.to_integral() else qty),
+        "price_seen": str(f.price_seen) if f.price_seen is not None else None,
+        "value_seen": str(_money(qty * Decimal(f.price_seen))) if f.price_seen is not None else None,
+        "where_found": f.where_found,
+        "note": f.note,
+        "photo": f.photo.url if f.photo else None,
+        "recorded_by": " ".join(x for x in (f.recorded_by.first_name, f.recorded_by.last_name) if x) if f.recorded_by_id else None,
+        "created": f.created.isoformat(),
+    }
+
+
+def record_found_item(st, onboarder, user, data, files=None):
+    """StocktakerRecordFoundItem {title, quantity, barcode?, batch_number?, price_seen?, where_found?, note?, photo?}."""
+    title = str(data.get("title") or "").strip()
+    if not title:
+        return ["Describe the item"], None
+    try:
+        qty = Decimal(str(data.get("quantity")))
+    except Exception:
+        return ["Enter how many you found"], None
+    if qty <= 0:
+        return ["Enter how many you found"], None
+    price = None
+    if data.get("price_seen") not in (None, ""):
+        try:
+            price = _money(Decimal(str(data["price_seen"])))
+        except Exception:
+            return ["Enter the price as a number"], None
+    with transaction.atomic():
+        f = sm.StockTakeFoundItems.objects.create(
+            stock_take=st, title=title[:256], quantity=_q3(qty), price_seen=price,
+            barcode=str(data.get("barcode") or "").strip()[:64], batch_number=str(data.get("batch_number") or "").strip()[:64],
+            where_found=str(data.get("where_found") or "").strip()[:120], note=str(data.get("note") or "")[:200],
+            photo=(files or {}).get("photo"), recorded_by=user, onboarder=onboarder,
+        )
+        if st.status == "SCHEDULED":
+            st.status = "COUNTING"
+            st.save(update_fields=["status", "updated"])
+    return [], f
 
 
 def remove_count(agent, data):

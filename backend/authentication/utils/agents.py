@@ -64,6 +64,7 @@ def receipt_kind(entity_type):
 AGENT_ENTITY_TYPES = {
     "GeneralRetailer", "PharmaceuticalRetailer", "GeneralWholesaler", "PharmaceuticalWholesaler",
     "Restaurant", "Hotel",
+    # Delivery companies and couriers are onboarded centrally by WaziPOS admin, not agents.
 }
 MAX_COMMISSION = Decimal("100")
 CENTS = Decimal("0.01")
@@ -806,7 +807,7 @@ def create_entity(data, agent, request_user):
     if not owner:
         errors.append("Pick the owner from the users you registered")
     if details.get("entity_type") not in AGENT_ENTITY_TYPES:
-        errors.append("Agents register retailers, wholesalers, restaurants and hotels only")
+        errors.append("Agents register retailers, wholesalers, restaurants, hotels, delivery companies and couriers only")
     term_errors, terms = clean_terms(agent, data.get("onboarding"), creating=True, entity_type=details.get("entity_type"))
     errors += term_errors
     errors += utils.validate_create_local_entity_data(data, request_user)
@@ -877,7 +878,7 @@ def update_entity(data, agent):
     if not entity.owner_id:
         return ["This entity has no owner yet; ask an admin to set one"], None
     if details.get("entity_type") and details["entity_type"] not in AGENT_ENTITY_TYPES:
-        return ["Agents register retailers, wholesalers, restaurants and hotels only"], None
+        return ["Agents register retailers, wholesalers, restaurants, hotels, delivery companies and couriers only"], None
     if details.get("owner") and str(details["owner"]) != str(entity.owner_id) and not own_user(agent, details["owner"]):
         return ["Pick the owner from the users you registered"], None
     # update_entity allows staff or the owner; the agent acts for the owner here.

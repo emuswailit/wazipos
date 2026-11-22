@@ -1152,3 +1152,74 @@ class OfflinePayments(models.Model):
                 )
 
         super(PaymentServicesProvider, self).save(*args, **kwargs)
+
+
+class OrderPayouts(models.Model):
+    """
+    What WaziPOS owes onward from a buyer's single payment on an order (goods +
+    shipping, collected into the WaziPOS till by mobile money):
+      VENDOR           the goods amount (less commission) -> the seller's PayoutAccounts,
+                       due once the goods are released to the delivery person
+                       (pickup orders: once collected);
+      DELIVERY_PERSON  an intracity leg's pay -> the person's UserPayoutAccounts, due
+                       on delivery to the buyer or to the courier's dispatch office;
+      COURIER          the long-haul leg's pay -> the courier's PayoutAccounts, due when
+                       the goods are received at its dispatch office;
+      EMPLOYEE_COMMISSION a shop employee's monthly sales commission -> their
+                       UserPayoutAccounts, due once the owner has paid it in
+                       (shopguard.CommissionPayouts; order_kind "commission").
+    DUE rows are paid out by payments.tasks.process_order_payouts
+    (payments/utils/order_payouts.py). SELLER_PAYS: the buyer paid the seller
+    directly (cash etc.), so WaziPOS holds nothing and the seller pays the deliverer.
+    """
+
+    class PayeeKind(models.TextChoices):
+        VENDOR = "VENDOR", _("Vendor (goods)")
+        DELIVERY_PERSON = "DELIVERY_PERSON", _("Delivery person")
+        COURIER = "COURIER", _("Long-haul courier")
+        EMPLOYEE_COMMISSION = "EMPLOYEE_COMMISSION", _("Sales commission")
+
+    class Status(models.TextChoices):
+        DUE = "DUE", _("Due")
+        PROCESSING = "PROCESSING", _("Being paid")
+        PAID = "PAID", _("Paid")
+        FAILED = "FAILED", _("Failed")
+        NO_ACCOUNT = "NO_ACCOUNT", _("No payout account")
+        SELLER_PAYS = "SELLER_PAYS", _("Seller pays directly")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payee_kind = models.CharField(max_length=20, choices=PayeeKind.choices)
+    order_kind = models.CharField(max_length=20)  # customer | retailer | wholesaler | food
+    order_id = models.CharField(max_length=64, db_index=True)
+    order_reference = models.CharField(max_length=64, blank=True, default="")
+    seller = models.ForeignKey(Entities, related_name="order_payouts_sold", on_delete=models.CASCADE)
+    shipment = models.ForeignKey("logistics.Shipment", related_name="payouts", on_delete=models.SET_NULL, null=True, blank=True)
+    leg = models.OneToOneField("logistics.ShipmentLeg", related_name="payout", on_delete=models.SET_NULL, null=True, blank=True)
+    payee_entity = models.ForeignKey(Entities, related_name="order_payouts_received", on_delete=models.CASCADE, null=True, blank=True)
+    payee_user = models.ForeignKey(get_user_model(), related_name="order_payouts_received", on_delete=models.CASCADE, null=True, blank=True)
+    entity_account = models.ForeignKey(PayoutAccounts, related_name="order_payouts", on_delete=models.SET_NULL, null=True, blank=True)
+    user_account = models.ForeignKey(UserPayoutAccounts, related_name="order_payouts", on_delete=models.SET_NULL, null=True, blank=True)
+    gross_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    commission_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DUE, db_index=True)
+    note = models.CharField(max_length=300, blank=True, default="")
+    reference_number = models.CharField(max_length=64, null=True, blank=True)
+    psp_reference = models.CharField(max_length=120, null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    due_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Order payouts"
+        ordering = ["-created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order_kind", "order_id"], condition=models.Q(payee_kind="VENDOR"), name="uniq_vendor_payout_per_order",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.payee_kind} {self.amount} ({self.status}) {self.order_kind}:{self.order_reference or self.order_id}"

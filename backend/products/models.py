@@ -233,12 +233,24 @@ class Products(EntityRelatedModel):
     )
 
     # --- NEW: Weight & Dimensions for Dynamic Shipping ---
+    # Captured when the product is created (products/product_utils.py
+    # validate_weights): orders are weighed from these to plan deliveries
+    # (logistics/utils/deliveries.py: walking, riders, vehicles, couriers).
     weight_kg = models.DecimalField(
-        max_digits=8, 
-        decimal_places=2, 
+        max_digits=8,
+        decimal_places=3,
         default=Decimal('0.50'),
-        help_text="Actual physical weight in kilograms (e.g., 0.50 for 500g)."
+        help_text="Weight of ONE unit in kilograms, as sold loose (e.g. 0.250 for 250 g)."
     )
+    pack_weight_kg = models.DecimalField(
+        max_digits=9,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="Weight of one full pack incl. packaging; blank = unit weight x units per pack."
+    )
+    # False = still the old 0.5 kg default: shown for correction, weights are estimates.
+    weight_captured = models.BooleanField(default=False, db_index=True)
     length_cm = models.DecimalField(
         max_digits=6, 
         decimal_places=2, 

@@ -376,6 +376,10 @@ def get_succesful_unsynced_today_customer_order_payments():
         created__date=today, # 👈 Added date filter
     ).exclude(
         payment_method__title="CASH",
+    ).exclude(
+        # Delivery orders: the goods share is paid once the goods are released and the
+        # shipping goes to whoever delivers (payments/utils/order_payouts.py).
+        customer_order__shipment__isnull=False,
     ).order_by("-created")
     return qs
 

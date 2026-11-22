@@ -309,14 +309,14 @@ class ProductsSerializer(serializers.ModelSerializer):
             "description",
             "owner",
             "units_per_pack",
-            "sold_in_parts", "measure", "content_per_unit", "part_size", "part_label",
-            
-            # --- Weight & Dimensions ---
             "weight_kg",
+            "pack_weight_kg",
             "length_cm",
             "width_cm",
             "height_cm",
-            # ---------------------------------
+            "weight_captured",
+            "sold_in_parts", "measure", "content_per_unit", "part_size", "part_label",
+            
             
             "manufacturer_title",
             "country_of_origin",

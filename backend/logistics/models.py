@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from core.models import EntityRelatedModel,OrganizationRelatedModel
 from django.contrib.auth import get_user_model
@@ -192,9 +193,11 @@ class EntitySubStoreReceipts(EntityRelatedModel):
 #
 # Who delivers:
 #   - the seller's own delivery persons (DeliveryAgent.entity = the seller);
-#   - an outsourced delivery company's persons (DeliveryAgent.entity = that
-#     company), usable by sellers that list it as a DeliveryPartner;
-#   - couriers: always outsourced entities (DeliveryPartner kind COURIER).
+#   - platform delivery companies' riders / drivers (DeliveryAgent.entity = that
+#     company): onboarded and managed centrally by WaziPOS admin, usable by any
+#     seller once whitelisted (PlatformDeliveryProvider); at dispatch a seller
+#     searches the available ones near the pickup point;
+#   - long-haul couriers: whitelisted Courier entities (PlatformDeliveryProvider).
 # Pricing: the DeliveryRate of whoever does the leg (seller, delivery company
 # or courier), by distance + weight.
 # Payout once a leg is done: the seller's own agent -> their
@@ -216,8 +219,49 @@ class DeliveryMode(models.TextChoices):
     COURIER = "COURIER", _("Long-haul courier")
 
 
+class PlatformDeliveryProvider(models.Model):
+    """
+    A delivery company (riders / drivers with their vehicles) or a long-haul courier
+    on the platform. Managed centrally by WaziPOS admin, who onboards the entity,
+    its riders / drivers and vehicles, and whitelists it. Only WHITELISTED
+    providers are offered to sellers; a seller's own people and fleet need none.
+    """
+
+    class Kind(models.TextChoices):
+        DELIVERY_COMPANY = "DELIVERY_COMPANY", _("Delivery company")
+        COURIER = "COURIER", _("Long-haul courier")
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", _("Pending review")
+        WHITELISTED = "WHITELISTED", _("Whitelisted")
+        SUSPENDED = "SUSPENDED", _("Suspended")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.OneToOneField(Entities, related_name="platform_delivery", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    # How far from a pickup point its riders / drivers are offered (from where they
+    # are now, else the company's base).
+    service_radius_km = models.DecimalField(max_digits=7, decimal_places=2, default=15)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    status_changed_by = models.ForeignKey(User, related_name="+", on_delete=models.SET_NULL, null=True, blank=True)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Platform delivery providers"
+
+    def __str__(self):
+        return f"{self.provider} ({self.kind}, {self.status})"
+
+
 class DeliveryPartner(EntityRelatedModel):
-    """An outsourced delivery company or courier a seller (entity) works with."""
+    """
+    LEGACY: sellers used to list their own partners. Delivery companies and
+    couriers are now whitelisted centrally (PlatformDeliveryProvider); this table
+    is no longer read.
+    """
 
     class Kind(models.TextChoices):
         DELIVERY_COMPANY = "DELIVERY_COMPANY", _("Delivery company")
@@ -251,6 +295,8 @@ class DeliveryAgent(EntityRelatedModel):
     vehicle_registration = models.CharField(max_length=20, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    # On duty: offered to sellers searching for a rider / driver right now.
+    is_available = models.BooleanField(default=True)
     last_point = geomodels.PointField(null=True, blank=True, srid=4326)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -270,7 +316,9 @@ class DeliveryRate(EntityRelatedModel):
     """
     Distance-based price for one mode, set by whoever delivers: a seller for
     its own agents, a delivery company for its agents, or a courier.
-    cost = max(min_fee, base_fee + rate_per_km * km + rate_per_kg * kg)
+    cost = max(min_fee, base_fee + rate_per_km * km + rate_per_kg * kg + value_percent% of the cargo value)
+    kg is the chargeable weight: the greater of actual and volumetric (packaging size).
+    Couriers may instead publish a rate chart (CourierRateCard) for their own legs.
     """
 
     mode = models.CharField(max_length=20, choices=DeliveryMode.choices)
@@ -278,6 +326,8 @@ class DeliveryRate(EntityRelatedModel):
     rate_per_km = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     rate_per_kg = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     min_fee = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    # Insurance / handling: this percent of the goods' value is added.
+    value_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     max_distance_km = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
     max_weight_kg = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -292,6 +342,165 @@ class DeliveryRate(EntityRelatedModel):
 
     def __str__(self):
         return f"{self.entity} {self.mode}: {self.base_fee} + {self.rate_per_km}/km"
+
+
+class FleetVehicle(EntityRelatedModel):
+    """
+    A vehicle in a vendor's (or a delivery company's) own fleet. entity = the owner.
+    Allocated at dispatch with a driver (a DeliveryAgent of the same entity) to
+    carry legs to buyers or to a courier's dispatch office; several deliveries
+    can share one trip (DeliveryTrip). Not allocatable while in maintenance,
+    retired, or with expired insurance / inspection.
+    """
+
+    class Kind(models.TextChoices):
+        BICYCLE = "BICYCLE", _("Bicycle")
+        MOTORBIKE = "MOTORBIKE", _("Motorbike")
+        CAR = "CAR", _("Car")
+        VAN = "VAN", _("Van / pickup")
+        TRUCK = "TRUCK", _("Lorry / truck")
+
+    class Status(models.TextChoices):
+        AVAILABLE = "AVAILABLE", _("Available")
+        ON_TRIP = "ON_TRIP", _("On a trip")
+        MAINTENANCE = "MAINTENANCE", _("In maintenance")
+        RETIRED = "RETIRED", _("Retired")
+
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    registration = models.CharField(max_length=20)
+    make_model = models.CharField(max_length=80, blank=True, default="")
+    capacity_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE, db_index=True)
+    default_driver = models.ForeignKey("DeliveryAgent", related_name="default_vehicles", on_delete=models.SET_NULL, null=True, blank=True)
+    insurance_expiry = models.DateField(null=True, blank=True)
+    inspection_expiry = models.DateField(null=True, blank=True)
+    odometer_km = models.DecimalField(max_digits=12, decimal_places=1, default=0)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Fleet vehicles"
+        ordering = ["kind", "registration"]
+        constraints = [
+            models.UniqueConstraint(fields=["entity", "registration"], name="uniq_fleet_vehicle_registration"),
+        ]
+
+    def __str__(self):
+        return f"{self.registration} ({self.get_kind_display()})"
+
+
+class DeliveryTrip(EntityRelatedModel):
+    """
+    One run of a fleet vehicle with its driver, carrying one or more shipment legs
+    (ShipmentLeg.trip). PLANNED while legs are being loaded, ON_ROUTE once started
+    (odometer out), DONE when back (odometer in, fuel). entity = the vehicle's owner.
+    """
+
+    class Status(models.TextChoices):
+        PLANNED = "PLANNED", _("Loading")
+        ON_ROUTE = "ON_ROUTE", _("On the road")
+        DONE = "DONE", _("Done")
+        CANCELLED = "CANCELLED", _("Cancelled")
+
+    vehicle = models.ForeignKey(FleetVehicle, related_name="trips", on_delete=models.PROTECT)
+    driver = models.ForeignKey("DeliveryAgent", related_name="trips", on_delete=models.PROTECT)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    start_odometer_km = models.DecimalField(max_digits=12, decimal_places=1, null=True, blank=True)
+    end_odometer_km = models.DecimalField(max_digits=12, decimal_places=1, null=True, blank=True)
+    fuel_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Delivery trips"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"Trip {self.vehicle} ({self.status})"
+
+
+class VehicleLog(EntityRelatedModel):
+    """Running a fleet vehicle: fuel, service, repairs, inspection / insurance renewals (cost per vehicle)."""
+
+    class Kind(models.TextChoices):
+        FUEL = "FUEL", _("Fuel")
+        SERVICE = "SERVICE", _("Service")
+        REPAIR = "REPAIR", _("Repair")
+        INSPECTION = "INSPECTION", _("Inspection")
+        INSURANCE = "INSURANCE", _("Insurance")
+        OTHER = "OTHER", _("Other")
+
+    vehicle = models.ForeignKey(FleetVehicle, related_name="logs", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    date = models.DateField()
+    cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    odometer_km = models.DecimalField(max_digits=12, decimal_places=1, null=True, blank=True)
+    litres = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Vehicle logs"
+        ordering = ["-date", "-created"]
+
+    def __str__(self):
+        return f"{self.vehicle} {self.kind} {self.date}"
+
+
+class CourierRateCard(EntityRelatedModel):
+    """
+    A courier's published rate chart (entity = the courier). Its lines price the
+    courier's own leg — from its dispatch office to the buyer's collection office —
+    by where from, where to and how heavy. value_percent of the cargo value is
+    added (insurance). Without a matching line the courier's DeliveryRate applies.
+    """
+
+    title = models.CharField(max_length=120)
+    is_active = models.BooleanField(default=True)
+    effective_from = models.DateField(null=True, blank=True)
+    value_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Courier rate cards"
+        ordering = ["-effective_from", "-created"]
+
+    def __str__(self):
+        return f"{self.entity} — {self.title}"
+
+
+class CourierRateCardLine(models.Model):
+    """
+    One line of a rate chart: cargo from an office (or any office in a county, or
+    anywhere) to an office / county / anywhere, weighing min_kg..max_kg, costs
+    `price`; an open band (no max_kg) adds extra_per_kg for each kg above min_kg.
+    The most specific matching line wins (office > county > anywhere).
+    """
+
+    card = models.ForeignKey(CourierRateCard, related_name="lines", on_delete=models.CASCADE)
+    origin_office = models.ForeignKey("authentication.CollectionPoints", related_name="rate_lines_from", on_delete=models.CASCADE, null=True, blank=True)
+    origin_county = models.ForeignKey("authentication.Counties", related_name="rate_lines_from", on_delete=models.CASCADE, null=True, blank=True)
+    destination_office = models.ForeignKey("authentication.CollectionPoints", related_name="rate_lines_to", on_delete=models.CASCADE, null=True, blank=True)
+    destination_county = models.ForeignKey("authentication.Counties", related_name="rate_lines_to", on_delete=models.CASCADE, null=True, blank=True)
+    min_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    extra_per_kg = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    lead_time_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Courier rate card lines"
+        ordering = ["min_kg"]
+
+    def __str__(self):
+        return f"{self.card}: {self.min_kg}-{self.max_kg or '+'} kg = {self.price}"
 
 
 class ShipmentStatus(models.TextChoices):
@@ -324,6 +533,11 @@ class Shipment(EntityRelatedModel):
         "restaurants.FoodOrder", related_name="shipment",
         on_delete=models.CASCADE, null=True, blank=True,
     )
+    # A wholesaler's order on a distributor (distributors.WholesalerOrders).
+    wholesaler_order = models.OneToOneField(
+        "distributors.WholesalerOrders", related_name="shipment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
     method = models.CharField(max_length=20, choices=Method.choices, default=Method.LOCAL)
     status = models.CharField(max_length=20, choices=ShipmentStatus.choices, default=ShipmentStatus.QUOTED)
     origin_point = geomodels.PointField(null=True, blank=True, srid=4326)
@@ -335,6 +549,8 @@ class Shipment(EntityRelatedModel):
     recipient_name = models.CharField(max_length=256, null=True, blank=True)
     recipient_phone = models.CharField(max_length=32, null=True, blank=True)
     chargeable_weight_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # The goods' value the delivery was priced on (insurance / handling percent of it).
+    cargo_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     distance_km = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tracking_number = models.CharField(max_length=40, null=True, blank=True, db_index=True)
@@ -351,11 +567,12 @@ class Shipment(EntityRelatedModel):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(retailer_order__isnull=False, customer_order__isnull=True, food_order__isnull=True)
-                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False, food_order__isnull=True)
-                    | models.Q(retailer_order__isnull=True, customer_order__isnull=True, food_order__isnull=False)
+                    models.Q(retailer_order__isnull=False, customer_order__isnull=True, food_order__isnull=True, wholesaler_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False, food_order__isnull=True, wholesaler_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=True, food_order__isnull=False, wholesaler_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=True, food_order__isnull=True, wholesaler_order__isnull=False)
                 ),
-                name="shipment_exactly_one_order_v2",
+                name="shipment_exactly_one_order_v3",
             ),
         ]
 
@@ -404,6 +621,9 @@ class ShipmentLeg(EntityRelatedModel):
     # a courier). agent = the person, when a person carries it.
     provider = models.ForeignKey(Entities, related_name="provided_legs", on_delete=models.SET_NULL, null=True, blank=True)
     agent = models.ForeignKey(DeliveryAgent, related_name="legs", on_delete=models.SET_NULL, null=True, blank=True)
+    # A fleet vehicle carrying it, and the trip it rides on (several legs may share one).
+    vehicle = models.ForeignKey(FleetVehicle, related_name="legs", on_delete=models.SET_NULL, null=True, blank=True)
+    trip = models.ForeignKey(DeliveryTrip, related_name="legs", on_delete=models.SET_NULL, null=True, blank=True)
     waybill_number = models.CharField(max_length=60, null=True, blank=True)
 
     distance_km = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -465,6 +685,10 @@ class Fulfilment(EntityRelatedModel):
         "retailers.CustomerOrders", related_name="fulfilment",
         on_delete=models.CASCADE, null=True, blank=True,
     )
+    wholesaler_order = models.OneToOneField(
+        "distributors.WholesalerOrders", related_name="fulfilment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.PENDING)
     prepared_by = models.ForeignKey(User, related_name="fulfilments_prepared", on_delete=models.SET_NULL, null=True, blank=True)
     preparing_at = models.DateTimeField(null=True, blank=True)
@@ -491,10 +715,11 @@ class Fulfilment(EntityRelatedModel):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(retailer_order__isnull=False, customer_order__isnull=True)
-                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False)
+                    models.Q(retailer_order__isnull=False, customer_order__isnull=True, wholesaler_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=False, wholesaler_order__isnull=True)
+                    | models.Q(retailer_order__isnull=True, customer_order__isnull=True, wholesaler_order__isnull=False)
                 ),
-                name="fulfilment_exactly_one_order",
+                name="fulfilment_exactly_one_order_v2",
             ),
         ]
 
