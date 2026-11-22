@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 import requests
 from decouple import config
 from transport.models import TicketPayment
@@ -529,7 +530,7 @@ def pay_entity_registration_fee(data, user):
             {
                 "orderId": f"{reference_number}",
                 "amount": f"{float(entity.plan.registration_fee)}",
-                "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+                "callBackUrl": jambopay_callback_url(),
                 "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                 "description": "Merchant payment",
                 "modeOfPayment": "MOBILE_MONEY",
@@ -622,7 +623,7 @@ def customer_order_payment(data,user):
     data = json.dumps({
         "orderId": query_order.document_number,
         "amount": int(query_order.order_net_price_total),
-        "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+        "callBackUrl": jambopay_callback_url(),
         "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
         "description": "Merchant payment",
         "modeOfPayment": "MOBILE_MONEY",
@@ -929,7 +930,7 @@ def payout_from_wallet_to_mpesa(account_from, account_ref, account_number, amoun
             "accountRef": account_ref,
             "accountNumber": account_number
         },
-        "callBackUrl": "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
+        "callBackUrl": jambopay_callback_url(),
         "narration": "Send Money to MPesa",
         "verificationType":"PIN"
         })
@@ -992,7 +993,7 @@ def payout_from_wallet_to_bank(account_from, account_number, account_ref, amount
             "accountNumber":account_number,
             "bankCode": bank_code,
         },
-        "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+        "callBackUrl": jambopay_callback_url(),
         "narration": "Wallet account withdrawal to bank",
         "verificationType":"PIN"
    
@@ -1062,7 +1063,7 @@ def payout_from_wallet_to_till(account_from, account_number, amount, reference_n
         "payTo": {
             "accountNumber": account_number
         },
-        "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cbt",
+        "callBackUrl": jambopay_callback_url(),
         "narration": "Wallet to MPesa Till NO.",  
         "verificationType":"PIN"
         })
@@ -1095,7 +1096,7 @@ def payout_from_wallet_to_paybill(payload):
     #             "accountRef": account_number,
     #             "accountNumber": paybill_number
     #         },
-    #         "callBackUrl": "https://webhook.site/7a311d8a-7c1b-4195-8640-e95e5ad616b3",
+    #         "callBackUrl": jambopay_callback_url(),
     #         "narration": "Wallet account withdrawal to pay bill",
     #           "verificationType":"PIN"
     #     })
@@ -1134,7 +1135,7 @@ def payout_from_wallet_to_airtel(payload):
     #         "accountRef": account_ref,
     #         "accountNumber": account_number,
     #     },
-    #     "callBackUrl": "https://webhook.site/c49b13e2-eb9f-47ee-a673-e60ae6b92737",
+    #     "callBackUrl": jambopay_callback_url(),
     #     "narration": "Payout to Airtel Money",
     #       "verificationType":"PIN"
     #     })
@@ -1302,7 +1303,7 @@ def mpesa_checkout(amount,phone_number, reference_number):
     data = json.dumps({
         "orderId": reference_number,
         "amount": amount,
-        "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+        "callBackUrl": jambopay_callback_url(),
         "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
         "description": "Merchant payment",
         "modeOfPayment": "MOBILE_MONEY",

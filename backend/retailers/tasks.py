@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 # retailers/tasks.py
 
 from celery import Celery
@@ -355,8 +356,7 @@ def process_collection_settlement(amount, account_number, reference_number):
     payload = json.dumps(
         {
             "callbackUrl": (
-                "https://webhook.site/"
-                "94df1553-1b65-44c3-99ba-4ff3a32c554e"
+                jambopay_callback_url()
             ),
             "amount": str(amount),
             "accountTo": account_number,
@@ -386,6 +386,18 @@ def get_succesful_unsynced_today_customer_order_payments():
 
 @app.task
 def settle_cashless_customer_order_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_settle_cashless_customer_order_payments():
     unsettled = get_succesful_unsynced_today_customer_order_payments()
     if unsettled.exists():
         print(

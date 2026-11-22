@@ -417,8 +417,6 @@ def _best_person_leg(provider, agents, km, kg, modes=None, value=0):
     best = None
     allowed = set(modes) if modes else LOCAL_MODES
     
-    # Debugging: Print what we are evaluating
-    print(f"DEBUG _best_person_leg: Provider={provider.title}, Distance={km}km, Weight={kg}kg, Agents={len(agents)}")
 
     for mode in {a.mode for a in agents if a.mode in allowed}:
         limit = next(((mk, mm) for m, mk, mm in MODE_LIMITS if m == mode), (None, None))
@@ -427,14 +425,11 @@ def _best_person_leg(provider, agents, km, kg, modes=None, value=0):
         if mode in VEHICLE_MODES and _has_fleet(provider, mode):
             limit = (None, limit[1])  # the vehicle's own capacity decides the weight
         if (limit[0] is not None and kg > limit[0]) or (limit[1] is not None and km > limit[1]):
-            print(f"DEBUG: Rejected {mode} - Exceeds hard limits (Max kg: {limit[0]}, Max km: {limit[1]})")
             continue
         if not any(a.mode == mode and (a.max_weight_kg is None or kg <= a.max_weight_kg) for a in agents):
-            print(f"DEBUG: Rejected {mode} - No specific agent can carry this weight")
             continue
         rate = rate_for(provider, mode)
         if rate.max_distance_km is not None and km > rate.max_distance_km:
-            print(f"DEBUG: Rejected {mode} - Exceeds provider rate max distance ({rate.max_distance_km}km)")
             continue
         cost = price(rate, km, kg, value)
         if best is None or cost < best[1]:
@@ -1141,7 +1136,50 @@ def dispatch_order(data, user):
             order.status = "DISPATCHED"
         order.save()
     _broadcast(shipment)
+    _tell_recipient(shipment, order, kind)
     return [], shipment
+
+
+def _tell_recipient(shipment, order, kind):
+    """
+    Dispatched: the person receiving gets the delivery code by SMS (they give it to
+    the rider, or show it at the courier office) — so it reaches them even when staff
+    placed the order or they have no app — and the buyer gets it by email too.
+    """
+    from core.notify import deliver_to_entity, deliver_to_users, later
+
+    shipment_id, order_pk = shipment.pk, order.pk
+
+    def build():
+        from core.utils import send_sms
+
+        sh = Shipment.objects.select_related("entity", "destination_collection_point").filter(pk=shipment_id).first()
+        if not sh or not sh.delivery_code:
+            return
+        ref = str(getattr(order, "reference_number", None) or getattr(order, "order_number", None)
+                  or getattr(order, "document_number", None) or str(order_pk)[:8].upper())
+        seller = sh.entity.title if sh.entity_id else "the seller"
+        office = sh.destination_collection_point.title if sh.destination_collection_point_id else None
+        if office:
+            text = (f"Your order {ref} from {seller} is on its way to {office}. "
+                    f"Collect it there with code {sh.delivery_code}. Tracking {sh.tracking_number}.")
+        else:
+            text = (f"Your order {ref} from {seller} is on its way. "
+                    f"Give the rider code {sh.delivery_code} only when you receive it. Tracking {sh.tracking_number}.")
+        if sh.recipient_phone:
+            send_sms(sh.recipient_phone, f"WaziPOS: {text}")
+        lines = [text, "Never share the code before the goods are in your hands."]
+        subject = f"Order {ref} is on its way"
+        if kind == "customer" and getattr(order, "customer_id", None):
+            deliver_to_users([order.customer], subject, lines, push=True, data={"type": "customer_order", "order": str(order_pk)})
+        elif kind == "food" and getattr(order, "customer_id", None):
+            deliver_to_users([order.customer], subject, lines, push=True, data={"type": "food_order", "order": str(order_pk)})
+        else:
+            buyer = getattr(order, {"retailer": "retailer", "wholesaler": "wholesaler", "manufacturer": "distributor"}.get(kind, ""), None)
+            if buyer is not None:
+                deliver_to_entity(buyer, subject, lines, push=True, data={"type": "order", "order": str(order_pk)})
+
+    later(build)
 
 
 def _broadcast(shipment):

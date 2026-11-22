@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from authentication.validators.authentication_models_validators import validate_entity, validate_town,validate_user
 from intergrations.jambopay.jambopay_wallet import jambopay_authorize_transaction, jambopay_wallet_checkout, initiate_jambopay_settlement
 from core.date_utils import get_formatted_from_date, get_formatted_to_date
@@ -230,7 +231,7 @@ def create_single_ticket(data, user):
                 data = json.dumps({
                     "orderId": ticket.reference_number,
                     "amount": int(amount),
-                    "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+                    "callBackUrl": jambopay_callback_url(),
                     "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     "description": "Merchant payment",
                     "modeOfPayment": "MOBILE_MONEY",
@@ -452,7 +453,7 @@ def create_batched_tickets(data, user):
                     # payload = json.dumps({
                     #     "orderId": reference_number,
                     #     "amount": int(ticket_total_fare),
-                    #     "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+                    #     "callBackUrl": jambopay_callback_url(),
                     #     "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     #     "description": "Merchant payment",
                     #     "modeOfPayment": "MOBILE_MONEY",
@@ -465,8 +466,8 @@ def create_batched_tickets(data, user):
                     payload = json.dumps({
                         "orderId": reference_number,
                         "amount": int(ticket_total_fare),
-                        "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-                        "accountTo":  collection_account.account_number,
+                        "callBackUrl": jambopay_callback_url(),
+                        "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                         "description": "Merchant payment",
                         "modeOfPayment": "MOBILE_MONEY",
                         "provider": "Mpesa",
@@ -479,7 +480,7 @@ def create_batched_tickets(data, user):
                     # payload = json.dumps({
                     #     "orderId": reference_number,
                     #     "amount": ticket_total_fare,
-                    #     "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                    #     "callBackUrl": jambopay_callback_url(),
                     #     "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                     #     "currency":"KES",
                     #     "description": "TOPUP",
@@ -493,8 +494,8 @@ def create_batched_tickets(data, user):
                     payload = json.dumps({
                         "orderId": reference_number,
                         "amount": ticket_total_fare,
-                        "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
-                        "accountTo":collection_account.account_number, 
+                        "callBackUrl": jambopay_callback_url(),
+                        "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                         "currency":"KES",
                         "description": "TOPUP",
                         "modeOfPayment": "MOBILE_MONEY",
@@ -552,7 +553,7 @@ def create_batched_tickets(data, user):
                         data ={
                                         "orderId": reference_number,
                                         "amount": ticket_total_fare,
-                                        "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
+                                        "callBackUrl": jambopay_callback_url(),
                                         "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                                         "description": "Test_Wallet Checkout",
                                         "modeOfPayment": "WALLET_AS_SERVICE",
@@ -934,7 +935,7 @@ def get_unsynced_today_sacco_subscription_payments():
 @transaction.atomic           
 def create_cashless_ticket_settlement(utp, account):
     data =  json.dumps({
-        "callbackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+        "callbackUrl": jambopay_callback_url(),
         "amount": str(utp.amount),
         "accountTo": account.account_number,
         "accountFrom":config("WAZIPOS_JAMBOPAY_PAYOUT_ACCOUNT"),
@@ -968,7 +969,7 @@ def create_cashless_ticket_settlement(utp, account):
 def create_sacco_subscription_settlement(usp, account,reference_number):
     # reference_number = generate_reference_number(account.entity,account.owner),
     data =  json.dumps({
-        "callbackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+        "callbackUrl": jambopay_callback_url(),
         "amount": str(usp.amount),
         "accountTo": account.account_number,
         "accountFrom":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
@@ -1196,7 +1197,7 @@ def vehicle_collection_to_airtel(data,user):
                                     "accountRef": airtel_account_reference,
                                     "accountNumber":validated_airtel_account_number
                                 },
-                                "callBackUrl": "https://webhook.site/5a0465a2-3e53-4955-b1ab-50c805102343",
+                                "callBackUrl": jambopay_callback_url(),
                                 "narration": narration
                                 })
                     errors, collection_to_mpesa = payout_from_wallet_to_airtel(payload)
@@ -1303,7 +1304,7 @@ def vehicle_collection_to_mpesa(data,user):
                                 "accountRef": mpesa_account_reference,
                                 "accountNumber":validated_mpesa_account_number
                             },
-                            "callBackUrl": "https://webhook.site/5a0465a2-3e53-4955-b1ab-50c805102343",
+                            "callBackUrl": jambopay_callback_url(),
                             "narration": narration,
     
                             })
@@ -1397,7 +1398,7 @@ def vehicle_collection_to_bank(data, user):
                             "accountNumber": bank_account,
                             "bankCode": bank_code
                         },
-                        "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+                        "callBackUrl": jambopay_callback_url(),
                         "narration": f"{narration}",
                         "verificationType":"OTP"
                     })
@@ -1484,7 +1485,7 @@ def vehicle_collection_to_till(data, user):
                         "payTo": {
                             "accountNumber": till_number 
                         },
-                        "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cbt",
+                        "callBackUrl": jambopay_callback_url(),
                         "narration": narration
                         })
 
@@ -1576,7 +1577,7 @@ def vehicle_collection_to_paybill(data, user):
                             "accountRef": account_number,
                             "accountNumber": paybill_number,
                         },
-                        "callBackUrl": "https://webhook.site/7a311d8a-7c1b-4195-8640-e95e5ad616b3",
+                        "callBackUrl": jambopay_callback_url(),
                         "narration": narration
                     })
 

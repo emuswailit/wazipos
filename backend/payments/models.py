@@ -1168,6 +1168,10 @@ class OrderPayouts(models.Model):
       EMPLOYEE_COMMISSION a shop employee's monthly sales commission -> their
                        UserPayoutAccounts, due once the owner has paid it in
                        (shopguard.CommissionPayouts; order_kind "commission").
+      Everything else collected (in-store and pickup sales, dine-in food, bar tabs,
+      hotel stays, WiFi, rent, matatu / boda fares, sacco subscriptions, agent
+      commissions, stocktaker pay) is paid out the same way
+      (payments/utils/collection_payouts.py).
     DUE rows are paid out by payments.tasks.process_order_payouts
     (payments/utils/order_payouts.py). SELLER_PAYS: the buyer paid the seller
     directly (cash etc.), so WaziPOS holds nothing and the seller pays the deliverer.
@@ -1178,6 +1182,9 @@ class OrderPayouts(models.Model):
         DELIVERY_PERSON = "DELIVERY_PERSON", _("Delivery person")
         COURIER = "COURIER", _("Long-haul courier")
         EMPLOYEE_COMMISSION = "EMPLOYEE_COMMISSION", _("Sales commission")
+        AGENT_COMMISSION = "AGENT_COMMISSION", _("Agent commission")
+        STOCKTAKER = "STOCKTAKER", _("Stocktaker pay")
+        FARE = "FARE", _("Fares to the vehicle")
 
     class Status(models.TextChoices):
         DUE = "DUE", _("Due")

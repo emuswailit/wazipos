@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from authentication.validators.authentication_models_validators import validate_user, validate_role
 from transport.transport_validators import validate_sacco_personnel, validate_vehicle, validate_sacco_subscription
 from intergrations.jambopay.jambopay_create_whitelabel_account import create_white_label_account
@@ -140,7 +141,7 @@ def create_sacco_personnel(data, user):
                 #                 payload = {
                 #                         "contact" : created.user.phone,
                 #                         "message" : message,
-                #                         "callback" : "https://webhook.site/4028cefd-2c36-4391-a77d-1c8ef130fbac",
+                #                         "callback" : jambopay_callback_url(),
                 #                         "sender_name" : config("JAMBOPAY_SWIFT_SENDER_NAME")
                 #                     }
         
@@ -303,7 +304,7 @@ def create_sacco_subscription_payment(data, user):
                 payload = json.dumps({
                         "orderId": reference_number,
                         "amount": str(int(sacco_subscription.amount)),
-                        "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                        "callBackUrl": jambopay_callback_url(),
                         "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                         "currency":"KES",
                         "description": "TOPUP",
@@ -318,7 +319,7 @@ def create_sacco_subscription_payment(data, user):
                 payload = json.dumps({
                     "orderId": reference_number,
                     "amount": str(int(sacco_subscription.amount)),
-                    "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                    "callBackUrl": jambopay_callback_url(),
                     "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     "description": "Merchant payment",
                     "modeOfPayment": "MOBILE_MONEY",
@@ -366,9 +367,9 @@ def create_sacco_subscription_payment(data, user):
                     if float(wallet_balance["balance"])> float(sacco_subscription.amount):
                         print("Sufficient Balance ", wallet_balance["balance"])
                         data =  json.dumps({
-                                "callbackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                                "callbackUrl": jambopay_callback_url(),
                                 "amount": str(sacco_subscription.amount),
-                                "accountTo": sacco_subscription.sacco_settlement_account.account_number,
+                                "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                                 "accountFrom":administrato_wallet.account_number,
                                 "orderId": generate_reference_number(vehicle.entity,vehicle.administrator.user),
                                 
@@ -446,7 +447,7 @@ def create_sacco_subscription_payment(data, user):
                 payload = json.dumps({
                         "orderId": reference_number,
                         "amount": str(int(sacco_subscription.amount)),
-                        "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                        "callBackUrl": jambopay_callback_url(),
                         "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                         "currency":"KES",
                         "description": "TOPUP",
@@ -461,7 +462,7 @@ def create_sacco_subscription_payment(data, user):
                 payload = json.dumps({
                     "orderId": reference_number,
                     "amount": str(int(sacco_subscription.amount)),
-                    "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                    "callBackUrl": jambopay_callback_url(),
                     "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     "description": "Merchant payment",
                     "modeOfPayment": "MOBILE_MONEY",
@@ -509,9 +510,9 @@ def create_sacco_subscription_payment(data, user):
                     if float(wallet_balance["balance"])> float(sacco_subscription.amount):
                         print("Sufficient Balance ", wallet_balance["balance"])
                         data =  json.dumps({
-                                "callbackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+                                "callbackUrl": jambopay_callback_url(),
                                 "amount": str(sacco_subscription.amount),
-                                "accountTo": sacco_subscription.sacco_settlement_account.account_number,
+                                "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                                 "accountFrom":administrato_wallet.account_number,
                                 "orderId": generate_reference_number(vehicle.entity,vehicle.administrator.user),
                                 

@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from xml.dom.minidom import Entity
 from datetime import datetime, timedelta
 from django.db import transaction
@@ -96,7 +97,7 @@ def process_customer_order_payment(retailer_order, payment_method, user, mobile_
             payload = json.dumps({
                 "orderId": reference_number,
                 "amount": int(retailer_order.final_price_total + retailer_order.shipping_amount),
-                "callBackUrl": "https://webhook.site",
+                "callBackUrl": jambopay_callback_url(),
                 "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                 "description": "Merchant payment",
                 "modeOfPayment": "MOBILE_MONEY",
@@ -110,7 +111,7 @@ def process_customer_order_payment(retailer_order, payment_method, user, mobile_
             payload = json.dumps({
                 "orderId": reference_number,
                 "amount": int(retailer_order.final_price_total + retailer_order.shipping_amount),
-                "callBackUrl": "https://webhook.site",
+                "callBackUrl": jambopay_callback_url(),
                 "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                 "currency": "KES",
                 "description": "TOPUP",
@@ -218,8 +219,8 @@ def process_customer_order_payment(retailer_order, payment_method, user, mobile_
             data = {
                 "orderId": reference_number,
                 "amount": int(retailer_order.final_price_total),
-                "callBackUrl": "https://webhook.site",
-                "accountTo": wholesaler_collection_account.entity_account_number,
+                "callBackUrl": jambopay_callback_url(),
+                "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                 "description": "Test_Wallet Checkout",
                 "modeOfPayment": "WALLET_AS_SERVICE",
                 "provider": "JAMBOPAY",
@@ -1524,7 +1525,7 @@ def process_retailer_order_payment(data, user):
 #                 payload = json.dumps({
 #                     "orderId": reference_number,
 #                     "amount": int(customer_order.final_price_total+ customer_order.shipping_amount),
-#                     "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+#                     "callBackUrl": jambopay_callback_url(),
 #                     "accountTo":  administrator_account.account_number,
 #                     "description": "Merchant payment",
 #                     "modeOfPayment": "MOBILE_MONEY",
@@ -1539,7 +1540,7 @@ def process_retailer_order_payment(data, user):
 #                 payload = json.dumps({
 #                     "orderId": reference_number,
 #                     "amount":  int(customer_order.final_price_total+ customer_order.shipping_amount),
-#                     "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+#                     "callBackUrl": jambopay_callback_url(),
 #                     "accountTo":administrator_account.account_number, 
 #                     "currency":"KES",
 #                     "description": "TOPUP",
@@ -1591,7 +1592,7 @@ def process_retailer_order_payment(data, user):
 #             data ={
 #                         "orderId": reference_number,
 #                         "amount":  int(customer_order.final_price_total+ customer_order.shipping_amount),
-#                         "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
+#                         "callBackUrl": jambopay_callback_url(),
 #                         "accountTo": administrator_account.account_number,
 #                         "description": "Customer order payment",
 #                         "modeOfPayment": "WALLET_AS_SERVICE",

@@ -728,4 +728,49 @@ def mark_dues_paid(data, admin):
         payout_status="PAID", paid_at=timezone.now(), paid_by=admin,
         payout_reference=str(data.get("reference") or "")[:120],
     )
+    # Paid outside WaziPOS: the payout ledger must not pay them again.
+    from payments.utils.collection_payouts import paid_manually
+
+    paid_manually("stocktaker_pay", ids, data.get("reference"))
     return [], n
+
+
+# ---------------------------------------------------------------- requests (vendors)
+
+def request_stock_take(entity, user, data):
+    """
+    VendorRequestStockTake {note?, preferred_date?}: tell the business's agent (push + SMS)
+    that it wants a stock take; without an agent, WaziPOS admins. Returns (errors, who was told).
+    """
+    from django.db import transaction as tx
+
+    from authentication.models import Users
+
+    note = str(data.get("note") or "").strip()[:200]
+    when = str(data.get("preferred_date") or "").strip()[:10]
+    from authentication.utils.agents import is_own_shop
+
+    agent = getattr(entity, "agent", None)
+    if agent is not None and (agent.user_id == user.pk or is_own_shop(agent, entity)):
+        agent = None  # their own shop: WaziPOS handles it (conflict of interest)
+    if agent is not None and getattr(agent, "is_active", True) and agent.user_id:
+        people, sent_to = [agent.user], "your agent"
+    else:
+        people = list(Users.objects.filter(Q(is_staff=True) | Q(roles__value="Admin")).distinct()[:10])
+        sent_to = "WaziPOS"
+    if not people:
+        return ["Nobody to send the request to yet. Contact WaziPOS support."], None
+    who = " ".join(x for x in (user.first_name, user.last_name) if x) or getattr(user, "phone", "") or "The owner"
+    body = f"{entity.title} would like a stock take{f' from {when}' if when else ''}. {who}{f': {note}' if note else ''}. Book it under Agent Panel -> Stock takes."
+
+    def send():
+        from core.utils import send_push_notification, send_sms
+
+        for p in people:
+            if getattr(p, "notification_token", None):
+                send_push_notification(p.notification_token, "Stock take requested", body, {"type": "stock_take_request", "entity": str(entity.id)})
+            if getattr(p, "phone", None):
+                send_sms(p.phone, f"WaziPOS: {body}"[:300])
+
+    tx.on_commit(send)
+    return [], sent_to

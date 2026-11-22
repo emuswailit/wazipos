@@ -1,3 +1,5 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
+from decouple import config
 
 from properties.models import PropertyUnits
 from authentication.utils.utils import get_telco_by_phone_number,generate_reference_number
@@ -96,8 +98,8 @@ def rent_4(splitted,msisdn):
                 payload = json.dumps({
                     "orderId": reference_number,
                     "amount": int(amount_to_pay),
-                    "callBackUrl": "https://webhook.site/a8c1b092-2fda-4538-ad8e-1016009301ce",
-                    "accountTo":  collection_account.account_number,
+                    "callBackUrl": jambopay_callback_url(),
+                    "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     "description": "Merchant payment",
                     "modeOfPayment": "MOBILE_MONEY",
                     "provider": "Mpesa",
@@ -110,8 +112,8 @@ def rent_4(splitted,msisdn):
                 payload = json.dumps({
                     "orderId": reference_number,
                     "amount": amount_to_pay,
-                    "callBackUrl": "https://webhook.site/a8c1b092-2fda-4538-ad8e-1016009301ce",
-                    "accountTo":collection_account.account_number, 
+                    "callBackUrl": jambopay_callback_url(),
+                    "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                     "currency":"KES",
                     "description": "TOPUP",
                     "modeOfPayment": "MOBILE_MONEY",

@@ -6,7 +6,7 @@ import django
 # import sys
 # sys.path.append(os.path.abspath(os.path.dirname(__name__)))
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.development")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.production")
 # django.setup()
 django_asgi_app = get_asgi_application()
 
@@ -23,6 +23,7 @@ from transport.routing import transport_websocket_urlpatterns
 from wholesalers.routing import wholesalers_websocket_urlpatterns
 from products.routing import products_websocket_urlpatterns
 from analytics.routing import analytics_websocket_urlpatterns   # NEW
+from notifications.routing import notifications_websocket_urlpatterns
 
 
 routes = (
@@ -34,7 +35,8 @@ routes = (
     + messaging_websocket_urlpatterns
     + products_websocket_urlpatterns
     + analytics_websocket_urlpatterns 
-    + subscriptions_websocket_urlpatterns    
+    + subscriptions_websocket_urlpatterns
+    + notifications_websocket_urlpatterns
 )
 
 

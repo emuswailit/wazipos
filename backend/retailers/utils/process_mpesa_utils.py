@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from decouple import config
 import requests
 from rest_framework import exceptions
@@ -24,7 +25,7 @@ def process_mpesa(payment_account_number, reference_number, amount):
             "msisdn": payment_account_number,
             "reference_number": reference_number,
             "narration": f"Customer Order {reference_number}",
-            "result_url": "https://webhook.site/3a9b9c43-c2c7-417e",
+            "result_url": jambopay_callback_url(),
             "metadata": {
                 "key0": "value0",
                 "key1": "value1"

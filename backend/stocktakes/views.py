@@ -163,6 +163,14 @@ class VendorAdminOnly(permissions.BasePermission):
 def vendorStockTakesAPIView(request):
     action, data, entity = _action(request), request.data, request.user.entity
 
+    if action == "VendorRequestStockTake":
+        # The business asks for a stock take: its agent books it (the agent picks the
+        # days, the fee and the stocktakers). Without an agent, WaziPOS admins are told.
+        errors, sent_to = sv.request_stock_take(entity, request.user, data)
+        if errors:
+            return custom_errors_response(1, "Request not sent", errors)
+        return custom_success_message(0, "Request sent", {"sent_to": sent_to}, "data")
+
     if action == "VendorGetStockTakes":
         qs = _qs().filter(entity=entity).exclude(status="CANCELLED")
         return custom_success_message(0, "Stock takes", [sv.stock_take_out(st) for st in qs[:200]], "stock_takes")

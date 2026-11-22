@@ -5,6 +5,8 @@ from . import views
 
 
 urlpatterns = [
+    # JamboPay posts payment / payout results here (only logged; status is polled).
+    path("jambopay/callback", views.jambopayCallbackAPIView, name="jambopay-callback"),
     # path("providers", views.accountProvidersAPIView,
     #      name="account-providers-api-view"),
     # path("providers/branches", views.accountProviderBranchesAPIView,

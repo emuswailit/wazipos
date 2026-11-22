@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from authentication.utils.utils import get_telco_by_phone_number, generate_reference_number, use_reference_number
 from .. import models
 from employees.models import Employees
@@ -95,7 +96,7 @@ def user_account_to_airtel(data,user):
                                 "accountRef": f"{user.first_name} {user.last_name}",
                                 "accountNumber":validated_airtel_account_number
                             },
-                            "callBackUrl": "https://webhook.site/5a0465a2-3e53-4955-b1ab-50c805102343",
+                            "callBackUrl": jambopay_callback_url(),
                             "narration": narration,
                              "verificationType":"PIN"
                             })
@@ -222,7 +223,7 @@ def user_account_to_mpesa_payout(data,user):
                             "accountRef": f"{user.first_name} {user.last_name}",
                             "accountNumber":validated_mpesa_account_number
                         },
-                        "callBackUrl": "https://webhook.site/5a0465a2-3e53-4955-b1ab-50c805102343",
+                        "callBackUrl": jambopay_callback_url(),
                         "narration": narration,
                          "verificationType":"PIN"
 
@@ -343,7 +344,7 @@ def user_account_to_bank(data, user):
                         "accountNumber": account_number,
                         "bankCode": bank_code
                     },
-                    "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+                    "callBackUrl": jambopay_callback_url(),
                     "narration": f"{narration}",
                     "verificationType":"PIN"
                 })
@@ -439,7 +440,7 @@ def user_account_to_till(data, user):
                     "payTo": {
                         "accountNumber": account_number 
                     },
-                    "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cbt",
+                    "callBackUrl": jambopay_callback_url(),
                     "narration": narration,
                      "verificationType":"PIN"
                     })
@@ -544,7 +545,7 @@ def user_account_to_paybill(data, user):
                         "accountRef": account_number,
                         "accountNumber": paybill_number,
                     },
-                    "callBackUrl": "https://webhook.site/7a311d8a-7c1b-4195-8640-e95e5ad616b3",
+                    "callBackUrl": jambopay_callback_url(),
                     "narration": narration,
                      "verificationType":"PIN"
                 })

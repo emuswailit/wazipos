@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from celery import Celery
 
 app = Celery()
@@ -55,7 +56,7 @@ from restaurants.models import BarInventoryOrderItem,FoodOrderItem
 ## SHARED API
 def process_collection_settlement(amount, account_number,reference_number):
     payload =  json.dumps({
-        "callbackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+        "callbackUrl": jambopay_callback_url(),
         "amount": str(amount),
         "accountTo": account_number,
         "accountFrom":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
@@ -135,6 +136,18 @@ def get_succesful_unsynced_today_bar_order_payments():
 
 #@app.task
 def settle_cashless_bar_order_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_settle_cashless_bar_order_payments():
     pass
     # unsettled_bar_order_payments = get_succesful_unsynced_today_bar_order_payments()
     # if len(unsettled_bar_order_payments)>0:
@@ -225,6 +238,18 @@ def get_succesful_unsynced_today_food_order_payments():
 
 #@app.task
 def settle_cashless_food_order_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_settle_cashless_food_order_payments():
     unsettled_food_order_payments = get_succesful_unsynced_today_food_order_payments()
     if len(unsettled_food_order_payments)>0:
         print(f"We got {len(unsettled_food_order_payments)} unsettled food order payments")
@@ -306,6 +331,18 @@ def get_succesful_unsynced_today_accommodation_order_payments():
 
 #@app.task
 def settle_cashless_accommodation_order_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_settle_cashless_accommodation_order_payments():
     unsettled_accommodation_order_payments = get_succesful_unsynced_today_accommodation_order_payments()
     if len(unsettled_accommodation_order_payments)>0:
         print(f"We got {len(unsettled_accommodation_order_payments)} unsettled accommodation order payments")

@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 import json
 import requests
 from decimal import Decimal
@@ -159,7 +160,7 @@ def start_subscription_payment(entity, payer, phone, months=1, amount=None, purp
         payload = json.dumps({
             "orderId": reference_number, 
             "amount": amount,
-            "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+            "callBackUrl": jambopay_callback_url(),
             "accountTo": system_till,  # 🌟 Updated here
             "description": "TOPUP",
             "modeOfPayment": "MOBILE_MONEY", 
@@ -170,7 +171,7 @@ def start_subscription_payment(entity, payer, phone, months=1, amount=None, purp
         payload = json.dumps({
             "orderId": reference_number, 
             "amount": str(amount),
-            "callBackUrl": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
+            "callBackUrl": jambopay_callback_url(),
             "accountTo": system_till,  # 🌟 Updated here
             "currency": "KES",
             "description": "TOPUP", 

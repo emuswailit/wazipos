@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 import json
 import time
 from payments.models import UserAccounts, EntitySubscriptions,EntitySubscriptionsDailyLog,UserAccountsPayouts,UserAccountsPayins
@@ -646,7 +647,7 @@ def my_subscriptions_pay_pending_installments_2(splitted, msisdn):
         payload = json.dumps({
             "orderId": reference_number,
             "amount": int(pending_installments_value),
-            "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+            "callBackUrl": jambopay_callback_url(),
             "accountTo":  account.account_number,
             "description": "Merchant payment",
             "modeOfPayment": "MOBILE_MONEY",
@@ -660,7 +661,7 @@ def my_subscriptions_pay_pending_installments_2(splitted, msisdn):
         payload = json.dumps({
             "orderId": reference_number,
             "amount": int(pending_installments_value),
-            "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+            "callBackUrl": jambopay_callback_url(),
             "accountTo":account.account_number, 
             "currency":"KES",
             "description": "TOPUP",
@@ -785,7 +786,7 @@ def my_subscriptions_pay_all_installments_2(splitted, msisdn):
         payload = json.dumps({
             "orderId": reference_number,
             "amount": int(pending_installments_value),
-            "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+            "callBackUrl": jambopay_callback_url(),
             "accountTo":  account.account_number,
             "description": "Merchant payment",
             "modeOfPayment": "MOBILE_MONEY",
@@ -799,7 +800,7 @@ def my_subscriptions_pay_all_installments_2(splitted, msisdn):
         payload = json.dumps({
             "orderId": reference_number,
             "amount": int(pending_installments_value),
-            "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
+            "callBackUrl": jambopay_callback_url(),
             "accountTo":account.account_number, 
             "currency":"KES",
             "description": "TOPUP",

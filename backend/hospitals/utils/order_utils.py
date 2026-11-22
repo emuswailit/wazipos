@@ -1,3 +1,5 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
+from decouple import config
 from rest_framework import exceptions
 import json
 from authentication.models import Departments
@@ -1175,8 +1177,8 @@ def process_prescription_order_payment(prescription_order, payment_method,user,m
                 payload = json.dumps({
                     "orderId": reference_number,
                     "amount": int(prescription_order.order_total_price),
-                    "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-                    "accountTo":  administrator_account.account_number,
+                    "callBackUrl": jambopay_callback_url(),
+                    "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     "description": "Merchant payment",
                     "modeOfPayment": "MOBILE_MONEY",
                     "provider": "Mpesa",
@@ -1191,8 +1193,8 @@ def process_prescription_order_payment(prescription_order, payment_method,user,m
                 payload = json.dumps({
                     "orderId": reference_number,
                     "amount":  int(amount),
-                    "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
-                    "accountTo":administrator_account.account_number, 
+                    "callBackUrl": jambopay_callback_url(),
+                    "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                     "currency":"KES",
                     "description": "TOPUP",
                     "modeOfPayment": "MOBILE_MONEY",
@@ -1254,8 +1256,8 @@ def process_prescription_order_payment(prescription_order, payment_method,user,m
             data ={
                         "orderId": reference_number,
                         "amount":  int(prescription_order.orde_total_aamount),
-                        "callBackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
-                        "accountTo": administrator_account.account_number,
+                        "callBackUrl": jambopay_callback_url(),
+                        "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                         "description": "Customer order payment",
                         "modeOfPayment": "WALLET_AS_SERVICE",
                         "provider": "JAMBOPAY",

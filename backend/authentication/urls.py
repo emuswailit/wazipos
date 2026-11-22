@@ -118,6 +118,8 @@ urlpatterns = [
         views.EntityDocumentUploadAPIView.as_view(),
         name=views.EntityDocumentUploadAPIView.name,
     ),
+    # The signed-in user's Expo push token from this device (notifications/signals.py uses it).
+    path("users/me/push-token", views.pushTokenAPIView, name="user-push-token"),
     path(
         "users/<uuid:pk>/update", views.UserUpdate.as_view(), name=views.UserUpdate.name
     ),

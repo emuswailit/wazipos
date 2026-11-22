@@ -1,15 +1,4 @@
+from .base import *  # noqa: F401,F403
 
-from .base import *
-from decouple import config
-
-
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = config("EMAIL_HOST")
-EMAIL_USE_TLS = True
-EMAIL_PORT = config("EMAIL_PORT")
-EMAIL_HOST_USER = config("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
-DEFAULT_FROM_EMAIL = config("EMAIL_HOST")
-DOMAIN = config("DOMAIN")
-SITE_NAME = "Wazipos"
-
+# Local development: everything comes from base.py and .env (email included).
+# Set DEBUG=True and CORS_ALLOW_ALL=True in your local .env if you need them.

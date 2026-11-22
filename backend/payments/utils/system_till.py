@@ -1,14 +1,17 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 # payments/utils/system_till.py
 #
-# Collect mobile money into the central WaziPOS till (WAZIPOS_SYSTEM_TILL),
-# the pattern subscriptions use (subscriptions/views.py InitiateSubscriptionPayment):
-#   1. STK push with accountTo = the system till, orderId = our reference;
+# Collect mobile money into the WaziPOS JamboPay collection account
+# (WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT, payments/utils/collection.py) — every
+# pay-in on the platform lands there:
+#   1. STK push with accountTo = the collection account, orderId = our reference;
 #   2. a PENDING payment row is stored and the client follows it on a
 #      status WebSocket that polls JamboPay every few seconds;
 #   3. a Celery task reconciles anything the socket missed and expires stale
 #      PENDING payments.
-# Money owed to a third party (e.g. a wholesaler) is then paid out from the
-# till to that party's active PayoutAccount.
+# Money owed to anyone (sellers, riders, couriers, agents, staff...) is then paid
+# out from the collection account to their payout account through the payout
+# ledger (payments/utils/order_payouts.py) — never transferred wallet to wallet.
 
 import json
 
@@ -22,8 +25,8 @@ from utils.logging import create_log
 PENDING_TIMEOUT_MINUTES = 30
 
 _CALLBACK_URLS = {
-    "MPESA": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-    "AIRTELMONEY": "https://webhook.site/55963e0b-b692-42b6-a682-0223eaf7fbff",
+    "MPESA": jambopay_callback_url(),
+    "AIRTELMONEY": jambopay_callback_url(),
 }
 
 
@@ -50,12 +53,15 @@ def get_jambopay_token():
 
 def push_to_system_till(order_id, amount, phone, description="TOPUP"):
     """
-    STK push of `amount` from `phone` into the system till.
+    STK push of `amount` from `phone` into the WaziPOS collection account.
     Returns (errors, result_json, telco); result_json carries JamboPay's "ref".
     """
-    system_till = config("WAZIPOS_SYSTEM_TILL", default=None)
-    if not system_till:
-        return ["System till number is not configured"], None, None
+    from payments.utils.collection import collection_account
+
+    try:
+        system_till = collection_account()
+    except Exception as e:
+        return [str(e)], None, None
 
     try:
         telco, formatted_phone = get_telco_by_phone_number(phone)

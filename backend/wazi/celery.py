@@ -7,7 +7,7 @@ from celery.schedules import crontab
 from decouple import config # 👈 Import config to use .env
 
 # set the default Django settings module for the 'celery' program.
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.development")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wazi.settings.production")
 
 app = Celery("wazi")
 

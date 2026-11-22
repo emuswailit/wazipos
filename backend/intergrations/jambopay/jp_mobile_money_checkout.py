@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 
 import json
 from decouple import config
@@ -82,7 +83,7 @@ def jambopay_mobile_checkout(data):
     # data = json.dumps({
     #     "orderId": query_order.reference_number,
     #     "amount": int(query_order.order_net_price_total),
-    #     "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
+    #     "callBackUrl": jambopay_callback_url(),
     #     "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
     #     "description": "Merchant payment",
     #     "modeOfPayment": "MOBILE_MONEY",

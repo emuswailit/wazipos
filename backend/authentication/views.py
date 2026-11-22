@@ -4385,6 +4385,13 @@ class UserUpdate(generics.RetrieveUpdateAPIView):
         filter = {}
         for field in self.lookup_fields:
             filter[field] = self.kwargs[field]
+        # People update only their own account (platform admins excepted): the pk in
+        # the URL must not let anyone rename someone, move them to another business
+        # (entity) or take their push token.
+        from authentication.utils.admin_users import is_platform_admin
+
+        if str(filter.get("pk")) != str(self.request.user.pk) and not is_platform_admin(self.request.user):
+            raise exceptions.PermissionDenied("You can only update your own account")
 
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
@@ -5281,3 +5288,22 @@ class FacebookLoginAPIView(APIView):
             safe=False,
             status=status.HTTP_200_OK,
         )
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def pushTokenAPIView(request):
+    """
+    POST /users/me/push-token {token}: the signed-in user's Expo push token from this
+    device ("" on sign-out). A device belongs to one account at a time, so the token is
+    removed from anyone else who had it (someone else signed in on the same phone).
+    """
+    token = str(request.data.get("token") or "").strip()[:200]
+    if token and not (token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken[")):
+        return custom_errors_response(1, "Not saved", ["That is not an Expo push token"])
+    user = request.user
+    if token:
+        Users.objects.filter(notification_token=token).exclude(pk=user.pk).update(notification_token=None)
+    user.notification_token = token or None
+    user.save(update_fields=["notification_token"])
+    return custom_success_message(0, "Push token saved" if token else "Push token removed", {"registered": bool(token)}, "data")

@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 # payments/utils/order_payouts.py
 #
 # One buyer payment, split and paid onward (payments.OrderPayouts):
@@ -223,7 +224,7 @@ def _payload(account, amount, reference, narration):
         "amount": int(amount),
         "accountFrom": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
         "orderId": reference,
-        "callBackUrl": config("JAMBOPAY_PAYOUT_CALLBACK_URL", default="https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31"),
+        "callBackUrl": jambopay_callback_url(),
         "narration": narration[:60],
     }
     if kind == "MOBILE":
@@ -249,6 +250,11 @@ def _refresh_accounts():
 
 
 def _on_paid(row):
+    from payments.utils.collection_payouts import COLLECTION_KINDS, on_paid
+
+    if row.order_kind in COLLECTION_KINDS:
+        on_paid(row)
+        return
     if row.payee_kind == OrderPayouts.PayeeKind.EMPLOYEE_COMMISSION:
         from shopguard.services import commission_paid_out
 
@@ -341,13 +347,23 @@ def _send_due(token):
                 reference_number=None,
                 note=str(body.get("message") or body.get("error") or "Payout not accepted")[:300], updated=timezone.now(),
             )
+            if row.attempts >= MAX_ATTEMPTS:
+                # Bulk update fires no signal: tell the payee here (notifications/signals.py).
+                try:
+                    from notifications.signals import notify_payout
+
+                    notify_payout(OrderPayouts.objects.get(id=row_id))
+                except Exception as e:
+                    create_log("error", f"Payout failure notice for {row_id} failed: {e}")
     return sent
 
 
 def run_payouts():
-    """Celery: accounts added -> DUE; check payouts in flight; send what's due."""
+    """Celery: collected pay-ins -> payouts; accounts added -> DUE; check payouts in flight; send what's due."""
+    from payments.utils.collection_payouts import sweep_collections
     from payments.utils.system_till import get_jambopay_token
 
+    sweep_collections()
     _refresh_accounts()
     if not OrderPayouts.objects.filter(status__in=[OrderPayouts.Status.DUE, OrderPayouts.Status.PROCESSING]).exists():
         return 0

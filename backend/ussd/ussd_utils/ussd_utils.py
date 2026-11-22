@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 
 from turtle import title
 from core.date_utils import get_today_date
@@ -1263,7 +1264,7 @@ def handle_payout_to_airtel_or_mpesa_numbers(splitted, msisdn):
                             "accountRef": "Albert Musembi",
                             "accountNumber": "0786918440"
                         },
-                        "callBackUrl": "https://webhook.site/c49b13e2-eb9f-47ee-a673-e60ae6b92737",
+                        "callBackUrl": jambopay_callback_url(),
                         "narration": "Payout to Airtel Money"
                     }
             response = f"CON Pay out to Airtel {formatted_phone_number} pin {wallet_pin}\n"

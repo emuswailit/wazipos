@@ -1,3 +1,5 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
+from decouple import config
 from transport.models import JourneyBookings
 from django.db.models import Q
 from authentication.utils.utils import generate_reference_number, generate_document_number
@@ -70,8 +72,8 @@ def create_journey_booking(data, user):
             payload = json.dumps({
                 "orderId": reference_number,
                 "amount": int(journey.journey_fare),
-                "callBackUrl": "https://webhook.site/7911487f-fc9e-46b0-a812-3adfa008375c",
-                "accountTo":  collection_account,
+                "callBackUrl": jambopay_callback_url(),
+                "accountTo":  config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                 "description": "Merchant payment",
                 "modeOfPayment": "MOBILE_MONEY",
                 "provider": "Mpesa",
@@ -84,8 +86,8 @@ def create_journey_booking(data, user):
             payload = json.dumps({
                 "orderId": reference_number,
                 "amount": journey.journey_fare,
-                "callBackUrl": "https://webhook.site/94df1553-1b65-44c3-99ba-4ff3a32c554e",
-                "accountTo":collection_account, 
+                "callBackUrl": jambopay_callback_url(),
+                "accountTo":config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"), 
                 "currency":"KES",
                 "description": "TOPUP",
                 "modeOfPayment": "MOBILE_MONEY",

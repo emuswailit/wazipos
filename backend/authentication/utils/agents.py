@@ -106,8 +106,39 @@ def agent_users(agent):
     return models.Users.objects.filter(creating_agent=agent)
 
 
+def conflicted_entity_ids(user):
+    """
+    Businesses this person owns, administers, works at or holds a role in (or is
+    signed into). As an agent they can't act on these — no bookings, onboarding,
+    terms or commission on their own shop (conflict of interest). The default
+    WAZIPOS entity, where every agent sits, is not a conflict.
+    """
+    if not user or not getattr(user, "pk", None):
+        return set()
+    from employees.models import Employees
+
+    ids = set(models.Entities.objects.filter(Q(owner=user) | Q(administrator=user)).values_list("id", flat=True))
+    ids |= set(Employees.objects.filter(user=user, is_active="true").values_list("entity_id", flat=True))
+    ids |= {e for e in user.roles.exclude(entity__isnull=True).values_list("entity_id", flat=True) if e}
+    if getattr(user, "entity_id", None):
+        ids.add(user.entity_id)
+    from authentication.utils.admin_users import DEFAULT_ENTITY_TITLE
+
+    default = models.Entities.objects.filter(title=DEFAULT_ENTITY_TITLE).values_list("id", flat=True).first()
+    ids.discard(default)
+    return ids
+
+
+def is_own_shop(agent, entity):
+    """The agent owns / runs / works at this business: agent actions are off there."""
+    return bool(agent and entity) and getattr(entity, "id", entity) in conflicted_entity_ids(agent.user)
+
+
 def agent_entities(agent):
-    return models.Entities.objects.filter(Q(agent=agent) | Q(agent_entities=agent)).distinct()
+    """The businesses the agent registered or serves — never one they own or work at."""
+    qs = models.Entities.objects.filter(Q(agent=agent) | Q(agent_entities=agent)).distinct()
+    own = conflicted_entity_ids(agent.user) if agent else set()
+    return qs.exclude(id__in=own) if own else qs
 
 
 def _percentage(value):
@@ -255,7 +286,12 @@ def mark_commissions_paid(data, admin):
     ids = data.get("commissions")
     if isinstance(ids, list) and ids:
         qs = qs.filter(id__in=ids)
+    paid_ids = list(qs.values_list("id", flat=True))
     n = qs.update(status="PAID", paid_at=timezone.now(), paid_by=admin)
+    # Paid outside WaziPOS: the payout ledger must not pay them again.
+    from payments.utils.collection_payouts import paid_manually
+
+    paid_manually("agent_commission", paid_ids, data.get("reference"))
     return [], n
 
 
@@ -371,6 +407,10 @@ def record_subscription_commission(payment, agent=None):
         entity = payment.entity
         agent = agent or (entity.agent if entity and entity.agent_id else None)
         if not agent or not agent.is_active:
+            return None
+        if is_own_shop(agent, entity):
+            # No commission from the agent's own shop (conflict of interest): the platform keeps it.
+            create_log("info", f"No agent commission on payment {payment.reference_number}: the agent's own business")
             return None
         pct = agent.commission_percentage or Decimal("0")
         paid = Decimal(payment.amount or 0)
@@ -591,6 +631,9 @@ def onboarder_access(user, entity_id):
     o = onboarder_assignments(onboarder).filter(entity_id=entity_id).first() if entity_id else None
     if not o:
         return ["You are not attached to this business"], None, None
+    if o.agent_id and is_own_shop(o.agent, o.entity):
+        # Onboarding the agent's own shop is a conflict of interest: their onboarders can't enter stock there.
+        return ["This business belongs to your agent; their onboarders can't enter its stock"], None, None
     if not receipt_kind(o.entity.entity_type):
         return ["Onboarders can't enter stock for this kind of business"], None, None
     if not access_open(o):
@@ -806,6 +849,8 @@ def create_entity(data, agent, request_user):
     errors = []
     if not owner:
         errors.append("Pick the owner from the users you registered")
+    elif owner.pk == agent.user_id:
+        errors.append("Agents can't register their own business; another agent or WaziPOS must onboard it")
     if details.get("entity_type") not in AGENT_ENTITY_TYPES:
         errors.append("Agents register retailers, wholesalers, restaurants, hotels, delivery companies and couriers only")
     term_errors, terms = clean_terms(agent, data.get("onboarding"), creating=True, entity_type=details.get("entity_type"))

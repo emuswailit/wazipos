@@ -156,6 +156,18 @@ def check_jambopay_transport_payment_status():
 
 #@app.task
 def process_vehicle_collection_account_settlement():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_process_vehicle_collection_account_settlement():
     print("Process vehicle collection settlement")
    
 
@@ -176,6 +188,18 @@ def clean_up_old_incomplete_transactions():
 
 @app.task
 def settle_cashless_ticket_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_settle_cashless_ticket_payments():
     unsettled_ticket_payments = get_unsynced_today_ticket_payments()
     if len(unsettled_ticket_payments)>0:
         print(f"We got {len(unsettled_ticket_payments)} unsettled ticket payments")
@@ -223,6 +247,18 @@ def check_sacco_subscription_payment_status():
 
 #@app.task
 def settle_sacco_subscription_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_settle_sacco_subscription_payments():
     unsettled_subscription_payments = get_unsynced_today_sacco_subscription_payments()
     if len(unsettled_subscription_payments)>0:
         print(f"We got {len(unsettled_subscription_payments)} unsettled ticket payments")

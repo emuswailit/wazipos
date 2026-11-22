@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 import datetime
 from django.shortcuts import render
 from django.utils import timezone
@@ -155,7 +156,7 @@ def hotspot_login_view(request):
             "orderId": reference_number, "amount": int(tariff_obj.price), "accountTo": config('WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT'),
             "description": f"WiFi Sub - {mac}", "modeOfPayment": "MOBILE_MONEY",
             "provider": "Mpesa" if telco == "MPESA" else "AIRTELMONEY",
-            "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"}, "callBackUrl": "https://webhook.site"
+            "data": {"phoneNumber": formatted_phone_number, "serviceType": "TOPUP"}, "callBackUrl": jambopay_callback_url()
         }
         if telco == "AIRTELMONEY": 
             payload_data["currency"] = "KES"

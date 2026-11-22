@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 from email import errors
 from datetime import datetime, timedelta
 from authentication.validators.authentication_models_validators import validate_user
@@ -754,9 +755,9 @@ def create_vehicle_subscription_payment(data,user):
         print("my entity",vehicle.entity)
         if float(balance)>amount:
             data = json.dumps({
-                    "callbackUrl": "https://webhook.site/931bef21-de22-43bc-a45b-7e12999ac9cb",
+                    "callbackUrl": jambopay_callback_url(),
                     "amount": str(amount),
-                    "accountTo": vehicle_collection_account.account_number,
+                    "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                     "accountFrom":subscription.account_number,
                     "orderId": reference_number
                     

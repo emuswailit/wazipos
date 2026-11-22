@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 import pyotp
 import json
 from authentication.signals import generate_key
@@ -951,7 +952,7 @@ def create_member_account_transaction_transaction(data,user):
                                 "accountRef": externalAccountToNumber,
                                 "accountNumber":externalAccountToNumber
                             },
-                            "callBackUrl": "https://webhook.site/5a0465a2-3e53-4955-b1ab-50c805102343",
+                            "callBackUrl": jambopay_callback_url(),
                             "narration": "Send Money to MPesa",
                             "verificationType":"PIN"
     
@@ -972,7 +973,7 @@ def create_member_account_transaction_transaction(data,user):
                                 "accountRef": externalAccountToNumber,
                                 "accountNumber":externalAccountToNumber
                             },
-                            "callBackUrl": "https://webhook.site/5a0465a2-3e53-4955-b1ab-50c805102343",
+                            "callBackUrl": jambopay_callback_url(),
                             "narration": "Send Money to Airtel Money",
                             "verificationType":"PIN"
     
@@ -993,7 +994,7 @@ def create_member_account_transaction_transaction(data,user):
                         "accountRef": externalAccountToRef,
                         "accountNumber": externalAccountToNumber,
                     },
-                    "callBackUrl": "https://webhook.site/7a311d8a-7c1b-4195-8640-e95e5ad616b3",
+                    "callBackUrl": jambopay_callback_url(),
                     "narration": "Payout to Paybill",
                      "verificationType":"PIN"
                 })
@@ -1014,7 +1015,7 @@ def create_member_account_transaction_transaction(data,user):
                         "accountNumber":externalAccountToNumber,
                         "bankCode": externalBankCode,
                     },
-                    "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+                    "callBackUrl": jambopay_callback_url(),
                     "narration": "Wallet account withdrawal to bank",
                     "verificationType":"PIN"
             

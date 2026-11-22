@@ -4,7 +4,7 @@ Django settings for wazi project.
 
 from pathlib import Path
 from datetime import timedelta
-from decouple import config
+from decouple import Csv, config
 import os
 import base64
 from cryptography.fernet import Fernet
@@ -12,7 +12,8 @@ from cryptography.fernet import Fernet
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
 
-DEBUG = config("DEBUG")
+# Parsed as a boolean: the string "False" from .env used to switch debug ON.
+DEBUG = config("DEBUG", default=False, cast=bool)
 CELERY_IMPORT = ['properties.tasks', 'employees.tasks', 'distributors.tasks', 'hospitals.tasks', 'drugs.tasks', 'loyalty.tasks', 'logistics.tasks', 'messaging.tasks', 'manufacturers.tasks', 'payments.tasks', 'products.tasks', 'parking.tasks', 'retailers.tasks', 'services.tasks', 'saccos.tasks', 'expenses.tasks', 'transport.tasks', 'restaurants.tasks', 'wholesalers.tasks', 'wifi.tasks', 'subscriptions.tasks', 'chats.tasks', 'stats.tasks', 'ussd.tasks']
 
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -20,7 +21,13 @@ SECRET_KEY = config("SECRET_KEY")
 FIELD_ENCRYPTION_KEY  = config("FIELD_ENCRYPTION_KEY")
 ENCRYPT_KEY=config("ENCRYPT_KEY")
 
-ALLOWED_HOSTS = ["*",'24b2-102-219-248-21.ngrok-free.app']
+# Hosts this API answers to. Override with ALLOWED_HOSTS=a.com,b.com in .env
+# (add any other domain or IP the server is reached by).
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="api.wazipos.co.ke,wazipos.co.ke,www.wazipos.co.ke,localhost,127.0.0.1",
+    cast=Csv(),
+)
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880
@@ -85,6 +92,8 @@ INSTALLED_APPS = [
     "stocktakes",
     # Owner-away protection: shifts, blind cash counts, commissions, alerts (shopguard/models.py)
     "shopguard",
+    # Email / SMS / push on orders, pay-ins and payouts (notifications/signals.py)
+    "notifications",
 ]
 
 AUTHENTICATION_BACKENDS = (
@@ -278,7 +287,15 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-CORS_ORIGIN_ALLOW_ALL = True
+# Browsers may call the API only from these sites (the phone apps send no Origin and
+# are unaffected). Override with CORS_ALLOWED_ORIGINS=https://a.com,... in .env;
+# CORS_ALLOW_ALL=True only for local debugging.
+CORS_ORIGIN_ALLOW_ALL = config("CORS_ALLOW_ALL", default=False, cast=bool)
+CORS_ALLOWED_ORIGINS = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="https://wazipos.co.ke,https://www.wazipos.co.ke,https://app.wazipos.co.ke,http://localhost:8081,http://localhost:19006",
+    cast=Csv(),
+)
 CSRF_TRUSTED_ORIGINS = [
     "https://wazipos.co.ke",
     "https://api.wazipos.co.ke",
@@ -387,3 +404,15 @@ logging.config.dictConfig({
         }
     }
 })
+
+# ---------------------------------------------------------------- email (every environment)
+# Used by core/utils.send_email and core/notify.py (order / payment / payout emails).
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_USE_TLS = True
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="") or EMAIL_HOST_USER
+DOMAIN = config("DOMAIN", default="api.wazipos.co.ke")
+SITE_NAME = "Wazipos"

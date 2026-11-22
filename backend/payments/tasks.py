@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 
 import json
 
@@ -306,7 +307,7 @@ def payout_entity_amount(payment,entity,payout_amount,token,payout_account):
                 "accountNumber":payout_account.account_number,
                 "bankCode": payout_account.account_code,
             },
-            "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+            "callBackUrl": jambopay_callback_url(),
             "narration": "Commision payout to bank",
           
         }
@@ -322,7 +323,7 @@ def payout_entity_amount(payment,entity,payout_amount,token,payout_account):
                 "accountNumber":payout_account.account_number,
                 
             },
-            "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+            "callBackUrl": jambopay_callback_url(),
             "narration": "Commision payout to mobile money",
           
         })
@@ -338,7 +339,7 @@ def payout_entity_amount(payment,entity,payout_amount,token,payout_account):
                 "accountNumber":payout_account.account_number,
                 
             },
-            "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+            "callBackUrl": jambopay_callback_url(),
             "narration": "Commision payout to paybill",
            
         })
@@ -353,7 +354,7 @@ def payout_entity_amount(payment,entity,payout_amount,token,payout_account):
                 "accountNumber":payout_account.account_number,
                 
             },
-            "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+            "callBackUrl": jambopay_callback_url(),
             "narration": "Commision payout to till",
            
         })
@@ -413,7 +414,7 @@ def payout_commission_amount(payment,entity,commission_amount,token):
                 "accountNumber":config("WAZIPOS_COMMISSION_PAYOUT_ACCOUNT"),
                 "bankCode": config("WAZIPOS_COMMISSION_PAYOUT_BANK_CODE"),
             },
-            "callBackUrl": "https://webhook.site/f6cda98d-3773-401b-ae2b-f430b6affb31",
+            "callBackUrl": jambopay_callback_url(),
             "narration": "Commision payout to bank",
           
         }
@@ -437,6 +438,18 @@ def payout_commission_amount(payment,entity,commission_amount,token):
 
 @app.task
 def process_wifi_payments():
+    """
+    Replaced by the payout ledger: every pay-in sits in the WaziPOS collection
+    account and is paid out by JamboPay payout to the payee's payout account
+    (payments/utils/order_payouts.py run_payouts, collection_payouts.py). Kept so
+    any schedule pointing here stays valid; never transfers wallet to wallet.
+    """
+    from payments.utils.order_payouts import run_payouts
+
+    return run_payouts()
+
+
+def _legacy_process_wifi_payments():
     create_log("info", "Process Wifi Payments Task: Started processing wifi payments")
     unsettled_payments=[]
     token = None

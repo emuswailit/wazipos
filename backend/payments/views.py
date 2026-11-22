@@ -1487,3 +1487,21 @@ class EntitySubscriptionsUpdateAPIView(generics.RetrieveUpdateAPIView):
         obj = get_object_or_404(queryset, **filter)
         self.check_object_permissions(self.request, obj)
         return obj
+
+@api_view(["POST", "GET"])
+@permission_classes([permissions.AllowAny])
+def jambopayCallbackAPIView(request):
+    """
+    POST /api/v1/payments/jambopay/callback — JamboPay's payment / payout results.
+    Only acknowledged and logged (reference and status, no phone numbers): every
+    payment's status is confirmed by asking JamboPay directly (polling), so a forged
+    callback can't mark anything paid.
+    """
+    data = request.data if hasattr(request, "data") else {}
+    try:
+        ref = data.get("orderId") or data.get("ref") or data.get("reference")
+        status_ = data.get("status")
+        create_log("info", f"JamboPay callback: ref={ref} status={status_}")
+    except Exception:
+        pass
+    return JsonResponse({"received": True})

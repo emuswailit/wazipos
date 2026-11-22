@@ -1,3 +1,4 @@
+from payments.utils.collection import jambopay_callback_url  # JamboPay callbacks: our own endpoint
 # retailers/utils/retailer_utils.py
 #
 # Retailer utilities: receipts, orders, indents, out-of-stocks,
@@ -2798,10 +2799,9 @@ def process_retailer_order_payment(
                     + retailer_order.shipping_amount
                 ),
                 "callBackUrl": (
-                    "https://webhook.site/"
-                    "931bef21-de22-43bc-a45b-7e12999ac9cb"
+                    jambopay_callback_url()
                 ),
-                "accountTo": administrator_account.account_number,
+                "accountTo": config("WAZIPOS_JAMBOPAY_COLLECTION_ACCOUNT"),
                 "description": "Customer order payment",
                 "modeOfPayment": "WALLET_AS_SERVICE",
                 "provider": "JAMBOPAY",
@@ -3095,8 +3095,7 @@ def process_customer_order_payment(
                 "orderId": reference_number,
                 "amount": amount_int, # 🟢 Pass integer
                 "callBackUrl": (
-                    "https://webhook.site/"
-                    "7911487f-fc9e-46b0-a812-3adfa008375c"
+                    jambopay_callback_url()
                 ),
                 "accountTo": jambopay_collection_account, 
                 "description": "Merchant payment",
@@ -3112,8 +3111,7 @@ def process_customer_order_payment(
                 "orderId": reference_number,
                 "amount": amount_str, # 🟢 Pass integer string
                 "callBackUrl": (
-                    "https://webhook.site/"
-                    "55963e0b-b692-42b6-a682-0223eaf7fbff"
+                    jambopay_callback_url()
                 ),
                 "accountTo": jambopay_collection_account,
                 "currency": "KES",
@@ -3229,8 +3227,7 @@ def process_customer_order_payment(
             "orderId": reference_number,
             "amount": amount_int, # 🟢 Pass integer
             "callBackUrl": (
-                "https://webhook.site/"
-                "931bef21-de22-43bc-a45b-7e12999ac9cb"
+                jambopay_callback_url()
             ),
             "accountTo": jambopay_collection_account, 
             "description": "Customer order payment",
