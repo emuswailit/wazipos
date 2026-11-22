@@ -10,7 +10,8 @@ import type { PrescriptionsClient } from '@/api/retailerPrescriptionsApi';
 import { AdminFormSheet, SearchField, useListTokens, webPointer } from '@/components/common/listScreen';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 interface Pharmacy {
     id: string;

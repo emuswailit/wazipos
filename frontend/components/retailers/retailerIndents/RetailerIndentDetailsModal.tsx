@@ -15,7 +15,8 @@ import type { RetailerIndent, RetailerIndentItem } from '@/databases/types';
 import { resolveImageUrl } from '@/lib/images';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 import {
     budgetPct,

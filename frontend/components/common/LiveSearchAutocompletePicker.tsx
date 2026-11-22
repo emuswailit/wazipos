@@ -5,12 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Platform,
-    Pressable,
     ScrollView,
     Text,
     TextInput,
     View,
 } from "react-native";
+import { Pressable } from '@/components/common/StablePressable';
 
 interface AutocompleteOption {
     id: string;

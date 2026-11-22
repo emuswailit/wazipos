@@ -9,7 +9,8 @@
 import { useAuth } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatKES, PAYMENT_METHOD_FILTERS, PAYMENT_METHOD_ICONS, PAYMENT_METHOD_LABELS, type PaymentMethodFilter } from '../customerOrders/CustomerOrdersWebView';

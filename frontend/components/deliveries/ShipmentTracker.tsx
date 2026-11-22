@@ -4,12 +4,14 @@
 //   Buyer (retailer / customer):  tracking number, the delivery CODE to give whoever
 //                      delivers, and each leg's progress.
 //   Seller (wholesaler):
-//     - paid, not dispatched yet  -> Dispatch: pick a delivery person of the
-//       provider (and mode) the buyer paid for;
+//     - paid, not dispatched yet  -> Dispatch: allocate the in-town leg to one of
+//       your delivery persons (if the distance and weight allow) or a rider —
+//       yours or a partner company's; it pays them their rate, the buyer's price
+//       does not change;
 //     - under way                 -> move legs on (LegActions) or reassign;
 //     - waiting at the courier's office -> confirm collection with the buyer's code.
 
-import deliveriesApi, { apiError, isOk, MODE_LABELS, type DeliveryAgent, type OrderLink, type Shipment, type ShipmentLeg } from '@/api/deliveriesApi';
+import deliveriesApi, { apiError, isOk, MODE_LABELS, type DeliveryAgent, type OrderLink, type Shipment, type ShipmentLeg, type AllocatableAgent } from '@/api/deliveriesApi';
 import { SheetButton, formatDateTime, useListTokens } from '@/components/common/listScreen';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -141,8 +143,8 @@ export function ShipmentTracker({ link, version, viewer, paid, onOrderChanged }:
                         leg={firstPersonLeg}
                         sellerId={shipment.entity}
                         actionLabel="Dispatch"
-                        onPick={async (agentId) => {
-                            const res: any = await deliveriesApi.dispatchOrder(link, agentId);
+                        onPick={async (choice) => {
+                            const res: any = await deliveriesApi.dispatchOrder(link, choice.agent, { vehicle: choice.vehicle, dispatch_office: choice.dispatchOffice });
                             if (!isOk(res)) return apiError(res, 'Could not dispatch the order.');
                             changed(res.data?.shipment);
                             return null;
@@ -214,8 +216,8 @@ function LegRow({
                 <AgentPicker
                     leg={leg}
                     actionLabel="Reassign"
-                    onPick={async (agentId) => {
-                        const res: any = await deliveriesApi.assignShipmentLeg(leg.id, agentId);
+                    onPick={async (choice) => {
+                        const res: any = await deliveriesApi.assignShipmentLeg(leg.id, choice.agent, choice.vehicle);
                         if (!isOk(res)) return apiError(res, 'Could not reassign.');
                         onChanged(res.data?.shipment);
                         return null;
@@ -226,7 +228,19 @@ function LegRow({
     );
 }
 
-/** Delivery persons of the leg's provider who use the planned mode. */
+export interface AllocationChoice {
+    agent: string;
+    vehicle?: string;
+    dispatchOffice?: string;
+}
+
+/**
+ * Who takes this leg. The seller sees its own delivery persons and partners'
+ * riders / drivers — with one of their fleet vehicles where they keep a fleet
+ * (joining a trip already loading on it) — each with what the leg pays them and
+ * why someone can't. Courier deliveries also offer the courier's dispatch offices
+ * near the seller's premises. A partner company's staff see their own people.
+ */
 function AgentPicker({
     leg,
     sellerId,
@@ -236,65 +250,118 @@ function AgentPicker({
     leg: ShipmentLeg;
     sellerId?: string;
     actionLabel: string;
-    onPick: (agentId: string) => Promise<string | null>;
+    onPick: (choice: AllocationChoice) => Promise<string | null>;
 }) {
     const { theme, border } = useListTokens();
-    const [agents, setAgents] = useState<DeliveryAgent[] | null>(null);
+    const [rows, setRows] = useState<{ key: string; agent: string; vehicle?: string; name: string; note?: string; ok: boolean; own?: boolean }[] | null>(null);
+    const [offices, setOffices] = useState<{ id: string; title: string; distance_km: string; current: boolean }[]>([]);
+    const [office, setOffice] = useState<string | undefined>(undefined);
     // The person named when the order was made (if any) is preselected.
-    const [pick, setPick] = useState<string | null>(leg.agent ?? null);
+    const [pick, setPick] = useState<string | null>(leg.agent ? `${leg.agent}|` : null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         let alive = true;
-        // Own staff when the provider is the seller; otherwise the partner company's.
-        const partner = leg.provider && leg.provider !== sellerId ? leg.provider : undefined;
+        const fallback = () => {
+            const partner = leg.provider && leg.provider !== sellerId ? leg.provider : undefined;
+            return deliveriesApi.getDeliveryAgents(partner).then((res: any) => {
+                if (!alive) return;
+                if (isOk(res))
+                    setRows(
+                        (res.data?.agents ?? [])
+                            .filter((a: DeliveryAgent) => a.is_active && a.mode === leg.mode)
+                            .map((a: DeliveryAgent) => ({ key: `${a.id}|`, agent: a.id, name: a.name, ok: true, own: true })),
+                    );
+                else setError(apiError(res, 'Could not load delivery persons.'));
+            });
+        };
         deliveriesApi
-            .getDeliveryAgents(partner)
+            .getAllocatableAgents(leg.id)
             .then((res: any) => {
                 if (!alive) return;
-                if (isOk(res)) setAgents((res.data?.agents ?? []).filter((a: DeliveryAgent) => a.is_active && a.mode === leg.mode));
-                else setError(apiError(res, 'Could not load delivery persons.'));
+                if (!isOk(res)) return fallback();
+                const data = res.data?.data ?? {};
+                const list: AllocatableAgent[] = data.agents ?? [];
+                setOffices(data.dispatch_offices ?? []);
+                setRows(
+                    list.map((r) => ({
+                        key: `${r.agent}|${r.vehicle ?? ''}`,
+                        agent: r.agent,
+                        vehicle: r.vehicle ?? undefined,
+                        name: `${r.name || r.phone || 'Delivery person'}${r.vehicle_label ? ` · ${r.vehicle_label}` : ''}`,
+                        ok: r.ok,
+                        own: r.own,
+                        note: r.ok
+                            ? `${r.mode_label}${r.own ? '' : ` · ${r.provider_title}`}${!r.own && r.km_away != null ? ` · ${Number(r.km_away).toLocaleString()} km ${r.live_location ? 'away' : 'from base'}` : ''} · KES ${Number(r.cost).toLocaleString()}${r.trip ? ' · joins the trip loading' : r.vehicle_on_trip ? ' · vehicle out now' : ''}`
+                            : r.reason ?? undefined,
+                    })),
+                );
             })
             .catch(() => alive && setError('Could not reach the server.'));
         return () => {
             alive = false;
         };
-    }, [leg.provider, leg.mode, sellerId]);
+    }, [leg.id, leg.provider, leg.mode, sellerId]);
 
     const submit = async () => {
-        if (!pick) return;
+        const row = rows?.find((r) => r.key === pick) ?? rows?.find((r) => pick && r.agent === pick.split('|')[0]);
+        if (!row) return;
         setBusy(true);
         setError(null);
-        const err = await onPick(pick);
+        const err = await onPick({ agent: row.agent, vehicle: row.vehicle, dispatchOffice: office });
         if (err) setError(err);
         setBusy(false);
     };
 
+    const chip = (key: string, on: boolean, title: string, note: string | undefined, onPress: () => void, disabled = false) => (
+        <Pressable
+            key={key}
+            disabled={disabled}
+            onPress={onPress}
+            className="rounded-xl px-3 py-1.5 justify-center"
+            style={{ opacity: disabled ? 0.55 : 1, borderWidth: 1, borderColor: on ? theme.primary : border, backgroundColor: on ? `${theme.primary}14` : 'transparent' }}
+        >
+            <Text style={{ color: on ? theme.primary : theme.text, fontFamily: theme.font.bold, fontSize: 12.5 }}>{title}</Text>
+            {note ? <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11 }}>{note}</Text> : null}
+        </Pressable>
+    );
+
     return (
         <View style={{ gap: 6 }}>
+            {offices.length ? (
+                <>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.5 }}>DROP AT THE COURIER'S OFFICE</Text>
+                    <View className="flex-row flex-wrap" style={{ gap: 6 }}>
+                        {offices.map((o) => chip(o.id, office ? office === o.id : o.current, o.title, `${Number(o.distance_km).toLocaleString()} km from you`, () => setOffice(o.id)))}
+                    </View>
+                </>
+            ) : null}
             <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.5 }}>
-                {leg.provider_title?.toUpperCase()} · {MODE_LABELS[leg.mode].toUpperCase()}
+                WHO TAKES IT · {MODE_LABELS[leg.mode].toUpperCase()} PLANNED
             </Text>
-            {agents === null ? (
+            {rows === null ? (
                 <ActivityIndicator size="small" color={theme.primary} />
-            ) : agents.length === 0 ? (
+            ) : rows.length === 0 ? (
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
-                    No active delivery person using {MODE_LABELS[leg.mode].toLowerCase()}. Add one in Delivery settings.
+                    No one can take this right now: none of your people or vehicles fit, and no WaziPOS rider or driver is available nearby. Add people or fleet vehicles in Delivery settings, or try again shortly.
                 </Text>
             ) : (
-                <View className="flex-row flex-wrap" style={{ gap: 6 }}>
-                    {agents.map((a) => (
-                        <Pressable
-                            key={a.id}
-                            onPress={() => setPick(a.id)}
-                            className="rounded-full px-3 h-9 justify-center"
-                            style={{ borderWidth: 1, borderColor: pick === a.id ? theme.primary : border, backgroundColor: pick === a.id ? `${theme.primary}14` : 'transparent' }}
-                        >
-                            <Text style={{ color: pick === a.id ? theme.primary : theme.text, fontFamily: theme.font.bold, fontSize: 12.5 }}>{a.name}</Text>
-                        </Pressable>
-                    ))}
-                </View>
+                <>
+                    {[
+                        { title: 'YOUR PEOPLE & FLEET', list: rows.filter((r) => r.own) },
+                        { title: 'WAZIPOS RIDERS & DRIVERS NEAR YOU', list: rows.filter((r) => !r.own) },
+                    ]
+                        .filter((g) => g.list.length)
+                        .map((g) => (
+                            <View key={g.title} style={{ gap: 4 }}>
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 10.5, letterSpacing: 0.4 }}>{g.title}</Text>
+                                <View className="flex-row flex-wrap" style={{ gap: 6 }}>
+                                    {g.list.map((r) => chip(r.key, pick === r.key, r.name, r.note, () => setPick(r.key), !r.ok))}
+                                </View>
+                            </View>
+                        ))}
+                </>
             )}
             <SheetButton label={actionLabel} icon="paper-plane-outline" onPress={submit} loading={busy} disabled={!pick} grow />
             {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12 }}>{error}</Text> : null}

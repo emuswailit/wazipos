@@ -46,7 +46,7 @@ interface Props {
 }
 
 /** What agents may register (backend authentication/utils/agents.py AGENT_ENTITY_TYPES). */
-export const AGENT_ENTITY_TYPES = ['GeneralRetailer', 'PharmaceuticalRetailer', 'GeneralWholesaler', 'PharmaceuticalWholesaler', 'Restaurant', 'Hotel'];
+export const AGENT_ENTITY_TYPES = ['GeneralRetailer', 'PharmaceuticalRetailer', 'GeneralWholesaler', 'PharmaceuticalWholesaler', 'Restaurant', 'Hotel', 'Delivery', 'Courier'];
 
 /** The `entity_details` the backend expects (CreateLocalEntity / UpdateEntity and the agent versions). */
 export function toEntityDetails(values: any, editingRemoteId?: string | null) {

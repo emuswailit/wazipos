@@ -53,6 +53,11 @@ const schema = Yup.object({
     description: Yup.string().ensure(),
     preparation: Yup.string().ensure(),
     units_per_pack: Yup.number().typeError('Enter a whole number').positive('Must be more than 0').integer('Enter a whole number').required('Enter units per pack'),
+    weight_kg: Yup.number().typeError('Enter kg, e.g. 0.25').moreThan(0, 'Above 0').max(5000).required('Weight of one unit (kg) — deliveries are planned from it'),
+    pack_weight_kg: Yup.number().typeError('Enter kg').moreThan(0, 'Above 0').nullable().transform((v, o) => (o === '' ? null : v)),
+    length_cm: Yup.number().typeError('cm').moreThan(0).nullable().transform((v, o) => (o === '' ? null : v)),
+    width_cm: Yup.number().typeError('cm').moreThan(0).nullable().transform((v, o) => (o === '' ? null : v)),
+    height_cm: Yup.number().typeError('cm').moreThan(0).nullable().transform((v, o) => (o === '' ? null : v)),
     pack_tag: Yup.string().trim().required("Enter the pack tag, e.g. 100'S"),
     manufacturer_title: Yup.string().required('Pick the manufacturer'),
     category: Yup.string().required('Pick a category'),
@@ -98,6 +103,12 @@ export default function AdminProductEditModal({ visible, onClose, isSubmittingRe
                 preparation: initialData?.preparation || '',
                 units_per_pack: initialData?.units_per_pack !== undefined ? String(initialData.units_per_pack) : '',
                 pack_tag: initialData?.pack_tag || "100'S",
+                // An unconfirmed (default 0.5 kg) weight starts empty so it gets entered.
+                weight_kg: initialData?.weight_kg && initialData?.weight_captured !== false ? String(Number(initialData.weight_kg)) : '',
+                pack_weight_kg: initialData?.pack_weight_kg ? String(Number(initialData.pack_weight_kg)) : '',
+                length_cm: initialData?.length_cm ? String(Number(initialData.length_cm)) : '',
+                width_cm: initialData?.width_cm ? String(Number(initialData.width_cm)) : '',
+                height_cm: initialData?.height_cm ? String(Number(initialData.height_cm)) : '',
                 manufacturer: initialData?.manufacturer || '',
                 manufacturer_title: initialData?.manufacturer_title || '',
                 category: initialData?.category || DEFAULT_CATEGORY_ID,
@@ -157,6 +168,18 @@ export default function AdminProductEditModal({ visible, onClose, isSubmittingRe
                             <CustomTextField name="pack_tag" label="Pack tag" required placeholder="100'S" />
                         </FormRow>
                         <BarcodeScannerInput name="bar_code" label="Barcode (SKU / GTIN)" placeholder="Scan or type…" />
+                    </FormSection>
+
+                    <FormSection title="Weight & size" hint="Weigh it — orders are weighed from this to choose walking, riders, vehicles or couriers." zIndex={18}>
+                        <FormRow>
+                            <CustomTextField name="weight_kg" label="Weight of one unit (kg)" required placeholder="e.g. 0.25 for 250 g" keyboardType="decimal-pad" />
+                            <CustomTextField name="pack_weight_kg" label="Weight of a full pack (kg)" placeholder="Blank = unit × units per pack" keyboardType="decimal-pad" />
+                        </FormRow>
+                        <FormRow>
+                            <CustomTextField name="length_cm" label="Length (cm)" keyboardType="decimal-pad" />
+                            <CustomTextField name="width_cm" label="Width (cm)" keyboardType="decimal-pad" />
+                            <CustomTextField name="height_cm" label="Height (cm)" keyboardType="decimal-pad" />
+                        </FormRow>
                     </FormSection>
 
                     <FormSection title="Sold in parts" hint="Stock is counted as whole units plus what's left in the opened one." zIndex={15}>

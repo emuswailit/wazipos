@@ -8,7 +8,8 @@
 import { isWeb, useListTokens, webPointer } from '@/components/common/listScreen/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { IconName } from './AdminListView';
@@ -19,6 +20,27 @@ const SHEET_WIDE_MIN_WIDTH = 640;
 export const SHEET_BOTTOM_MARGIN = 12;
 /** Phones: gap between a sheet and the sides of the screen. */
 export const SHEET_SIDE_MARGIN = 8;
+
+/**
+ * Space to keep clear at the bottom of a phone sheet: the safe-area inset, or
+ * on Android — where that inset can come back 0 inside a modal although the
+ * modal draws under the navigation bar — the bar's height worked out from the
+ * screen vs window size. Without it the last controls of a sheet (e.g.
+ * "Start preparing") sat behind the navigation buttons.
+ */
+export function useSheetBottomInset(): number {
+    const insets = useSafeAreaInsets();
+    const { height: windowH } = useWindowDimensions();
+    if (Platform.OS !== 'android') return insets.bottom;
+    const screenH = Dimensions.get('screen').height;
+    const statusH = StatusBar.currentHeight ?? 0;
+    const navBar = Math.max(0, Math.round(screenH - windowH - statusH));
+    // Edge-to-edge windows equal the screen (navBar 0): fall back to a
+    // conservative height for a 3-button bar when the inset is missing too.
+    const guess = navBar > 0 ? navBar : insets.bottom > 0 ? 0 : ANDROID_NAV_BAR_FALLBACK;
+    return Math.max(insets.bottom, guess);
+}
+const ANDROID_NAV_BAR_FALLBACK = 48;
 
 /**
  * Pixel height the body may use, for sheets with `scroll={false}` that bring
@@ -55,10 +77,11 @@ export function FloatingSheet({
 }) {
     const { theme } = useListTokens();
     const insets = useSafeAreaInsets();
+    const bottomInset = useSheetBottomInset();
     const { height: winHeight } = useWindowDimensions();
     const [availH, setAvailH] = useState(0);
     const padTop = insets.top + 16;
-    const padBottom = insets.bottom + SHEET_BOTTOM_MARGIN;
+    const padBottom = bottomInset + SHEET_BOTTOM_MARGIN;
     const room = Math.max(200, (availH || winHeight) - padTop - padBottom);
     const sizeStyle = size === 'fit' ? { maxHeight: room } : { height: Math.round(room * Math.min(1, size)) };
     return (
@@ -275,7 +298,8 @@ function ModalSheet({
     // Phones: the sheet floats clear of the status bar and of the bottom edge
     // (navigation bar / home indicator + a margin), so nothing sits under them.
     const padTop = wide ? 24 : insets.top + 16;
-    const padBottom = wide ? 24 : insets.bottom + SHEET_BOTTOM_MARGIN + keyboardLift;
+    const bottomInset = useSheetBottomInset();
+    const padBottom = wide ? 24 : bottomInset + SHEET_BOTTOM_MARGIN + keyboardLift;
 
     // Native layout does not reliably shrink a ScrollView under a percentage
     // maxHeight, so long content pushed the footer (and its buttons) out of the
@@ -460,16 +484,20 @@ export function SheetButton({
     const off = disabled || loading;
     const bg = variant === 'primary' ? theme.primary : variant === 'danger' ? '#f43f5e' : variant === 'secondary' ? `${theme.primary}12` : 'transparent';
     const fg = variant === 'primary' || variant === 'danger' ? '#fff' : variant === 'secondary' ? theme.primary : theme.text;
+    const [pressed, setPressed] = useState(false);
     return (
         <Pressable
             onPress={onPress}
+            onPressIn={() => setPressed(true)}
+            onPressOut={() => setPressed(false)}
             disabled={off}
             accessibilityRole="button"
             accessibilityLabel={label}
             accessibilityState={{ disabled: !!off, busy: !!loading }}
-            // Layout lives in `style` (not className): NativeWind drops className styles
-            // on a Pressable whose style is a function, which collapsed these buttons.
-            style={({ pressed }) => ({
+            // A plain style object, never a function: on native, NativeWind's Pressable
+            // dropped a function style entirely, leaving the white label on no
+            // background — primary buttons (Save, Start preparing…) were invisible.
+            style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -485,7 +513,7 @@ export function SheetButton({
                 flexGrow: grow ? 1 : 0,
                 flexBasis: grow ? 0 : 'auto',
                 ...webPointer,
-            })}
+            }}
         >
             {icon ? <Ionicons name={loading ? 'hourglass-outline' : icon} size={fontSize + 2} color={fg} /> : null}
             <Text style={{ flexShrink: 1, color: fg, fontFamily: theme.font.bold, fontSize }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>

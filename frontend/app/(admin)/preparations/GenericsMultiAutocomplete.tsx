@@ -1,7 +1,8 @@
 import genericsApi from "@/api/drugs/genericsApi";
 import useApi from "@/hooks/useApi";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Pressable } from '@/components/common/StablePressable';
 
 interface GenericsMultiAutocompleteProps {
     theme: any;

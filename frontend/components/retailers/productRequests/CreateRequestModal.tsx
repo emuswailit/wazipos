@@ -39,7 +39,8 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { Alert, Platform, Pressable, Text, View } from 'react-native';
+import { Alert, Platform, Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 /* =========================================================
  * Shapes

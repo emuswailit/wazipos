@@ -209,6 +209,13 @@ function normalizeProduct(i: any): ProductItem {
         owner: String(i.owner ?? ''),
 
         units_per_pack: Number(i.units_per_pack) || 1,
+        // Weights (deliveries are planned from them)
+        weight_kg: i.weight_kg != null ? String(i.weight_kg) : undefined,
+        pack_weight_kg: i.pack_weight_kg != null ? String(i.pack_weight_kg) : null,
+        length_cm: i.length_cm != null ? String(i.length_cm) : null,
+        width_cm: i.width_cm != null ? String(i.width_cm) : null,
+        height_cm: i.height_cm != null ? String(i.height_cm) : null,
+        weight_captured: i.weight_captured !== false,
         manufacturer_title: String(i.manufacturer_title ?? ''),
         country_of_origin: String(i.country_of_origin ?? ''),
 

@@ -742,6 +742,50 @@ def plan_wholesaler_order_delivery(distributor, wholesaler, lines, option_key):
     return [], chosen, kg
 
 
+# ---------------------------------------------------------------- distributors' orders on manufacturers
+
+def purchase_order_lines_weight(lines):
+    """[(ManufacturerBatches batch, units of issue)] -> chargeable kg (a unit of issue holds packs_per_unit packs)."""
+    total = Decimal("0")
+    for batch, units in lines:
+        if batch.product_id:
+            total += _product_kg(batch.product, Decimal(units) * Decimal(batch.packs_per_unit or 1), "Pack")
+    return _q(total)
+
+
+def purchase_order_delivery_options(manufacturer, distributor, lines, dest_cp_id=None):
+    """A distributor ordering from a manufacturer: the same delivery mix. Returns (errors, options, kg)."""
+    errors = delivery_location_errors(manufacturer, distributor)
+    if errors:
+        return errors, [], Decimal("0")
+    kg = purchase_order_lines_weight(lines)
+    value = sum((Decimal(b.final_unit_price or b.unit_price or 0) * units for b, units in lines), Decimal("0"))
+    return [], tiered_delivery_options(manufacturer, entity_point(manufacturer), entity_point(distributor), kg, dest_cp_id, value), kg
+
+
+def plan_purchase_order_delivery(manufacturer, distributor, lines, option_key):
+    """Re-price the option the distributor picked: (errors, chosen, kg)."""
+    if not str(option_key or "").strip():
+        return ["Choose how it should be delivered"], None, Decimal("0")
+    errors, options, kg = purchase_order_delivery_options(manufacturer, distributor, lines, cp_from_key(option_key))
+    if errors:
+        return errors, None, kg
+    chosen = find_option(options, option_key)
+    if not chosen:
+        return ["That delivery option is no longer available; choose again"], None, kg
+    return [], chosen, kg
+
+
+def attach_purchase_order_shipment(order, chosen, kg, user):
+    """Save the distributor's chosen delivery as the order's (QUOTED) shipment."""
+    return _create_quoted_shipment(
+        seller=order.manufacturer, user=user, chosen=chosen, kg=kg,
+        origin=entity_point(order.manufacturer), destination=entity_point(order.distributor),
+        recipient_name=order.distributor.title, recipient_phone=getattr(order.distributor, "phone", None),
+        distributor_purchase_order=order,
+    )
+
+
 def attach_wholesaler_order_shipment(order, chosen, kg, user):
     """Save the wholesaler's chosen delivery as the order's (QUOTED) shipment."""
     return _create_quoted_shipment(
@@ -991,6 +1035,13 @@ def _seller_order(data, user):
 
         order = FoodOrder.objects.filter(id=data["food_order"], entity=user.entity).first()
         return (None if order else "Food order for provided ID does not exist"), order, "food"
+    if data.get("distributor_purchase_order"):
+        from manufacturers.models import DistributorPurchaseOrders
+
+        order = DistributorPurchaseOrders.objects.select_related("manufacturer", "distributor").filter(
+            id=data["distributor_purchase_order"], manufacturer=user.entity
+        ).first()
+        return (None if order else "Purchase order for provided ID does not exist"), order, "manufacturer"
     if data.get("wholesaler_order"):
         from distributors.models import WholesalerOrders
 
@@ -1004,10 +1055,15 @@ def _seller_order(data, user):
     return (None if order else "Retailer order for provided ID does not exist"), order, "retailer"
 
 
-ORDER_LINK = {"retailer": "retailer_order", "customer": "customer_order", "food": "food_order", "wholesaler": "wholesaler_order"}
+ORDER_LINK = {
+    "retailer": "retailer_order", "customer": "customer_order", "food": "food_order",
+    "wholesaler": "wholesaler_order", "manufacturer": "distributor_purchase_order",
+}
 
 
 def _order_paid(order, kind):
+    if kind == "manufacturer":
+        return bool(order.is_paid)
     if kind in ("customer", "food"):
         return str(order.is_paid).lower() == "true"
     if kind == "wholesaler":
@@ -1038,7 +1094,7 @@ def dispatch_order(data, user):
         # The kitchen marks food READY (restaurants dining service).
         if str(order.status).upper() != "READY":
             return ["Mark the food ready before dispatching"], None
-    elif kind == "wholesaler":
+    elif kind in ("wholesaler", "manufacturer"):
         f = getattr(order, "fulfilment", None)
         if not f or f.stage != "READY":
             return ["Prepare and pack the order, then mark it ready, before dispatching"], None
@@ -1078,7 +1134,7 @@ def dispatch_order(data, user):
                 order.status = "DISPATCHED"
             order.dispatched_at = order.dispatched_at or now
             order.dispatched_by = user
-        elif kind == "wholesaler":
+        elif kind in ("wholesaler", "manufacturer"):
             order.status = "DISPATCHED"
             order.dispatched_at = order.dispatched_at or now
         else:
@@ -1187,6 +1243,10 @@ def _mark_delivered(shipment):
     if wholesaler_order and str(wholesaler_order.is_delivered).lower() != "true":
         wholesaler_order.is_delivered = "true"
         wholesaler_order.save(update_fields=["is_delivered", "updated"])
+    purchase_order = shipment.distributor_purchase_order
+    if purchase_order and not purchase_order.delivered_at:
+        purchase_order.delivered_at = now
+        purchase_order.save(update_fields=["delivered_at", "updated"])
     food_order = shipment.food_order
     if food_order and not food_order.delivered_at:
         food_order.delivered_at = now

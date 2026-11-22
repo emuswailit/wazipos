@@ -1,7 +1,8 @@
 import formulationsApi from "@/api/drugs/formulationsApi";
 import useApi from "@/hooks/useApi";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable } from '@/components/common/StablePressable';
 
 interface FormulationAutocompleteProps {
     theme: any;

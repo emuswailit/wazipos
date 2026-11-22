@@ -4,7 +4,10 @@
 //   Delivery persons - own staff who deliver (an employee + mode + capacity)
 //   Rates            - price per mode: base + per km + per kg (min fee, limits);
 //                      buyers are quoted from these, and each leg is paid by them
-//   Partners         - outsourced delivery companies and long-haul couriers used
+//   WaziPOS providers - delivery companies and couriers whitelisted by WaziPOS
+//                      admin (read-only: admin onboards them, their riders and
+//                      vehicles); at dispatch you pick their available people
+//                      near you, or your own people and fleet
 //   Offices          - a courier's offices / collection points (where parcels are
 //                      handed over and collected); delivery options route via the
 //                      nearest ones, so each needs its GPS location
@@ -16,7 +19,7 @@ import deliveriesApi, {
     MODE_LABELS,
     type DeliveryAgent,
     type DeliveryMode,
-    type DeliveryPartner,
+    type PlatformProvider,
     type DeliveryRate,
     type Office,
 } from '@/api/deliveriesApi';
@@ -107,25 +110,28 @@ const ratesConfig: AdminListConfig<DeliveryRate> = {
     ],
 };
 
-const partnersConfig: AdminListConfig<DeliveryPartner> = {
-    title: 'Delivery partners',
-    noun: ['partner', 'partners'],
+const partnersConfig: AdminListConfig<PlatformProvider> = {
+    title: 'WaziPOS delivery providers',
+    noun: ['provider', 'providers'],
     icon: 'business-outline',
-    searchPlaceholder: 'Search partners…',
-    addLabel: 'Add partner',
-    emptyMessage: 'Add the delivery companies and couriers (e.g. Postal Corporation of Kenya) you send orders with.',
+    searchPlaceholder: 'Search providers…',
+    emptyMessage: 'No delivery companies or couriers are whitelisted yet. WaziPOS admin onboards them; use your own people and fleet meanwhile.',
     keyOf: (p, i) => `${p.id}-${i}`,
-    titleOf: (p) => p.partner_title,
-    subtitleOf: (p) => (p.kind === 'COURIER' ? 'Long-haul courier' : 'Delivery company'),
-    avatarOf: (p) => ({ label: p.partner_title }),
+    titleOf: (p) => p.title,
+    subtitleOf: (p) =>
+        p.kind === 'COURIER'
+            ? `Long-haul courier · ${p.offices} office${p.offices === 1 ? '' : 's'}`
+            : `Delivery company · ${p.agents_on_duty}/${p.agents} on duty · within ${Number(p.service_radius_km)} km`,
+    avatarOf: (p) => ({ label: p.title }),
     badgesOf: (p) => [
-        p.kind === 'COURIER' ? { label: 'Courier', tone: 'violet', icon: 'airplane-outline' } : { label: 'Delivery company', tone: 'info', icon: 'bicycle-outline' },
-        p.is_active ? { label: 'Active', tone: 'success', icon: 'ellipse' } : { label: 'Inactive', tone: 'neutral' },
+        p.kind === 'COURIER' ? { label: 'Courier', tone: 'violet', icon: 'airplane-outline' } : { label: 'Riders & drivers', tone: 'info', icon: 'bicycle-outline' },
+        { label: 'Whitelisted', tone: 'success', icon: 'shield-checkmark' },
     ],
-    primaryColumn: { label: 'Partner', flex: 2.4 },
+    primaryColumn: { label: 'Provider', flex: 2.4 },
     columns: [
         { key: 'kind', label: 'Type', flex: 1.4, render: (p) => (p.kind === 'COURIER' ? 'Long-haul courier' : 'Delivery company') },
-        { key: 'status', label: 'Status', flex: 1, render: (p) => (p.is_active ? 'Active' : 'Inactive') },
+        { key: 'people', label: 'On duty', flex: 1, render: (p) => (p.kind === 'COURIER' ? `${p.offices} offices` : `${p.agents_on_duty} / ${p.agents}`) },
+        { key: 'radius', label: 'Reach', flex: 1, render: (p) => (p.kind === 'COURIER' ? '—' : `${Number(p.service_radius_km)} km`) },
     ],
 };
 
@@ -172,7 +178,7 @@ export default function DeliverySettings() {
     const [tab, setTab] = useState<Tab>('AGENTS');
     const [agents, setAgents] = useState<DeliveryAgent[]>([]);
     const [rates, setRates] = useState<DeliveryRate[]>([]);
-    const [partners, setPartners] = useState<DeliveryPartner[]>([]);
+    const [partners, setPartners] = useState<PlatformProvider[]>([]);
     const [offices, setOffices] = useState<Office[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -193,12 +199,12 @@ export default function DeliverySettings() {
             const [a, r, p, o]: any[] = await Promise.all([
                 deliveriesApi.getDeliveryAgents(),
                 deliveriesApi.getDeliveryRates(),
-                deliveriesApi.getDeliveryPartners(),
+                deliveriesApi.getPlatformProviders(),
                 deliveriesApi.getMyOffices(),
             ]);
             if (isOk(a)) setAgents(a.data.agents ?? []);
             if (isOk(r)) setRates(r.data.rates ?? []);
-            if (isOk(p)) setPartners(p.data.partners ?? []);
+            if (isOk(p)) setPartners(p.data.providers ?? []);
             if (isOk(o)) setOffices(o.data.offices ?? []);
             const failed = [a, r, p, o].find((x) => !isOk(x));
             if (failed) setError(apiError(failed, 'Could not load delivery settings.'));
@@ -249,9 +255,7 @@ export default function DeliverySettings() {
                     ? await deliveriesApi.saveDeliveryAgent(body)
                     : tab === 'RATES'
                         ? await deliveriesApi.saveDeliveryRate(body)
-                        : tab === 'PARTNERS'
-                            ? await deliveriesApi.saveDeliveryPartner(body)
-                            : await deliveriesApi.saveOffice(body);
+                        : await deliveriesApi.saveOffice(body);
             if (isOk(res)) {
                 setFormOpen(false);
                 setEditing(null);
@@ -281,19 +285,19 @@ export default function DeliverySettings() {
                 error={error}
                 items={filtered.slice(pageStart, pageEnd)}
                 allItems={filtered}
-                onOpenCreate={() => openForm(null)}
-                onPressItem={openForm}
-                onEditItem={openForm}
+                onOpenCreate={tab === 'PARTNERS' ? undefined : () => openForm(null)}
+                onPressItem={tab === 'PARTNERS' ? () => undefined : openForm}
+                onEditItem={tab === 'PARTNERS' ? undefined : openForm}
                 stats={[
                     { label: 'Delivery persons', value: String(agents.filter((a) => a.is_active).length) },
                     { label: 'Rates', value: String(rates.filter((r) => r.is_active).length) },
-                    { label: 'Partners', value: String(partners.filter((p) => p.is_active).length) },
+                    { label: 'WaziPOS providers', value: String(partners.length) },
                 ]}
                 filters={{
                     options: [
                         { key: 'AGENTS', label: 'Delivery persons', icon: 'bicycle-outline', count: agents.length },
                         { key: 'RATES', label: 'Rates', icon: 'pricetags-outline', count: rates.length },
-                        { key: 'PARTNERS', label: 'Partners', icon: 'business-outline', count: partners.length },
+                        { key: 'PARTNERS', label: 'WaziPOS providers', icon: 'shield-checkmark-outline', count: partners.length },
                         { key: 'OFFICES', label: 'Offices', icon: 'location-outline', count: offices.length },
                     ],
                     value: tab,
@@ -317,9 +321,7 @@ export default function DeliverySettings() {
                 <AgentForm {...formProps} />
             ) : tab === 'RATES' ? (
                 <RateForm {...formProps} takenModes={rates.map((r) => r.mode)} />
-            ) : tab === 'PARTNERS' ? (
-                <PartnerForm {...formProps} />
-            ) : (
+            ) : tab === 'PARTNERS' ? null : (
                 <OfficeForm {...formProps} />
             )}
         </View>
@@ -328,7 +330,7 @@ export default function DeliverySettings() {
 
 /* ------------------------------------------------------------------ forms */
 
-interface FormProps<T> {
+export interface FormProps<T> {
     visible: boolean;
     onClose: () => void;
     initial: T | null;
@@ -339,7 +341,8 @@ interface FormProps<T> {
 
 const modeOptions = (modes: DeliveryMode[]) => modes.map((m) => ({ value: m, label: MODE_LABELS[m], icon: MODE_ICONS[m] }));
 
-function AgentForm({ visible, onClose, initial, saving, error, onSave }: FormProps<DeliveryAgent>) {
+/** Add / edit a delivery person (one of our employees). Also used by the courier dashboard. */
+export function AgentForm({ visible, onClose, initial, saving, error, onSave }: FormProps<DeliveryAgent>) {
     const { theme, isDarkMode } = useAuth();
     const { employeesList, forceEmployeesRefresh } = useEmployeesSync();
     useEffect(() => {
@@ -447,6 +450,7 @@ function RateForm({ visible, onClose, initial, saving, error, onSave, takenModes
                 rate_per_km: initial ? String(Number(initial.rate_per_km)) : '',
                 rate_per_kg: initial ? String(Number(initial.rate_per_kg)) : '0',
                 min_fee: initial ? String(Number(initial.min_fee)) : '0',
+                value_percent: initial?.value_percent ? String(Number(initial.value_percent)) : '0',
                 max_distance_km: initial?.max_distance_km ? String(Number(initial.max_distance_km)) : '',
                 max_weight_kg: initial?.max_weight_kg ? String(Number(initial.max_weight_kg)) : '',
                 is_active: initial?.is_active ?? true,
@@ -464,6 +468,7 @@ function RateForm({ visible, onClose, initial, saving, error, onSave, takenModes
                     rate_per_km: num(v.rate_per_km),
                     rate_per_kg: num(v.rate_per_kg) ?? 0,
                     min_fee: num(v.min_fee) ?? 0,
+                    value_percent: num(v.value_percent) ?? 0,
                     max_distance_km: num(v.max_distance_km),
                     max_weight_kg: num(v.max_weight_kg),
                     is_active: v.is_active,
@@ -494,86 +499,12 @@ function RateForm({ visible, onClose, initial, saving, error, onSave, takenModes
                         <CustomTextField name="rate_per_km" label="Per km" required keyboardType="decimal-pad" placeholder="e.g. 40" />
                         <CustomTextField name="rate_per_kg" label="Per kg" keyboardType="decimal-pad" placeholder="e.g. 20" />
                         <CustomTextField name="min_fee" label="Minimum fee" keyboardType="decimal-pad" placeholder="e.g. 150" />
+                        <CustomTextField name="value_percent" label="% of goods' value (insurance)" keyboardType="decimal-pad" placeholder="e.g. 1" hint="Added to every delivery: this percent of what the goods are worth." />
                     </FormSection>
                     <FormSection title="Limits" hint="Leave blank for no limit. Options beyond a limit aren't offered.">
                         <CustomTextField name="max_distance_km" label="Furthest (km)" keyboardType="decimal-pad" placeholder="Optional" />
                         <CustomTextField name="max_weight_kg" label="Heaviest (kg)" keyboardType="decimal-pad" placeholder="Optional" />
                         <SwitchField name="is_active" label="Active" />
-                    </FormSection>
-                </AdminFormSheet>
-            )}
-        </Formik>
-    );
-}
-
-function PartnerForm({ visible, onClose, initial, saving, error, onSave }: FormProps<DeliveryPartner>) {
-    const { theme, isDarkMode } = useAuth();
-    const { entitiesList, forceEntitiesRefresh, isEntitiesSyncing } = useEntitiesSync();
-    useEffect(() => {
-        if (visible && entitiesList.length === 0) void forceEntitiesRefresh();
-    }, [visible, entitiesList.length, forceEntitiesRefresh]);
-    const optionsFor = useCallback(
-        (kind: 'COURIER' | 'DELIVERY_COMPANY') =>
-            entitiesList
-                .filter((e) => e.remote_id && e.entity_type === (kind === 'COURIER' ? 'Courier' : 'Delivery'))
-                .map((e) => ({ id: String(e.remote_id), title: (e as any).title || 'Unnamed' })),
-        [entitiesList],
-    );
-
-    return (
-        <Formik
-            key={`${visible}-${initial?.id ?? 'new'}`}
-            enableReinitialize
-            initialValues={{
-                kind: (initial?.kind ?? 'COURIER') as 'COURIER' | 'DELIVERY_COMPANY',
-                partner: initial?.partner ?? '',
-                is_active: initial?.is_active ?? true,
-            }}
-            validationSchema={Yup.object({ partner: Yup.string().required('Pick the company') })}
-            onSubmit={(v) => onSave({ kind: v.kind, partner: v.partner, is_active: v.is_active })}
-        >
-            {(f) => (
-                <AdminFormSheet
-                    visible={visible}
-                    onClose={onClose}
-                    title={initial ? 'Edit partner' : 'New delivery partner'}
-                    subtitle={initial?.partner_title ?? 'An outsourced delivery company or courier'}
-                    icon="business-outline"
-                    submitLabel={initial ? 'Save changes' : 'Add partner'}
-                    submitting={saving}
-                    error={error}
-                    onSubmit={() => f.handleSubmit()}
-                >
-                    <FormSection title="Partner" zIndex={20}>
-                        <ChoiceChips<'COURIER' | 'DELIVERY_COMPANY'>
-                            label="Type"
-                            options={[
-                                { value: 'COURIER', label: 'Long-haul courier', icon: 'airplane-outline' },
-                                { value: 'DELIVERY_COMPANY', label: 'Delivery company', icon: 'bicycle-outline' },
-                            ]}
-                            value={f.values.kind}
-                            onChange={(k) => {
-                                f.setFieldValue('kind', k);
-                                if (!initial) f.setFieldValue('partner', '');
-                            }}
-                            disabled={!!initial}
-                        />
-                        {initial ? (
-                            <CustomTextField label="Company" value={initial.partner_title} editable={false} />
-                        ) : (
-                            <CustomAutocompletePicker
-                                key={f.values.kind}
-                                name="partner"
-                                label={f.values.kind === 'COURIER' ? 'Courier' : 'Delivery company'}
-                                options={optionsFor(f.values.kind)}
-                                theme={theme}
-                                isDarkMode={isDarkMode}
-                                loading={isEntitiesSyncing}
-                                placeholder="Search…"
-                                emptyText={f.values.kind === 'COURIER' ? 'No couriers registered yet.' : 'No delivery companies registered yet.'}
-                            />
-                        )}
-                        <SwitchField name="is_active" label="Active" hint="Active partners appear in buyers' delivery options." />
                     </FormSection>
                 </AdminFormSheet>
             )}

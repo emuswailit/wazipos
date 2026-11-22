@@ -515,6 +515,12 @@ def deliveriesAPIView(request):
                 food_order_id=request.data["food_order"]).first()
             fo = shipment.food_order if shipment else None
             allowed = bool(fo) and (fo.entity_id == entity.id or request.user.id in (fo.customer_id, fo.owner_id))
+        elif request.data.get("distributor_purchase_order"):
+            # A distributor's order on a manufacturer: either party.
+            shipment = models.Shipment.objects.prefetch_related("legs").select_related("distributor_purchase_order").filter(
+                distributor_purchase_order_id=request.data["distributor_purchase_order"]).first()
+            po = shipment.distributor_purchase_order if shipment else None
+            allowed = bool(po) and entity.id in (po.manufacturer_id, po.distributor_id)
         elif request.data.get("wholesaler_order"):
             # A wholesaler's order on a distributor: either party.
             shipment = models.Shipment.objects.prefetch_related("legs").select_related("wholesaler_order").filter(

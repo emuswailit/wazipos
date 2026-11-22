@@ -50,10 +50,29 @@ export interface CountLine {
     decided_at?: string | null;
 }
 
+/** Goods on site that aren't on the business's books (e.g. an employee's own stock). */
+export interface FoundItem {
+    id: string;
+    title: string;
+    barcode: string;
+    batch_number: string;
+    quantity: string;
+    price_seen: string | null;
+    value_seen: string | null;
+    where_found: string;
+    note: string;
+    photo: string | null;
+    recorded_by: string | null;
+    created: string;
+}
+
 export interface StockTakeReport {
     lines: CountLine[];
     uncounted: { kind: CountKind; item: string; title: string; unit: string; book_quantity: string }[];
+    found?: FoundItem[];
     summary: {
+        found?: number;
+        found_value?: string;
         counted: number;
         matched: number;
         short: number;
@@ -156,6 +175,10 @@ export const stocktakerApi = {
     count: (stock_take: string, kind: CountKind, item: string, counted: string, note?: string) =>
         stocktaker('StocktakerRecordCount', { stock_take, kind, item, counted, ...(note ? { note } : {}) }),
     myCounts: (stock_take: string) => stocktaker('StocktakerGetMyCounts', { stock_take }),
+    /** Something on site that isn't on the books: no matching item, no shop label, or another batch. */
+    found: (stock_take: string, details: { title: string; quantity: string; barcode?: string; batch_number?: string; price_seen?: string; where_found?: string; note?: string }) =>
+        stocktaker('StocktakerRecordFoundItem', { stock_take, ...details }),
+    myFound: (stock_take: string) => stocktaker('StocktakerGetMyFoundItems', { stock_take }),
 };
 
 export const vendorStockTakesApi = {

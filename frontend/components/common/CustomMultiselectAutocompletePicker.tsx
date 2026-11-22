@@ -38,13 +38,13 @@ import {
 import {
     ActivityIndicator,
     Platform,
-    Pressable,
     ScrollView,
     Text,
     TextInput,
     useWindowDimensions,
     View,
 } from "react-native";
+import { Pressable } from '@/components/common/StablePressable';
 
 /** Room kept clear at the bottom (sheet action footers) and top (headers) when choosing a side. */
 const BOTTOM_RESERVE = 96;

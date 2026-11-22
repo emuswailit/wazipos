@@ -538,6 +538,11 @@ class Shipment(EntityRelatedModel):
         "distributors.WholesalerOrders", related_name="shipment",
         on_delete=models.CASCADE, null=True, blank=True,
     )
+    # A distributor's order on a manufacturer (manufacturers/services/orders.py).
+    distributor_purchase_order = models.OneToOneField(
+        "manufacturers.DistributorPurchaseOrders", related_name="shipment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
     method = models.CharField(max_length=20, choices=Method.choices, default=Method.LOCAL)
     status = models.CharField(max_length=20, choices=ShipmentStatus.choices, default=ShipmentStatus.QUOTED)
     origin_point = geomodels.PointField(null=True, blank=True, srid=4326)
@@ -687,6 +692,10 @@ class Fulfilment(EntityRelatedModel):
     )
     wholesaler_order = models.OneToOneField(
         "distributors.WholesalerOrders", related_name="fulfilment",
+        on_delete=models.CASCADE, null=True, blank=True,
+    )
+    distributor_purchase_order = models.OneToOneField(
+        "manufacturers.DistributorPurchaseOrders", related_name="fulfilment",
         on_delete=models.CASCADE, null=True, blank=True,
     )
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.PENDING)

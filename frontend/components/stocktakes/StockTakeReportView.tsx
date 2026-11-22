@@ -47,7 +47,30 @@ export default function StockTakeReportView({
                 {tile('Over', `${s.over} · ${formatKES(s.value_over)}`, s.over ? '#f59e0b' : undefined)}
                 {tile('Net difference', formatKES(s.net_value), n(s.net_value) < 0 ? '#f43f5e' : undefined)}
                 {s.uncounted ? tile('Not counted', String(s.uncounted), '#f59e0b') : null}
+                {s.found ? tile('Not on the books', `${s.found} · ${formatKES(s.found_value ?? '0')}`, '#f43f5e') : null}
             </View>
+
+            {report.found?.length ? (
+                <View style={{ gap: 6, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#f43f5e55', backgroundColor: '#f43f5e0d' }}>
+                    <Text style={{ color: '#f43f5e', fontFamily: theme.font.bold, fontSize: 13 }}>
+                        Found on the premises but not on your books
+                    </Text>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
+                        These are not added to your stock. Goods you never bought are often someone's own stock being sold in your shop.
+                    </Text>
+                    {report.found.map((f) => (
+                        <View key={f.id} style={{ flexDirection: 'row', gap: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: border }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>{f.title} × {fmtQty(f.quantity)}</Text>
+                                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>
+                                    {[f.barcode && `barcode ${f.barcode}`, f.batch_number && `batch ${f.batch_number}`, f.where_found, f.note, f.recorded_by && `by ${f.recorded_by}`].filter(Boolean).join(' · ')}
+                                </Text>
+                            </View>
+                            {f.value_seen ? <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 12.5 }}>{formatKES(f.value_seen)}</Text> : null}
+                        </View>
+                    ))}
+                </View>
+            ) : null}
 
             {report.lines.length === 0 ? (
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13 }}>Nothing counted yet.</Text>

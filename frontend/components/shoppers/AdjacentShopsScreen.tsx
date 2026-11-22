@@ -22,7 +22,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { getPlan, type ShoppingPlan } from '@/utils/shoppingPlans';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, RefreshControl, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 import { CustomMapView } from './CustomMapView';
 

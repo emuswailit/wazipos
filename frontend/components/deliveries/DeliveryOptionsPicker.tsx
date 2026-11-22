@@ -12,6 +12,9 @@ import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
 import type { RetailerOrder } from '@/databases/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
+
+import CourierOfficePicker from './CourierOfficePicker';
+import { priceBasis } from './DeliveryOptionList';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { formatKES } from '@/components/retailers/retailerRequisitions/primitives';
@@ -40,12 +43,14 @@ export function DeliveryOptionsPicker({ order, editable }: Props) {
     const [saving, setSaving] = useState<string | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
+    // Long-haul: the courier office the retailer picked to collect from.
+    const [office, setOffice] = useState<string | undefined>(undefined);
 
     const load = useCallback(async () => {
         setLoading(true);
         setLoadError(null);
         try {
-            const res: any = await deliveriesApi.getRetailerOrderDeliveryOptions(order.remote_id);
+            const res: any = await deliveriesApi.getRetailerOrderDeliveryOptions(order.remote_id, office);
             if (isOk(res)) {
                 const result: DeliveryOptionsResult = res.data.delivery;
                 setData(result);
@@ -63,7 +68,7 @@ export function DeliveryOptionsPicker({ order, editable }: Props) {
         } finally {
             setLoading(false);
         }
-    }, [order.remote_id]);
+    }, [order.remote_id, office]);
 
     useEffect(() => {
         void load();
@@ -84,6 +89,25 @@ export function DeliveryOptionsPicker({ order, editable }: Props) {
             }
         } catch (e: any) {
             setSaveError(e?.message || 'Could not reach the server.');
+        } finally {
+            setSaving(null);
+        }
+    };
+
+    /** Pick another office for the chosen courier: re-price, then save that option. */
+    const pickOffice = async (opt: DeliveryOption, officeId: string) => {
+        if (!editable || saving) return;
+        setSaving(opt.key);
+        setSaveError(null);
+        try {
+            const res: any = await deliveriesApi.getRetailerOrderDeliveryOptions(order.remote_id, officeId);
+            if (!isOk(res)) return setSaveError(apiError(res, 'Could not price that office.'));
+            const next: DeliveryOption | undefined = (res.data.delivery?.options ?? []).find((o: DeliveryOption) => o.courier === opt.courier);
+            if (!next) return setSaveError('That office is no longer available.');
+            setOffice(officeId);
+            setData(res.data.delivery);
+            setSaving(null);
+            await choose(next.key);
         } finally {
             setSaving(null);
         }
@@ -125,7 +149,8 @@ export function DeliveryOptionsPicker({ order, editable }: Props) {
                             {courier ? `Courier · ${via || 'courier'}` : `Delivered to you · ${via || 'delivery'}`}
                         </Text>
                         <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>
-                            {courier ? 'Collect from the courier office nearest you' : 'Straight to your shop'}
+                            {courier ? `Collect at ${opt.collection_point?.title ?? 'the courier office nearest you'}` : 'Straight to your shop'}
+                            {priceBasis(opt) ? ` · ${priceBasis(opt)}` : ''}
                         </Text>
                     </View>
                     <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>KES {formatKES(opt.total)}</Text>
@@ -135,13 +160,20 @@ export function DeliveryOptionsPicker({ order, editable }: Props) {
                         <View key={i} className="flex-row items-center gap-2">
                             <Ionicons name={LEG_ICONS[leg.kind] ?? 'navigate-outline'} size={14} color={theme.textDark} />
                             <Text className="flex-1" style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={2}>
-                                {leg.label}
-                                {leg.to_title ? ` (${leg.to_title})` : ''} · {leg.provider_title} · {leg.mode_label.toLowerCase()} · {Number(leg.distance_km).toLocaleString()} km
+                                {/* Long haul: the buyer picks only where to collect; the seller decides how it reaches the courier. */}
+                                {leg.kind === 'LOCAL'
+                                        ? `The seller arranges it (walking, rider or vehicle) · ${Number(leg.distance_km).toLocaleString()} km`
+                                        : leg.kind === 'HANDOVER'
+                                    ? "The seller gets it to the courier's dispatch office"
+                                    : leg.kind === 'TRANSIT'
+                                        ? `${leg.provider_title ?? 'Courier'} to ${leg.to_title ?? 'your office'} · ${Number(leg.distance_km).toLocaleString()} km`
+                                        : `${leg.label}${leg.to_title ? ` (${leg.to_title})` : ''} · ${leg.provider_title} · ${leg.mode_label.toLowerCase()} · ${Number(leg.distance_km).toLocaleString()} km`}
                             </Text>
                             <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>KES {formatKES(leg.cost)}</Text>
                         </View>
                     ))}
                 </View>
+                {active && editable ? <CourierOfficePicker option={opt} busy={!!saving} onPick={(id) => void pickOffice(opt, id)} /> : null}
             </>,
         );
     };

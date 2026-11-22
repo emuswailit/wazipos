@@ -27,7 +27,8 @@ import { useIndentBridge } from '@/hooks/useIndentBridge';
 import { resolveImageUrl } from '@/lib/images';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, TextInput, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 /* ------------------------------------------------------------------ */
 /* Feedback shape                                                      */

@@ -54,42 +54,51 @@ export interface UserProfile {
  * Brand palette
  * ======================================================= */
 
-const PALETTE = {
-    primary: '#1a73e8',
-    primaryDark: '#1557b0',
-    primaryLight: '#4285f4',
-    primarySoft: 'rgba(26,115,232,0.12)',
+export const PALETTE = {
+    // WaziPOS cobalt: buttons, links, highlights
+    primary: '#2a6ff3',
+    primaryDark: '#1d4fd8',
+    primaryLight: '#5b9dff',
+    primarySoft: 'rgba(42,111,243,0.12)',
 
-    success: '#2e7d32',
-    successDark: '#1b5e20',
-    successLight: '#4caf50',
-    successSoft: 'rgba(46,125,50,0.12)',
+    success: '#10b981',
+    successDark: '#047857',
+    successLight: '#34d399',
+    successSoft: 'rgba(16,185,129,0.12)',
 
-    warning: '#f57c00',
-    warningDark: '#e65100',
-    warningLight: '#ff9800',
-    warningSoft: 'rgba(245,124,0,0.12)',
+    warning: '#f59e0b',
+    warningDark: '#b45309',
+    warningLight: '#fbbf24',
+    warningSoft: 'rgba(245,158,11,0.14)',
 
-    danger: '#d93025',
-    dangerDark: '#b31412',
-    dangerLight: '#f28b82',
-    dangerSoft: 'rgba(217,48,37,0.12)',
+    danger: '#ef4444',
+    dangerDark: '#b91c1c',
+    dangerLight: '#f87171',
+    dangerSoft: 'rgba(239,68,68,0.12)',
 
-    accent: '#8e24aa',
-    accentDark: '#6a1b9a',
-    accentLight: '#ab47bc',
-    accentSoft: 'rgba(142,36,170,0.12)',
+    // Sky: the second stop of the brand gradient (cobalt -> sky)
+    accent: '#22b8f0',
+    accentDark: '#0284c7',
+    accentLight: '#67d4fb',
+    accentSoft: 'rgba(34,184,240,0.14)',
 
-    info: '#1a73e8',
-    infoDark: '#1557b0',
-    infoLight: '#4285f4',
-    infoSoft: 'rgba(26,115,232,0.12)',
+    info: '#2a6ff3',
+    infoDark: '#1d4fd8',
+    infoLight: '#5b9dff',
+    infoSoft: 'rgba(42,111,243,0.12)',
 
-    neutral: '#5f6368',
-    neutralStrong: '#3c4043',
-    neutralMuted: '#80868b',
-    neutralSubtle: '#9aa0a6',
+    neutral: '#5b6785',
+    neutralStrong: '#33405f',
+    neutralMuted: '#7a86a3',
+    neutralSubtle: '#9aa5bf',
+
+    // Deep navy: dark bands, dark mode
+    navy: '#0b1733',
+    navyLight: '#13244d',
 } as const;
+
+/** The brand gradient (cobalt -> sky), for headlines, hero tiles and buttons. */
+export const BRAND_GRADIENT = [PALETTE.primary, PALETTE.accent] as const;
 
 /* =========================================================
  * Theme
@@ -130,6 +139,9 @@ export interface ThemeColors {
     neutralStrong: string;
     neutralMuted: string;
     neutralSubtle: string;
+
+    navy: string;
+    navyLight: string;
 
     background: string;
     panel: string;
@@ -269,17 +281,20 @@ export function AuthProvider({
             neutralMuted: PALETTE.neutralMuted,
             neutralSubtle: PALETTE.neutralSubtle,
 
-            background: isDarkMode ? '#0f172a' : '#f8fafc',
-            panel: isDarkMode ? '#1e293b' : '#ffffff',
-            surface: isDarkMode ? '#1e293b' : '#ffffff',
-            surfaceAlt: isDarkMode ? '#0b1220' : '#f1f5f9',
-            border: isDarkMode ? '#334155' : '#e2e8f0',
-            borderStrong: isDarkMode ? '#475569' : '#cbd5e1',
+            navy: PALETTE.navy,
+            navyLight: PALETTE.navyLight,
 
-            text: isDarkMode ? '#f8fafc' : '#0f172a',
-            textMuted: isDarkMode ? '#94a3b8' : '#334155',
-            textSubtle: isDarkMode ? '#64748b' : '#64748b',
-            textInverse: isDarkMode ? '#0f172a' : '#ffffff',
+            background: isDarkMode ? '#08122b' : '#f5f8ff',
+            panel: isDarkMode ? '#0f1d40' : '#ffffff',
+            surface: isDarkMode ? '#0f1d40' : '#ffffff',
+            surfaceAlt: isDarkMode ? '#060e22' : '#eef3fd',
+            border: isDarkMode ? '#1e2e57' : '#e1e8f5',
+            borderStrong: isDarkMode ? '#2c3f70' : '#c9d5ec',
+
+            text: isDarkMode ? '#f3f6ff' : '#0b1733',
+            textMuted: isDarkMode ? '#a8b5d6' : '#3c4a6b',
+            textSubtle: isDarkMode ? '#7584a8' : '#6b7a99',
+            textInverse: isDarkMode ? '#0b1733' : '#ffffff',
         };
 
         return {

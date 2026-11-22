@@ -24,7 +24,8 @@ import {
 import { LIST_MAX_WIDTH, isWeb, useListTokens, webPointer } from '@/components/common/listScreen/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import React, { memo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { FlatList, RefreshControl, Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdminSheet, SheetButton, useSheetIsWide } from './AdminSheet';

@@ -21,6 +21,8 @@ export function productBadges(p: ProductItem): AdminBadge[] {
     if (p.active === false) badges.push({ label: 'Inactive', tone: 'neutral' });
     if (isVatable(p)) badges.push({ label: 'VAT', tone: 'violet' });
     if (p.category_title) badges.push({ label: p.category_title, tone: 'info' });
+    // Deliveries are planned from the weight: flag products still on the default.
+    if (p.weight_captured === false) badges.push({ label: 'Weight missing', tone: 'warning' });
     return badges;
 }
 

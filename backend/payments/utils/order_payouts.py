@@ -33,7 +33,10 @@ from utils.logging import create_log
 
 MIN_PAYOUT = Decimal("10")  # JamboPay's smallest payout
 MAX_ATTEMPTS = 3
-ORDER_LINK = {"retailer": "retailer_order", "customer": "customer_order", "food": "food_order", "wholesaler": "wholesaler_order"}
+ORDER_LINK = {
+    "retailer": "retailer_order", "customer": "customer_order", "food": "food_order",
+    "wholesaler": "wholesaler_order", "manufacturer": "distributor_purchase_order",
+}
 OFFLINE_METHODS = ("CASH", "CREDIT")
 
 
@@ -51,7 +54,7 @@ def order_of(shipment):
     return None, None
 
 
-SELLER_FIELD = {"customer": "entity", "food": "entity", "retailer": "wholesaler", "wholesaler": "distributor"}
+SELLER_FIELD = {"customer": "entity", "food": "entity", "retailer": "wholesaler", "wholesaler": "distributor", "manufacturer": "manufacturer"}
 
 
 def seller_of(kind, order):
@@ -85,6 +88,10 @@ def _till_payments(kind, order):
         from distributors.models import DistributorPayments
 
         return DistributorPayments.objects.filter(wholesaler_order=order, status="SUCCESS").exclude(pay_in_reference_number__isnull=True).exclude(pay_in_reference_number="")
+    if kind == "manufacturer":
+        from manufacturers.models import ManufacturerOrderPayments
+
+        return ManufacturerOrderPayments.objects.filter(order=order, status="SUCCESS").exclude(pay_in_reference_number__isnull=True).exclude(pay_in_reference_number="")
     return None
 
 
@@ -105,7 +112,7 @@ def _mark_source_settled(kind, order):
         qs.update(is_validated=True)
     elif kind == "retailer":
         qs.update(is_settled="true")
-    elif kind == "wholesaler":
+    elif kind in ("wholesaler", "manufacturer"):
         qs.update(is_settled=True, settled_at=now)
     elif kind == "food":
         qs.update(is_settled=True)
@@ -137,7 +144,7 @@ def release_vendor(kind, order, shipment=None, note=""):
         return None  # the seller took the money directly
     shipping = _q(shipment.total_cost) if shipment is not None else Decimal("0")
     gross = _q(paid - min(paid, shipping))
-    pct = Decimal(str(getattr(seller, "commission_percentage", 0) or 0)) if kind in ("retailer", "wholesaler") else Decimal("0")
+    pct = Decimal(str(getattr(seller, "commission_percentage", 0) or 0)) if kind in ("retailer", "wholesaler", "manufacturer") else Decimal("0")
     commission = _q(gross * pct / Decimal("100"))
     account = _entity_account(seller)
     return OrderPayouts.objects.create(
@@ -253,6 +260,7 @@ def _on_paid(row):
         model = {
             "customer": "retailers.CustomerOrders", "food": "restaurants.FoodOrder",
             "retailer": "wholesalers.RetailerOrders", "wholesaler": "distributors.WholesalerOrders",
+            "manufacturer": "manufacturers.DistributorPurchaseOrders",
         }.get(row.order_kind)
         order = apps.get_model(model).objects.filter(pk=row.order_id).first() if model else None
         if order is not None:

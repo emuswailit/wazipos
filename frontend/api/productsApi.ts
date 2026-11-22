@@ -23,4 +23,10 @@ export interface ProductDetails {
     part_size?: string;
     part_unit?: string;
     part_label?: string;
+    /** kg: one unit (required when creating), a full pack (optional); size in cm (all three or none). */
+    weight_kg?: string;
+    pack_weight_kg?: string;
+    length_cm?: string;
+    width_cm?: string;
+    height_cm?: string;
 }

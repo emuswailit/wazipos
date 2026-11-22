@@ -35,6 +35,12 @@ app.conf.beat_schedule = {
     # Buyers' order payments paid onward: vendors once goods are released, delivery
     # persons on delivery, couriers on receipt at their dispatch office.
     # Owner-away protection: idle-shop alerts, open shifts, employee commissions.
+    # Distributors' orders on manufacturers: mobile-money payments followed to SUCCESS / FAILED.
+    "reconcile_purchase_order_payments": {
+        "task": "manufacturers.tasks.reconcile_purchase_order_payments",
+        "schedule": 60.0,
+        "args": None,
+    },
     "run_shop_watch": {
         "task": "shopguard.tasks.run_shop_watch",
         "schedule": 600.0,

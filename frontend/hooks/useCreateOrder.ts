@@ -1,5 +1,6 @@
 // hooks/useCreateOrder.ts
 
+import shopGuardApi from '@/api/shopGuardApi';
 import retailersApi from '@/api/retailersApi';
 import { useAuth } from '@/context/AuthContext';
 import { useInventorySync } from '@/context/InventorySyncContext';
@@ -289,7 +290,11 @@ export function useCreateOrder() {
         const code = barcode.trim();
         if (!code) return;
         const prod = retailerReceipts.find((r) => r.bar_code === code);
-        if (!prod) return;
+        if (!prod) {
+            // Not in this shop's stock: logged for the owner (shop guard), never blocks the till.
+            shopGuardApi.logUnknownScan(code, 'POS').catch(() => undefined);
+            return;
+        }
         const receiptId = String(prod.remote_id ?? prod.remote_key ?? '');
         if (!receiptId) return;
         const price = Number(prod.unit_selling_price ?? (prod as any)?.price ?? 0);

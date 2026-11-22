@@ -4,7 +4,7 @@
 // department, roles and employment dates.
 
 import usersApi, { SearchUserResult } from '@/api/usersApi';
-import { AdminAvatarTile, AdminFormSheet, FormRow, FormSection } from '@/components/admin/kit';
+import { AdminAvatarTile, AdminFormSheet, ChoiceChips, FormRow, FormSection } from '@/components/admin/kit';
 import CustomAutocompletePicker from '@/components/common/CustomAutocompletePicker';
 import CustomMultiselectAutocompletePicker from '@/components/common/CustomMultiselectAutocompletePicker';
 import { CustomTextField } from '@/components/common/CustomTextField';
@@ -39,7 +39,23 @@ const schema = Yup.object({
     hire_date: Yup.string().required('Pick the hire date'),
     terminal_date: Yup.string().nullable(),
     roles: Yup.array().of(Yup.string()).min(1, 'Pick at least one role').required('Pick at least one role'),
+    // New employees: where their commission / pay goes (a USER payout account).
+    payout_number: Yup.string().nullable(),
+    payout_business: Yup.string().when('payout_type', { is: 'PAYBILL', then: (s) => s.required('Enter the paybill number') }),
 });
+
+/** Payout account details for CreateEmployee, or undefined when left blank (the server then needs an existing one). */
+export function employeePayoutDetails(values: any): Record<string, any> | undefined {
+    const number = String(values.payout_number || '').trim();
+    if (!number) return undefined;
+    return {
+        account_type: values.payout_type || 'MOBILE',
+        account_name: String(values.payout_name || '').trim(),
+        account_number: number,
+        ...(values.payout_type === 'PAYBILL' ? { business_number: String(values.payout_business || '').trim() } : {}),
+        is_active: 'true',
+    };
+}
 
 function userName(f: any): string {
     return f?.title || [f?.first_name, f?.last_name].filter(Boolean).join(' ') || '';
@@ -102,6 +118,10 @@ export default function AdminEmployeeEditModal({ visible, onClose, isSubmittingR
                 hire_date: initialData?.hire_date || '',
                 terminal_date: initialData?.terminal_date || '',
                 roles: initialRoleIds,
+                payout_type: 'MOBILE',
+                payout_name: '',
+                payout_number: '',
+                payout_business: '',
             }}
             validationSchema={schema}
             onSubmit={(values, helpers) => onSubmitTrigger(values, helpers)}
@@ -186,11 +206,53 @@ export default function AdminEmployeeEditModal({ visible, onClose, isSubmittingR
                             </FormRow>
                             <CustomTextField name="advert" label="Advert / source (optional)" placeholder="e.g. Referral, job board…" />
                         </FormSection>
+
+                        {!isEdit ? <PayoutPrefill name={confirmName} phone={f?.phone} form={form} /> : null}
+                        {!isEdit ? (
+                            <FormSection
+                                title="Payout account"
+                                hint="Where their sales commission and other pay go. Required unless they already have one; they can change it later in My payout accounts."
+                            >
+                                <ChoiceChips<'MOBILE' | 'TILL' | 'PAYBILL'>
+                                    options={[
+                                        { value: 'MOBILE', label: 'Mobile money' },
+                                        { value: 'TILL', label: 'Till' },
+                                        { value: 'PAYBILL', label: 'Paybill' },
+                                    ]}
+                                    value={form.values.payout_type as 'MOBILE' | 'TILL' | 'PAYBILL'}
+                                    onChange={(v) => form.setFieldValue('payout_type', v)}
+                                />
+                                <FormRow>
+                                    <CustomTextField
+                                        name="payout_name"
+                                        label="Account name"
+                                        placeholder={confirmName || 'Name on the account'}
+                                    />
+                                    <CustomTextField
+                                        name="payout_number"
+                                        label={form.values.payout_type === 'MOBILE' ? 'Mobile money number' : form.values.payout_type === 'TILL' ? 'Till number' : 'Account number'}
+                                        placeholder={form.values.payout_type === 'MOBILE' ? (f?.phone || 'e.g. 0712345678') : ''}
+                                        keyboardType="phone-pad"
+                                    />
+                                </FormRow>
+                                {form.values.payout_type === 'PAYBILL' ? <CustomTextField name="payout_business" label="Paybill number" keyboardType="number-pad" /> : null}
+                            </FormSection>
+                        ) : null}
                     </AdminFormSheet>
                 );
             }}
         </Formik>
     );
+}
+
+/** Fill the payout account's name and mobile number from the picked person (still editable). */
+function PayoutPrefill({ name, phone, form }: { name: string; phone?: string; form: any }) {
+    useEffect(() => {
+        if (name && !form.values.payout_name) form.setFieldValue('payout_name', name);
+        if (phone && form.values.payout_type === 'MOBILE' && !form.values.payout_number) form.setFieldValue('payout_number', String(phone));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [name, phone]);
+    return null;
 }
 
 function PickedUser({ name, contact }: { name: string; contact: string }) {

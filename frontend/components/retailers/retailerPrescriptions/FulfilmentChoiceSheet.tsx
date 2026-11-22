@@ -11,7 +11,8 @@
 import { AdminFormSheet, useListTokens, webPointer } from '@/components/common/listScreen';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 export interface FulfilmentChoice {
     pickup_required: boolean;

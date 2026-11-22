@@ -21,7 +21,8 @@ import { confirmCloseIndent, useIndentBridge } from '@/hooks/useIndentBridge';
 import { resolveImageUrl } from '@/lib/images';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, ScrollView, Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 import {
     budgetPct,

@@ -228,22 +228,22 @@ interface CreateRetailerReceiptPayload {
 const createRetailerReceiptAction = (
     data: CreateRetailerReceiptPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "CreateRetailerReceipt", ...data });
+    retailerReceiptsAdminAction({ action: "CreateRetailerReceipt", ...data });
 
 const getRetailerReceiptsAction = (
     data?: { page?: number; page_size?: number;[key: string]: any },
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "GetRetailerReceipts", ...(data ?? {}) });
+    retailerReceiptsAdminAction({ action: "GetRetailerReceipts", ...(data ?? {}) });
 
 const getProductMovementAction = (
     data?: { product?: string;[key: string]: any },
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "GetProductMovement", ...(data ?? {}) });
+    retailerReceiptsAdminAction({ action: "GetProductMovement", ...(data ?? {}) });
 
 const getRetailerReceiptsByCategoryAction = (
     data?: { category?: string;[key: string]: any },
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "RetailerReceiptsByCategory",
         ...(data ?? {}),
     });
@@ -256,7 +256,7 @@ interface UpdateRetailerReceiptPayload {
 const updateRetailerReceiptAction = (
     data: UpdateRetailerReceiptPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "UpdateRetailerReceipt", ...data });
+    retailerReceiptsAdminAction({ action: "UpdateRetailerReceipt", ...data });
 
 interface GetRetailersByCountyAndCategoriesPayload {
     county: string;
@@ -330,7 +330,7 @@ const getPurchasesReturnsAction = (data?: {
     status?: string;
     [key: string]: any;
 }): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "GetPurchasesReturns", ...(data ?? {}) });
+    retailerReceiptsAdminAction({ action: "GetPurchasesReturns", ...(data ?? {}) });
 
 /* =========================================================
  * Sales returns
@@ -365,22 +365,22 @@ interface GetSalesReturnsPayload {
 const createSalesReturnAction = (
     data: CreateSalesReturnPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "CreateSalesReturn", ...data });
+    retailerReceiptsAdminAction({ action: "CreateSalesReturn", ...data });
 
 const getSalesReturnsAction = (
     data?: GetSalesReturnsPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "GetSalesReturns", ...(data ?? {}) });
+    retailerReceiptsAdminAction({ action: "GetSalesReturns", ...(data ?? {}) });
 
 const updateSalesReturnAction = (
     data: UpdateSalesReturnPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "UpdateSalesReturn", ...data });
+    retailerReceiptsAdminAction({ action: "UpdateSalesReturn", ...data });
 
 const deleteSalesReturnAction = (
     data: DeleteSalesReturnPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "DeleteSalesReturn", ...data });
+    retailerReceiptsAdminAction({ action: "DeleteSalesReturn", ...data });
 
 /* =========================================================
  * Stock adjustments
@@ -421,24 +421,24 @@ interface DeleteStockAdjustmentPayload {
 const createStockAdjustmentAction = (
     data: CreateStockAdjustmentPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "CreateStockAdjustment", ...data });
+    retailerReceiptsAdminAction({ action: "CreateStockAdjustment", ...data });
 
 const getStockAdjustmentsAction = (data?: {
     page?: number;
     page_size?: number;
     [key: string]: any;
 }): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "GetStockAdjustments", ...(data ?? {}) });
+    retailerReceiptsAdminAction({ action: "GetStockAdjustments", ...(data ?? {}) });
 
 const updateStockAdjustmentAction = (
     data: UpdateStockAdjustmentPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "UpdateStockAdjustment", ...data });
+    retailerReceiptsAdminAction({ action: "UpdateStockAdjustment", ...data });
 
 const deleteStockAdjustmentAction = (
     data: DeleteStockAdjustmentPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({ action: "DeleteStockAdjustment", ...data });
+    retailerReceiptsAdminAction({ action: "DeleteStockAdjustment", ...data });
 
 /* =========================================================
  * Retailer orders (requisitions), receipts admin, indent params
@@ -566,7 +566,7 @@ interface GetDailySalesReportPayload {
 const getDailySalesReportAction = (
     data?: GetDailySalesReportPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "GetDailySalesReport",
         ...(data ?? {}),
     });
@@ -586,7 +586,7 @@ interface GetProfitAndLossPayload {
 const getProfitAndLossAction = (
     data?: GetProfitAndLossPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "GetProfitAndLoss",
         ...(data ?? {}),
     });
@@ -615,7 +615,7 @@ interface GetExpiryReportPayload {
 const getExpiryReportAction = (
     data?: GetExpiryReportPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "GetExpiryReport",
         ...(data ?? {}),
     });
@@ -637,7 +637,7 @@ interface GetStockReportPayload {
 const getStockReportAction = (
     data?: GetStockReportPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "GetStockReport",
         ...(data ?? {}),
     });
@@ -662,7 +662,7 @@ interface GetLowStockReportPayload {
 const getLowStockReportAction = (
     data?: GetLowStockReportPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "GetLowStockReport",
         ...(data ?? {}),
     });
@@ -693,7 +693,7 @@ interface GetProductMovementReportPayload {
 const getProductMovementReportAction = (
     data: GetProductMovementReportPayload,
 ): Promise<ApiResponse<any>> =>
-    retailerReceiptsAction({
+    retailerReceiptsAdminAction({
         action: "GetProductMovementReport",
         ...data,
     });

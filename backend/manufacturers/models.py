@@ -247,3 +247,210 @@ class ManufacturerPayments(EntityRelatedModel):
     updated = models.DateTimeField(auto_now=True)
     owner = models.ForeignKey(
         'authentication.Users', related_name="manufaturerPaymentOwner", on_delete=models.CASCADE)
+
+
+# =====================================================================
+# The manufacturer <-> distributor trade (rules: manufacturers/services/).
+#
+# Products are the source: a manufacturer owns its product master
+# (products.Products with manufacturer = it). Every distributor, wholesaler,
+# retailer, restaurant and hotel stocks those products.
+#   ManufacturerBatches           production lots of the manufacturer's own products:
+#                                 batch, manufacture / expiry date, quantity, price
+#   ManufacturerPriceDiscounts    a lower price on a batch for a period
+#   ManufacturerQuantityDiscounts buy N, get M free on a batch
+#   DistributorPurchaseOrders / Items  a distributor's order on a manufacturer
+#   ManufacturerOrderPayments     payments on those orders (buyer: mobile money into
+#                                 the WaziPOS till; manufacturer staff: any method)
+# Paid orders are prepared through logistics.Fulfilment and, when delivered,
+# carried through logistics.Shipment; the distributor receives them into its
+# stock (distributors.DistributorReceipts). The legacy tables above
+# (ManufacturerVariations, DistributorOrders, ...) are kept for old data only.
+# =====================================================================
+
+import uuid as _uuid  # noqa: E402
+
+UNIT_CHOICES = tuple((u, u) for u in ("Pack", "Carton", "Box", "Piece", "Bottle", "Bag", "Strip", "Tube", "Sachet", "Crate", "Pallet"))
+
+
+class ManufacturerBatches(EntityRelatedModel):
+    product = models.ForeignKey("products.Products", related_name="manufacturer_batches", on_delete=models.CASCADE)
+    batch = models.CharField(max_length=100)
+    manufacture_date = models.DateField(null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    unit_of_issue = models.CharField(max_length=20, choices=UNIT_CHOICES, default="Carton")
+    # How many product units (packs) one unit of issue holds, e.g. 24 packs per carton.
+    packs_per_unit = models.PositiveIntegerField(default=1)
+    produced_quantity = models.BigIntegerField(default=0)
+    current_quantity = models.BigIntegerField(default=0)
+    # Production cost per unit of issue: never shown to buyers.
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    final_unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    minimum_order_quantity = models.PositiveIntegerField(default=1)
+    is_listed = models.BooleanField(default=True)
+    description = models.CharField(max_length=300, blank=True, default="")
+    draft_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Manufacturer batches"
+        ordering = ["product__title", "expiry_date"]
+        constraints = [models.UniqueConstraint(fields=["entity", "product", "batch"], name="uniq_manufacturer_batch")]
+
+    def __str__(self):
+        return f"{self.product} batch {self.batch}"
+
+    def save(self, *args, **kwargs):
+        self.batch = (self.batch or "").strip().upper()
+        super().save(*args, **kwargs)
+
+    def sync_price_from_discounts(self):
+        """final price = the latest running price discount's offer, else the list price."""
+        from decimal import Decimal
+
+        from django.utils import timezone
+
+        today = timezone.localdate()
+        price = Decimal(self.unit_price or 0)
+        active = self.price_discounts.filter(is_active=True, start__lte=today, end__gte=today).order_by("-start", "-created").first()
+        offer = Decimal("0")
+        if active:
+            offer = Decimal(active.offer_price or 0)
+            if offer <= 0 and active.percent:
+                offer = (price * (Decimal("100") - Decimal(active.percent)) / Decimal("100")).quantize(Decimal("0.01"))
+        if active and Decimal("0") < offer < price:
+            self.discount_unit_price, self.final_unit_price = price - offer, offer
+        else:
+            self.discount_unit_price, self.final_unit_price = Decimal("0"), price
+        type(self).objects.filter(pk=self.pk).update(discount_unit_price=self.discount_unit_price, final_unit_price=self.final_unit_price)
+
+
+class ManufacturerPriceDiscounts(EntityRelatedModel):
+    batch = models.ForeignKey(ManufacturerBatches, related_name="price_discounts", on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    normal_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    offer_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    start = models.DateField()
+    end = models.DateField()
+    is_active = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-start", "-created"]
+
+
+class ManufacturerQuantityDiscounts(EntityRelatedModel):
+    batch = models.ForeignKey(ManufacturerBatches, related_name="quantity_discounts", on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    limit_quantity = models.PositiveIntegerField()
+    awarded_quantity = models.PositiveIntegerField()
+    start = models.DateField()
+    end = models.DateField()
+    is_active = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-start", "-created"]
+
+
+class DistributorPurchaseOrders(EntityRelatedModel):
+    """A distributor's order on a manufacturer. entity = the distributor (buyer)."""
+
+    STATUS_CHOICES = (
+        ("SUBMITTED", "Submitted"),
+        ("PAID", "Paid"),
+        ("PREPARING", "Preparing"),
+        ("PACKED", "Packed"),
+        ("READY", "Ready"),
+        ("COLLECTED", "Collected"),
+        ("DISPATCHED", "Dispatched"),
+        ("RECEIVED", "Received into stock"),
+        ("REJECTED", "Rejected by the manufacturer"),
+        ("CANCELLED", "Cancelled"),
+    )
+    manufacturer = models.ForeignKey(Entities, related_name="purchase_orders_received", on_delete=models.CASCADE)
+    distributor = models.ForeignKey(Entities, related_name="purchase_orders_placed", on_delete=models.CASCADE)
+    reference_number = models.CharField(max_length=56, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="SUBMITTED", db_index=True)
+    order_origin = models.CharField(max_length=20, choices=(("DISTRIBUTOR", "Placed by the distributor"), ("STAFF", "Taken by manufacturer staff")), default="DISTRIBUTOR")
+    order_terms = models.CharField(max_length=20, choices=(("CASH", "Cash"), ("CREDIT", "Credit")), default="CASH")
+    # SELF = the distributor collects; COURIER = delivered (logistics.Shipment).
+    delivery_method = models.CharField(max_length=20, choices=(("SELF", "Collect"), ("COURIER", "Delivery")), default="SELF")
+    payment_method = models.ForeignKey("payments.PaymentMethods", related_name="distributor_purchase_orders", on_delete=models.SET_NULL, null=True, blank=True)
+    employee = models.ForeignKey("employees.Employees", related_name="distributor_purchase_orders", on_delete=models.SET_NULL, null=True, blank=True)
+    gross_price_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    final_price_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    shipping_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_paid = models.BooleanField(default=False)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    stock_deducted_at = models.DateTimeField(null=True, blank=True)
+    collected_at = models.DateTimeField(null=True, blank=True)
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    received_by = models.ForeignKey(Users, related_name="+", on_delete=models.SET_NULL, null=True, blank=True)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    rejected_reason = models.CharField(max_length=300, blank=True, default="")
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    draft_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Distributor purchase orders"
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"{self.reference_number}: {self.distributor} <- {self.manufacturer}"
+
+
+class DistributorPurchaseOrderItems(models.Model):
+    id = models.UUIDField(primary_key=True, default=_uuid.uuid4, editable=False)
+    order = models.ForeignKey(DistributorPurchaseOrders, related_name="items", on_delete=models.CASCADE)
+    batch = models.ForeignKey(ManufacturerBatches, related_name="order_items", on_delete=models.PROTECT)
+    unit_of_issue = models.CharField(max_length=20, default="Carton")
+    purchased_quantity = models.PositiveIntegerField()
+    free_quantity = models.PositiveIntegerField(default=0)
+    total_quantity = models.PositiveIntegerField()
+    item_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)        # list price per unit
+    item_final_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # charged per unit
+    item_discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    item_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    is_received = models.BooleanField(default=False)
+    received_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["order", "batch"], name="uniq_batch_per_purchase_order")]
+
+
+class ManufacturerOrderPayments(EntityRelatedModel):
+    """A payment on a distributor's purchase order. entity = the distributor (payer)."""
+
+    STATUS_CHOICES = (("PENDING", "PENDING"), ("SUCCESS", "SUCCESS"), ("CANCELLED", "CANCELLED"), ("FAILED", "FAILED"))
+    manufacturer = models.ForeignKey(Entities, related_name="order_payments_received", on_delete=models.CASCADE)
+    order = models.ForeignKey(DistributorPurchaseOrders, related_name="payments", on_delete=models.CASCADE)
+    payment_method = models.ForeignKey("payments.PaymentMethods", related_name="manufacturer_order_payments", on_delete=models.SET_NULL, null=True, blank=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING", db_index=True)
+    pay_in_reference_number = models.CharField(max_length=120, null=True, blank=True, db_index=True)
+    psp_reference_number = models.CharField(max_length=120, blank=True, default="")
+    provider_reference_number = models.CharField(max_length=120, blank=True, default="")
+    description = models.CharField(max_length=120, blank=True, default="")
+    telco = models.CharField(max_length=40, blank=True, default="")
+    currency = models.CharField(max_length=10, default="KES")
+    is_paid = models.BooleanField(default=False)
+    is_settled = models.BooleanField(default=False)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]

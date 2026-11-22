@@ -135,7 +135,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         route: '/routes',
         // Each item below still has its own allowedRoles; this only lets the
         // group show for these roles.
-        allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+        allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'CourierSuperAdmin', 'DeliverySuperAdmin'],
         showInSidebar: true,
         icon: 'ShieldCheck',
         tint: TINTS.violet,
@@ -303,7 +303,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 id: 20,
                 title: 'Payout accounts',
                 route: '/payoutAccounts?tab=payoutAccounts',
-                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'CourierSuperAdmin', 'DeliverySuperAdmin'],
                 showInSidebar: true,
                 icon: 'Wallet',
                 tint: TINTS.violet,
@@ -347,6 +347,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 showInSidebar: true,
                 icon: 'ClipboardCheck',
                 tint: TINTS.violet,
+            },
+            {
+                // Delivery companies and couriers, their riders / drivers and vehicles: whitelisted centrally.
+                id: 95,
+                title: 'Delivery providers',
+                route: '/deliveryProviders?tab=deliveryProviders',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Truck',
+                tint: TINTS.orange,
             },
             {
                 // Every request to the API: IP, signed-in user and business, action.
@@ -471,6 +481,42 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         ],
     },
     {
+        // Distributors sell to wholesalers as wholesalers sell to retailers
+        // (backend distributors/api.py, services/).
+        id: 22,
+        title: 'Distributors',
+        route: '/distributorOrders',
+        allowedRoles: ['GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Truck',
+        tint: TINTS.indigo,
+        subRoutes: [
+            { id: 1, title: 'Wholesaler orders', route: '/distributorOrders?tab=distributorOrders', allowedRoles: ['GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'], showInSidebar: true, icon: 'ClipboardList', tint: TINTS.indigo },
+            { id: 2, title: 'Stock', route: '/distributorStock?tab=distributorStock', allowedRoles: ['GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.indigo },
+            { id: 3, title: 'Discounts', route: '/distributorDiscounts?tab=distributorDiscounts', allowedRoles: ['GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'], showInSidebar: true, icon: 'BadgePercent', tint: TINTS.indigo },
+            // Distributors buy from manufacturers remotely (manufacturers/buy).
+            { id: 4, title: 'Buy from manufacturers', route: '/manufacturerMarketplace?tab=manufacturerMarketplace', allowedRoles: ['GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'], showInSidebar: true, icon: 'ShoppingBasket', tint: TINTS.indigo },
+            { id: 5, title: 'Manufacturer orders', route: '/manufacturerPurchases?tab=manufacturerPurchases', allowedRoles: ['GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'], showInSidebar: true, icon: 'PackageOpen', tint: TINTS.indigo },
+        ],
+    },
+    {
+        // Manufacturers: the product master (the source of every product on WaziPOS),
+        // production batches, discounts and distributors' orders (backend manufacturers/api.py).
+        id: 23,
+        title: 'Manufacturers',
+        route: '/manufacturerProducts',
+        allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Factory',
+        tint: TINTS.amber,
+        subRoutes: [
+            { id: 1, title: 'Products', route: '/manufacturerProducts?tab=manufacturerProducts', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.amber },
+            { id: 2, title: 'Batches', route: '/manufacturerBatches?tab=manufacturerBatches', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.amber },
+            { id: 3, title: 'Discounts', route: '/manufacturerDiscounts?tab=manufacturerDiscounts', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'BadgePercent', tint: TINTS.amber },
+            { id: 4, title: 'Distributor orders', route: '/manufacturerOrders?tab=manufacturerOrders', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'ClipboardList', tint: TINTS.amber },
+        ],
+    },
+    {
         id: 3,
         title: 'Wholesalers',
         route: '/routes',
@@ -479,6 +525,25 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         icon: 'Warehouse',
         tint: TINTS.sky,
         subRoutes: [
+            {
+                // Wholesalers buy from distributors remotely (distributors/buy).
+                id: 20,
+                title: 'Buy from distributors',
+                route: '/distributorMarketplace?tab=distributorMarketplace',
+                allowedRoles: ['GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ShoppingBasket',
+                tint: TINTS.sky,
+            },
+            {
+                id: 21,
+                title: 'Distributor orders',
+                route: '/distributorPurchases?tab=distributorPurchases',
+                allowedRoles: ['GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'PackageOpen',
+                tint: TINTS.sky,
+            },
             {
                 id: 1,
                 title: 'New Order',
@@ -687,16 +752,26 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 16,
         title: 'Deliveries',
         route: '/myDeliveries',
-        allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin'],
+        allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
         showInSidebar: true,
         icon: 'Truck',
         tint: TINTS.orange,
         subRoutes: [
             {
+                // Couriers' and delivery companies' own staff: parcels, riders on duty, fleet, money.
+                id: 8,
+                title: 'Courier dashboard',
+                route: '/courierDashboard?tab=courierDashboard',
+                allowedRoles: ['CourierSuperAdmin', 'DeliverySuperAdmin'],
+                showInSidebar: true,
+                icon: 'LayoutDashboard',
+                tint: TINTS.orange,
+            },
+            {
                 id: 1,
                 title: 'My deliveries',
                 route: '/myDeliveries',
-                allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin'],
+                allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
                 showInSidebar: true,
                 icon: 'Bike',
                 tint: TINTS.orange,
@@ -705,17 +780,47 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 id: 2,
                 title: 'Delivery settings',
                 route: '/deliverySettings?tab=deliverySettings',
-                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin'],
+                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
                 showInSidebar: true,
                 icon: 'Sliders',
                 tint: TINTS.orange,
+            },
+            {
+                // Own delivery vehicles: papers, running costs, trips (logistics/utils/fleet.py).
+                id: 6,
+                title: 'Fleet',
+                route: '/deliveryFleet?tab=deliveryFleet',
+                allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Truck',
+                tint: TINTS.orange,
+            },
+            {
+                // Couriers publish what their long-haul legs cost (logistics/utils/rate_charts.py).
+                id: 7,
+                title: 'Rate charts',
+                route: '/courierRates?tab=courierRates',
+                allowedRoles: ['Admin', 'CourierSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ReceiptText',
+                tint: TINTS.orange,
+            },
+            {
+                // Buyers pay once: goods to the seller on release, delivery pay to riders / couriers (payments.OrderPayouts).
+                id: 9,
+                title: 'Payouts',
+                route: '/orderPayouts?tab=orderPayouts',
+                allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
+                showInSidebar: true,
+                icon: 'Wallet',
+                tint: TINTS.emerald,
             },
             {
                 // Where a delivery person's earnings are paid (UserPayoutAccounts).
                 id: 3,
                 title: 'My payout accounts',
                 route: '/myPayoutAccounts',
-                allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin'],
+                allowedRoles: ['Client', 'Admin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin'],
                 showInSidebar: true,
                 icon: 'Wallet',
                 tint: TINTS.orange,
@@ -866,6 +971,26 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         icon: 'Users',
         tint: TINTS.sky,
         subRoutes: [
+            {
+                // Owner-away protection: shifts, blind cash counts, staff vs owner sales, commissions, alerts.
+                id: 96,
+                title: 'Shop guard',
+                route: '/shopGuard?tab=shopGuard',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'ClipboardCheck',
+                tint: TINTS.red,
+            },
+            {
+                // Staff: clock in / out with a blind cash count; their sales commission.
+                id: 97,
+                title: 'My shift',
+                route: '/myShift?tab=myShift',
+                allowedRoles: ['Admin', 'GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'CalendarDays',
+                tint: TINTS.emerald,
+            },
             {
                 id: 1,
                 title: 'New Customer Order',

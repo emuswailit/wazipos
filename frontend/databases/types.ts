@@ -93,6 +93,13 @@ export interface ProductItem {
     allowed_entities: string[];
     created: string;
     updated: string;
+    /** kg per unit / per full pack, size in cm; weight_captured false = still the 0.5 kg default. */
+    weight_kg?: string;
+    pack_weight_kg?: string | null;
+    length_cm?: string | null;
+    width_cm?: string | null;
+    height_cm?: string | null;
+    weight_captured?: boolean;
 }
 
 // ===========================================================================

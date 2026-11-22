@@ -435,6 +435,10 @@ def confirm_collection(distributor, user, data):
         order.status = "COLLECTED"
         order.collected_at = now
         order.save(update_fields=["status", "collected_at", "updated"])
+        # Collected = released to the buyer: the distributor's goods share is due.
+        from payments.utils.order_payouts import release_vendor
+
+        release_vendor("wholesaler", order, None, "Collected by the wholesaler")
     return [], order
 
 

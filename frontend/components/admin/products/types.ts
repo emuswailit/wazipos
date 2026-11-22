@@ -20,6 +20,14 @@ export interface ProductItem {
     category_title: string;
     units_per_pack: number;
     pack_tag: string;
+    /** Weight of one unit (kg) and of a full pack (blank = unit x units per pack): deliveries are planned from these. */
+    weight_kg?: string;
+    pack_weight_kg?: string | null;
+    length_cm?: string | null;
+    width_cm?: string | null;
+    height_cm?: string | null;
+    /** False = still the old 0.5 kg default. */
+    weight_captured?: boolean;
     bar_code: string;
     is_vatable: string;
     /** Sold in parts (utils/parts.ts) */

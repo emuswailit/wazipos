@@ -8,7 +8,8 @@ import { AdminAvatarTile, AdminSheet, SheetButton, useListTokens, useSheetIsWide
 import { Ionicons } from "@expo/vector-icons";
 import { Formik, FormikHelpers } from "formik";
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from '@/components/common/StablePressable';
 import * as Yup from "yup";
 
 import type { RetailerCampaignItem } from "./types";

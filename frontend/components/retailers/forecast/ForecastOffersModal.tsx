@@ -10,7 +10,8 @@ import { useRetailerIndentsSync } from '@/context/RetailerIndentsSyncContext';
 import type { RetailerForecastCampaign, RetailerForecastNormalized, RetailerForecastOffer } from '@/databases/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 import { formatKES, units } from './forecastsConfig';
 

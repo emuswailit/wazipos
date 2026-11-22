@@ -5,11 +5,11 @@ import { useFormikContext } from 'formik';
 import React from 'react';
 import {
     Platform,
-    Pressable,
     Text,
     TextInput,
     View,
 } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 interface BarcodeScannerInputProps {
     name: string;

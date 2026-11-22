@@ -10,7 +10,8 @@ import { AdminFormSheet, ChoiceChips, FormSection, useListTokens, webNoOutline, 
 import { useEntitiesSync } from '@/context/EntitiesSyncContext';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 type Urgency = 'low' | 'medium' | 'high';
 

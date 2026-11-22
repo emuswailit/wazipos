@@ -29,7 +29,8 @@ import {
     Wallet,
 } from 'lucide-react-native';
 import React, { useMemo } from 'react';
-import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 const isWeb = Platform.OS === 'web';
 const webPointer = isWeb ? ({ cursor: 'pointer' } as any) : {};

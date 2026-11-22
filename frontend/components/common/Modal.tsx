@@ -1,7 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { ReactNode, useEffect, useId, useState } from "react";
 import { useDetailsDock } from "@/components/common/listScreen/DetailsDock";
-import { SHEET_BOTTOM_MARGIN, SHEET_SIDE_MARGIN } from "@/components/common/listScreen/AdminSheet";
+import { SHEET_BOTTOM_MARGIN, SHEET_SIDE_MARGIN, useSheetBottomInset } from "@/components/common/listScreen/AdminSheet";
 import {
     KeyboardAvoidingView,
     Platform,
@@ -148,7 +148,7 @@ function NativeSheet({
     const { height: winHeight } = useWindowDimensions();
     const [availH, setAvailH] = useState(0);
     const padTop = insets.top + 16;
-    const padBottom = insets.bottom + SHEET_BOTTOM_MARGIN;
+    const padBottom = useSheetBottomInset() + SHEET_BOTTOM_MARGIN;
     const panelMaxH = Math.max(200, Math.round(((availH || winHeight) - padTop - padBottom) * Math.min(1, maxHeightRatio / 0.92)));
 
     return (

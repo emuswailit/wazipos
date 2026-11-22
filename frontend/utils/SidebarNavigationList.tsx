@@ -13,7 +13,7 @@ import {
     UserCircle, Users, Wallet, Warehouse, Truck, Bike, PackageCheck, UtensilsCrossed, Wifi,
     AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
-    Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, type LucideIcon,
+    Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, type LucideIcon,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -39,7 +39,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
     // Used by navigationData but missing before (they showed as initials, e.g. "PL", "PR").
     AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
-    Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket,
+    Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket,
 };
 
 function initials(title: string): string {

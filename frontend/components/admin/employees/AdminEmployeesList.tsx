@@ -11,7 +11,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StatusBar, useWindowDimensions, View } from 'react-native';
 
-import AdminEmployeeEditModal from './AdminEmployeeEditModal';
+import AdminEmployeeEditModal, { employeePayoutDetails } from './AdminEmployeeEditModal';
 import AdminEmployeesMobileView from './AdminEmployeesMobileView';
 import AdminEmployeesWebView from './AdminEmployeesWebView';
 
@@ -133,9 +133,12 @@ export default function AdminEmployeesList() {
                 employee_details.id = editingItem.id;
             }
 
+            // New employees: their payout account, defaulting the name to theirs.
+            const payout = editingItem ? undefined : employeePayoutDetails(values);
             const payload = {
                 action: editingItem ? 'UpdateEmployee' : 'CreateEmployee',
                 employee_details,
+                ...(payout ? { payout_account_details: payout } : {}),
             };
 
             console.log("🚀 SUBMITTING EMPLOYEE PAYLOAD:", payload);

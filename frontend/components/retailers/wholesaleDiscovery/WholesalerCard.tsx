@@ -8,7 +8,8 @@ import type { DiscoveredWholesaler } from '@/api/wholesaleDiscoveryApi';
 import { useListTokens, webPointer } from '@/components/common/listScreen';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 const PHARMA = { label: 'Pharmaceutical', color: '#0ea5e9' };
 const GENERAL = { label: 'General', color: '#8b5cf6' };

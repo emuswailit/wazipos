@@ -103,6 +103,30 @@ function CountScreen({ job, onBack }: { job: StockTake; onBack: () => void }) {
     const [qty, setQty] = useState('');
     const [note, setNote] = useState('');
     const [saving, setSaving] = useState(false);
+    // Goods that aren't on the books (no matching item, no shop label, another batch).
+    const [foundOpen, setFoundOpen] = useState(false);
+    const [found, setFound] = useState({ title: '', quantity: '', barcode: '', batch_number: '', price_seen: '', where_found: '', note: '' });
+    const [foundCount, setFoundCount] = useState(0);
+
+    const saveFound = async () => {
+        if (!found.title.trim() || !(Number(found.quantity) > 0)) return alert('Found item', 'Describe the item and how many you found.');
+        setSaving(true);
+        try {
+            const res: any = await stocktakerApi.found(job.id, {
+                title: found.title.trim(), quantity: found.quantity.trim(),
+                ...Object.fromEntries(Object.entries(found).filter(([k, v]) => !['title', 'quantity'].includes(k) && String(v).trim())),
+            });
+            if (ok(res)) {
+                setFoundOpen(false);
+                setFoundCount((n) => n + 1);
+            } else alert('Not recorded', errorText(res, 'Could not record the item.'), undefined, 'danger');
+        } finally {
+            setSaving(false);
+        }
+    };
+    useEffect(() => {
+        stocktakerApi.myFound(job.id).then((res: any) => ok(res) && setFoundCount((res.data.found ?? []).length));
+    }, [job.id]);
 
     const load = useCallback(async () => {
         const res: any = await stocktakerApi.items(job.id, q.trim() || undefined);
@@ -146,6 +170,16 @@ function CountScreen({ job, onBack }: { job: StockTake; onBack: () => void }) {
                     {done} of {items?.length ?? 0} counted · tap an item and enter what's on the shelf
                 </Text>
                 <SearchField variant="mobile" value={q} onChangeText={setQ} placeholder="Search items…" />
+                <Pressable
+                    onPress={() => { setFound({ title: '', quantity: '', barcode: '', batch_number: '', price_seen: '', where_found: '', note: '' }); setFoundOpen(true); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: '#f43f5e88' }}
+                >
+                    <Ionicons name="alert-circle-outline" size={18} color="#f43f5e" />
+                    <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold, fontSize: 13 }}>
+                        Found something not on the list?{foundCount ? ` (${foundCount} recorded)` : ''}
+                    </Text>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 11.5 }}>No shop label, unknown item, other batch</Text>
+                </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 6, maxWidth: 900, width: '100%', alignSelf: 'center' }}>
                 {items === null ? <ActivityIndicator color={theme.primary} /> : null}
@@ -194,6 +228,42 @@ function CountScreen({ job, onBack }: { job: StockTake; onBack: () => void }) {
                         style={{ height: 42, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.medium }}
                     />
                     <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>You can't change a count once saved; ask your agent if it needs redoing.</Text>
+                </View>
+            </AdminSheet>
+            <AdminSheet
+                visible={foundOpen}
+                onClose={() => !saving && setFoundOpen(false)}
+                title="Not on the books"
+                subtitle="Goods here that the business doesn't list: they are reported to the owner, not added to stock"
+                icon="alert-circle-outline"
+                width={460}
+                footer={
+                    <>
+                        <SheetButton label="Cancel" variant="ghost" onPress={() => setFoundOpen(false)} />
+                        <SheetButton label="Record" icon="checkmark" loading={saving} onPress={() => void saveFound()} />
+                    </>
+                }
+            >
+                <View style={{ gap: 8 }}>
+                    {([
+                        ['title', 'What is it? e.g. Panadol 10s'],
+                        ['quantity', 'How many'],
+                        ['barcode', 'Barcode (if any)'],
+                        ['batch_number', 'Batch number (if any)'],
+                        ['price_seen', 'Price on it (if any)'],
+                        ['where_found', 'Where — e.g. under the counter'],
+                        ['note', 'Note'],
+                    ] as const).map(([key, placeholder]) => (
+                        <TextInput
+                            key={key}
+                            value={found[key]}
+                            onChangeText={(t) => setFound((f) => ({ ...f, [key]: key === 'quantity' || key === 'price_seen' ? t.replace(/[^0-9.]/g, '') : t }))}
+                            placeholder={placeholder}
+                            placeholderTextColor={theme.textDark}
+                            keyboardType={key === 'quantity' || key === 'price_seen' ? 'decimal-pad' : 'default'}
+                            style={{ height: 42, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.medium }}
+                        />
+                    ))}
                 </View>
             </AdminSheet>
         </View>

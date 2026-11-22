@@ -23,7 +23,8 @@ import { resolveImageUrl } from '@/lib/images';
 import { Ionicons } from '@expo/vector-icons';
 import { Formik, type FormikHelpers } from 'formik';
 import React, { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 import * as Yup from 'yup';
 
 /* ------------------------------------------------------------------ */

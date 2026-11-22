@@ -112,7 +112,7 @@ export default function GoogleSignInButton({ onIdToken, onError, loading, disabl
                 <ActivityIndicator color={theme.text} size="small" />
             ) : (
                 <>
-                    <FontAwesome name="google" size={18} color="#4285F4" />
+                    <FontAwesome name="google" size={18} color="#5b9dff" />
                     <Text style={{ color: theme.text }} className="font-semibold text-base md:text-sm">
                         Continue with Google
                     </Text>

@@ -29,12 +29,12 @@ import {
     Platform,
     ScrollView,
     Text,
-    Pressable,
     TouchableOpacity,
     useWindowDimensions,
     View,
     type ViewStyle,
 } from 'react-native';
+import { Pressable } from '@/components/common/StablePressable';
 
 /* ═══════════════════════════════════════════════════════════
  * FETCH ADAPTER
