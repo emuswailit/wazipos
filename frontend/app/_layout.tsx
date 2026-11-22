@@ -1,5 +1,8 @@
 // app/_layout.tsx
 
+import { useNotificationTaps, usePushRegistration } from '@/hooks/usePushRegistration';
+import { useLiveAlerts } from '@/hooks/useLiveAlerts';
+import LiveAlertsHost from '@/components/common/LiveAlertsHost';
 import { SubscriptionBanner } from '@/components/common/SubscriptionBanner';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { registerBackgroundSyncTask } from '@/context/backgroundSyncTask';
@@ -100,6 +103,9 @@ function GlobalAppShellLayout() {
     toggleTheme,
     theme,
   } = useAuth();
+  usePushRegistration(user as any); // order / payment / payout notices on this device
+  useLiveAlerts(); // the same notices live over the websocket while the app is connected
+  useNotificationTaps(); // tapping a notice opens its screen
   const { isOnline } = useNetworkStatus();
   // Typed routes infer an empty tuple at the root layout; segments are plain strings.
   const segments = useSegments() as string[];
@@ -558,6 +564,8 @@ function GlobalAppShellLayout() {
           </View>
         )}
       </View>
+      {/* Web: live order / payment / payout alerts (phones get local notifications). */}
+      <LiveAlertsHost />
     </>
   );
 }

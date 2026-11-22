@@ -378,6 +378,16 @@ export function AuthProvider({
      * Logout
      * ------------------------------------------------------- */
     const logout = useCallback(async () => {
+        // Native: stop this device getting the account's order / payout notices
+        // (best effort, while the session is still valid; hooks/usePushRegistration.ts).
+        if (Platform.OS !== 'web') {
+            try {
+                const usersApi = require('@/api/usersApi').default;
+                await Promise.race([usersApi.updateNotificationToken(''), new Promise((r) => setTimeout(r, 3000))]);
+            } catch {
+                // never block sign-out
+            }
+        }
         try {
             if (Platform.OS === 'web') {
                 localStorage.removeItem(TOKEN_KEY);

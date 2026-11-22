@@ -187,6 +187,8 @@ export const vendorStockTakesApi = {
     pay: (stock_take: string, phone: string) => vendor('VendorPayStockTake', { stock_take, phone }),
     decideAll: (stock_take: string, decision: 'APPLY' | 'KEEP') => vendor('VendorDecide', { stock_take, all: decision }),
     decideLines: (stock_take: string, lines: { count: string; decision: 'APPLY' | 'KEEP' }[]) => vendor('VendorDecide', { stock_take, lines }),
+    /** Ask the business's agent (or WaziPOS) to book a stock take. */
+    request: (note?: string, preferred_date?: string) => vendor('VendorRequestStockTake', { ...(note ? { note } : {}), ...(preferred_date ? { preferred_date } : {}) }),
 };
 
 export const adminStockTakesApi = {

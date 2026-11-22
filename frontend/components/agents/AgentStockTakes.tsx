@@ -33,7 +33,7 @@ import { DateField } from '@/components/common/DateField';
 import type { PageSize } from '@/components/common/PaginationBar';
 import StockTakeReportView from '@/components/stocktakes/StockTakeReportView';
 import { useAuth } from '@/context/AuthContext';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Formik } from 'formik';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, useWindowDimensions, View } from 'react-native';
@@ -94,6 +94,10 @@ export default function AgentStockTakes() {
     const [pageSize, setPageSize] = useState<PageSize>(25);
     const [viewing, setViewing] = useState<StockTake | null>(null);
     const [booking, setBooking] = useState<StockTake | 'new' | null>(null);
+    // Opened from a business's own Stock takes screen: book for that business.
+    const params = useLocalSearchParams<{ entity?: string }>();
+    const [preset, setPreset] = useState<string | null>(null);
+    const [presetDone, setPresetDone] = useState(false);
 
     const load = useCallback(async () => {
         setRefreshing(true);
@@ -121,6 +125,22 @@ export default function AgentStockTakes() {
     }, []);
 
     useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+    useEffect(() => {
+        const wanted = typeof params.entity === 'string' ? params.entity : '';
+        if (!wanted || presetDone || refreshing || !entities.length) return;
+        setPresetDone(true);
+        if (!entities.some((e) => e.id === wanted)) {
+            alert('Not available', 'You can book stock takes only for businesses you registered (My entities) — never for a business you own or work at.');
+            return;
+        }
+        if (!stocktakers.length) {
+            alert('No stocktakers yet', 'Add onboarders (with payout accounts) under My onboarders first.');
+            return;
+        }
+        setPreset(wanted);
+        setBooking('new');
+    }, [params.entity, presetDone, refreshing, entities, stocktakers, alert]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -197,7 +217,8 @@ export default function AgentStockTakes() {
                 booking={booking}
                 entities={entities}
                 stocktakers={stocktakers}
-                onClose={() => setBooking(null)}
+                presetEntity={preset}
+                onClose={() => { setBooking(null); setPreset(null); }}
                 onSaved={(st) => { setBooking(null); upsert(st); setViewing(st); void load(); }}
             />
         </>
@@ -210,12 +231,14 @@ function BookingSheet({
     booking,
     entities,
     stocktakers,
+    presetEntity,
     onClose,
     onSaved,
 }: {
     booking: StockTake | 'new' | null;
     entities: { id: string; title: string }[];
     stocktakers: { id: string; title: string }[];
+    presetEntity?: string | null;
     onClose: () => void;
     onSaved: (st: StockTake) => void;
 }) {
@@ -230,7 +253,7 @@ function BookingSheet({
             key={`${booking ? (editing?.id ?? 'new') : 'closed'}`}
             enableReinitialize
             initialValues={{
-                entity: editing?.entity ?? '',
+                entity: editing?.entity ?? presetEntity ?? '',
                 kind: (editing?.kind ?? 'ONE_OFF') as StockTakeKind,
                 every_days: editing?.every_days ? String(editing.every_days) : '30',
                 starts_on: editing?.starts_on ?? '',

@@ -151,11 +151,9 @@ const facilityRegister = (
   });
 };
 
-const updateNotificationToken = (token: string): Promise<ApiResponse<any>> => {
-  const data = new FormData();
-  data.append("notification_token", token);
-  return client.patch("/users/user/update", data);
-};
+/** This device's Expo push token for the signed-in user ("" removes it on sign-out). */
+const updateNotificationToken = (token: string): Promise<ApiResponse<any>> =>
+  client.post("/users/me/push-token", { token });
 
 const pushNotification = (to: string, title: string, body: string): Promise<ApiResponse<any>> => {
   const data = new FormData();

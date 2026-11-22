@@ -27,14 +27,17 @@ const errorText = (res: any, fallback: string) => {
 
 const config = {
     ...stockTakesConfig,
-    addLabel: undefined,
-    emptyMessage: 'Ask your WaziPOS agent to book a stock take: an independent count of your stock against the system, with a report.',
+    addLabel: 'Request a stock take',
+    emptyMessage: 'Request a stock take: a WaziPOS agent books the days and stocktakers, who count your stock independently against the system, with a report.',
     columns: stockTakesConfig.columns.filter((c) => c.key !== 'who'),
 };
+// This is the business's own screen: even if the owner is a WaziPOS agent, they only
+// request here — an agent never books or earns on their own shop (conflict of interest).
 
 export default function VendorStockTakes() {
     const { width } = useWindowDimensions();
     const isLarge = width >= 768;
+    const [requesting, setRequesting] = useState(false);
     const [rows, setRows] = useState<StockTake[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -76,6 +79,7 @@ export default function VendorStockTakes() {
                 error={loadError}
                 items={items}
                 allItems={items}
+                onOpenCreate={() => setRequesting(true)}
                 onPressItem={setViewing}
                 stats={[
                     { label: 'Stock takes', value: rows.length.toLocaleString() },
@@ -92,7 +96,65 @@ export default function VendorStockTakes() {
                 onNext={() => {}}
                 onPageSizeChange={() => {}}
             />
+            <RequestSheet visible={requesting} onClose={() => setRequesting(false)} />
         </DetailsDock>
+    );
+}
+
+/** The business asks its agent (or WaziPOS) for a stock take. */
+function RequestSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+    const { theme, border } = useListTokens();
+    const alert = useAlert();
+    const [note, setNote] = useState('');
+    const [date, setDate] = useState('');
+    const [busy, setBusy] = useState(false);
+    const send = async () => {
+        setBusy(true);
+        try {
+            const res: any = await vendorStockTakesApi.request(note.trim() || undefined, /^\d{4}-\d{2}-\d{2}$/.test(date.trim()) ? date.trim() : undefined);
+            if (ok(res)) {
+                alert('Request sent', `We told ${res.data.data?.sent_to ?? 'your agent'}. They will book the days, the fee and the stocktakers with you.`, undefined, 'success');
+                setNote('');
+                setDate('');
+                onClose();
+            } else alert('Not sent', errorText(res, 'Could not send the request.'), undefined, 'danger');
+        } finally {
+            setBusy(false);
+        }
+    };
+    const field = (value: string, onChange: (t: string) => void, placeholder: string, multiline = false) => (
+        <TextInput
+            value={value}
+            onChangeText={onChange}
+            placeholder={placeholder}
+            placeholderTextColor={theme.textDark}
+            multiline={multiline}
+            style={{ minHeight: multiline ? 80 : 42, paddingHorizontal: 12, paddingTop: multiline ? 10 : 0, borderRadius: 10, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.medium, textAlignVertical: multiline ? 'top' : 'center' }}
+        />
+    );
+    return (
+        <AdminSheet
+            visible={visible}
+            onClose={() => !busy && onClose()}
+            title="Request a stock take"
+            subtitle="Your WaziPOS agent books it and sends independent stocktakers"
+            icon="clipboard-outline"
+            width={480}
+            footer={
+                <>
+                    <SheetButton label="Cancel" variant="ghost" onPress={onClose} />
+                    <SheetButton label="Send request" icon="paper-plane-outline" loading={busy} onPress={() => void send()} />
+                </>
+            }
+        >
+            <View style={{ gap: 10 }}>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 13, lineHeight: 19 }}>
+                    Stocktakers count every item on your premises blind, against your system stock. You get a report of what's short, over or not on your books, pay the agreed fee by mobile money, and decide what updates your stock.
+                </Text>
+                {field(date, setDate, 'Preferred start date (YYYY-MM-DD, optional)')}
+                {field(note, setNote, 'Anything the agent should know (optional)', true)}
+            </View>
+        </AdminSheet>
     );
 }
 
