@@ -21,13 +21,20 @@ SECRET_KEY = config("SECRET_KEY")
 FIELD_ENCRYPTION_KEY  = config("FIELD_ENCRYPTION_KEY")
 ENCRYPT_KEY=config("ENCRYPT_KEY")
 
-# Hosts this API answers to. Override with ALLOWED_HOSTS=a.com,b.com in .env
-# (add any other domain or IP the server is reached by).
-ALLOWED_HOSTS = config(
-    "ALLOWED_HOSTS",
-    default="api.wazipos.co.ke,wazipos.co.ke,www.wazipos.co.ke,localhost,127.0.0.1",
-    cast=Csv(),
-)
+# Hosts this API answers to. Our domains are always included; ALLOWED_HOSTS in .env
+# adds others (e.g. the server IP). A "*" there allows every host — don't use it in production.
+def _host_list(raw):
+    """Hosts from .env in any form: commas or spaces, with or without quotes / [brackets]."""
+    import re as _re
+
+    return [h for h in (p.strip().strip("'\"") for p in _re.split(r"[,\s\[\]]+", str(raw or ""))) if h]
+
+
+# Our own domains are always served; .env ALLOWED_HOSTS adds any others (IPs, extra domains).
+ALLOWED_HOSTS = list(dict.fromkeys(
+    ["api.wazipos.co.ke", "wazipos.co.ke", "www.wazipos.co.ke", "localhost", "127.0.0.1"]
+    + _host_list(config("ALLOWED_HOSTS", default=""))
+))
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880
