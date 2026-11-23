@@ -68,6 +68,11 @@ app.conf.beat_schedule = {
         "schedule": 900.0,
         "args": None,
     },
+    "monitor_wifi_payments": {
+        "task": "wifi.tasks.monitor_wifi_payments",
+        "schedule": 30.0,
+        "args": None,
+    },
     "process_order_payouts": {
         "task": "payments.tasks.process_order_payouts",
         "schedule": 120.0,

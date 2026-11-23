@@ -86,7 +86,7 @@ def hotspot_login_view(request):
                     cursor.execute("INSERT INTO radreply (username, attribute, op, value) VALUES (%s, 'Session-Timeout', '=', %s)", [mac, str(remaining_seconds)])
                     cursor.execute("INSERT INTO radreply (username, attribute, op, value) VALUES (%s, 'Mikrotik-Rate-Limit', '=', %s)", [mac, bandwidth_limit])
                 create_log("info",f"URL: {login_url}")
-                return render(request, 'hotspots/connecting.html', {
+                return render(request, 'wifi/hotspot/connecting.html', {
                     'login_url': login_url, 'username': mac, 'password': mac, 'psp_ref': '', 'nas_id': nas_id,
                     'message': 'Welcome back! Syncing your active session parameters...'
                 })
@@ -105,7 +105,7 @@ def hotspot_login_view(request):
         eligible_for_trial = not has_used_trial
         
         # Default Fallback: No subscription active -> serve landing choice screen
-        return render(request, 'hotspots/login.html', {
+        return render(request, 'wifi/hotspot/login.html', {
             'title': router_obj.title if router_obj else 'Wazi WiFi',
             'router_ip': router_ip, 'mac': mac, 'tariffs': tariffs, 'login_url': login_url, 'nas_id': nas_id, 'eligible_for_trial': eligible_for_trial,
             'message': 'Router identification error' if (nas_id and not router_obj) else ''
@@ -133,7 +133,7 @@ def hotspot_login_view(request):
             'router_ip': router_ip
             })
             return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-            # return render(request, 'hotspots/payment_failed.html', {'message': 'Entity administrator configuration error.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+            # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'Entity administrator configuration error.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
         user_account = UserAccounts.objects.filter(owner=router_obj.entity.administrator).first()
         tariff_obj = WifiTarrifs.objects.filter(id=tariff_id).first()
@@ -147,7 +147,7 @@ def hotspot_login_view(request):
             'router_ip': router_ip
             })
             return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-            # return render(request, 'hotspots/payment_failed.html', {'message': 'System account tracking failure status.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+            # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'System account tracking failure status.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
         telco, formatted_phone_number = get_telco_by_phone_number(phone)
         reference_number = generate_reference_number(tariff_obj.entity, tariff_obj.owner)
@@ -178,7 +178,7 @@ def hotspot_login_view(request):
             'router_ip': router_ip
             })
             return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-            # return render(request, 'hotspots/payment_failed.html', {'message': 'Payment services offline. Please attempt again shortly.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+            # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'Payment services offline. Please attempt again shortly.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
         if result_json and result_json.get("ref"):
             psp_ref = result_json["ref"]
@@ -186,11 +186,12 @@ def hotspot_login_view(request):
             WifiSubscriptionPayments.objects.create(
                 tariff=tariff_obj, reference_number=reference_number, status="PENDING",
                 amount=int(tariff_obj.price), entity=tariff_obj.entity, currency="KES",
-                psp_reference_number=psp_ref, telco=telco, is_settled="false",account=user_account
+                psp_reference_number=psp_ref, telco=telco, is_settled="false",account=user_account,
+                mac_address=mac, nas_id=nas_id,
             )
             use_reference_number(reference_number)
 
-            return render(request, 'hotspots/connecting.html', {
+            return render(request, 'wifi/hotspot/connecting.html', {
                 'login_url': login_url, 'username': mac, 'password': mac, 'psp_ref': psp_ref,
                 'nas_id': nas_id, 'tariff_id': tariff_id,
                 'message': 'STK Push prompt dispatched! Enter your PIN on your phone to connect.'
@@ -203,141 +204,47 @@ def hotspot_login_view(request):
         'router_ip': router_ip
         })
         return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-        # return render(request, 'hotspots/payment_failed.html', {'message': 'Express transaction processing checkout drop.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+        # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'Express transaction processing checkout drop.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
 
 
 @xframe_options_exempt
 def check_payment_status_api(request):
     """
-    Asynchronous JSON Endpoint polled by connecting.html.
-    Prioritizes real-time gateway checks via psp_ref, updates payment rows,
-    and handles downstream subscription creation and RADIUS synchronization.
+    Polled by connecting.html. Delegates to wifi/payments.resolve — the same path
+    the background monitor and the live socket use — so a device is connected and
+    the owner's payout queued exactly once, whether or not the page stays open.
+    Replies {"status": "PENDING" | "SUCCESS" | "FAILED"}.
     """
+    from wifi import payments as wp
+
     psp_ref = request.GET.get('ref', '').strip()
-    nas_id = request.GET.get('nas_id', '').strip()
     mac = request.GET.get('mac', '').strip().lower()
     tariff_id = request.GET.get('tariff_id', '').strip()
 
     if not psp_ref:
         return JsonResponse({"status": "PENDING", "error": "Missing transaction token reference."})
-
-    # Locate tracking entry row parameters
-    payment = WifiSubscriptionPayments.objects.filter(psp_reference_number=psp_ref).first()
+    payment = WifiSubscriptionPayments.objects.select_related("tariff", "entity").filter(psp_reference_number=psp_ref).first()
     if not payment:
         return JsonResponse({"status": "PENDING", "error": "Internal tracking record not found."})
 
-    # =========================================================================
-    # 🎯 STEP 1: PRIORITIZE GATEWAY QUERY (Fetch status straight from JamboPay)
-    # =========================================================================
-    gateway_status = "PENDING"
+    tariff = payment.tariff or (WifiTarrifs.objects.filter(id=tariff_id).first() if tariff_id else None)
     try:
-        auth_data = {
-            "client_id": config("JAMBOPAY_CLIENT_ID"),
-            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE")
-        }
-        auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=auth_data, timeout=4)
-        token = auth_res.json().get("access_token")
-        
-        if token:
-            # Active check request hitting the payment processing node directly
-            status_res = check_payment_status(psp_ref, token)
-            
-            # Safe tuple/dictionary unpacking handler blocks
-            if isinstance(status_res, tuple):
-                response_dict = status_res[1] if len(status_res) > 1 else {}
-                gateway_status = response_dict.get("status", "PENDING") if isinstance(response_dict, dict) else "PENDING"
-            else:
-                gateway_status = status_res.get("status", "PENDING") if status_res else "PENDING"
-            
-            create_log("info", f"JamboPay Real-Time Status Check result for Ref [{psp_ref}]: {gateway_status}")
-    except Exception as api_err:
-        create_log("error", f"Proactive payment status validation fetch error: {str(api_err)}")
-        # Fallback to local DB record state if payment provider endpoint severs packets temporarily
-        gateway_status = payment.status
+        wp.resolve(payment, mac=mac or None, tariff=tariff)
+    except Exception as e:
+        create_log("error", f"WiFi payment check {psp_ref}: {e}")
+    payment.refresh_from_db()
+    status = wp.portal_status(payment)
+    if status == "PENDING" and payment.status == "SUCCESS":
+        return JsonResponse({"status": "PENDING", "error": payment.activation_error or "Connecting your device"})
+    return JsonResponse({"status": status})
 
-    # =========================================================================
-    # 💾 STEP 2: IMMEDIATELY UPDATE WIFISUBSCRIPTIONPAYMENTS WITH THE RESULT
-    # =========================================================================
-    if gateway_status in ["SUCCESS", "FAILED", "CANCELLED", "TIMEOUT"]:
-        if payment.status != gateway_status:
-            payment.status = gateway_status
-            payment.save()
-            create_log("info", f"Updated WifiSubscriptionPayments row status index to: {gateway_status}")
-
-    # =========================================================================
-    # 🔑 STEP 3: IF SUCCESS, CREATE SUBSCRIPTION, UPDATE RADIUS, LOG USER IN
-    # =========================================================================
-    if payment.status == "SUCCESS":
-        # Check layout constraints to ensure we do not generate duplicate database subscriptions
-        sub_exists = WifiSubscriptions.objects.filter(payment=payment).exists()
-        
-        if not sub_exists:
-            tariff_obj = WifiTarrifs.objects.filter(id=tariff_id).first()
-            
-            # NATIVE LOCAL TIME ANCHORING: No UTC translation loops
-            now_local = datetime.datetime.now()
-            length = tariff_obj.length if tariff_obj else 1
-            duration_unit = tariff_obj.duration.lower() if tariff_obj else "hour"
-            
-            if duration_unit == "hour": expiry_local = now_local + datetime.timedelta(hours=length)
-            elif duration_unit == "day": expiry_local = now_local + datetime.timedelta(days=length)
-            elif duration_unit == "week": expiry_local = now_local + datetime.timedelta(weeks=length)
-            elif duration_unit == "month": expiry_local = now_local + datetime.timedelta(days=length * 30)
-            else: expiry_local = now_local + datetime.timedelta(hours=1)
-            
-            session_timeout_seconds = int((expiry_local - now_local).total_seconds())
-
-            try:
-                # Atomically write local subscription parameters to the DB
-                with transaction.atomic(using='default'):
-                    WifiSubscriptions.objects.create(
-                        entity=getattr(tariff_obj, 'entity', None),
-                        tariff_selected=tariff_obj,
-                        mac_address=mac,
-                        username=mac,
-                        password=mac,
-                        payment=payment,
-                        owner=getattr(tariff_obj, 'owner', None),
-                        valid_from=now_local,   # Written explicitly as Local Time
-                        valid_to=expiry_local,  # Written explicitly as Local Time
-                        is_active="true"
-                    )
-                
-                # Format strict month-first space-padding schema for FreeRADIUS ("Jun  9 2026 14:15:00")
-                day = expiry_local.day
-                day_str = f" {day}" if day < 10 else str(day)
-                expiration_string = expiry_local.strftime(f"%b {day_str} %Y %H:%M:%S")
-
-                # Inject accounting validation rows straight into FreeRADIUS memory tables
-                with connections['radius'].cursor() as cursor:
-                    cursor.execute("DELETE FROM radcheck WHERE username = %s", [mac])
-                    cursor.execute("DELETE FROM radreply WHERE username = %s", [mac])
-                    
-                    cursor.execute("INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, 'Cleartext-Password', ':=', %s)", [mac, mac])
-                    cursor.execute("INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, 'Expiration', ':=', %s)", [mac, expiration_string])
-                    cursor.execute("INSERT INTO radreply (username, attribute, op, value) VALUES (%s, 'Session-Timeout', '=', %s)", [mac, str(session_timeout_seconds)])
-                
-                create_log("info", f"Local registration saved & RADIUS table synced successfully for device: {mac}")
-            except Exception as async_err:
-                create_log("error", f"Downstream profile tracking generation pipeline failure: {str(async_err)}")
-                return JsonResponse({"status": "PENDING", "error": "AAA data synchronization failure"})
-
-        # Signal frontend JavaScript to trigger automatic form submit event to log user into wifi
-        return JsonResponse({"status": "SUCCESS"})
-
-    elif payment.status in ["FAILED", "CANCELLED", "TIMEOUT"]:
-        return JsonResponse({"status": "FAILED"})
-
-    # Catch-all default state keeps frontend polling spin active
-    return JsonResponse({"status": "PENDING"})
 
 def payment_failed_view(request):
     """
     Renders the custom fallback error screen when transactions break.
     """
-    return render(request, 'hotspots/payment_failed.html', {
+    return render(request, 'wifi/hotspot/payment_failed.html', {
         'message': request.GET.get('message', 'Transaction processing dropped.'),
         'login_url': request.GET.get('login_url', ''),
         'mac': request.GET.get('mac', ''),
@@ -371,7 +278,7 @@ def hotspot_trial_view(request):
         'router_ip': router_ip
         })
         return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-        # return render(request, 'hotspots/payment_failed.html', {'message': 'Invalid device mac identifier hardware properties.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+        # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'Invalid device mac identifier hardware properties.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
     tariffs = []
     router_obj = WifiRouters.objects.filter(nas_id=nas_id).first() if nas_id else None
@@ -381,7 +288,7 @@ def hotspot_trial_view(request):
     # Validate against past trials using the exact pricing match rule
     already_used = WifiSubscriptions.objects.filter(mac_address=mac, tariff_selected__price=0).exists()
     if already_used:
-        return render(request, 'hotspots/login.html', {
+        return render(request, 'wifi/hotspot/login.html', {
             'tariffs': tariffs, 'nas_id': nas_id, 'mac': mac, 'router_ip': router_ip, 'login_url': login_url,
             'title': router_obj.title if router_obj else 'Wazi WiFi',
             'message': 'This device has already exhausted its free trial allocation.'
@@ -392,7 +299,7 @@ def hotspot_trial_view(request):
         trial_tariff = WifiTarrifs.objects.filter(price=0).first()
 
     if not trial_tariff:
-        return render(request, 'hotspots/login.html', {
+        return render(request, 'wifi/hotspot/login.html', {
             'tariffs': tariffs, 'nas_id': nas_id, 'mac': mac, 'router_ip': router_ip, 'login_url': login_url,
             'title': router_obj.title if router_obj else 'Wazi WiFi',
             'message': 'Free trial access package is currently unconfigured on this network node.'
@@ -429,7 +336,7 @@ def hotspot_trial_view(request):
         'router_ip': router_ip
         })
         return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-        # return render(request, 'hotspots/payment_failed.html', {'message': 'Internal database storage tracking processing pipeline processing failure.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+        # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'Internal database storage tracking processing pipeline processing failure.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
     try:
         with connections['radius'].cursor() as cursor:
@@ -451,9 +358,9 @@ def hotspot_trial_view(request):
         'router_ip': router_ip
         })
         return redirect(f"{reverse('hotspots:payment_failed')}?{query_params}")
-        # return render(request, 'hotspots/payment_failed.html', {'message': 'Radius profile injection timeout. Access not updated.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
+        # return render(request, 'wifi/hotspot/payment_failed.html', {'message': 'Radius profile injection timeout. Access not updated.', 'login_url': login_url, 'mac': mac, 'nas_id': nas_id, 'router_ip': router_ip})
 
-    return render(request, 'hotspots/connecting.html', {
+    return render(request, 'wifi/hotspot/connecting.html', {
         'login_url': login_url, 'username': mac, 'password': mac, 'psp_ref': '', 'nas_id': nas_id,
         'message': 'Free trial access granted! Establishing your session...'
     })

@@ -24,6 +24,7 @@ from wholesalers.routing import wholesalers_websocket_urlpatterns
 from products.routing import products_websocket_urlpatterns
 from analytics.routing import analytics_websocket_urlpatterns   # NEW
 from notifications.routing import notifications_websocket_urlpatterns
+from wifi.routing import wifi_websocket_urlpatterns
 
 
 routes = (
@@ -37,6 +38,7 @@ routes = (
     + analytics_websocket_urlpatterns 
     + subscriptions_websocket_urlpatterns
     + notifications_websocket_urlpatterns
+    + wifi_websocket_urlpatterns
 )
 
 

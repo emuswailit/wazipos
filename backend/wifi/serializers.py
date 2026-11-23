@@ -44,6 +44,17 @@ class WifiTarrifsSerializer(serializers.ModelSerializer):
 class WifiSubscriptionPaymentsSerializer(serializers.ModelSerializer):
     tariff_title= serializers.SerializerMethodField(read_only=True)
     entity_title= serializers.SerializerMethodField(read_only=True)
+    # Live monitor fields (wifi/payments.py): device connected? owner's payout?
+    connected = serializers.SerializerMethodField(read_only=True)
+    payout = serializers.SerializerMethodField(read_only=True)
+
+    def get_connected(self, obj):
+        return models.WifiSubscriptions.objects.filter(payment=obj).exists()
+
+    def get_payout(self, obj):
+        from wifi.payments import payout_of, payout_out
+
+        return payout_out(payout_of(obj))
     class Meta:
         model = models.WifiSubscriptionPayments
         fields = (
@@ -63,6 +74,10 @@ class WifiSubscriptionPaymentsSerializer(serializers.ModelSerializer):
             "status",
             "amount",
             "is_settled",
+            "mac_address",
+            "activation_error",
+            "connected",
+            "payout",
             "created",
             "updated",
            

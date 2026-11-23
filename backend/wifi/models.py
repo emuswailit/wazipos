@@ -142,6 +142,13 @@ class WifiSubscriptionPayments(EntityRelatedModel):
     status = models.CharField(
         max_length=120, choices=PAYMENT_STATUS_CHOICES, default="PENDING"
     )
+    # The device and router the package was bought for, so the payment monitor
+    # (wifi/payments.py) can connect the customer even after they leave the portal.
+    mac_address = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+    nas_id = models.CharField(max_length=256, null=True, blank=True)
+    checks = models.PositiveIntegerField(default=0)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    activation_error = models.CharField(max_length=300, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 

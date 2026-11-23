@@ -153,6 +153,14 @@ def wifiAPIView(request):
             page, many=True, context={"request": request}
         )
         return paginator.get_paginated_response(serializer.data)     
+    elif request.data["action"] == "RecheckWifiPayment":
+        # Ask the gateway about one payment now; connects the device and queues the payout if paid.
+        from wifi.payments import recheck
+
+        data = recheck(request.user, request.data.get("id"))
+        if data is None:
+            return custom_errors_response(1, "Not found", ["That payment does not exist or is not yours"])
+        return custom_success_message(0, f"Payment {data['status'].lower()}", data, "payment")
     elif request.data["action"] == "DeleteWifiRouter":
         # Payments and subscriptions are created by customers and are read only.
         from .utils import wifi_crud as crud

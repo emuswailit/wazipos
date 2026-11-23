@@ -85,7 +85,8 @@ urlpatterns = [
     path("api/v1/logistics/", include("logistics.urls")),
     path("api/v1/restaurants/", include("restaurants.urls")),
     path("api/v1/wholesalers/", include("wholesalers.urls")),
-    path("hotspots/", include("hotspots.urls",namespace='hotspots')),
+    # Captive portal (wifi app). Keep the /hotspots/ path: routers are configured with it.
+    path("hotspots/", include("wifi.hotspot_urls", namespace="hotspots")),
     path("api/v1/wifi/", include("wifi.urls")),
     path("api/v1/stats/", include("stats.urls")),
      path("api/v1/analytics/", include("analytics.urls")),

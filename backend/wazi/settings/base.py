@@ -70,7 +70,6 @@ INSTALLED_APPS = [
     "cities_light",
     "subscriptions",
     "hospitals",
-    "hotspots",
     "distributors",
     "drugs",
     "entitylocations",
