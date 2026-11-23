@@ -33,6 +33,35 @@ import urllib.parse
 from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 
+TRIAL_DONE_MESSAGE = "You've already used your free trial on this device. Pick a package below to keep browsing."
+
+
+def _norm_mac(mac):
+    """aa:bb:cc:dd:ee:ff, whatever the router sent (AA-BB-…, aabbcc…)."""
+    raw = re.sub(r"[^0-9a-f]", "", str(mac or "").lower())
+    return ":".join(raw[i:i + 2] for i in range(0, 12, 2)) if len(raw) == 12 else str(mac or "").strip().lower()
+
+
+def trial_used(mac):
+    """
+    Has this device already had a free trial? The ONE rule, used both to hide the
+    trial button on the packages page and to refuse a second trial: any past
+    subscription on a free (KES 0) package, on any router.
+    """
+    mac = _norm_mac(mac)
+    if not mac:
+        return False
+    variants = {mac, mac.replace(":", "-"), mac.replace(":", ""), mac.upper(), mac.replace(":", "-").upper()}
+    return WifiSubscriptions.objects.filter(mac_address__in=variants, tariff_selected__price=0).exists()
+
+
+def trial_tariff_for(router_obj):
+    """The free package to give: this hotspot's own, else none configured."""
+    if router_obj is None or not router_obj.entity_id:
+        return None
+    return WifiTarrifs.objects.filter(entity=router_obj.entity, price=0).first()
+
+
 @xframe_options_exempt
 def hotspot_login_view(request):
     """
@@ -95,15 +124,11 @@ def hotspot_login_view(request):
                 create_log("error", f"Auto-Sync FreeRADIUS GET view failure: {str(radius_error)}")
         else:
             create_log("info", "No active subscription")
-        # Check if this specific device has already consumed a trial at this router node
-        has_used_trial = WifiSubscriptions.objects.filter(
-            mac_address=mac,
-            tariff_selected__price=0,
-            tariff_selected__router__router_ip=router_ip
-        ).exists()
-
-        # The device is eligible only if no prior free tier records match the current router node
-        eligible_for_trial = not has_used_trial
+        # Trial button: only when this hotspot offers a free package AND this device
+        # hasn't had a trial (same rule the trial view enforces: trial_used).
+        has_used_trial = trial_used(mac)
+        eligible_for_trial = bool(mac) and not has_used_trial and trial_tariff_for(router_obj) is not None
+        create_log("info", f"Trial check {mac}: used={has_used_trial} offered={eligible_for_trial}")
         
         # Default Fallback: No subscription active -> serve landing choice screen
         return render(request, 'wifi/hotspot/login.html', {
@@ -286,24 +311,28 @@ def hotspot_trial_view(request):
     if router_obj and router_obj.entity:
         tariffs = WifiTarrifs.objects.filter(entity=router_obj.entity).order_by('price')
 
-    # Validate against past trials using the exact pricing match rule
-    already_used = WifiSubscriptions.objects.filter(mac_address=mac, tariff_selected__price=0).exists()
-    if already_used:
+    # Paid packages only on the page we send back (the free one isn't sold).
+    paid_tariffs = [t for t in tariffs if t.price and t.price > 0]
+
+    # Same rule as the packages page: one free trial per device. If the button was
+    # still on screen (old page, Back button), say so and show the packages.
+    if trial_used(mac):
+        create_log("info", f"Trial refused for {mac}: already used")
         return render(request, 'wifi/hotspot/login.html', {
-            'tariffs': tariffs, 'nas_id': nas_id, 'mac': mac, 'router_ip': router_ip, 'login_url': login_url,
+            'tariffs': paid_tariffs, 'nas_id': nas_id, 'mac': mac, 'router_ip': router_ip, 'login_url': login_url,
             'title': router_obj.title if router_obj else 'Wazi WiFi',
-            'message': 'This device has already exhausted its free trial allocation.'
+            'eligible_for_trial': False, 'trial_done': True,
+            'message': TRIAL_DONE_MESSAGE,
         })
 
-    trial_tariff = WifiTarrifs.objects.filter(entity=router_obj.entity, price=0).first() if router_obj else None
-    if not trial_tariff:
-        trial_tariff = WifiTarrifs.objects.filter(price=0).first()
+    trial_tariff = trial_tariff_for(router_obj)
 
     if not trial_tariff:
         return render(request, 'wifi/hotspot/login.html', {
-            'tariffs': tariffs, 'nas_id': nas_id, 'mac': mac, 'router_ip': router_ip, 'login_url': login_url,
+            'tariffs': paid_tariffs, 'nas_id': nas_id, 'mac': mac, 'router_ip': router_ip, 'login_url': login_url,
             'title': router_obj.title if router_obj else 'Wazi WiFi',
-            'message': 'Free trial access package is currently unconfigured on this network node.'
+            'eligible_for_trial': False,
+            'message': "This hotspot doesn't offer a free trial. Pick a package below.",
         })
 
     # 🛠️ NATIVE LOCAL TIME ANCHORS: Disabling UTC offset operations completely
