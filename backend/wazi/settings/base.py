@@ -114,6 +114,8 @@ AUTHENTICATION_BACKENDS = (
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # Serves /static/ (admin CSS/JS…). WhiteNoise must sit right after SecurityMiddleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -126,7 +128,6 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django_browser_reload.middleware.BrowserReloadMiddleware",
     "allauth.account.middleware.AccountMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = "wazi.urls"
@@ -195,6 +196,15 @@ DATABASE_ROUTERS = ['wazi.settings.routers.RadiusRouter']
 
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+# Serve app static files (Django admin, DRF, drf-yasg…) straight from their packages
+# when they haven't been collected into STATIC_ROOT yet — e.g. a fresh deploy where
+# `collectstatic` was skipped (staticfiles/ is git-ignored). Collected files win.
+WHITENOISE_USE_FINDERS = True
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Gzip/Brotli copies at collectstatic; no manifest, so a missed collectstatic never 500s a page.
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 MEDIA_ROOT = os.path.join(BASE_DIR, config("MEDIA_ROOT"))
 MEDIA_URL = config("MEDIA_URL")

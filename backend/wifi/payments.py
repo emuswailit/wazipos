@@ -220,16 +220,37 @@ def queue_payout(payment):
     from payments.utils.collection_payouts import _pay, _pct
     from payments.utils.order_payouts import _q
 
-    if payment.status != "SUCCESS" or payment.entity_id is None:
+    ref = payment.reference_number or payment.pk
+    if payment.status != "SUCCESS":
+        create_log("info", f"[wifi-payout] {ref}: not queued — payment is {payment.status}, not SUCCESS")
+        return None
+    if payment.entity_id is None:
+        create_log("error", f"[wifi-payout] {ref}: not queued — payment has no entity (hotspot owner)")
         return None
     existing = payout_of(payment)
     if existing:
         return existing
     entity = payment.entity
     gross = Decimal(str(payment.amount or 0))
+    if gross <= 0:
+        create_log("error", f"[wifi-payout] {ref}: not queued — amount is {gross}")
+        return None
+    pct = _pct(entity)
     row = _pay(
         "wifi_payment", payment.pk, payment.reference_number, entity, gross=gross, payee_entity=entity,
-        commission=_q(gross * _pct(entity) / Decimal("100")), note="WiFi package sold",
+        commission=_q(gross * pct / Decimal("100")), note="WiFi package sold",
+    )
+    if row is None:
+        create_log("error", f"[wifi-payout] {ref}: _pay created no row (entity={entity.pk} gross={gross})")
+        return payout_of(payment)
+    from payments.utils.order_payouts import MIN_PAYOUT
+
+    create_log(
+        "info",
+        f"[wifi-payout] {ref}: queued {row.amount} to {entity.title} "
+        f"(gross {gross}, fee {row.commission_amount} at {pct}%) status={row.status}"
+        + (f" — below JamboPay's KES {MIN_PAYOUT} minimum, waits for manual payment" if row.amount < MIN_PAYOUT else "")
+        + (" — the business has no active payout account" if row.status == "NO_ACCOUNT" else ""),
     )
     if row is not None:
         def kick():
@@ -341,6 +362,8 @@ def monitor():
     for p in WifiSubscriptionPayments.objects.filter(status="SUCCESS", is_settled="false", created__gte=since).select_related("entity")[:200]:
         if str(p.pk) not in queued and queue_payout(p):
             summary["queued"] += 1
+    if any(summary.values()):
+        create_log("info", f"[wifi-monitor] {summary}")
     return summary
 
 
