@@ -12,7 +12,7 @@
 #                                    sign-in): {"event": "wifi.status",
 #                                    "status": "PENDING" | "SUCCESS" | "FAILED"}.
 #
-# Close codes: 4001 not signed in · 4003 not allowed · 4004 payment not found.
+# Close codes: 4001 not signed in · 4403 not allowed · 4004 payment not found.
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -24,11 +24,13 @@ class WifiPaymentsConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         user = self.scope.get("user")
         if not user or not user.is_authenticated:
+            await self.accept()
             await self.close(code=self.scope.get("close_code") or 4001)
             return
         self.groups_joined, entity = await self._groups(user)
         if not self.groups_joined:
-            await self.close(code=4003)
+            await self.accept()
+            await self.close(code=4403)
             return
         for g in self.groups_joined:
             await self.channel_layer.group_add(g, self.channel_name)

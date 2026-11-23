@@ -56,6 +56,7 @@ from retailers.serializers import (
     RetailerReceiptsSerializer,
 )
 from utils.UUIDEncoder import UUIDEncoder
+from core.ws_access import ws_access  # who may open each socket
 
 logger = logging.getLogger("retailers.consumers")
 
@@ -71,6 +72,7 @@ except ImportError:
 # Wholesaler discounts (dormant — kept for reference)
 # =====================================================================
 
+@ws_access()
 class WholesaleDiscountsConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         print("Am at the connect")
@@ -98,6 +100,7 @@ class WholesaleDiscountsConsumer(AsyncWebsocketConsumer):
 # Retailer out-of-stocks
 # =====================================================================
 
+@ws_access(entity_types=("Retailer",))
 class RetailerOutOfStocksConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -145,6 +148,7 @@ class RetailerOutOfStocksConsumer(AsyncJsonWebsocketConsumer):
 # Retailer inventory
 # =====================================================================
 
+@ws_access(entity_types=("Retailer",))
 class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -195,6 +199,7 @@ class RetailerInventoryConsumer(AsyncJsonWebsocketConsumer):
 # Retailer indents
 # =====================================================================
 
+@ws_access(entity_types=("Retailer",))
 class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
     GROUP_NAME = "retailer-indents"
 
@@ -246,6 +251,7 @@ class RetailerIndentsConsumer(AsyncJsonWebsocketConsumer):
 # Shop inventory
 # =====================================================================
 
+@ws_access()
 class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -300,6 +306,7 @@ class ShopInventoryConsumer(AsyncJsonWebsocketConsumer):
 # Retailer dashboard
 # =====================================================================
 
+@ws_access(entity_types=("Retailer",))
 class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -407,6 +414,7 @@ class RetailerDashboardsConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
+@ws_access()
 class BodabodaAssignedOrdersConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.user = self.scope["user"]
@@ -499,6 +507,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 # socket with close code 1011.
 
 
+@ws_access()
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
     Listens to a specific order by reference number to track its payment status.
@@ -726,6 +735,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
+@ws_access(entity_types=("Retailer",))
 class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
     """
     Live customer orders for the user's own entity.
@@ -832,6 +842,7 @@ class CustomerOrdersConsumer(AsyncJsonWebsocketConsumer):
 # Customer order payments (Payments screen)
 # =====================================================================
 
+@ws_access(entity_types=("Retailer",))
 class CustomerOrderPaymentsConsumer(AsyncJsonWebsocketConsumer):
     """
     The latest customer order payments received by the user's own entity.
@@ -884,6 +895,7 @@ class CustomerOrderPaymentsConsumer(AsyncJsonWebsocketConsumer):
 # User orders
 # =====================================================================
 
+@ws_access()
 class UserOrdersConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -933,6 +945,7 @@ class UserOrdersConsumer(AsyncJsonWebsocketConsumer):
 # User prescriptions
 # =====================================================================
 
+@ws_access()
 class UserPrescriptionsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -1059,6 +1072,7 @@ class CustomerOrderNotificationsConsumer(WebsocketConsumer):
 # Order details
 # =====================================================================
 
+@ws_access()
 class OrderDetailsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -1134,6 +1148,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 # from .utils import create_log
 # from decouple import config
 
+@ws_access()
 class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
     Listens to a specific order by reference number to track its payment status.
@@ -1392,6 +1407,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 # Retailer product requests
 # =====================================================================
 
+@ws_access(entity_types=("Retailer",))
 class RetailerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -1462,6 +1478,7 @@ def retailer_requisitions_group(entity_id):
     return f"retailer-requisitions-{entity_id}"
 
 
+@ws_access()
 class RetailerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
     """
     Live status of one requisition (retailer order) mobile-money payment,
@@ -1542,6 +1559,7 @@ class RetailerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({"payment": await self._refresh(poll=False)})
 
 
+@ws_access(entity_types=("Retailer",))
 class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
     """
     Live retailer requisitions (RetailerOrders placed by the user's entity).
@@ -1610,6 +1628,7 @@ class RetailerRequisitionsConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
+@ws_access()
 class BodaLocationConsumer(AsyncJsonWebsocketConsumer):
     async def receive_json(self, content, **kwargs):
         lat = content.get("lat")
@@ -1655,6 +1674,7 @@ class BodaLocationConsumer(AsyncJsonWebsocketConsumer):
         )
 
 
+@ws_access()
 class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
     """
     Watcher socket for a single order.
@@ -1827,6 +1847,7 @@ class OrderTrackingConsumer(AsyncJsonWebsocketConsumer):
 # =====================================================================
 
 
+@ws_access()
 class PrescriptionEventsConsumer(AsyncJsonWebsocketConsumer):
     """Joins rx_user_<id> (customers) and rx_entity_<id> (pharmacy staff)."""
 
