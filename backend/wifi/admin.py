@@ -1,21 +1,37 @@
 from django.contrib import admin
+
 from . import models
-# Register your models here.
+
+
+class EntityTitleMixin:
+    """Shows the business (entity) each row belongs to, sortable and searchable by its title."""
+
+    list_select_related = ("entity",)
+
+    @admin.display(description="Entity", ordering="entity__title")
+    def entity_title(self, obj):
+        return obj.entity.title if obj.entity_id else "—"
+
+
 @admin.register(models.WifiRouters)
-class WifiRoutersAdmin(admin.ModelAdmin):
+class WifiRoutersAdmin(EntityTitleMixin, admin.ModelAdmin):
     list_display = (
         "id",
+        "entity_title",
         "title",
         "location",
         "description",
         "owner",
         "created",
     )
+    search_fields = ("entity__title", "title", "nas_id")
+
 
 @admin.register(models.WifiTarrifs)
-class WifiTarrifsAdmin(admin.ModelAdmin):
+class WifiTarrifsAdmin(EntityTitleMixin, admin.ModelAdmin):
     list_display = (
         "id",
+        "entity_title",
         "title",
         "duration",
         "length",
@@ -23,10 +39,14 @@ class WifiTarrifsAdmin(admin.ModelAdmin):
         "owner",
         "created",
     )
+    search_fields = ("entity__title", "title")
+
+
 @admin.register(models.WifiSubscriptions)
-class WifiSubscriptionsAdmin(admin.ModelAdmin):
+class WifiSubscriptionsAdmin(EntityTitleMixin, admin.ModelAdmin):
     list_display = (
         "id",
+        "entity_title",
         "mac_address",
         "username",
         "password",
@@ -35,10 +55,14 @@ class WifiSubscriptionsAdmin(admin.ModelAdmin):
         "owner",
         "created",
     )
+    search_fields = ("entity__title", "mac_address", "username")
+
+
 @admin.register(models.WifiSubscriptionPayments)
-class WifiSubscriptionPaymentsAdmin(admin.ModelAdmin):
+class WifiSubscriptionPaymentsAdmin(EntityTitleMixin, admin.ModelAdmin):
     list_display = (
         "id",
+        "entity_title",
         "amount",
         "account",
         "is_settled",
@@ -50,4 +74,4 @@ class WifiSubscriptionPaymentsAdmin(admin.ModelAdmin):
         "status",
         "created",
     )
-
+    search_fields = ("entity__title", "reference_number", "psp_reference_number", "provider_reference_number")
