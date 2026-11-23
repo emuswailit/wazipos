@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { errorText } from '@/utils/apiFeedback';
 
 type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
@@ -68,11 +69,6 @@ const config: AdminListConfig<Onboarder> = {
     ],
 };
 
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
-};
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
 
 export default function AgentOnboardersList() {

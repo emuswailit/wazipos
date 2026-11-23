@@ -14,6 +14,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react
 import { formatKES } from '@/components/retailers/retailerRequisitions/primitives';
 import { LegActions } from './LegActions';
 import DutyToggle from './DutyToggle';
+import InsuranceOffer from '@/components/insurance/InsuranceOffer';
 
 const KIND_TITLES: Record<string, string> = {
     LOCAL: 'Deliver to the shop',
@@ -64,6 +65,10 @@ export default function MyDeliveries() {
             </View>
 
             <DutyToggle />
+            {/* WaziPOS Cover: accident cover for today's rides, a few shillings a day. */}
+            <View style={{ marginTop: 10 }}>
+                <InsuranceOffer product="RIDER_SHIELD" source="rider_duty" context={{ inputs: { plan: 'DAY' } }} />
+            </View>
             {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 12.5 }}>{error}</Text> : null}
             {legs === null ? <ActivityIndicator color={theme.primary} /> : null}
             {legs && legs.length === 0 && !error ? (

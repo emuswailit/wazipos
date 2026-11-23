@@ -6,6 +6,8 @@ import type { LatLng } from '@/components/common/locationPinShared';
 import { StaffDeliveryPlanner, type StaffDeliveryState } from '@/components/deliveries/StaffDeliveryPlanner';
 import { FloatingSheet } from '@/components/common/listScreen/AdminSheet';
 import { useAuth } from '@/context/AuthContext';
+import { ctaStyle, money, PaymentMethodCards } from '@/components/ui/pos';
+import InsuranceOffer from '@/components/insurance/InsuranceOffer';
 import React from 'react';
 import {
     ActivityIndicator,
@@ -42,6 +44,14 @@ interface FulfillmentControlsProps {
     deliveryNotReadyHint?: string;
 }
 
+
+/** Days from today until a credit sale's due date (1–90, what TradeGuard can cover). */
+function creditDays(due?: string) {
+    const d = due ? new Date(`${String(due).slice(0, 10)}T23:59:59`) : null;
+    if (!d || isNaN(d.getTime())) return 30;
+    return Math.min(90, Math.max(1, Math.ceil((d.getTime() - Date.now()) / 86400000)));
+}
+
 function pressHandlers(onPress: () => void, stopPropagation = false) {
     return isWeb
         ? { onClick: (e: any) => { if (stopPropagation) e?.stopPropagation?.(); onPress(); } }
@@ -50,18 +60,17 @@ function pressHandlers(onPress: () => void, stopPropagation = false) {
 
 export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
     paymentMethodsList, selectedPaymentMethodId, setSelectedPaymentMethodId,
-    isPaymentSyncing, paymentDetails, setPaymentDetails, isMobileBackground = false, totals,
+    isPaymentSyncing, paymentDetails, setPaymentDetails, totals,
     delivery, destination, setDestination, shopCenter, loadDeliveryOptions, deliveryOptionsKey, deliveryNotReadyHint,
 }) => {
     const { theme } = useAuth();
     const currentMethodObj = paymentMethodsList.find((m) => m.id === selectedPaymentMethodId);
     const normalizedPaymentTitle = currentMethodObj?.title?.toUpperCase() || '';
-    const containerBg = isMobileBackground ? "bg-slate-50 dark:bg-slate-955" : "bg-white dark:bg-slate-900";
 
     return (
-        <View className="flex-col space-y-4 w-full">
+        <View style={{ gap: 18 }} className="flex-col w-full">
             <View className="w-full">
-                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase tracking-wider mb-1.5">Fulfilment</Text>
+                <Text style={{ fontFamily: theme.font.bold, fontSize: 11, color: theme.textMuted, letterSpacing: 0.8, marginBottom: 8 }}>FULFILMENT</Text>
                 <StaffDeliveryPlanner
                     state={delivery}
                     loadOptions={loadDeliveryOptions}
@@ -73,16 +82,16 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                             {normalizedPaymentTitle !== 'CREDIT' ? (
                                 <View className="flex-row" style={{ gap: 6 }}>
                                     <TextInput
-                                        style={{ flex: 1, fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
-                                        className="h-9 bg-white border border-slate-200 rounded-md px-2"
+                                        style={{ flex: 1, fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, backgroundColor: theme.panel, borderColor: theme.border, ...webNoOutline }}
+                                        className="h-11 border rounded-xl px-3"
                                         placeholder="Customer name"
                                         placeholderTextColor="#94a3b8"
                                         value={paymentDetails.customerName}
                                         onChangeText={(text) => setPaymentDetails((prev: any) => ({ ...prev, customerName: text }))}
                                     />
                                     <TextInput
-                                        style={{ flex: 1, fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
-                                        className="h-9 bg-white border border-slate-200 rounded-md px-2"
+                                        style={{ flex: 1, fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, backgroundColor: theme.panel, borderColor: theme.border, ...webNoOutline }}
+                                        className="h-11 border rounded-xl px-3"
                                         placeholder="Customer phone"
                                         keyboardType="phone-pad"
                                         placeholderTextColor="#94a3b8"
@@ -91,47 +100,40 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                                     />
                                 </View>
                             ) : null}
-                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase">Deliver to</Text>
+                            <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' }}>Deliver to</Text>
                             <LocationPinPicker value={destination} onChange={setDestination} center={shopCenter} height={180} />
                         </View>
                     }
                 />
             </View>
 
-            <View className="w-full space-y-3">
+            <View style={{ gap: 14 }} className="w-full">
                 <View>
-                    <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase tracking-wider mb-1.5">
-                        Payment Method {isPaymentSyncing && <Text className="text-blue-500 normal-case">(updating...)</Text>}
-                    </Text>
-                    <View className="flex-col gap-1.5">
-                        {paymentMethodsList.map((method) => {
-                            const isSelected = selectedPaymentMethodId === method.id;
-                            return (
-                                <TouchableOpacity key={method.id} onPress={() => setSelectedPaymentMethodId(method.id)} className={`px-3 py-2 rounded-lg border flex-row items-center ${isSelected ? 'bg-blue-500/10 border-primary' : 'border-slate-200 dark:border-slate-800 active:bg-slate-50'}`}>
-                                    <View className={`h-3.5 w-3.5 rounded-full border items-center justify-center mr-2 ${isSelected ? 'border-primary' : 'border-slate-300'}`}>
-                                        {isSelected && <View style={{ backgroundColor: theme.primary }} className="h-1.5 w-1.5 rounded-full" />}
-                                    </View>
-                                    <Text style={{ fontFamily: isSelected ? theme.font.bold : theme.font.medium, fontSize: theme.fontSize.sm, color: isSelected ? theme.primary : theme.text }}>{method.title}</Text>
-                                </TouchableOpacity>
-                            );
-                        })}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <Text style={{ fontFamily: theme.font.bold, fontSize: 11, color: theme.textMuted, letterSpacing: 0.8 }}>PAYMENT METHOD</Text>
+                        {isPaymentSyncing ? <ActivityIndicator size="small" color={theme.primary} /> : null}
                     </View>
+                    <PaymentMethodCards
+                        methods={paymentMethodsList.map((m) => ({ id: m.id, title: m.title }))}
+                        value={selectedPaymentMethodId}
+                        onChange={(id) => setSelectedPaymentMethodId(id)}
+                    />
                 </View>
 
                 {normalizedPaymentTitle === 'MOBILE MONEY' && (
-                    <View className={`p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1 ${containerBg}`}>
-                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase">Mobile Money Number</Text>
-                        <TextInput style={{ fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }} className="w-full h-9 bg-white border border-slate-200 rounded-md px-2 outline-none" placeholder="e.g. +2547XXXXXXXX" keyboardType="phone-pad" placeholderTextColor="#94a3b8" value={paymentDetails.mobileMoneyNumber} onChangeText={(text) => setPaymentDetails((prev: any) => ({ ...prev, mobileMoneyNumber: text }))} />
+                    <View style={{ backgroundColor: theme.surfaceAlt, borderRadius: 14, padding: 12, gap: 6 }}>
+                        <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' }}>Mobile Money Number</Text>
+                        <TextInput style={{ fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, backgroundColor: theme.panel, borderColor: theme.border, ...webNoOutline }} className="w-full h-11 border rounded-xl px-3" placeholder="e.g. +2547XXXXXXXX" keyboardType="phone-pad" placeholderTextColor="#94a3b8" value={paymentDetails.mobileMoneyNumber} onChangeText={(text) => setPaymentDetails((prev: any) => ({ ...prev, mobileMoneyNumber: text }))} />
                     </View>
                 )}
 
                 {normalizedPaymentTitle === 'CREDIT' && (
-                    <View className={`p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-3 ${containerBg}`}>
+                    <View style={{ backgroundColor: theme.surfaceAlt, borderRadius: 14, padding: 12, gap: 10 }}>
                         <View className="space-y-1">
-                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase">Customer Name</Text>
+                            <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' }}>Customer Name</Text>
                             <TextInput
-                                style={{ fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
-                                className="w-full h-9 bg-white border border-slate-200 rounded-md px-2 outline-none"
+                                style={{ fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, backgroundColor: theme.panel, borderColor: theme.border, ...webNoOutline }}
+                                className="w-full h-11 border rounded-xl px-3"
                                 placeholder="Enter full name"
                                 placeholderTextColor="#94a3b8"
                                 value={paymentDetails.customerName}
@@ -139,10 +141,10 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                             />
                         </View>
                         <View className="space-y-1">
-                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase">Customer Phone</Text>
+                            <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' }}>Customer Phone</Text>
                             <TextInput
-                                style={{ fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
-                                className="w-full h-9 bg-white border border-slate-200 rounded-md px-2 outline-none"
+                                style={{ fontFamily: theme.font.regular, fontSize: theme.fontSize.sm, color: theme.text, backgroundColor: theme.panel, borderColor: theme.border, ...webNoOutline }}
+                                className="w-full h-11 border rounded-xl px-3"
                                 placeholder="Enter phone"
                                 keyboardType="phone-pad"
                                 placeholderTextColor="#94a3b8"
@@ -151,7 +153,7 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                             />
                         </View>
                         <View className="space-y-1">
-                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.xs }} className="text-slate-400 uppercase">Due Date</Text>
+                            <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' }}>Due Date</Text>
                             <DateField
                                 bare
                                 placeholder="Select due date"
@@ -159,31 +161,52 @@ export const FulfillmentControls: React.FC<FulfillmentControlsProps> = ({
                                 onChangeText={(date) => setPaymentDetails((prev: any) => ({ ...prev, dueDate: date }))}
                             />
                         </View>
+                        {/* WaziPOS Cover: insure this credit sale — 80% back if the customer doesn't pay. */}
+                        {totals.total > 0 && paymentDetails.customerPhone && paymentDetails.dueDate ? (
+                            <InsuranceOffer
+                                product="TRADE_GUARD"
+                                source="pos_credit"
+                                variant="strip"
+                                context={{
+                                    inputs: {
+                                        amount: Math.round(totals.total),
+                                        days: creditDays(paymentDetails.dueDate),
+                                        buyer_name: paymentDetails.customerName,
+                                        buyer_phone: paymentDetails.customerPhone,
+                                    },
+                                }}
+                                subjectLabel={`Credit to ${paymentDetails.customerName || 'this customer'}`}
+                                locked={['amount', 'days', 'buyer_name', 'buyer_phone']}
+                            />
+                        ) : null}
                     </View>
                 )}
 
-                <View className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+                <View style={{ backgroundColor: theme.surfaceAlt, borderRadius: 14, padding: 14, gap: 6 }}>
                     <View className="flex-row justify-between items-center">
-                        <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm }} className="text-slate-400">Subtotal:</Text>
-                        <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }} className="text-slate-600">KES {(totals.subtotal + totals.totalDiscount).toFixed(2)}</Text>
+                        <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm, color: theme.textMuted }}>Subtotal</Text>
+                        <Text style={{ fontFamily: theme.font.semibold, fontSize: theme.fontSize.sm, color: theme.text }}>KES {money(totals.subtotal + totals.totalDiscount)}</Text>
                     </View>
-                    <View className="flex-row justify-between items-center">
-                        <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm }} className="text-slate-400">Discount:</Text>
-                        <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }} className="text-rose-500 font-bold">KES -{totals.totalDiscount.toFixed(2)}</Text>
-                    </View>
-
+                    {totals.totalDiscount > 0 ? (
+                        <View className="flex-row justify-between items-center">
+                            <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm, color: theme.textMuted }}>Discount</Text>
+                            <Text style={{ fontFamily: theme.font.semibold, fontSize: theme.fontSize.sm, color: theme.danger }}>− KES {money(totals.totalDiscount)}</Text>
+                        </View>
+                    ) : null}
                     {delivery.method === 'DELIVERY' && (
                         <View className="flex-row justify-between items-center">
-                            <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm }} className="text-slate-400">Delivery:</Text>
-                            <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.sm }} className="text-slate-600">
-                                {delivery.option ? `KES ${totals.shippingCost.toFixed(2)}` : 'choose an option'}
+                            <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.sm, color: theme.textMuted }}>Delivery</Text>
+                            <Text style={{ fontFamily: theme.font.semibold, fontSize: theme.fontSize.sm, color: delivery.option ? theme.text : theme.warning }}>
+                                {delivery.option ? `KES ${money(totals.shippingCost)}` : 'Choose an option'}
                             </Text>
                         </View>
                     )}
-
-                    <View className="flex-row justify-between items-center pt-1 mt-1 border-t border-slate-100 dark:border-slate-800">
-                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }}>Order Total:</Text>
-                        <Text style={{ fontFamily: theme.font.mono, fontSize: theme.fontSize.base, color: theme.primary }} className="font-black">KES {totals.total.toFixed(2)}</Text>
+                    <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 4 }} />
+                    <View className="flex-row justify-between items-end">
+                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: theme.text }}>Total</Text>
+                        <Text style={{ fontFamily: theme.font.bold, fontSize: 22, color: theme.text, letterSpacing: -0.3 }}>
+                            <Text style={{ fontSize: 13, color: theme.textMuted }}>KES </Text>{money(totals.total)}
+                        </Text>
                     </View>
                 </View>
             </View>
@@ -222,7 +245,7 @@ export const FulfillmentModal: React.FC<FulfillmentModalProps> = ({
 
                             <View className="flex-row justify-between items-center mb-4">
                                 <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }}>
-                                    Fulfillment Details
+                                    Review & pay
                                 </Text>
                                 <TouchableOpacity onPress={onClose}>
                                     <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base }} className="text-slate-400">✕</Text>
@@ -236,8 +259,8 @@ export const FulfillmentModal: React.FC<FulfillmentModalProps> = ({
                             <TouchableOpacity
                                 onPress={onSave}
                                 disabled={isSubmitDisabled}
-                                style={{ backgroundColor: theme.primary, opacity: isSubmitDisabled ? 0.5 : 1 }}
-                                className="w-full py-3.5 rounded-xl items-center justify-center shadow-md active:opacity-90 flex-row"
+                                style={[saveButtonStyle(theme), { opacity: isSubmitDisabled ? 0.5 : 1 }]}
+                                className="w-full py-4 rounded-2xl items-center justify-center active:opacity-90 flex-row"
                             >
                                 {isSaving ? (
                                     <ActivityIndicator size="small" color="#fff" />
@@ -251,4 +274,9 @@ export const FulfillmentModal: React.FC<FulfillmentModalProps> = ({
                         </View>
         </FloatingSheet>
     );
-};
+};
+
+/** Primary call to action: brand cobalt -> sky gradient on web, solid cobalt with a glow on native. */
+export function saveButtonStyle(theme: any) {
+    return ctaStyle(theme);
+}

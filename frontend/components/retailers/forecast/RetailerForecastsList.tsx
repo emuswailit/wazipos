@@ -11,7 +11,10 @@ import React, {
     useMemo,
     useState,
 } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
+import { SegmentedControl } from '@/components/common/listScreen';
+import { useAuth } from '@/context/AuthContext';
+import ForecastInsights from './ForecastInsights';
 import { ForecastDetailsModal } from './ForecastDetailsModal';
 import {
     AcceptedForecastOfferPayload,
@@ -35,11 +38,29 @@ interface RetailerForecastsListProps {
 /* =========================================================
  * Component
  * ======================================================= */
+/** Restock list (offers, requests) | Profit & AI analyst. */
+function ViewSwitch({ value, onChange }: { value: 'list' | 'insights'; onChange: (v: 'list' | 'insights') => void }) {
+    const { theme } = useAuth();
+    return (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12, maxWidth: 1240, width: '100%', alignSelf: 'center' }}>
+            <SegmentedControl<'list' | 'insights'>
+                variant="mobile"
+                value={value}
+                onChange={onChange}
+                options={[{ key: 'list', label: 'Restock list' }, { key: 'insights', label: '✨ Profit & AI analyst' }]}
+            />
+            <View style={{ height: 1, backgroundColor: theme.border, marginTop: 12 }} />
+        </View>
+    );
+}
+
 export default function RetailerForecastsList({
     onAcceptOffer,
     onItemPress,
     emptyComponent,
 }: RetailerForecastsListProps) {
+    const { theme } = useAuth();
+    const [view, setView] = useState<'list' | 'insights'>('list');
     const { width } = useWindowDimensions();
     const isLarge = width >= 900;
 
@@ -413,8 +434,17 @@ export default function RetailerForecastsList({
     };
 
     /* ---------------- Render ---------------------------------- */
+    if (view === 'insights') {
+        return (
+            <View style={{ flex: 1, backgroundColor: theme.background }}>
+                <ViewSwitch value={view} onChange={setView} />
+                <ForecastInsights />
+            </View>
+        );
+    }
     return (
         <>
+            <ViewSwitch value={view} onChange={setView} />
             <DetailsDock
                 placeholder="Pick a forecast to see its details here."
                 pane={

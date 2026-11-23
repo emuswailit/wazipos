@@ -1,5 +1,7 @@
 // components/wholesalers/newWholesaleOrder/OrderFormBusinessLogic.tsx
 
+import { useAlert } from '@/components/common/AlertProvider';
+import { toast } from '@/components/common/Toast';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import { usePaymentMethodsSync } from '@/context/PaymentMethodsSyncContext';
 
@@ -75,10 +77,14 @@ export default function OrderFormBusinessLogic({
     const [createdOrder, setCreatedOrder] = useState<{ id: string; reference?: string } | null>(null);
 
     /* -------- Toast helper -------- */
+    // Checks before submitting → a warning toast; results → success / offline toasts.
     const triggerNotificationToast = (msg: string) => {
-        setSubmitToast(msg);
-        setTimeout(() => setSubmitToast(null), 5000);
+        const clean = msg.replace(/^[^A-Za-z0-9]+/u, '').trim();
+        if (/^success:/i.test(clean)) toast.success('Order created', clean.replace(/^success:\s*/i, ''));
+        else if (/offline/i.test(clean) && /saved/i.test(clean)) toast.show({ tone: 'offline', title: 'Saved on this device', message: clean });
+        else toast.warning('Check the order', clean);
     };
+    const appAlert = useAlert();
 
     /* -------- Submit -------- */
     const handleSubmit = async () => {
@@ -86,7 +92,6 @@ export default function OrderFormBusinessLogic({
         if (!selectedRetailer) {
             const msg =
                 '⚠️ Please select a retailer before submitting.';
-            alert(msg);
             triggerNotificationToast(msg);
             return;
         }
@@ -94,7 +99,6 @@ export default function OrderFormBusinessLogic({
         /* ---- Fulfilment guard ---- */
         if (delivery.method === 'DELIVERY' && !delivery.option) {
             const msg = '⚠️ Choose a delivery option (or switch to pickup).';
-            alert(msg);
             triggerNotificationToast(msg);
             return;
         }
@@ -109,7 +113,6 @@ export default function OrderFormBusinessLogic({
         ) {
             const msg =
                 '⚠️ Fill or remove unfinished product lines.';
-            alert(msg);
             triggerNotificationToast(msg);
             return;
         }
@@ -132,7 +135,6 @@ export default function OrderFormBusinessLogic({
         if (rowsMissingReceiptId.length > 0) {
             const msg =
                 '⚠️ Some items are missing a receipt ID. Remove them or refresh inventory and pick again.';
-            alert(msg);
             triggerNotificationToast(msg);
             return;
         }
@@ -141,7 +143,6 @@ export default function OrderFormBusinessLogic({
         let offlineCashMethodId: string | null = null;
         if (!isOnline) {
             const fail = (msg: string) => {
-                alert(msg);
                 triggerNotificationToast(msg);
             };
             if (delivery.method === 'DELIVERY') {
@@ -178,8 +179,7 @@ export default function OrderFormBusinessLogic({
 
             if (!result.ok) {
                 setSyncStatus('error');
-                alert(`Wholesale Submission Error\n\n${result.message}`);
-                triggerNotificationToast(`❌ Failed: ${result.message}`);
+                appAlert('Order not created', String(result.message || 'The server did not accept the order.'), undefined, 'danger');
                 return;
             }
 
@@ -210,8 +210,7 @@ export default function OrderFormBusinessLogic({
             );
             setSyncStatus('error');
             const msg = e?.message ?? 'Failed to submit order.';
-            alert(`Wholesale Submission Error\n\n${msg}`);
-            triggerNotificationToast(`❌ Failed: ${msg}`);
+            appAlert('Order not created', msg, undefined, 'danger');
         } finally {
             setIsSubmitting(false);
         }

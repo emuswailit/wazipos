@@ -8,7 +8,10 @@
 
 import { errorText, isOk } from '@/api/diningApi';
 import qrMenuApi, { newOrderToken, type WalkInMenu, type WalkInOrder, type WalkInPayment } from '@/api/qrMenuApi';
-import { ChoiceChips, SheetButton, useListTokens } from '@/components/common/listScreen';
+import { SheetButton, useListTokens } from '@/components/common/listScreen';
+import { InlineNotice, liftShadow, PaymentMethodCards, PrimaryCTA } from '@/components/ui/pos';
+import CreditOffer from '@/components/credit/CreditOffer';
+import { Check, Smartphone } from 'lucide-react-native';
 import { CustomTextField } from '@/components/common/CustomTextField';
 import { usePaymentMethodsSync } from '@/context/PaymentMethodsSyncContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,8 +23,6 @@ import OrderPad, { type OrderPadInput } from './OrderPad';
 import WalkInOrderView from './WalkInOrderView';
 import { useDiningKind } from '../diningKind';
 
-const METHOD_ICONS: Record<string, any> = { CASH: 'cash-outline', 'MOBILE MONEY': 'phone-portrait-outline', CARD: 'card-outline', BANK: 'business-outline' };
-const nice = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
 
 /** Take payment for a placed walk-in order (everything due, food and drinks together). */
 function TakePayment({ order, onOrder }: { order: WalkInOrder; onOrder: (o: WalkInOrder) => void }) {
@@ -90,35 +91,42 @@ function TakePayment({ order, onOrder }: { order: WalkInOrder; onOrder: (o: Walk
     }
     const waiting = payment?.status === 'PENDING';
     return (
-        <View className="rounded-2xl p-4" style={{ gap: 12, backgroundColor: theme.panel, borderWidth: 1, borderColor: border }}>
-            <View className="flex-row items-center justify-between">
-                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 15 }}>Take payment</Text>
-                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 20 }}>{kes(due)}</Text>
+        <View style={{ gap: 14, padding: 18, borderRadius: 20, backgroundColor: theme.panel, borderWidth: 1, borderColor: border, ...liftShadow }}>
+            <View className="flex-row items-end justify-between">
+                <View>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.8 }}>AMOUNT DUE</Text>
+                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 28, letterSpacing: -0.5, marginTop: 2 }}>{kes(due)}</Text>
+                </View>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>Take payment</Text>
             </View>
+            {/* WaziPOS Credit for the food bill: the diner repays the lender later (consent by SMS code). */}
+            {order.food_order?.id && !waiting ? <CreditOffer kind="food" orderId={String(order.food_order.id)} onPaid={() => void qrMenuApi.staffOrder(order.token).then((res: any) => isOk(res) && onOrder(res.data.order))} /> : null}
             {methods.length ? (
-                <ChoiceChips<string>
-                    label="Paid by"
-                    options={methods.map((m: any) => ({ value: String(m.id), label: nice(String(m.title)), icon: METHOD_ICONS[String(m.title).toUpperCase()] ?? 'wallet-outline' }))}
-                    value={methodId}
-                    onChange={(v) => { setMethodId(v); setError(null); }}
-                    disabled={waiting}
-                />
+                <View style={{ gap: 8 }}>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.8 }}>PAID BY</Text>
+                    <PaymentMethodCards
+                        methods={methods.map((m: any) => ({ id: String(m.id), title: String(m.title) }))}
+                        value={methodId}
+                        onChange={(v) => { setMethodId(v); setError(null); }}
+                        disabled={waiting}
+                    />
+                </View>
             ) : (
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5 }}>Payment methods aren’t loaded on this device yet — it will be recorded as cash.</Text>
             )}
             {isMomo ? <CustomTextField label="Customer’s mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="07…" editable={!waiting} /> : null}
             {waiting ? (
-                <View className="flex-row items-center rounded-xl p-3" style={{ gap: 10, backgroundColor: 'rgba(59,130,246,0.10)' }}>
-                    <ActivityIndicator color="#3b82f6" />
+                <View className="flex-row items-center rounded-2xl p-3.5" style={{ gap: 10, backgroundColor: theme.primarySoft }}>
+                    <ActivityIndicator color={theme.primary} />
                     <Text className="flex-1" style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13 }}>Prompt sent. Waiting for the customer to enter their mobile money PIN…</Text>
                 </View>
             ) : (
-                <SheetButton label={isMomo ? `Send mobile money prompt · ${kes(due)}` : `Record payment · ${kes(due)}`} icon={isMomo ? 'phone-portrait-outline' : 'checkmark'} loading={busy} loadingLabel={isMomo ? 'Sending…' : 'Saving…'} onPress={() => void take()} />
+                <PrimaryCTA label={isMomo ? `Send prompt · ${kes(due)}` : `Record payment · ${kes(due)}`} icon={isMomo ? Smartphone : Check} loading={busy} onPress={() => void take()} />
             )}
             {payment?.status === 'FAILED' ? (
-                <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13 }}>{payment.description || 'The payment did not go through.'} Try again or pick another method.</Text>
+                <InlineNotice tone="danger" message={`${payment.description || 'The payment did not go through.'} Try again or pick another method.`} />
             ) : null}
-            {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13 }}>{error}</Text> : null}
+            {error ? <InlineNotice tone="danger" message={error} /> : null}
         </View>
     );
 }
@@ -194,7 +202,7 @@ export default function StaffWalkIn({ onClose, onPlaced }: { onClose?: () => voi
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
                     {error ? (
                         <>
-                            <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, textAlign: 'center' }}>{error}</Text>
+                            <InlineNotice tone="danger" message={error} />
                             <SheetButton label="Try again" icon="refresh" onPress={() => void loadMenu()} />
                         </>
                     ) : (

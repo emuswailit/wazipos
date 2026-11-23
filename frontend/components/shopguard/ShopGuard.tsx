@@ -22,6 +22,7 @@ import shopGuardApi, {
 import { SegmentedControl, SheetButton, useListTokens } from '@/components/admin/kit';
 import { formatKES } from '@/components/admin/subscriptionPayments/subscriptionPaymentsConfig';
 import { useAlert } from '@/components/common/AlertProvider';
+import InsuranceOffer from '@/components/insurance/InsuranceOffer';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -84,6 +85,17 @@ export default function ShopGuard() {
                     onChange={setTab}
                     variant={width < 640 ? 'mobile' : 'web'}
                 />
+                {/* WaziPOS Cover: protect what shop guard watches over. */}
+                {tab === 'OVERVIEW' ? (
+                    <View style={{ flexDirection: width >= 900 ? 'row' : 'column', gap: 8 }}>
+                        <View style={{ flex: width >= 900 ? 1 : undefined }}>
+                            <InsuranceOffer product="TILL_GUARD" source="shop_guard" variant="strip" />
+                        </View>
+                        <View style={{ flex: width >= 900 ? 1 : undefined }}>
+                            <InsuranceOffer product="DUKA_COVER" source="shop_guard" variant="strip" />
+                        </View>
+                    </View>
+                ) : null}
                 {tab === 'OVERVIEW' || tab === 'STAFF' || tab === 'SHIFTS' ? (
                     <SegmentedControl<'7' | '30'> options={[{ key: '7', label: 'Last 7 days' }, { key: '30', label: 'Last 30 days' }]} value={String(range) as '7' | '30'} onChange={(k) => setRange(Number(k) as Range)} />
                 ) : null}

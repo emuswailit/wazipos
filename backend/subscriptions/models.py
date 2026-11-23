@@ -46,8 +46,10 @@ class SubscriptionPayment(EntityRelatedModel):
     
     # What the payment is for: the monthly subscription, or a stock take booked by
     # an agent (stocktakes.StockTakes) — same mobile money checkout and commission.
-    PURPOSES = (("SUBSCRIPTION", "Subscription"), ("STOCK_TAKE", "Stock take"))
+    PURPOSES = (("SUBSCRIPTION", "Subscription"), ("STOCK_TAKE", "Stock take"), ("TOKENS", "WaziPOS tokens"))
     purpose = models.CharField(max_length=20, choices=PURPOSES, default="SUBSCRIPTION", db_index=True)
+    # Token top-ups (billing): tokens credited when this payment succeeds (pack + bonus).
+    tokens = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     stock_take = models.ForeignKey(
         "stocktakes.StockTakes", related_name="payments", on_delete=models.SET_NULL, null=True, blank=True,
     )

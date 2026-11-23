@@ -7,6 +7,7 @@ import {
     Text,
     TextInput,
     TextInputProps,
+    useWindowDimensions,
     View,
     type TextStyle,
 } from "react-native";
@@ -26,14 +27,14 @@ interface CustomTextFieldProps extends TextInputProps {
 
 type Props = CustomTextFieldProps;
 
-// 🌟 Reduced font size and tightened spacing
-const FONT_SIZE = 12;
-const LINE_HEIGHT = 16;
-const VERTICAL_PADDING = 6;
-const HORIZONTAL_PADDING = 10;
+// Phones: 16px text so iOS Safari never zooms on focus; desktop web a touch smaller.
+const isWebPlatform = Platform.OS === "web";
+const LINE_HEIGHT = 20;
+const VERTICAL_PADDING = 10;
+const HORIZONTAL_PADDING = 14;
 
-const MIN_HEIGHT = 38; // Standard compact single-line height
-const MIN_HEIGHT_MULTI = 80; // Shorter multiline height
+const MIN_HEIGHT = 46; // Comfortable thumb-sized single line
+const MIN_HEIGHT_MULTI = 96;
 
 export function CustomTextField(props: Props) {
     if (props.name) {
@@ -86,24 +87,31 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
     ref
 ) {
     const { theme, isDarkMode } = useAuth();
+    const { width } = useWindowDimensions();
+    const FONT_SIZE = isWebPlatform && width >= 768 ? 14 : 16;
+    const [focused, setFocused] = useState(false);
 
     const hasError = !!error;
     const isMultiline = !!multiline;
 
     const borderColor = hasError
-        ? "#ef4444"
-        : isDarkMode
-            ? "rgba(148,163,184,0.18)"
-            : "rgba(15,23,42,0.10)";
+        ? theme.danger
+        : focused
+            ? theme.primary
+            : isDarkMode
+                ? "rgba(148,163,184,0.16)"
+                : "rgba(15,23,42,0.08)";
 
-    const backgroundColor = isDarkMode ? "#0f172a" : theme.surface;
+    // Filled field at rest, panel colour with a cobalt ring while typing.
+    const backgroundColor = focused ? theme.panel : isDarkMode ? "rgba(148,163,184,0.08)" : "#f4f7fc";
 
     const baseStyle: TextStyle = {
         backgroundColor,
         color: theme.text,
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor,
-        borderRadius: 8, // Slightly tighter radius for compact look
+        borderRadius: 12,
+        fontFamily: theme.font.medium,
         paddingHorizontal: HORIZONTAL_PADDING,
         paddingVertical: isMultiline ? VERTICAL_PADDING : 0, // Let single line center vertically
         textAlign: "left",
@@ -111,7 +119,12 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
         fontSize: FONT_SIZE,
         lineHeight: LINE_HEIGHT,
         minHeight: isMultiline ? MIN_HEIGHT_MULTI : MIN_HEIGHT,
-        ...(Platform.OS === "web" ? ({ outlineStyle: "none", resize: isMultiline ? "vertical" : "none" } as any) : {}),
+        ...(focused && !hasError
+            ? isWebPlatform
+                ? ({ boxShadow: `0 0 0 4px ${theme.primary}22` } as any)
+                : {}
+            : {}),
+        ...(isWebPlatform ? ({ outlineStyle: "none", resize: isMultiline ? "vertical" : "none", transition: "border-color 120ms, box-shadow 120ms, background-color 120ms" } as any) : {}),
     };
 
     return (
@@ -121,8 +134,8 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
                     style={{
                         color: theme.textDark,
                         fontFamily: theme.font.bold,
-                        fontSize: 10, // Reduced from 11
-                        letterSpacing: 0.5,
+                        fontSize: 11,
+                        letterSpacing: 0.6,
                         textTransform: "uppercase",
                         paddingHorizontal: 2,
                     }}
@@ -139,14 +152,22 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
                 placeholderTextColor={placeholderTextColor ?? (isDarkMode ? "#64748b" : "#94a3b8")}
                 style={[baseStyle, style]}
                 {...rest}
+                onFocus={(e) => {
+                    setFocused(true);
+                    rest.onFocus?.(e);
+                }}
+                onBlur={(e) => {
+                    setFocused(false);
+                    rest.onBlur?.(e);
+                }}
             />
 
             {hasError ? (
-                <Text style={{ color: "#ef4444", fontSize: 10, paddingHorizontal: 2 }}>
+                <Text style={{ color: theme.danger, fontFamily: theme.font.medium, fontSize: 12, paddingHorizontal: 2 }}>
                     {error}
                 </Text>
             ) : hint ? (
-                <Text style={{ color: theme.textDark, fontSize: 10, paddingHorizontal: 2 }}>
+                <Text style={{ color: theme.textDark, fontFamily: theme.font.regular, fontSize: 12, paddingHorizontal: 2 }}>
                     {hint}
                 </Text>
             ) : null}

@@ -7,24 +7,31 @@ from core.responses import custom_error_response
 
 
 class EntitySubscriptionPermission(permissions.BasePermission):
-    """Allow selected array of roles to access a resource"""
+    """
+    May this business work today? (WaziPOS Tokens — billing/services.can_operate)
+    Yes while: an old monthly subscription runs, the free month runs, it is being
+    set up / waiting for approval, or its token wallet has balance (a small
+    overdraft after a first top-up keeps the till open).
+    """
 
     def has_permission(self, request, view):
-    
-        if request.user.is_authenticated:
-            # Super admins act on other entities' data; their own entity's
-            # subscription is irrelevant.
-            if request.user.is_superuser:
-                return True
-            if Subscription.objects.filter(entity=request.user.entity, end_date__gte=timezone.now()).exists():
-                return True
-            else:
-
-               
-                raise exceptions.ValidationError(f"{request.user.entity.title} has no active subscription")
-        else:
+        if not request.user.is_authenticated:
             raise exceptions.ValidationError("Please log in")
+        # Super admins act on other entities' data; their own entity's billing is irrelevant.
+        if request.user.is_superuser:
+            return True
+        entity = request.user.entity
+        try:
+            from billing.services import can_operate
 
+            ok, reason = can_operate(entity)
+        except Exception:
+            # Billing must never lock everyone out: fall back to the subscription check.
+            ok = Subscription.objects.filter(entity=entity, end_date__gte=timezone.now()).exists()
+            reason = f"{getattr(entity, 'title', 'This business')} has no active subscription"
+        if ok:
+            return True
+        raise exceptions.ValidationError(reason)
 
 
 class RetailAdminPermission(permissions.BasePermission):

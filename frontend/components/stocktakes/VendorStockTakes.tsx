@@ -17,13 +17,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import StockTakeReportView from './StockTakeReportView';
+import { errorText } from '@/utils/apiFeedback';
 
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join('\n');
-    return res?.data?.response_message || res?.problem || fallback;
-};
 
 const config = {
     ...stockTakesConfig,

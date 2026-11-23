@@ -24,7 +24,7 @@ export interface SellerReadiness {
     document_url: string | null;
     consent_status: string;
     /** Every business the user owns; `current` is the one they're working in. */
-    businesses: { id: string; title: string; entity_type: string; type_label: string; town: string | null; current: boolean; has_location: boolean }[];
+    businesses: { id: string; title: string; entity_type: string; type_label: string; town: string | null; current: boolean; has_location: boolean; approval?: 'SETUP' | 'PENDING' | 'APPROVED' | 'REJECTED' | null }[];
     business_types: { value: string; label: string }[];
     consent_note?: string | null;
 }

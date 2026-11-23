@@ -23,7 +23,15 @@ SELF_SERVICE_TYPES = {
     "Restaurant": "Restaurant / eatery",
     "Hotel": "Hotel / lodge (rooms + restaurant)",
     "InternetServiceProvider": "Wi-Fi hotspot (business or shared home internet)",
+    "GeneralDistributor": "Distributor",
+    "PharmaceuticalDistributor": "Pharmaceutical distributor",
+    "GeneralManufacturer": "Manufacturer",
+    "PharmaceuticalManufacturer": "Pharmaceutical manufacturer",
+    "Courier": "Courier / delivery company",
+    "Facilitator": "Lender / credit facilitator (licensed)",
 }
+# Every self-opened business waits for WaziPOS to approve it (onboarding app);
+# the free month starts on approval.
 ID_TYPES = ("NationalId", "Passport")
 
 
@@ -63,6 +71,12 @@ def seller_readiness(user, request=None):
 
     owned = list(models.Entities.objects.filter(owner=user).exclude(entity_type__in=["Default", "Bank"]).order_by("title"))
     located = set(Locations.objects.filter(entity__in=owned, point__isnull=False).values_list("entity_id", flat=True))
+    try:
+        from onboarding.models import EntityApprovals
+
+        approvals = dict(EntityApprovals.objects.filter(entity__in=owned).values_list("entity_id", "status"))
+    except Exception:
+        approvals = {}
     businesses = [
         {
             "id": str(e.id),
@@ -72,6 +86,7 @@ def seller_readiness(user, request=None):
             "town": e.town,
             "current": e.id == user.entity_id,
             "has_location": e.id in located,
+            "approval": approvals.get(e.id),
         }
         for e in owned
     ]
@@ -171,6 +186,9 @@ def create_my_business(data, user):
             utils.create_super_admin_role(entity)
             user.entity = entity
             user.save()
+            from onboarding.services import open_setup
+
+            open_setup(entity, user)
     except exceptions.ValidationError as e:
         detail = e.detail
         if isinstance(detail, dict):

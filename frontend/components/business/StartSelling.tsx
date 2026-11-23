@@ -16,6 +16,7 @@ import { CustomTextField } from '@/components/common/CustomTextField';
 import LocationPinPicker from '@/components/common/LocationPinPicker';
 import type { LatLng } from '@/components/common/locationPinShared';
 import { pickImage, previewUri, type PickedImage } from '@/components/common/imagePicker';
+import SetupWizard from '@/components/onboarding/SetupWizard';
 import { useAuth } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -56,6 +57,8 @@ export default function StartSelling() {
     const [editProfile, setEditProfile] = useState(false);
     /** Owners adding one more business. */
     const [adding, setAdding] = useState(false);
+    /** Owners with a business still being set up see the checklist first; this shows the list instead. */
+    const [showList, setShowList] = useState(false);
 
     const load = useCallback(async () => {
         setLoadError(null);
@@ -98,6 +101,12 @@ export default function StartSelling() {
 
     // ---- the businesses they run (they can always add another)
     const owned = readiness.businesses ?? [];
+    // New sellers, and owners whose business isn't approved yet: the full checklist
+    // (verify email + phone, ID, business, payout account, stock, submit).
+    const settingUp = owned.find((b) => b.approval && b.approval !== 'APPROVED');
+    if (!adding && (owned.length === 0 || (settingUp && !showList))) {
+        return <SetupWizard onBack={owned.length > 0 ? () => setShowList(true) : undefined} />;
+    }
     if (owned.length > 0 && !adding) {
         return (
             <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ padding: 16, alignItems: 'center', paddingBottom: 40 }}>
@@ -124,6 +133,13 @@ export default function StartSelling() {
                                     <Text style={{ color: '#d97706', fontFamily: theme.font.bold, fontSize: 11.5 }}>No location set — buyers and deliveries can't find it</Text>
                                 ) : null}
                             </View>
+                            {b.approval && b.approval !== 'APPROVED' ? (
+                                <Pressable onPress={() => setShowList(false)} className="rounded-full px-2.5 py-1" style={{ backgroundColor: b.approval === 'REJECTED' ? 'rgba(244,63,94,0.12)' : 'rgba(245,158,11,0.14)' }}>
+                                    <Text style={{ color: b.approval === 'REJECTED' ? '#f43f5e' : '#d97706', fontFamily: theme.font.bold, fontSize: 10.5 }}>
+                                        {b.approval === 'PENDING' ? 'AWAITING APPROVAL' : b.approval === 'REJECTED' ? 'CHANGES NEEDED' : 'FINISH SETUP'}
+                                    </Text>
+                                </Pressable>
+                            ) : null}
                             {b.current ? (
                                 <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: 'rgba(16,185,129,0.12)' }}>
                                     <Text style={{ color: '#10b981', fontFamily: theme.font.bold, fontSize: 10.5 }}>WORKING IN</Text>
@@ -205,7 +221,7 @@ export default function StartSelling() {
 
 /* ------------------------------------------------------------ step 1 */
 
-function ProfileStep({ readiness, onSaved }: { readiness: SellerReadiness; onSaved: (r: SellerReadiness) => void }) {
+export function ProfileStep({ readiness, onSaved }: { readiness: SellerReadiness; onSaved: (r: SellerReadiness) => void }) {
     const { theme } = useListTokens();
     const [doc, setDoc] = useState<PickedImage | null>(null);
     const [errors, setErrors] = useState<string[]>([]);
@@ -367,7 +383,7 @@ function BusinessLocation({ pin, onChange, retail }: { pin: LatLng | null; onCha
     );
 }
 
-function BusinessStep({ readiness, onEditProfile, onCreated }: { readiness: SellerReadiness; onEditProfile: () => void; onCreated: (token: string) => Promise<void> }) {
+export function BusinessStep({ readiness, onEditProfile, onCreated }: { readiness: SellerReadiness; onEditProfile: () => void; onCreated: (token: string) => Promise<void> }) {
     const { theme } = useListTokens();
     const [pin, setPin] = useState<LatLng | null>(null);
     const [errors, setErrors] = useState<string[]>([]);

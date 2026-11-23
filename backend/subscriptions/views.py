@@ -104,7 +104,7 @@ def subscriptionsDispatcherAPIView(request):
     raise exceptions.ValidationError(f"Action {action} is unknown")
 
 
-def start_subscription_payment(entity, payer, phone, months=1, amount=None, purpose="SUBSCRIPTION", stock_take=None):
+def start_subscription_payment(entity, payer, phone, months=1, amount=None, purpose="SUBSCRIPTION", stock_take=None, tokens=0):
     """
     Send a mobile money prompt for `months` of the entity's monthly_subscription
     to `phone`, and record a PENDING SubscriptionPayment paid by `payer`.
@@ -222,6 +222,7 @@ def start_subscription_payment(entity, payer, phone, months=1, amount=None, purp
             months=months,
             purpose=purpose,
             stock_take=stock_take,
+            tokens=Decimal(str(tokens or 0)),
             entity=entity,
             owner=payer, 
             status="PENDING",

@@ -1,13 +1,11 @@
 import * as Network from 'expo-network'; // 🚀 Swapped out package dependency
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Platform, Text, View } from 'react-native';
-import { useAuth } from './AuthContext';
+import { Platform } from 'react-native';
 
 const NetworkMonitorContext = createContext<{ isOnline: boolean }>({ isOnline: true });
 
 export const NetworkMonitorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [isOnline, setIsOnline] = useState<boolean>(true);
-    const { theme } = useAuth();
 
     useEffect(() => {
         if (Platform.OS === 'web') {
@@ -25,20 +23,21 @@ export const NetworkMonitorProvider: React.FC<{ children: React.ReactNode }> = (
                 setIsOnline(!!state.isConnected);
             };
             checkNativeNet();
+            // Instant updates where the listener exists; the poll is a safety net.
+            const sub = typeof (Network as any).addNetworkStateListener === 'function'
+                ? (Network as any).addNetworkStateListener((st: any) => setIsOnline(!!st?.isConnected))
+                : null;
             const nativeIntervalId = setInterval(checkNativeNet, 10000);
-            return () => clearInterval(nativeIntervalId);
+            return () => {
+                clearInterval(nativeIntervalId);
+                sub?.remove?.();
+            };
         }
     }, []);
 
     return (
         <NetworkMonitorContext.Provider value={{ isOnline }}>
             {children}
-            {!isOnline && (
-                <View style={{ backgroundColor: '#f43f5e', zIndex: 99999 }} className="absolute bottom-0 left-0 right-0 py-2 items-center justify-center shadow-lg">
-                    <Text style={{ fontFamily: theme?.font?.bold || 'System', fontSize: 12 }} className="text-white font-bold tracking-wider uppercase text-center">⚠️ You're offline. Data shown may have changed on the server.</Text>
-                    <Text style={{ fontFamily: theme?.font?.medium || 'System', fontSize: 11 }} className="text-white text-center mt-0.5">It will update automatically when you're back online.</Text>
-                </View>
-            )}
         </NetworkMonitorContext.Provider>
     );
 };

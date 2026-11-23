@@ -1185,6 +1185,7 @@ class OrderPayouts(models.Model):
         AGENT_COMMISSION = "AGENT_COMMISSION", _("Agent commission")
         STOCKTAKER = "STOCKTAKER", _("Stocktaker pay")
         FARE = "FARE", _("Fares to the vehicle")
+        LENDER_FLOAT = "LENDER_FLOAT", _("Unused lending float returned to the lender")
 
     class Status(models.TextChoices):
         DUE = "DUE", _("Due")

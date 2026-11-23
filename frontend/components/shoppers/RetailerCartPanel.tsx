@@ -4,6 +4,7 @@ import {
     type DeliveryMethod,
 } from "@/components/common/DeliveryMethodSelector";
 import { CheckoutDeliveryOptions } from "@/components/deliveries/CheckoutDeliveryOptions";
+import InsuranceOffer from "@/components/insurance/InsuranceOffer";
 import { useDeliveryAvailability } from "@/components/deliveries/useDeliveryAvailability";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -645,6 +646,20 @@ export default function RetailerCartPanel({
                                             selectedKey={deliveryOptionKey ?? null}
                                             onSelect={(key, total) => onDeliveryOptionChange?.(key, total)}
                                         />
+                                    ) : null}
+
+                                    {/* WaziPOS Cover: insure the goods on the way, priced for this order. */}
+                                    {deliveryOptionKey && (order as any)?.remote_id ? (
+                                        <View style={{ marginTop: 10 }}>
+                                            <InsuranceOffer
+                                                product="SAFE_PARCEL"
+                                                source="shopper_checkout"
+                                                variant="strip"
+                                                context={{ subject_kind: "customer", subject_id: String((order as any).remote_id), inputs: { value: Math.max(100, Math.round(subtotal)), mode: "MOTORBIKE" } }}
+                                                subjectLabel={retailerName ? `Your order from ${retailerName}` : "Your order"}
+                                                locked={["value"]}
+                                            />
+                                        </View>
                                     ) : null}
                                 </View>
                             )}

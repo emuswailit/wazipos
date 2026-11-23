@@ -99,6 +99,10 @@ INSTALLED_APPS = [
     "stocktakes",
     # Owner-away protection: shifts, blind cash counts, commissions, alerts (shopguard/models.py)
     "shopguard",
+    "insurance",
+    "credit",
+    "billing",
+    "onboarding",
     # Email / SMS / push on orders, pay-ins and payouts (notifications/signals.py)
     "notifications",
 ]
@@ -423,3 +427,17 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="") or EMAIL_HOST_USER
 DOMAIN = config("DOMAIN", default="api.wazipos.co.ke")
 SITE_NAME = "Wazipos"
+
+# Public web app (share links such as /job/<code> point here).
+WEB_APP_URL = config("WEB_APP_URL", default="https://wazipos.co.ke")
+
+# WaziPOS Cover (insurance). Keep sales OFF until a licensed (IRA) underwriter / broker
+# is signed: opting in then pre-registers interest and takes no money.
+INSURANCE_SALES_ENABLED = config("INSURANCE_SALES_ENABLED", default=False, cast=bool)
+INSURANCE_UNDERWRITER = config("INSURANCE_UNDERWRITER", default="")
+
+# CV assistant (Jobs -> My CV): Claude via the Anthropic API. The SDK reads
+# ANTHROPIC_API_KEY from the environment; leave it unset to keep the assistant off.
+ANTHROPIC_API_KEY = config("ANTHROPIC_API_KEY", default="")
+CV_AI_ENABLED = config("CV_AI_ENABLED", default=True, cast=bool)
+CV_AI_DAILY_LIMIT = config("CV_AI_DAILY_LIMIT", default=30, cast=int)

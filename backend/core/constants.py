@@ -52,6 +52,8 @@ class EntityType(Enum):
     GENERAL_DISTRIBUTOR = "GeneralDistributor"
     PHARMACEUTICAL_DISTRIBUTOR = "PharmaceuticalDistributor"
     FARM = "Farm"
+    # Lends to traders on WaziPOS Credit (digital credit providers, microfinance, SACCOs, fintechs).
+    FACILITATOR = "Facilitator"
     GROCERY = "Grocery"
     HOSPITAL = "Hospital"
     HOTEL = "Hotel"

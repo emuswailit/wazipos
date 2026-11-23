@@ -3,7 +3,7 @@
 import { useNotificationTaps, usePushRegistration } from '@/hooks/usePushRegistration';
 import { useLiveAlerts } from '@/hooks/useLiveAlerts';
 import LiveAlertsHost from '@/components/common/LiveAlertsHost';
-import { SubscriptionBanner } from '@/components/common/SubscriptionBanner';
+import { TokenBanner } from '@/components/billing/TokenBanner';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { registerBackgroundSyncTask } from '@/context/backgroundSyncTask';
 import { CadresSyncProvider } from '@/context/CadresSyncContext';
@@ -70,6 +70,15 @@ import '../global.css';
 
 // 🌟 IMPORT SUBSCRIPTION COMPONENTS
 import { SubscriptionSyncProvider } from '@/context/SubscriptionSyncContext';
+import { attachApiToasts, ToastHost } from '@/components/common/Toast';
+import OfflinePill from '@/components/common/OfflinePill';
+import { usePendingJobRedirect } from '@/components/jobs/jobsShared';
+import apiClientForToasts from '@/api/client';
+import cachedClientForToasts from '@/api/clientWithCache';
+import multipartClientForToasts from '@/api/multipartClient';
+
+// Connection / session problems show one app-wide toast (screens report their own errors).
+[apiClientForToasts, cachedClientForToasts, multipartClientForToasts].forEach((c: any) => c?.addMonitor && attachApiToasts(c));
 
 LogBox.ignoreLogs([
   'Cannot record touch end without a touch start',
@@ -106,6 +115,7 @@ function GlobalAppShellLayout() {
   usePushRegistration(user as any); // order / payment / payout notices on this device
   useLiveAlerts(); // the same notices live over the websocket while the app is connected
   useNotificationTaps(); // tapping a notice opens its screen
+  usePendingJobRedirect(user); // opened a shared job link, then signed up / in → that job
   const { isOnline } = useNetworkStatus();
   // Typed routes infer an empty tuple at the root layout; segments are plain strings.
   const segments = useSegments() as string[];
@@ -152,7 +162,8 @@ function GlobalAppShellLayout() {
     const inWelcome = segments.includes('welcome');
     // A restaurant's QR menu (/menu/<restaurant>) and the email confirmation link
     // (/verify-email) are open to everyone, signed in or not.
-    if (segments[0] === 'menu' || segments[0] === 'verify-email') return;
+    // A shared job link (/job/<code>) too: a public teaser that invites sign-up.
+    if (segments[0] === 'menu' || segments[0] === 'verify-email' || segments[0] === 'job') return;
 
     if (!user && !inAuthGroup && !inWelcome) {
       router.replace('/welcome');
@@ -166,9 +177,10 @@ function GlobalAppShellLayout() {
   const inAuthGroup = segments.includes('(auth)');
   const inWelcome = segments.includes('welcome');
   const inPublicMenu = segments[0] === 'menu';
+  const inPublicJob = segments[0] === 'job';
   const inVerifyEmail = segments[0] === 'verify-email';
 
-  if (inAuthGroup || inWelcome || inPublicMenu || inVerifyEmail) {
+  if (inAuthGroup || inWelcome || inPublicMenu || inVerifyEmail || inPublicJob) {
     // Login / register / password reset / welcome: keep content clear of the status bar
     // and the system navigation bar (Android draws edge-to-edge).
     return (
@@ -191,6 +203,7 @@ function GlobalAppShellLayout() {
           {inAuthGroup && <Stack.Screen name="(auth)" />}
           {inWelcome && <Stack.Screen name="welcome" />}
           {inPublicMenu && <Stack.Screen name="menu/[entity]" />}
+          {inPublicJob && <Stack.Screen name="job/[code]" />}
           {inVerifyEmail && <Stack.Screen name="verify-email/index" />}
         </Stack>
       </View>
@@ -397,8 +410,8 @@ function GlobalAppShellLayout() {
         }}
         className="flex-1 flex-col w-full overflow-hidden"
       >
-        {/* Subscription status, inside the safe area (was drawn under the status bar). */}
-        {user && <SubscriptionBanner />}
+        {/* WaziPOS Tokens status (approval, free month, low balance) — only when there is something to know. */}
+        {user && <TokenBanner />}
 
         {profileDropdownOpen && (
           <Pressable
@@ -544,28 +557,12 @@ function GlobalAppShellLayout() {
           </View>
         )}
 
-        {!isOnline && (
-          <View
-            style={{
-              backgroundColor: '#f43f5e',
-              paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-            }}
-            className="w-full py-2 items-center justify-center z-50 shadow-lg"
-          >
-            <Text
-              style={{
-                fontFamily: theme.font.bold,
-                fontSize: theme.fontSize.xs,
-              }}
-              className="text-white tracking-wider uppercase text-center"
-            >
-              ⚠️ Connection Interrupted. Operating in Offline Mode.
-            </Text>
-          </View>
-        )}
+        {/* Offline: one floating pill from NetworkMonitorProvider (no second banner here). */}
       </View>
       {/* Web: live order / payment / payout alerts (phones get local notifications). */}
       <LiveAlertsHost />
+      <OfflinePill />
+      <ToastHost />
     </>
   );
 }

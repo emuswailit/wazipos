@@ -13,13 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { errorText } from '@/utils/apiFeedback';
 
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.problem || fallback;
-};
 
 export default function StocktakerJobs() {
     const { theme, border, cardShadow } = useListTokens();

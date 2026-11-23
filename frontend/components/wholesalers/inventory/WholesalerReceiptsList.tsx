@@ -7,6 +7,7 @@
 import { InventorySyncStrip } from '@/components/common/inventory/InventorySyncStrip';
 import { INVENTORY_FILTER_ICONS, INVENTORY_FILTER_LABELS, INVENTORY_FILTERS, formatKES, type InventoryFilter } from '@/components/common/inventory/inventoryHelpers';
 import { buildInventoryConfig } from '@/components/common/inventory/inventoryListConfig';
+import { useForecastHints } from '@/components/common/inventory/useForecastHints';
 import { useInventoryList } from '@/components/common/inventory/useInventoryList';
 import { AdminListView, DetailsDock } from '@/components/common/listScreen';
 import PendingSyncBanner from '@/components/common/PendingSyncBanner';
@@ -19,12 +20,12 @@ import { useWindowDimensions, View } from 'react-native';
 import { WholesalerReceiptDetailsModal } from './WholesalerReceiptDetailsModal';
 import { WholesalerReceiptEditModal } from './WholesalerReceiptEditModal';
 
-const config = buildInventoryConfig({
+const configArgs = {
     title: 'Inventory',
     addLabel: 'Receive stock',
     emptyMessage: 'Stock you receive shows here — it works offline and syncs when you are back online.',
     showBuyingPrice: true,
-});
+};
 
 interface Props {
     onReceiptPress?: (receipt: WholesalerReceipt) => void;
@@ -32,6 +33,8 @@ interface Props {
 }
 
 export default function WholesalerReceiptsList({ onReceiptPress, emptyComponent }: Props) {
+    const forecastHints = useForecastHints();
+    const config = useMemo(() => buildInventoryConfig({ ...configArgs, forecast: forecastHints }), [forecastHints]);
     const { width } = useWindowDimensions();
     const isLarge = width >= 900;
     const { isOnline } = useNetworkStatus();

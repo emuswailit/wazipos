@@ -17,12 +17,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { accessLogDetailsConfig, accessLogsConfig, formatWhen, SOURCE_LABELS } from './accessLogsConfig';
+import { errorText } from '@/utils/apiFeedback';
 
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
-};
 
 const EMPTY_STATS: AccessStats = { requests: 0, ips: 0, users: 0, errors: 0 };
 

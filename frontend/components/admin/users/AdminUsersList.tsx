@@ -19,14 +19,10 @@ import { useWindowDimensions } from 'react-native';
 
 import AdminUserEditModal from './AdminUserEditModal';
 import { CONSENT_META, emailUnconfirmed, phoneUnconfirmed, usersConfig } from './usersConfig';
+import { errorText } from '@/utils/apiFeedback';
 
 type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'WITH_ID' | 'PHONE_TODO' | 'EMAIL_TODO' | ConsentStatus;
 
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
-};
 
 export default function AdminUsersList({ mode = 'admin' }: { mode?: 'admin' | 'agent' }) {
     const { width } = useWindowDimensions();

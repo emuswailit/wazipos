@@ -13,7 +13,7 @@ import {
     UserCircle, Users, Wallet, Warehouse, Truck, Bike, PackageCheck, UtensilsCrossed, Wifi,
     AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
-    Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, type LucideIcon,
+    Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, Briefcase, Bookmark, Search, type LucideIcon,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -40,6 +40,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
     AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
     Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket,
+    Briefcase, Bookmark, Search,
 };
 
 function initials(title: string): string {

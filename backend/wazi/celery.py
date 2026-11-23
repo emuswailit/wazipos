@@ -27,6 +27,18 @@ def debug_task(self):
 
 
 app.conf.beat_schedule = {
+    # WaziPOS Credit: repayments into lenders' wallets + float top-ups followed; daily reminders at 08:00.
+    "reconcile_credit_payments": {"task": "credit.tasks.reconcile_credit_payments", "schedule": 60.0},
+    "credit_daily": {"task": "credit.tasks.credit_daily", "schedule": crontab(hour=8, minute=0)},
+    "billing_daily": {"task": "billing.tasks.billing_daily", "schedule": crontab(hour=9, minute=0)},
+    # WaziPOS Cover: premium prompts followed to paid / failed; ended policies expire.
+    "reconcile_policy_payments": {"task": "insurance.tasks.reconcile_policy_payments", "schedule": 60.0},
+    "expire_insurance_policies": {"task": "insurance.tasks.expire_insurance_policies", "schedule": crontab(minute=15)},
+    # Jobs board: adverts past their closing date close (daily, just after midnight).
+    "close_expired_job_adverts": {
+        "task": "employees.tasks.close_expired_job_adverts",
+        "schedule": crontab(hour=0, minute=10),
+    },
     "process_wifi_payments": {
         "task": "payments.tasks.process_wifi_payments",
         "schedule": 30.0,

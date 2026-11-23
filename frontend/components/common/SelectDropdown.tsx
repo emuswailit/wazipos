@@ -1,12 +1,14 @@
 // components/common/SelectDropdown.tsx
 import { useAuth } from '@/context/AuthContext';
 import { useFormikContext } from 'formik';
+import { ChevronDown } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Platform,
     Pressable,
     ScrollView,
     Text,
+    useWindowDimensions,
     View,
     type StyleProp,
     type ViewStyle,
@@ -58,14 +60,17 @@ export function SelectDropdown({
     const displayLabel = selectedOption?.label ?? selectedOption?.value ?? '';
 
     const danger = '#ef4444';
-    const borderColor = fieldError ? danger : isDarkMode ? 'rgba(148,163,184,0.18)' : 'rgba(15,23,42,0.10)';
-    const inputBg = isDarkMode ? '#0f172a' : theme.surface;
     const dropdownBg = isDarkMode ? '#0f172a' : '#ffffff';
     const dropdownBorder = isDarkMode ? '#334155' : '#cbd5e1';
     const hoverBg = isDarkMode ? '#1e293b' : '#f1f5f9';
     const dividerColor = isDarkMode ? 'rgba(51,65,85,0.6)' : '#e2e8f0';
 
     const [open, setOpen] = useState(false);
+    const { width: winWidth } = useWindowDimensions();
+    // Same filled look as CustomTextField; cobalt ring while the menu is open.
+    const borderColor = fieldError ? danger : open ? theme.primary : isDarkMode ? 'rgba(148,163,184,0.16)' : 'rgba(15,23,42,0.08)';
+    const inputBg = open ? theme.panel : isDarkMode ? 'rgba(148,163,184,0.08)' : '#f4f7fc';
+    const fieldFont = Platform.OS === 'web' && winWidth >= 768 ? 14 : 16;
     const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0 });
 
     const triggerRef = useRef<any>(null);
@@ -197,8 +202,8 @@ export function SelectDropdown({
                             style={{
                                 color: theme.textDark,
                                 fontFamily: theme.font.bold,
-                                fontSize: 10,
-                                letterSpacing: 0.5,
+                                fontSize: 11,
+                                letterSpacing: 0.6,
                                 textTransform: 'uppercase',
                                 paddingHorizontal: 2
                             }}
@@ -216,13 +221,17 @@ export function SelectDropdown({
                 <Pressable
                     ref={triggerRef as any}
                     onPress={toggle}
-                    className="w-full px-[10px] rounded-lg border flex-row justify-between items-center"
+                    className="w-full flex-row justify-between items-center"
                     style={{
                         backgroundColor: inputBg,
                         borderColor,
+                        borderWidth: 1.5,
+                        borderRadius: 12,
+                        paddingHorizontal: 14,
                         opacity: disabled ? 0.55 : 1,
-                        minHeight: 38,
-                        height: 38
+                        minHeight: 46,
+                        height: 46,
+                        ...(Platform.OS === 'web' ? ({ cursor: disabled ? 'not-allowed' : 'pointer', transition: 'border-color 120ms, background-color 120ms' } as any) : null),
                     }}
                 >
                     <Text
@@ -231,28 +240,26 @@ export function SelectDropdown({
                         style={{
                             color: displayLabel ? theme.text : '#94a3b8',
                             fontFamily: theme.font.medium,
-                            fontSize: 12
+                            fontSize: fieldFont
                         }}
                     >
                         {displayLabel || placeholder}
                     </Text>
-                    <Text style={{ color: theme.textDark, fontSize: 10, marginLeft: 8 }}>
-                        {open ? '▲' : '▼'}
-                    </Text>
+                    <ChevronDown size={18} color={open ? theme.primary : theme.textDark} style={{ marginLeft: 8, transform: [{ rotate: open ? '180deg' : '0deg' }] }} />
                 </Pressable>
 
                 {Platform.OS !== 'web' && open && !disabled ? (
-                    <View className="absolute left-0 right-0 top-[42px]" style={{ zIndex: 9999 }}>
+                    <View className="absolute left-0 right-0 top-[50px]" style={{ zIndex: 9999 }}>
                         {MenuContent}
                     </View>
                 ) : null}
 
                 {fieldError ? (
-                    <Text style={{ color: danger, fontFamily: theme.font.bold, fontSize: 10, paddingLeft: 2, marginTop: 4 }}>
+                    <Text style={{ color: danger, fontFamily: theme.font.medium, fontSize: 12, paddingLeft: 2, marginTop: 4 }}>
                         {fieldError}
                     </Text>
                 ) : helperText ? (
-                    <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 10, paddingLeft: 2, marginTop: 4, opacity: 0.75 }}>
+                    <Text style={{ color: theme.textDark, fontFamily: theme.font.regular, fontSize: 12, paddingLeft: 2, marginTop: 4 }}>
                         {helperText}
                     </Text>
                 ) : null}

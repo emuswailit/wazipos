@@ -1,5 +1,6 @@
 // components/common/RecordPaymentModal.tsx
 
+import CreditOffer from '@/components/credit/CreditOffer';
 import { useAuth } from '@/context/AuthContext';
 import {
     CUSTOMER_ORDER_PAYMENT_CONFIG,
@@ -424,6 +425,17 @@ export default function RecordPaymentModal({
                             </View>
                         ) : (
                             <>
+                                {/* WaziPOS Credit: a lender pays this order now; the buyer repays later. */}
+                                {config.creditKind ? (
+                                    <CreditOffer
+                                        kind={config.creditKind}
+                                        orderId={orderId}
+                                        onPaid={() => {
+                                            onRefreshParentLedger?.();
+                                            void onSuccess?.({ method: null });
+                                        }}
+                                    />
+                                ) : null}
                                 {isLoadingMethods && noMethods ? (
                                     <View className="py-8 items-center">
                                         <ActivityIndicator color={theme.primary} />

@@ -1,1 +1,0 @@
-__d(function(g,r,i,a,m,_e,d){"use strict";Object.defineProperty(_e,'__esModule',{value:!0}),Object.defineProperty(_e,"default",{enumerable:!0,get:function(){return o}});var e,n=r(d[0]),t=(e=n)&&e.__esModule?e:{default:e},u=r(d[1]),l=r(d[2]);function o(){return(0,l.jsx)(u.DiningKindProvider,{kind:"hotel",children:(0,l.jsx)(t.default,{})})}},3360,[3310,3288,886]);

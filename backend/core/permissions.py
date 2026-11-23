@@ -1,6 +1,8 @@
 from distutils import errors
 from rest_framework import permissions, status
 from rest_framework.response import Response
+from rest_framework import exceptions
+from django.utils import timezone
 
 
 class IsOwner(permissions.BasePermission):
@@ -20,18 +22,26 @@ class IsOwner(permissions.BasePermission):
 
 
 class EntitySubscriptionPermission(permissions.BasePermission):
-    """Allow selected array of roles to access a resource"""
+    """May this business work today? WaziPOS Tokens (billing/services.can_operate):
+    old subscription, free month, set-up / awaiting approval, or token balance."""
 
     def has_permission(self, request, view):
-    
-        if request.user.is_authenticated:
-            
-            if Subscription.objects.filter(entity=request.user.entity, end_date__gte=timezone.now()).exists(): 
-                return True
-            else:
-
-               
-                raise exceptions.ValidationError(f"{request.user.entity.title} has no active subscription")
-        else:
+        if not request.user.is_authenticated:
             raise exceptions.ValidationError("Please log in")
+        if request.user.is_superuser:
+            return True
+        entity = request.user.entity
+        try:
+            from billing.services import can_operate
+
+            ok, reason = can_operate(entity)
+        except Exception:
+            from subscriptions.models import Subscription
+
+            ok = Subscription.objects.filter(entity=entity, end_date__gte=timezone.now()).exists()
+            reason = f"{getattr(entity, 'title', 'This business')} has no active subscription"
+        if ok:
+            return True
+        raise exceptions.ValidationError(reason)
+
 

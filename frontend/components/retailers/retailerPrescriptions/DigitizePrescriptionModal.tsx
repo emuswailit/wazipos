@@ -23,6 +23,7 @@ import { QuoteItemSheet } from './QuoteItemSheet';
 import { FulfilmentChoiceSheet, type FulfilmentChoice } from './FulfilmentChoiceSheet';
 import { WholesaleSourcesPanel } from './WholesaleSourcesPanel';
 import type { PrescriptionNormalized } from './RetailerPrescriptionsList';
+import { errorText } from '@/utils/apiFeedback';
 
 interface Props {
     visible: boolean;
@@ -46,8 +47,6 @@ function confirmAsync(title: string, message: string, confirmLabel: string): Pro
     });
 }
 
-const errorText = (res: any, fallback: string) =>
-    [res?.data?.response_message || fallback, Array.isArray(res?.data?.errors) ? res.data.errors.join(' ') : ''].filter(Boolean).join(' ');
 
 export function DigitizePrescriptionModal({ visible, prescription, onClose, onPrescriptionUpdated, client = pharmacyRxClient }: Props) {
     const { theme, chipBg, divider } = useListTokens();

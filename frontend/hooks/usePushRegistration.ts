@@ -35,6 +35,20 @@ export function routeForAlert(data: Record<string, any> | undefined | null): str
         case 'order':
         case 'payment':
             return '/(tabs)';
+        case 'credit':
+            return '/credit';
+        case 'billing':
+            return '/billing';
+        case 'entity_approval':
+            // Admins: a business to review. Owners: their business was decided.
+            return data?.status ? '/(tabs)/business' : '/signups?tab=approvals';
+        case 'credit_book':
+            return '/credit?tab=lending';
+        case 'insurance':
+            return '/insurance?tab=policies';
+        case 'job_application':
+            // Applicant: their application moved. Employer: someone applied.
+            return data?.application ? '/jobs?tab=applications' : '/jobAdverts';
         default:
             return null;
     }

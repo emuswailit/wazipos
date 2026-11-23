@@ -28,6 +28,8 @@ export interface RecordPaymentConfig {
     responseKey?: string;
     /** Field of that order holding the payment reference to follow. Default 'reference_number'. */
     referenceKey?: string;
+    /** Offer WaziPOS Credit (a lender pays now, the buyer repays later) for this kind of order. */
+    creditKind?: 'retailer' | 'customer';
 }
 
 export interface PaymentMethod {
@@ -54,6 +56,7 @@ interface UseRecordPaymentResult {
 }
 
 export const CUSTOMER_ORDER_PAYMENT_CONFIG: RecordPaymentConfig = {
+    creditKind: 'customer',
     paymentAction: 'MakeCustomerOrderPayment',
     statusAction: 'CheckCustomerOrderPaymentStatus',
     orderParamKey: 'customer_order',
@@ -110,6 +113,7 @@ export const CUSTOMER_PAYMENT_CONFIG: RecordPaymentConfig = {
  * ws/requisitions/payment/<ref>/ (backend RetailerOrderPaymentConsumer).
  */
 export const RETAILER_ORDER_PAYMENT_CONFIG: RecordPaymentConfig = {
+    creditKind: 'retailer',
     paymentAction: 'MakeRetailerOrderPayment',
     statusAction: '',
     orderParamKey: 'retailer_order',
@@ -135,6 +139,7 @@ export const RETAILER_ORDER_PAYMENT_CONFIG: RecordPaymentConfig = {
  * credit etc. are recorded as paid at once.
  */
 export const WHOLESALER_RETAILER_ORDER_PAYMENT_CONFIG: RecordPaymentConfig = {
+    creditKind: 'retailer',
     paymentAction: 'ProcessRetailerOrderPayment',
     statusAction: '',
     orderParamKey: 'retailer_order',

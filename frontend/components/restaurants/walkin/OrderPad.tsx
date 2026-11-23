@@ -10,6 +10,7 @@ import type { MenuItem } from '@/api/diningApi';
 import type { DrinkUnit, MenuDrink, WalkInMenu, WalkInOrderInput, WalkInService } from '@/api/qrMenuApi';
 import { AdminSheet, ChoiceChips, FormRow, SearchField, SegmentedControl, SheetButton, useListTokens } from '@/components/common/listScreen';
 import { CustomTextField } from '@/components/common/CustomTextField';
+import { ctaStyle, InlineNotice, softShadow } from '@/components/ui/pos';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
@@ -175,7 +176,7 @@ export default function OrderPad({
         }
     };
 
-    const card = { backgroundColor: theme.panel, borderWidth: 1, borderColor: border } as const;
+    const card = { backgroundColor: theme.panel, borderWidth: 1, borderColor: border, ...softShadow } as const;
     const cell = { width: cols === 1 ? ('100%' as const) : (`${100 / cols}%` as any), padding: 5 };
     const heading = (label: string) => (
         <Text style={{ color: theme.textDark, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', paddingHorizontal: 5, marginTop: 8 }}>{label}</Text>
@@ -275,19 +276,28 @@ export default function OrderPad({
 
             {/* Running total */}
             {count ? (
-                <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, backgroundColor: theme.background, borderTopWidth: 1, borderColor: border }}>
-                    <Pressable
-                        onPress={() => { setError(null); setReviewing(true); }}
-                        accessibilityRole="button"
-                        className="flex-row items-center justify-between rounded-2xl px-4"
-                        style={{ height: 54, backgroundColor: theme.primary, maxWidth: 640, width: '100%', alignSelf: 'center' }}
-                    >
-                        <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>{count} {count === 1 ? 'item' : 'items'} · {kes(total)}</Text>
-                        <View className="flex-row items-center" style={{ gap: 6 }}>
+                <View
+                    style={{
+                        position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16,
+                        backgroundColor: theme.panel, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTopWidth: 1, borderColor: border,
+                        shadowColor: '#0b1733', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 12,
+                    }}
+                >
+                    <View className="flex-row items-center" style={{ gap: 12, maxWidth: 720, width: '100%', alignSelf: 'center' }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ color: theme.textDark, fontFamily: theme.font.semibold, fontSize: 11 }}>{count} {count === 1 ? 'item' : 'items'} · Total</Text>
+                            <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 20, letterSpacing: -0.3 }}>{kes(total)}</Text>
+                        </View>
+                        <Pressable
+                            onPress={() => { setError(null); setReviewing(true); }}
+                            accessibilityRole="button"
+                            className="flex-row items-center justify-center rounded-2xl px-5"
+                            style={[{ height: 50, minWidth: 160, gap: 6 }, ctaStyle(theme)]}
+                        >
                             <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 15 }}>Review order</Text>
                             <Ionicons name="arrow-forward" size={18} color="#fff" />
-                        </View>
-                    </Pressable>
+                        </Pressable>
+                    </View>
                 </View>
             ) : onCancel ? (
                 <View style={{ padding: 12 }}>
@@ -343,7 +353,7 @@ export default function OrderPad({
                             After ordering you can pay with mobile money on this page, or pay your waiter.
                         </Text>
                     ) : null}
-                    {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium, fontSize: 13 }}>{error}</Text> : null}
+                    {error ? <InlineNotice tone="danger" message={error} /> : null}
                 </View>
             </AdminSheet>
         </View>

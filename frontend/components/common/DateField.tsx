@@ -137,8 +137,8 @@ export function DateField({
 
     /* -------- Size tokens -------- */
     const isCompact = size === 'sm';
-    const labelFontSize = isCompact ? 9 : 10;
-    const inputFontSize = isCompact ? 12 : 13.5;
+    const labelFontSize = isCompact ? 9 : 11;
+    const inputFontSize = isCompact ? 12 : 14;
     const iconSize = isCompact ? 24 : 32;
     const iconFontSize = isCompact ? 12 : 15;
     const radiusClass = isCompact ? 'rounded-lg' : 'rounded-xl';
@@ -148,8 +148,9 @@ export function DateField({
     const resolvedWidth = width ?? (isCompact ? 210 : undefined);
 
     /* -------- Theme tokens -------- */
-    const baseBorder = isDarkMode ? '#334155' : '#e2e8f0';
-    const inputBg = isDarkMode ? '#0f172a' : '#f1f5f9';
+    // Same filled look as CustomTextField.
+    const baseBorder = isDarkMode ? 'rgba(148,163,184,0.16)' : 'rgba(15,23,42,0.08)';
+    const inputBg = isDarkMode ? 'rgba(148,163,184,0.08)' : '#f4f7fc';
     const filledBg = isDarkMode ? '#0b1220' : '#ffffff';
     const danger = '#ef4444';
 

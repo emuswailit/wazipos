@@ -232,6 +232,13 @@ def analyticsAPIView(request):
     # Bulk forecast
     # =================================================================
 
+    # =================================================================
+    # Profit & turnover outlook, AI analyst, demand adjustments
+    # =================================================================
+
+    elif action in ("GetProfitOutlook", "GetAiInsights", "ApplyForecastAdjustment", "ListForecastAdjustments", "RemoveForecastAdjustment", "GetKitchenOutlook", "GetKitchenInsights"):
+        return _analyst(action, request)
+
     elif action == "GetBulkForecast":
         errors, result = utils.get_bulk_forecast_action(request.data, request.user)
         if errors:
@@ -245,3 +252,57 @@ def analyticsAPIView(request):
         )
     else:
         raise exceptions.ValidationError(f"Action {action} is unknown")
+
+
+def _analyst(action, request):
+    """Profit outlook and the AI analyst (analytics/services/ai_analyst.py), with plain errors."""
+    import logging
+
+    from django.http import JsonResponse
+
+    from analytics.services import ai_analyst as an
+    from analytics.utils.domains import tier_of
+
+    user = request.user
+    data = request.data
+    from analytics.services import kitchen_forecast as kf
+
+    entity = getattr(user, "entity", None)
+    if action in ("GetKitchenOutlook", "GetKitchenInsights"):
+        if not entity or entity.entity_type not in kf.RESTAURANT_TYPES:
+            return custom_errors_response(1, "Not available", ["Sign in to your restaurant or hotel to see its forecasts"])
+        is_admin = user.roles.filter(entity=entity, value=f"{entity.entity_type}SuperAdmin").exists()
+        try:
+            if action == "GetKitchenOutlook":
+                return custom_success_message(0, "Outlook", kf.kitchen_outlook(entity), "outlook")
+            if not is_admin:
+                return custom_errors_response(1, "Not allowed", ["Only your business's admin can use the AI analyst"])
+            return custom_success_message(0, "Insights", kf.kitchen_insights(entity, data.get("notes")), "insights")
+        except an.AnalystError as e:
+            return custom_errors_response(1, e.message, e.errors)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("analytics %s failed for %s", action, getattr(user, "pk", None))
+            return JsonResponse({"response_code": 1, "response_message": "Server problem", "errors": ["Something went wrong on our side. Please try again shortly."]}, status=500)
+
+    tier = data.get("tier") or (tier_of(entity.entity_type) if entity else None)
+    if not entity or tier not in ("WHOLESALER", "RETAILER"):
+        return custom_errors_response(1, "Not available", ["Sign in to your shop or wholesale business to see forecasts"])
+    is_admin = user.roles.filter(entity=entity, value=f"{entity.entity_type}SuperAdmin").exists()
+    try:
+        if action == "GetProfitOutlook":
+            return custom_success_message(0, "Outlook", an.profit_outlook(entity.id, tier), "outlook")
+        if action == "ListForecastAdjustments":
+            return custom_success_message(0, "Adjustments", an.list_adjustments(entity, tier), "adjustments")
+        if not is_admin:
+            return custom_errors_response(1, "Not allowed", ["Only your business's admin can use the AI analyst and change forecasts"])
+        if action == "GetAiInsights":
+            refresh = str(data.get("refresh")).lower() in ("1", "true", "yes")
+            return custom_success_message(0, "Insights", an.ai_insights(entity.id, tier, data.get("notes"), refresh), "insights")
+        if action == "ApplyForecastAdjustment":
+            return custom_success_message(0, "Adjustment saved — it applies from the next forecast run", an.apply_adjustment(entity, user, tier, data), "adjustment")
+        return custom_success_message(0, "Adjustment removed", an.remove_adjustment(entity, data), "adjustment")
+    except an.AnalystError as e:
+        return custom_errors_response(1, e.message, e.errors)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("analytics %s failed for %s", action, getattr(user, "pk", None))
+        return JsonResponse({"response_code": 1, "response_message": "Server problem", "errors": ["Something went wrong on our side. Please try again shortly."]}, status=500)

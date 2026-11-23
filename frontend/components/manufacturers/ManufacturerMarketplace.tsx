@@ -6,12 +6,13 @@
 // collect with your pickup code, then receive into your stock.
 // Backend: manufacturers/buy DiscoverManufacturers / GetCatalogue / PlaceOrder.
 
+import { CheckoutBar, InlineNotice, QtyStepper, softShadow } from '@/components/ui/pos';
 import { distributorBuyApi, type ManufacturerLot, type ManufacturerSummary, type DistributorOrder } from '@/api/manufacturersApi';
 import { AdminSheet, ChoiceChips, formatDate, SearchField, SegmentedControl, SheetButton, useListTokens } from '@/components/admin/kit';
 import { formatKES } from '@/components/admin/subscriptionPayments/subscriptionPaymentsConfig';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 
 import type { DeliveryOption } from '@/api/deliveriesApi';
 import DeliveryOptionList from '@/components/deliveries/DeliveryOptionList';
@@ -66,7 +67,7 @@ export default function ManufacturerMarketplace() {
                 <SearchField variant="mobile" value={search} onChangeText={setSearch} placeholder="Manufacturer name or town…" />
                 <SearchField variant="mobile" value={product} onChangeText={setProduct} placeholder="Who stocks… (product or barcode)" />
                 {rows === null && !error ? <ActivityIndicator color={theme.primary} /> : null}
-                {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium }}>{error}</Text> : null}
+                {error ? <InlineNotice tone="danger" message={error} /> : null}
                 {rows && rows.length === 0 ? <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, textAlign: 'center', marginTop: 20 }}>No manufacturers found.</Text> : null}
                 <View className="flex-row flex-wrap" style={{ gap: 12 }}>
                     {(rows ?? []).map((d) => (
@@ -190,16 +191,19 @@ function Catalogue({ manufacturer, onBack, onPlaced }: { manufacturer: Manufactu
                 <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 20 }}>{manufacturer.title}</Text>
                 <SearchField variant="mobile" value={q} onChangeText={setQ} placeholder="Search products…" />
             </View>
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 110, gap: 8, maxWidth: 960, width: '100%', alignSelf: 'center' }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, gap: 10, maxWidth: 960, width: '100%', alignSelf: 'center' }}>
                 {lots === null ? <ActivityIndicator color={theme.primary} /> : null}
                 {lots && lots.length === 0 ? <Text style={{ color: theme.textDark, fontFamily: theme.font.medium }}>Nothing in stock matches.</Text> : null}
                 {(lots ?? []).map((l) => {
                     const qty = cart[l.id]?.quantity ?? 0;
                     const offer = Number(l.discount_unit_price) > 0;
                     return (
-                        <View key={l.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: border, backgroundColor: theme.panel }}>
+                        <View key={l.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: qty ? theme.primary : border, backgroundColor: theme.panel, ...softShadow }}>
+                            <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: theme.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={{ color: theme.primary, fontFamily: theme.font.bold, fontSize: 16 }}>{String(l.title || '?').trim().charAt(0).toUpperCase()}</Text>
+                            </View>
                             <View style={{ flex: 1, gap: 2 }}>
-                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }} numberOfLines={1}>{l.title}</Text>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14.5 }} numberOfLines={1}>{l.title}</Text>
                                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={2}>
                                     {formatKES(l.final_unit_price)} / {l.unit_of_issue.toLowerCase()}{offer ? ` (was ${formatKES(l.unit_price)})` : ''}
                                     {' · '}{l.current_quantity} left{l.expiry_date ? ` · exp ${formatDate(l.expiry_date)}` : ''}
@@ -207,12 +211,7 @@ function Catalogue({ manufacturer, onBack, onPlaced }: { manufacturer: Manufactu
                                 {l.quantity_discount ? <Text style={{ color: '#8b5cf6', fontFamily: theme.font.bold, fontSize: 11.5 }}>Buy {l.quantity_discount.limit_quantity}, get {l.quantity_discount.awarded_quantity} free</Text> : null}
                             </View>
                             {qty ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <Pressable onPress={() => setQty(l, qty - 1)} hitSlop={6}><Ionicons name="remove-circle-outline" size={24} color={theme.primary} /></Pressable>
-                                    <TextInput value={String(qty)} onChangeText={(t) => setQty(l, Number(t.replace(/[^0-9]/g, '') || 0))} keyboardType="number-pad"
-                                        style={{ width: 52, height: 32, textAlign: 'center', borderRadius: 8, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.bold }} />
-                                    <Pressable onPress={() => setQty(l, qty + 1)} hitSlop={6}><Ionicons name="add-circle" size={24} color={theme.primary} /></Pressable>
-                                </View>
+                                <QtyStepper value={String(qty)} onChangeText={(t) => setQty(l, Number(t.replace(/[^0-9]/g, '') || 0))} onStep={(d) => setQty(l, qty + d)} />
                             ) : (
                                 <SheetButton label="Add" icon="add" variant="secondary" onPress={() => setQty(l, 1)} />
                             )}
@@ -221,10 +220,12 @@ function Catalogue({ manufacturer, onBack, onPlaced }: { manufacturer: Manufactu
                 })}
             </ScrollView>
             {lines.length ? (
-                <View style={{ position: 'absolute', left: 16, right: 16, bottom: 16, maxWidth: 928, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, backgroundColor: theme.panel, borderWidth: 1, borderColor: border }}>
-                    <Text style={{ flex: 1, color: theme.text, fontFamily: theme.font.bold }}>{lines.length} product(s) · {formatKES(total)}</Text>
-                    <SheetButton label="Review order" icon="cart-outline" onPress={() => setCheckout(true)} />
-                </View>
+                <CheckoutBar
+                    caption={`${lines.length} ${lines.length === 1 ? 'product' : 'products'} · Total`}
+                    total={total}
+                    actionLabel="Review order"
+                    onPress={() => setCheckout(true)}
+                />
             ) : null}
             <AdminSheet
                 visible={checkout}
@@ -241,11 +242,20 @@ function Catalogue({ manufacturer, onBack, onPlaced }: { manufacturer: Manufactu
                 }
             >
                 <View style={{ gap: 10 }}>
-                    {lines.map((l) => (
-                        <Text key={l.lot.id} style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13 }}>
-                            {l.quantity} × {l.lot.title} — {formatKES(Number(l.lot.final_unit_price) * l.quantity)}{free(l) ? ` · +${free(l)} free` : ''}
-                        </Text>
-                    ))}
+                    <View style={{ borderRadius: 16, backgroundColor: theme.surfaceAlt, padding: 12, gap: 10 }}>
+                        {lines.map((l) => (
+                            <View key={l.lot.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <View style={{ minWidth: 30, height: 26, paddingHorizontal: 6, borderRadius: 8, backgroundColor: theme.panel, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 12 }}>{l.quantity}×</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: theme.text, fontFamily: theme.font.semibold, fontSize: 13.5 }} numberOfLines={1}>{l.lot.title}</Text>
+                                    {free(l) ? <Text style={{ color: '#8b5cf6', fontFamily: theme.font.bold, fontSize: 11.5 }}>+{free(l)} free</Text> : null}
+                                </View>
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 13.5 }}>{formatKES(Number(l.lot.final_unit_price) * l.quantity)}</Text>
+                            </View>
+                        ))}
+                    </View>
                     <ChoiceChips<'SELF' | 'COURIER'>
                         label="How you'll get it"
                         options={[{ value: 'SELF', label: 'Collect (pickup)', icon: 'walk-outline' }, { value: 'COURIER', label: 'Deliver to me', icon: 'bicycle-outline' }]}
@@ -268,15 +278,15 @@ function Catalogue({ manufacturer, onBack, onPlaced }: { manufacturer: Manufactu
                         )
                     ) : null}
                     <TextInput value={notes} onChangeText={setNotes} placeholder="Note to the manufacturer (optional)" placeholderTextColor={theme.textDark}
-                        style={{ height: 40, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.medium }} />
-                    <View style={{ padding: 10, borderRadius: 10, backgroundColor: chipBg }}>
+                        style={{ height: 46, paddingHorizontal: 14, borderRadius: 12, backgroundColor: theme.surfaceAlt, color: theme.text, fontFamily: theme.font.medium, fontSize: 15, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) }} />
+                    <View style={{ padding: 12, borderRadius: 14, backgroundColor: theme.primarySoft }}>
                         <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12.5, lineHeight: 18 }}>
                             {method === 'COURIER'
                                 ? "Prices and delivery are confirmed by the system when you place the order. You pay both by mobile money; once ready, the manufacturer sends it with one of their delivery persons or a rider (or to the courier office), and you give your delivery code on arrival."
                                 : "Prices are confirmed by the manufacturer's system when you place the order. Next you pay by mobile money; once paid they prepare it and you collect with your pickup code."}
                         </Text>
                     </View>
-                    {error ? <Text style={{ color: '#f43f5e', fontFamily: theme.font.medium }}>{error}</Text> : null}
+                    {error ? <InlineNotice tone="danger" message={error} /> : null}
                 </View>
             </AdminSheet>
         </View>

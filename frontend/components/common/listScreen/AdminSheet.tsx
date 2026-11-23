@@ -512,6 +512,13 @@ export function SheetButton({
                 opacity: off ? 0.55 : pressed ? 0.85 : 1,
                 flexGrow: grow ? 1 : 0,
                 flexBasis: grow ? 0 : 'auto',
+                // Primary: brand cobalt -> sky on web, with a soft coloured glow everywhere.
+                ...(variant === 'primary' || variant === 'danger'
+                    ? {
+                        shadowColor: bg, shadowOpacity: off ? 0 : 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: off ? 0 : 4,
+                        ...(isWeb && variant === 'primary' ? ({ backgroundImage: `linear-gradient(120deg, ${theme.primary}, ${theme.accent})` } as any) : {}),
+                    }
+                    : {}),
                 ...webPointer,
             }}
         >

@@ -193,3 +193,4 @@ whitenoise==6.3.0
 WTForms==3.0.1
 yarl==1.13.1
 zope.interface==6.0
+anthropic>=1.0.0

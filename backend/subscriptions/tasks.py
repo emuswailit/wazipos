@@ -146,6 +146,12 @@ def create_subscription_from_payment(payment: SubscriptionPayment):
 
         mark_paid(payment)
         return
+    if getattr(payment, "purpose", "SUBSCRIPTION") == "TOKENS":
+        # A WaziPOS token top-up (billing): credit the wallet + agent commission.
+        from billing.services import credit_topup
+
+        credit_topup(payment)
+        return
     try:
         with transaction.atomic():
             # Serialise all subscription creation for this entity: lock the entity row first.

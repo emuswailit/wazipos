@@ -3,7 +3,8 @@
 // One list design for both inventories (retailer stock receipts, wholesaler
 // receipts): cards on phones, a table on wide screens (shared AdminListView).
 
-import { AdminBadgePill, CellText, type AdminListConfig, useListTokens } from '@/components/common/listScreen';
+import { AdminBadgePill, CellText, type AdminBadge, type AdminListConfig, useListTokens } from '@/components/common/listScreen';
+import { hintLabel, type ForecastHint, type ForecastHints } from './useForecastHints';
 import React from 'react';
 import { Text, View } from 'react-native';
 
@@ -65,7 +66,16 @@ function StatusCell({ item }: { item: any }) {
     );
 }
 
-export function buildInventoryConfig(opts: { title: string; addLabel?: string; emptyMessage: string; showBuyingPrice?: boolean }): AdminListConfig<any> {
+/** Forecast for a stock row (the receipt's product), from useForecastHints. */
+function forecastBadge(h: ForecastHint | undefined): AdminBadge | null {
+    if (!h) return null;
+    if (h.stockout_on) return { label: `${hintLabel(h)}${h.reorder_qty ? ` · reorder ${h.reorder_qty}` : ''}`, tone: 'danger', icon: 'trending-down' };
+    if (h.flags?.includes('SLOW')) return { label: 'Slow seller', tone: 'warning', icon: 'time-outline' };
+    return null;
+}
+
+export function buildInventoryConfig(opts: { title: string; addLabel?: string; emptyMessage: string; showBuyingPrice?: boolean; forecast?: ForecastHints }): AdminListConfig<any> {
+    const hintFor = (r: any) => (opts.forecast ? opts.forecast[String(r?.product ?? r?.product_id ?? '')] : undefined);
     return {
         title: opts.title,
         noun: ['item', 'items'],
@@ -79,7 +89,10 @@ export function buildInventoryConfig(opts: { title: string; addLabel?: string; e
         subtitleOf: (r) =>
             [preparationTitle(r), r?.batch ? `Batch ${r.batch}` : null, r?.bar_code || null].filter(Boolean).join(' · ') || null,
         avatarOf: (r) => ({ uri: itemImageUrl(r), label: productTitle(r), icon: 'cube-outline' }),
-        badgesOf: inventoryBadges,
+        badgesOf: (r: any) => {
+            const b = forecastBadge(hintFor(r));
+            return b ? [...inventoryBadges(r), b] : inventoryBadges(r);
+        },
         metaOf: (r) => (r?.expiry_date ? `Expires ${formatDate(r.expiry_date)}` : null),
         metaIcon: 'calendar-outline',
         metricOf: (r) => ({
@@ -102,6 +115,21 @@ export function buildInventoryConfig(opts: { title: string; addLabel?: string; e
                 ),
             },
             { key: 'stock', label: 'Stock', flex: 1.1, align: 'right', render: (r) => <StockCell item={r} /> },
+            ...(opts.forecast
+                ? [{
+                    key: 'forecast', label: 'Forecast', flex: 1.4,
+                    render: (r: any) => {
+                        const h = hintFor(r);
+                        if (!h) return <CellText>—</CellText>;
+                        return (
+                            <View>
+                                <CellText strong>{hintLabel(h) ?? `${h.forecast_units} in 28 d`}</CellText>
+                                <CellText>{h.reorder_qty ? `Reorder ${h.reorder_qty}` : `${h.forecast_units} expected in 28 d`}{h.accuracy_pct != null ? ` · ${h.accuracy_pct}% acc.` : ''}</CellText>
+                            </View>
+                        );
+                    },
+                }]
+                : []),
             ...(opts.showBuyingPrice
                 ? [{ key: 'buy', label: 'Buying', flex: 1, align: 'right' as const, render: (r: any) => <CellText align="right">{formatKES(r?.unit_buying_price)}</CellText> }]
                 : []),

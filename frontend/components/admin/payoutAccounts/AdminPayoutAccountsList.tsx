@@ -17,14 +17,10 @@ import { useWindowDimensions } from 'react-native';
 
 import AdminPayoutAccountEditModal from './AdminPayoutAccountEditModal';
 import { ACCOUNT_TYPE_META, isActiveAccount, payoutAccountsConfig } from './payoutAccountsConfig';
+import { errorText } from '@/utils/apiFeedback';
 
 type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'UNVERIFIED' | PayoutAccountType;
 
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.problem || fallback;
-};
 
 export default function AdminPayoutAccountsList() {
     const { width } = useWindowDimensions();

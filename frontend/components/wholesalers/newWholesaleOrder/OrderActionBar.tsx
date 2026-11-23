@@ -1,11 +1,8 @@
 // components/wholesalers/newWholesaleOrder/OrderActionBar.tsx
 
-import { useAuth } from '@/context/AuthContext';
-import {
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { AddRowButton, SoftButton } from '@/components/ui/pos';
+import { ScanLine } from 'lucide-react-native';
+import { View } from 'react-native';
 
 interface OrderActionBarProps {
     theme: any;
@@ -13,52 +10,11 @@ interface OrderActionBarProps {
     onAddRowTrigger: () => void;
 }
 
-export default function OrderActionBar({
-    theme,
-    onScanTrigger,
-    onAddRowTrigger,
-}: OrderActionBarProps) {
-    const { isDarkMode } = useAuth();
-
-    const cardBg = isDarkMode ? '#0f172a' : '#ffffff';
-
+export default function OrderActionBar({ onScanTrigger, onAddRowTrigger }: OrderActionBarProps) {
     return (
-        <View className="w-full my-3 flex-row items-stretch gap-3">
-            {/* -------- Scan Item -------- */}
-            <TouchableOpacity
-                onPress={onScanTrigger}
-                activeOpacity={0.8}
-                className="flex-1 flex-row items-center justify-center gap-x-2 rounded-xl border h-12"
-                style={{
-                    borderColor: theme.primary,
-                    backgroundColor: cardBg,
-                }}
-            >
-                <Text
-                    className="text-sm font-bold"
-                    style={{
-                        color: theme.primary,
-                        fontFamily: theme.font?.bold,
-                    }}
-                >
-                    📷 Scan Item
-                </Text>
-            </TouchableOpacity>
-
-            {/* -------- Add Item Row -------- */}
-            <TouchableOpacity
-                onPress={onAddRowTrigger}
-                activeOpacity={0.8}
-                className="flex-1 flex-row items-center justify-center rounded-xl h-12"
-                style={{ backgroundColor: theme.primary }}
-            >
-                <Text
-                    className="text-sm font-bold text-white"
-                    style={{ fontFamily: theme.font?.bold }}
-                >
-                    + Add Item Row
-                </Text>
-            </TouchableOpacity>
+        <View style={{ width: '100%', marginVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <AddRowButton label="Add item" onPress={onAddRowTrigger} />
+            <SoftButton label="Scan" icon={ScanLine} tone="navy" onPress={onScanTrigger} />
         </View>
     );
 }

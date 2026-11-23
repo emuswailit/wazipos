@@ -38,6 +38,10 @@ const TINTS = {
     slate: '#64748b',
 } as const;
 
+/* Jobs board: every signed-in user browses and applies; only a business's own admins post adverts for it. */
+const JOB_EMPLOYERS: string[] = ['GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin', 'GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'InternetServiceProviderSuperAdmin'];
+const JOB_SEEKERS: string[] = ['Client', 'Admin', 'Agent', 'Onboarder', ...JOB_EMPLOYERS];
+
 export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
     {
         id: 1,
@@ -130,6 +134,68 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         ],
     },
     {
+        id: 24,
+        title: 'Jobs',
+        route: '/jobs',
+        allowedRoles: JOB_SEEKERS,
+        showInSidebar: true,
+        icon: 'Briefcase',
+        tint: TINTS.indigo,
+        subRoutes: [
+            { id: 1, title: 'Job board', route: '/jobs', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'Search', tint: TINTS.indigo },
+            { id: 2, title: 'My applications', route: '/jobs?tab=applications', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'FileCheck', tint: TINTS.indigo },
+            { id: 3, title: 'Saved jobs', route: '/jobs?tab=saved', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'Bookmark', tint: TINTS.indigo },
+            { id: 5, title: 'My CV', route: '/myCv', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'FileText', tint: TINTS.indigo },
+            { id: 4, title: 'Post & hire', route: '/jobAdverts', allowedRoles: JOB_EMPLOYERS, showInSidebar: true, icon: 'Megaphone', tint: TINTS.indigo },
+        ],
+    },
+    {
+        id: 25,
+        title: 'Insurance',
+        route: '/insurance',
+        // Every signed-in user sees the cover meant for them; the claims desk is for platform admins.
+        allowedRoles: JOB_SEEKERS,
+        showInSidebar: true,
+        icon: 'ShieldCheck',
+        tint: TINTS.emerald,
+        subRoutes: [
+            { id: 1, title: 'Cover for you', route: '/insurance', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'ShieldCheck', tint: TINTS.emerald },
+            { id: 2, title: 'My policies', route: '/insurance?tab=policies', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'FileCheck', tint: TINTS.emerald },
+            { id: 3, title: 'Claims', route: '/insurance?tab=claims', allowedRoles: JOB_SEEKERS, showInSidebar: true, icon: 'FileText', tint: TINTS.emerald },
+            { id: 4, title: 'Claims desk', route: '/insurance?tab=desk', allowedRoles: ['Admin'], showInSidebar: true, icon: 'ClipboardCheck', tint: TINTS.emerald },
+        ],
+    },
+    {
+        id: 26,
+        title: 'Credit',
+        route: '/credit',
+        // Lipa Baadaye: everyone sees their loans; Bank / Facilitator admins lend; WaziPOS admins approve lenders.
+        allowedRoles: [...JOB_SEEKERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'],
+        showInSidebar: true,
+        icon: 'HandCoins',
+        tint: TINTS.violet,
+        subRoutes: [
+            { id: 1, title: 'My loans', route: '/credit', allowedRoles: [...JOB_SEEKERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'Wallet', tint: TINTS.violet },
+            { id: 2, title: 'Lending', route: '/credit?tab=lending', allowedRoles: ['BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'Building2', tint: TINTS.violet },
+            { id: 3, title: 'Lenders desk', route: '/credit?tab=desk', allowedRoles: ['Admin'], showInSidebar: true, icon: 'ShieldCheck', tint: TINTS.violet },
+        ],
+    },
+    {
+        id: 27,
+        title: 'Billing',
+        route: '/billing',
+        // WaziPOS Tokens: every business's staff see the balance; its admins top up. WaziPOS admins see all wallets.
+        allowedRoles: ['Admin', ...JOB_EMPLOYERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'],
+        showInSidebar: true,
+        icon: 'Coins',
+        tint: TINTS.amber,
+        subRoutes: [
+            { id: 1, title: 'Tokens & usage', route: '/billing', allowedRoles: ['Admin', ...JOB_EMPLOYERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'Coins', tint: TINTS.amber },
+            { id: 2, title: 'History', route: '/billing?tab=history', allowedRoles: ['Admin', ...JOB_EMPLOYERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'History', tint: TINTS.amber },
+            { id: 3, title: 'All wallets', route: '/billing?tab=wallets', allowedRoles: ['Admin'], showInSidebar: true, icon: 'Wallet', tint: TINTS.amber },
+        ],
+    },
+    {
         id: 2,
         title: 'Admin Panel',
         route: '/routes',
@@ -140,6 +206,15 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         icon: 'ShieldCheck',
         tint: TINTS.violet,
         subRoutes: [
+            {
+                id: 30,
+                title: 'Sign-ups & approvals',
+                route: '/signups?tab=approvals',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'UserPlus',
+                tint: TINTS.violet,
+            },
             {
                 id: 1,
                 title: 'Cadres',
@@ -582,6 +657,15 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 tint: TINTS.sky,
             },
             {
+                id: 92,
+                title: 'Forecasting',
+                route: '/wholesaleForecasting',
+                allowedRoles: ['GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin'],
+                showInSidebar: true,
+                icon: 'TrendingUp',
+                tint: TINTS.sky,
+            },
+            {
                 id: 4,
                 title: 'Payments',
                 route: '/wholesalePayments?tab=wholesalePayments',
@@ -718,6 +802,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             { id: 6, title: 'Bar', route: '/restaurantBar', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'ShoppingCart', tint: TINTS.orange },
             // Food stock, cleaning materials, utilities, packaging (offline-first).
             { id: 7, title: 'Supplies', route: '/restaurantSupplies', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.orange },
+            { id: 8, title: 'Forecasting', route: '/restaurantForecast', allowedRoles: ['Admin', 'RestaurantSuperAdmin'], showInSidebar: true, icon: 'TrendingUp', tint: TINTS.orange },
         ],
     },
     {
@@ -744,6 +829,7 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
             { id: 8, title: 'Ingredients', route: '/hotelIngredients', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.teal },
             { id: 9, title: 'Bar', route: '/hotelBar', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'ShoppingCart', tint: TINTS.teal },
             { id: 10, title: 'Supplies', route: '/hotelSupplies', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.teal },
+            { id: 11, title: 'Forecasting', route: '/hotelForecast', allowedRoles: ['HotelSuperAdmin'], showInSidebar: true, icon: 'TrendingUp', tint: TINTS.teal },
         ],
     },
     {

@@ -255,6 +255,11 @@ def _on_paid(row):
     if row.order_kind in COLLECTION_KINDS:
         on_paid(row)
         return
+    if row.order_kind == "credit_float":
+        from credit.services import float_withdrawal_paid
+
+        float_withdrawal_paid(row)
+        return
     if row.payee_kind == OrderPayouts.PayeeKind.EMPLOYEE_COMMISSION:
         from shopguard.services import commission_paid_out
 

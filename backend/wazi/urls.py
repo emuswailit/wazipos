@@ -91,6 +91,10 @@ urlpatterns = [
      path("api/v1/analytics/", include("analytics.urls")),
     path("api/v1/stocktakes/", include("stocktakes.urls")),
     path("api/v1/shopguard/", include("shopguard.urls")),
+    path("api/v1/insurance/", include("insurance.urls")),
+    path("api/v1/credit/", include("credit.urls")),
+    path("api/v1/billing/", include("billing.urls")),
+    path("api/v1/onboarding/", include("onboarding.urls")),
     path("__reload__/", include("django_browser_reload.urls")),
 ]
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

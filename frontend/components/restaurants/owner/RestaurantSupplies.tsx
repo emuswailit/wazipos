@@ -5,6 +5,7 @@
 // record what's used, wasted or counted. Mobile first; works offline (saved on
 // the device, synced when back online).
 
+import { kitchenHintText, useKitchenHints } from '@/components/restaurants/forecast/KitchenForecast';
 import diningApi, { isOk, SUPPLY_CATEGORIES, type CatalogueProduct, type Supply, type SupplyCategory, type SupplyMovement } from '@/api/diningApi';
 import { AdminSheet, ChoiceChips, FilterChips, FormRow, SearchField, SheetButton, useListTokens } from '@/components/common/listScreen';
 import { CustomTextField } from '@/components/common/CustomTextField';
@@ -38,6 +39,7 @@ export default function RestaurantSupplies() {
     const [q, setQ] = useState('');
     const [filter, setFilter] = useState<Filter>('ALL');
     const [openId, setOpenId] = useState<string | null>(null);
+    const hints = useKitchenHints();
     const [receiving, setReceiving] = useState(false);
     const onlineRef = useRef(isOnline);
     onlineRef.current = isOnline;
@@ -122,6 +124,11 @@ export default function RestaurantSupplies() {
                                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }} numberOfLines={1}>
                                     {[meta.label, i.expiry_date ? `exp ${i.expiry_date}` : null, i.supplier_name].filter(Boolean).join(' · ')}
                                 </Text>
+                                {kitchenHintText(hints[i.id]) ? (
+                                    <Text style={{ color: hints[i.id]?.flags.includes('RUNS_OUT_SOON') ? '#e11d48' : theme.primary, fontFamily: theme.font.semibold, fontSize: 11.5 }} numberOfLines={1}>
+                                        {kitchenHintText(hints[i.id])}
+                                    </Text>
+                                ) : null}
                             </View>
                             <View className="items-end">
                                 <Text style={{ color: i.is_low ? '#d97706' : theme.text, fontFamily: theme.font.bold, fontSize: 14 }}>{sellsInParts(i) && i.parts?.label ? i.parts.label : `${num(i.quantity)} ${i.unit}`}</Text>

@@ -6,15 +6,13 @@ import {
 } from '@/components/common';
 import { useAuth } from '@/context/AuthContext';
 import type { WholesalerReceipt } from '@/databases/types';
+import { AmountField, money, PosCard, QtyStepper, Segmented, ValueTile } from '@/components/ui/pos';
+import { ScanLine, Trash2 } from 'lucide-react-native';
 import React from 'react';
-import {
-    Platform,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { SaleUnit, partLabel, plural, sellsInParts, stockLabel, totalParts } from '@/utils/parts';
+import { Platform, Pressable, Text, View } from 'react-native';
+
+const pointer = Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : null;
+import { type SaleUnit, partLabel, plural, sellsInParts, stockLabel, totalParts } from '@/utils/parts';
 import type { WholesaleItemRow } from './useWholesaleOrderForm';
 
 interface WholesaleItemRowItemProps {
@@ -36,11 +34,6 @@ export default function WholesaleItemRowItem({
     onScanTrigger,
 }: WholesaleItemRowItemProps) {
     const { theme } = useAuth();
-    const isDark = (theme as any).isDarkMode;
-
-    const borderColor = isDark ? '#334155' : '#e2e8f0';
-    const inputBg = isDark ? '#0f172a' : '#f1f5f9';
-    const subBg = isDark ? '#0f172a' : '#f8fafc';
 
     /* -------- Derived -------- */
     const qty = Number(row.purchased_quantity) || 0;
@@ -144,369 +137,81 @@ export default function WholesaleItemRowItem({
         });
     };
 
-    return (
-        <View
-            className="rounded-xl border mb-2"
-            style={{ borderColor, backgroundColor: theme.panel }}
-        >
-            {/* =============================================
-             * Row 1: index + picker + scan + remove
-             * ============================================= */}
-            <View className="flex-row items-start px-3 pt-2.5 pb-2 gap-2">
-                <Text
-                    className="text-[10px] font-bold uppercase tracking-widest mt-3"
-                    style={{
-                        color: theme.textDark,
-                        fontFamily: theme.font.bold,
-                    }}
-                >
-                    #{index + 1}
-                </Text>
+    const stockTone = !Number.isFinite(stock) ? 'muted' : stock <= 0 ? 'danger' : stock <= 5 ? 'warning' : 'success';
+    const overStock = Number.isFinite(stock) && qty > stock;
 
-                <View className="flex-1">
+    return (
+        <PosCard style={{ gap: 12 }}>
+            {/* Number · product picker · scan · remove */}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: theme.primarySoft, alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>
+                    <Text style={{ fontFamily: theme.font.bold, fontSize: 12, color: theme.primary }}>{index + 1}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
                     <WholesaleInventoryPicker
                         value={row.selectedReceipt}
                         onSelect={handleSelect}
                         onClear={handleClear}
                         inStockOnly
                         filter={(r) => !!r.remote_id}
-                        placeholder="Click to browse or type to filter…"
+                        placeholder="Search your stock…"
                     />
                 </View>
-
-                <TouchableOpacity
-                    onPress={onScanTrigger}
-                    activeOpacity={0.6}
-                    className="mt-0.5 rounded-lg items-center justify-center"
-                    style={{
-                        width: 34,
-                        height: 34,
-                        backgroundColor: `${theme.primary}15`,
-                        borderWidth: 1,
-                        borderColor: `${theme.primary}40`,
-                    }}
-                >
-                    <Text
-                        style={{
-                            color: theme.primary,
-                            fontSize: 14,
-                        }}
-                    >
-                        📷
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    onPress={() => onRemoveRow(row.id)}
-                    activeOpacity={0.6}
-                    className="mt-0.5 px-1.5 py-1 rounded-md"
-                >
-                    <Text
-                        style={{ color: '#ef4444', fontSize: 14 }}
-                    >
-                        🗑
-                    </Text>
-                </TouchableOpacity>
+                <Pressable onPress={onScanTrigger} accessibilityRole="button" accessibilityLabel="Scan a barcode" style={{ width: 40, height: 40, marginTop: 2, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primarySoft, ...pointer }}>
+                    <ScanLine size={17} color={theme.primary} strokeWidth={2.3} />
+                </Pressable>
+                <Pressable onPress={() => onRemoveRow(row.id)} accessibilityRole="button" accessibilityLabel={`Remove item ${index + 1}`} style={{ width: 40, height: 40, marginTop: 2, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.dangerSoft, ...pointer }}>
+                    <Trash2 size={16} color={theme.danger} strokeWidth={2.2} />
+                </Pressable>
             </View>
 
-            {/* =============================================
-             * Row 1b: whole units or parts
-             * ============================================= */}
+            {/* Whole units or parts */}
             {canPart ? (
-                <View className="px-3 pb-2 flex-row items-center flex-wrap gap-1.5">
-                    {([['FULL', 'Whole units'], ['PART', `By the ${part}`]] as [SaleUnit, string][]).map(([unit, label]) => {
-                        const active = (row.sale_unit || 'FULL') === unit;
-                        return (
-                            <TouchableOpacity
-                                key={unit}
-                                onPress={() => setSaleUnit(unit)}
-                                activeOpacity={0.7}
-                                accessibilityRole="radio"
-                                accessibilityState={{ selected: active }}
-                                className="rounded-full border px-3 items-center justify-center"
-                                style={{ height: 30, backgroundColor: active ? theme.primary : 'transparent', borderColor: active ? theme.primary : borderColor }}
-                            >
-                                <Text style={{ color: active ? '#fff' : theme.text, fontFamily: theme.font.bold, fontSize: 11 }}>{label}</Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                    <Text style={{ color: partsNote ? '#ef4444' : theme.textDark, fontFamily: theme.font.medium, fontSize: 10, flexShrink: 1 }}>
+                <View style={{ gap: 6 }}>
+                    <Segmented<SaleUnit> options={[['FULL', 'Whole units'], ['PART', `By the ${part}`]]} value={(row.sale_unit || 'FULL') as SaleUnit} onChange={setSaleUnit} />
+                    <Text style={{ color: partsNote ? theme.danger : theme.textMuted, fontFamily: theme.font.medium, fontSize: 11.5 }}>
                         {partsNote ?? `${stockLabel(receipt)}${inParts ? ` · quantity in ${plural(part, 2)}` : ''}`}
                     </Text>
                 </View>
             ) : null}
 
-            {/* =============================================
-             * Row 2a: qty | price | disc
-             * ============================================= */}
-            <View
-                className="px-3 pb-2 flex-col gap-2"
-            >
-                <View
-                    className="flex-row items-stretch gap-2"
-                    style={{ width: '100%' }}
-                >
-                    {/* Quantity stepper */}
-                    <View
-                        className="flex-row items-center rounded-lg border overflow-hidden h-[34px]"
-                        style={{
-                            borderColor,
-                            flexGrow: 1,
-                            flexShrink: 0,
-                            flexBasis: 0,
-                            minWidth: 96,
-                        }}
-                    >
-                        <TouchableOpacity
-                            onPress={() => bump(-1)}
-                            hitSlop={4}
-                            className="items-center justify-center"
-                            style={{
-                                width: 30,
-                                height: '100%',
-                                backgroundColor: subBg,
-                                flexShrink: 0,
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontSize: 15,
-                                }}
-                            >
-                                −
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TextInput
-                            value={qtyFocus.displayValue}
-                            onChangeText={qtyFocus.onChange}
-                            onFocus={qtyFocus.onFocus}
-                            onBlur={qtyFocus.onBlur}
-                            keyboardType={inParts ? 'decimal-pad' : 'numeric'}
-                            placeholder="0"
-                            placeholderTextColor="#94a3b8"
-                            className="flex-1 h-full"
-                            style={{
-                                color: theme.text,
-                                fontFamily:
-                                    theme.font.bold,
-                                fontSize: 13,
-                                backgroundColor: inputBg,
-                                textAlign: 'center',
-                                paddingVertical: 0,
-                                paddingHorizontal: 0,
-                                minWidth: 32,
-                                ...(Platform.OS === 'web'
-                                    ? ({
-                                        outlineStyle:
-                                            'none',
-                                        textAlign: 'center',
-                                        lineHeight: 32,
-                                    } as any)
-                                    : {
-                                        textAlignVertical:
-                                            'center',
-                                    }),
-                            }}
-                        />
-
-                        <TouchableOpacity
-                            onPress={() => bump(1)}
-                            hitSlop={4}
-                            className="items-center justify-center"
-                            style={{
-                                width: 30,
-                                height: '100%',
-                                backgroundColor: subBg,
-                                flexShrink: 0,
-                            }}
-                        >
-                            <Text
-                                style={{
-                                    color: theme.text,
-                                    fontSize: 15,
-                                }}
-                            >
-                                +
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Unit price */}
-                    <View
-                        className="flex-row items-center justify-center rounded-lg border px-2 h-[34px]"
-                        style={{
-                            borderColor,
-                            backgroundColor: inputBg,
-                            flexGrow: 1,
-                            flexShrink: 0,
-                            flexBasis: 0,
-                            minWidth: 88,
-                        }}
-                    >
-                        <Text
-                            className="text-[10px] mr-1"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                            }}
-                        >
-                            KES
-                        </Text>
-                        <Text
-                            numberOfLines={1}
-                            style={{
-                                color: theme.text,
-                                fontFamily: theme.font.bold,
-                                fontSize: 12,
-                            }}
-                        >
-                            {price.toFixed(2)}
-                        </Text>
-                    </View>
-
-                    {/* Discount */}
-                    <View
-                        className="flex-row items-center justify-center rounded-lg border px-2 h-[34px]"
-                        style={{
-                            borderColor,
-                            backgroundColor: inputBg,
-                            flexGrow: 1,
-                            flexShrink: 0,
-                            flexBasis: 0,
-                            minWidth: 88,
-                        }}
-                    >
-                        <Text
-                            className="text-[10px] mr-1"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.bold,
-                            }}
-                        >
-                            Disc
-                        </Text>
-                        <TextInput
-                            value={discFocus.displayValue}
-                            onChangeText={discFocus.onChange}
-                            onFocus={discFocus.onFocus}
-                            onBlur={() => {
-                                discFocus.onBlur();
-                                const v =
-                                    parseFloat(
-                                        row.item_price_discount
-                                    ) || 0;
-                                onUpdateRow(row.id, {
-                                    item_price_discount:
-                                        v.toFixed(2),
-                                });
-                            }}
-                            keyboardType="numeric"
-                            placeholder="0.00"
-                            placeholderTextColor="#94a3b8"
-                            className="flex-1"
-                            style={{
-                                color: theme.text,
-                                fontFamily:
-                                    theme.font.bold,
-                                fontSize: 12,
-                                minWidth: 36,
-                                textAlign: 'right',
-                                paddingVertical: 0,
-                                ...(Platform.OS === 'web'
-                                    ? ({
-                                        outlineStyle:
-                                            'none',
-                                    } as any)
-                                    : null),
-                            }}
-                        />
-                    </View>
-                </View>
-
-                {/* =============================================
-                 * Row 2b: stock + total
-                 * ============================================= */}
-                <View className="flex-row items-center justify-between gap-2">
-                    {Number.isFinite(stock) ? (
-                        <View
-                            className="flex-row items-center rounded-lg px-2 h-[34px]"
-                            style={{
-                                backgroundColor:
-                                    stock <= 0
-                                        ? 'rgba(239,68,68,0.12)'
-                                        : stock <= 5
-                                            ? 'rgba(251,191,36,0.15)'
-                                            : 'rgba(16,185,129,0.12)',
-                            }}
-                        >
-                            <Text
-                                className="text-[10px] mr-1"
-                                style={{
-                                    color:
-                                        stock <= 0
-                                            ? '#ef4444'
-                                            : stock <= 5
-                                                ? '#f59e0b'
-                                                : '#10b981',
-                                    fontFamily:
-                                        theme.font.bold,
-                                }}
-                            >
-                                {inParts ? plural(part, 2) : 'Stock'}
-                            </Text>
-                            <Text
-                                style={{
-                                    color:
-                                        stock <= 0
-                                            ? '#ef4444'
-                                            : stock <= 5
-                                                ? '#f59e0b'
-                                                : '#10b981',
-                                    fontFamily:
-                                        theme.font.bold,
-                                    fontSize: 12,
-                                }}
-                            >
-                                {stock}
-                            </Text>
-                        </View>
-                    ) : (
-                        <View />
-                    )}
-
-                    <View
-                        className="flex-row items-center rounded-lg px-2.5 h-[34px]"
-                        style={{
-                            backgroundColor:
-                                'rgba(16,185,129,0.12)',
-                            borderWidth: 1,
-                            borderColor:
-                                'rgba(16,185,129,0.35)',
-                        }}
-                    >
-                        <Text
-                            className="text-[10px] mr-1"
-                            style={{
-                                color: '#10b981',
-                                fontFamily: theme.font.bold,
-                            }}
-                        >
-                            KES
-                        </Text>
-                        <Text
-                            style={{
-                                color: '#10b981',
-                                fontFamily: theme.font.bold,
-                                fontSize: 13,
-                            }}
-                        >
-                            {total.toFixed(2)}
-                        </Text>
-                    </View>
+            {/* Qty · price · discount · total */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: 10 }}>
+                <QtyStepper
+                    label={inParts ? plural(part, 2) : 'Qty'}
+                    value={qtyFocus.displayValue}
+                    onChangeText={qtyFocus.onChange}
+                    onFocus={qtyFocus.onFocus}
+                    onBlur={qtyFocus.onBlur}
+                    onStep={bump}
+                    decimal={inParts}
+                    danger={overStock}
+                />
+                <AmountField
+                    label="Discount"
+                    style={{ flex: 1, minWidth: 104 }}
+                    value={discFocus.displayValue}
+                    onChangeText={discFocus.onChange}
+                    onFocus={discFocus.onFocus}
+                    onBlur={() => {
+                        discFocus.onBlur();
+                        const v = parseFloat(row.item_price_discount) || 0;
+                        onUpdateRow(row.id, { item_price_discount: v.toFixed(2) });
+                    }}
+                    placeholder="0.00"
+                    tone={(parseFloat(row.item_price_discount) || 0) > 0 ? 'danger' : 'default'}
+                />
+                <View style={{ flexDirection: 'row', gap: 14, marginLeft: 'auto' }}>
+                    <ValueTile label={inParts ? `Per ${part}` : 'Unit price'} value={money(price)} tone="muted" />
+                    <ValueTile label="Line total" value={money(total)} strong />
                 </View>
             </View>
-        </View>
+
+            {row.selectedReceipt && Number.isFinite(stock) ? (
+                <Text style={{ fontFamily: theme.font.medium, fontSize: 11.5, color: stockTone === 'danger' ? theme.danger : stockTone === 'warning' ? theme.warning : theme.textMuted }}>
+                    {overStock ? `Only ${stock} in stock` : `${stock} ${inParts ? plural(part, 2) : 'in stock'}`}
+                </Text>
+            ) : null}
+        </PosCard>
     );
 }

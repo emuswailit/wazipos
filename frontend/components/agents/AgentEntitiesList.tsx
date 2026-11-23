@@ -26,16 +26,11 @@ import { useWindowDimensions } from 'react-native';
 
 import AgentPayoutAccountSheet, { type PayoutTarget } from './AgentPayoutAccountSheet';
 import OnboardingTermsSection, { termsInitialValues, termsSchema, toTerms } from './OnboardingTermsSection';
+import { errorText } from '@/utils/apiFeedback';
 
 const START_LABEL = { TRIAL: 'One month free trial', PAY_NOW: 'Paid right away' } as const;
 const STATUS_LABEL = { NOT_NEEDED: 'Not needed', PLANNED: 'Planned', IN_PROGRESS: 'In progress', DONE: 'Done' } as const;
 
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join('\n');
-    if (errs && typeof errs === 'object') return Object.values(errs).flat().join('\n');
-    return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
-};
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
 
 export default function AgentEntitiesList() {

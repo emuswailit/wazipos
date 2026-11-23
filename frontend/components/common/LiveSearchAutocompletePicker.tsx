@@ -35,10 +35,11 @@ interface Props {
     debounceMs?: number;
 }
 
-const FONT_SIZE = 12;
-const LINE_HEIGHT = 16;
-const HORIZONTAL_PADDING = 10;
-const MIN_INPUT_HEIGHT = 38;
+// Matches CustomTextField: 16px on phones (no iOS zoom), filled, 46px tall.
+const FONT_SIZE = 15;
+const LINE_HEIGHT = 20;
+const HORIZONTAL_PADDING = 14;
+const MIN_INPUT_HEIGHT = 46;
 
 export default function LiveSearchAutocompletePicker({
     name,
@@ -106,7 +107,7 @@ export default function LiveSearchAutocompletePicker({
     };
 
     const baseDelimiter = isDarkMode ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.10)";
-    const focusDelimiter = isDarkMode ? "rgba(148,163,184,0.28)" : "rgba(15,23,42,0.20)";
+    const focusDelimiter = theme.primary;
     const inputBorderColor = hasError ? "#ef4444" : focused || dropdownOpen ? focusDelimiter : baseDelimiter;
 
     return (
@@ -150,10 +151,11 @@ export default function LiveSearchAutocompletePicker({
                     placeholderTextColor={isDarkMode ? "#64748b" : "#94a3b8"}
                     multiline={false}
                     style={{
-                        backgroundColor: isDarkMode ? "#0f172a" : theme.surface ?? theme.background,
+                        backgroundColor: isDarkMode ? "rgba(148,163,184,0.08)" : "#f4f7fc",
                         borderColor: inputBorderColor,
-                        borderWidth: 1,
-                        borderRadius: 8,
+                        borderWidth: 1.5,
+                        borderRadius: 12,
+                        fontFamily: theme.font.medium,
                         color: theme.text,
                         minHeight: MIN_INPUT_HEIGHT,
                         paddingHorizontal: HORIZONTAL_PADDING,
@@ -192,7 +194,7 @@ export default function LiveSearchAutocompletePicker({
                             backgroundColor: theme.panel,
                             borderColor: baseDelimiter,
                             borderWidth: 1,
-                            borderRadius: 8,
+                            borderRadius: 14,
                             maxHeight: dropdownMaxHeight,
                             overflow: "hidden",
                             zIndex: 9999,

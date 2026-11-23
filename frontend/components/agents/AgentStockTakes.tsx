@@ -38,15 +38,10 @@ import { Formik } from 'formik';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import * as Yup from 'yup';
+import { errorText } from '@/utils/apiFeedback';
 
 const STOCKABLE = ['GeneralRetailer', 'PharmaceuticalRetailer', 'GeneralWholesaler', 'PharmaceuticalWholesaler', 'Restaurant', 'Hotel'];
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join('\n');
-    if (errs && typeof errs === 'object') return Object.values(errs).flat().join('\n');
-    return res?.data?.response_message || res?.problem || fallback;
-};
 
 export const stockTakeBadges = (st: StockTake): AdminBadge[] => [
     { label: STATUS_META[st.status].label, tone: STATUS_META[st.status].tone },

@@ -158,11 +158,33 @@ const STAKEHOLDERS: Stakeholder[] = [
         cta: 'Ride with WaziPOS',
     },
     {
+        key: 'jobs', label: 'Job seekers & employers', icon: 'briefcase', image: PHOTOS.pharmacy,
+        headline: 'Hire your next pharmacist, cashier or chef — or get hired.',
+        points: [
+            'A jobs board inside WaziPOS, open to every member',
+            'Permanent posts and locum cover, with pay and dates up front',
+            'Employers run the whole pipeline: shortlist → interview → offer → hire',
+            'Share any opening with a link; full details for WaziPOS members',
+        ],
+        cta: 'Find your next job',
+    },
+    {
+        key: 'lenders', label: 'Banks & lenders', icon: 'business', image: PHOTOS.payPhone,
+        headline: 'Lend to thousands of traders — and see exactly what they sell.',
+        points: [
+            'Fund real orders, paid straight to the supplier — not cash loans',
+            'Set your own rates for 7, 14 and 28 days, fees, limits and minimum WaziScore',
+            'Repayments land in your own wallet by M-Pesa; due-date prompts sent for you',
+            'A live loan book: disbursed, outstanding, due this week, overdue, PAR30',
+        ],
+        cta: 'Lend on WaziPOS',
+    },
+    {
         key: 'agents', label: 'Agents & stocktakers', icon: 'people', image: PHOTOS.butcher,
         headline: 'Build a business onboarding businesses.',
         points: [
             'Register shops, wholesalers, restaurants and hotels in your area',
-            'Earn commission on every subscription you bring in',
+            'Earn commission on every token top-up your businesses make',
             'Book paid stock takes; your stocktakers paid per day worked',
             'Your own team, your own clients — all in your agent dashboard',
         ],
@@ -198,6 +220,64 @@ const INVENTORY: { icon: IconName; title: string; text: string }[] = [
     { icon: 'cloud-offline', title: 'Sells offline', text: 'Cash sales saved on the device and synced when you’re back online.' },
     { icon: 'clipboard', title: 'Independent stock takes', text: 'Blind counts by WaziPOS stocktakers, with a variance report you approve.' },
     { icon: 'eye', title: 'Owner-away protection', text: 'Shifts, blind cash counts, staff vs owner sales and alerts when something’s off.' },
+];
+
+/* Sectors WaziPOS is built for — the same chain tools, tuned to how each one trades. */
+const INDUSTRIES: { icon: IconName; title: string; examples: string; points: string[]; colors: [string, string] }[] = [
+    {
+        icon: 'cart', title: 'FMCG', examples: 'Groceries, beverages, toiletries, household goods',
+        points: ['Fast restocking from distributors and wholesalers', 'Quantity deals and placements that move volume', 'Barcode scanning at the till, even offline'],
+        colors: ['#2a6ff3', '#22b8f0'],
+    },
+    {
+        icon: 'medkit', title: 'Pharmaceuticals', examples: 'Manufacturers, distributors, wholesalers, pharmacies',
+        points: ['Batches and expiry tracked lot by lot', 'Prescriptions, quotes and dispensing', 'Licensed locum and permanent staff from the jobs board'],
+        colors: ['#10b981', '#14b8a6'],
+    },
+    {
+        icon: 'restaurant', title: 'Food & catering', examples: 'Restaurants, hotels, bars, caterers, food vendors',
+        points: ['Menus, tables, rooms and a live kitchen board', 'Ingredients, supplies and bar stock kept honest', 'Delivery orders handed to riders automatically'],
+        colors: ['#f97316', '#ec4899'],
+    },
+    {
+        icon: 'flash', title: 'Electricals & electronics', examples: 'Phones, appliances, hardware, electrical supplies',
+        points: ['High-value stock with owner-away protection', 'Barcode scanning and independent stock takes', 'Courier delivery priced by weight and value'],
+        colors: ['#8b5cf6', '#6366f1'],
+    },
+];
+
+const JOBS_SEEKERS = [
+    'Browse permanent posts and locum cover from businesses across Kenya',
+    'Apply in a minute — licence number, experience and CV',
+    'Follow every step: shortlisted, interview, offer, hired',
+    'Save jobs and read them offline; share any job with a link',
+];
+const JOBS_EMPLOYERS = [
+    'Post an opening for your business in minutes — pay, dates, licence needed',
+    'Locum shifts by the day or shift; permanent roles by the month',
+    'Shortlist, invite to interview, make an offer and hire from one screen',
+    'Applicants updated automatically by email and app — SMS for interviews and offers',
+];
+
+/* WaziPOS Credit (Lipa Baadaye) and WaziPOS Cover (micro-insurance). */
+const CREDIT_POINTS = [
+    'A licensed lender pays your supplier the moment you order',
+    'Repay in 7, 14 or 28 days — early or in parts, by M-Pesa',
+    'Every cost shown before you accept: interest, fee, excise duty, APR',
+    'Repay on time and your WaziScore and limit grow',
+];
+const CREDIT_SEGMENTS: { icon: IconName; t: string }[] = [
+    { icon: 'storefront-outline', t: 'Retailers restocking from wholesalers' },
+    { icon: 'cube-outline', t: 'Wholesalers buying from distributors' },
+    { icon: 'cart-outline', t: 'Shop customers buying on credit' },
+    { icon: 'restaurant-outline', t: 'Diners at restaurants' },
+];
+const COVER_PLANS: { icon: IconName; name: string; price: string; text: string; color: string }[] = [
+    { icon: 'cube', name: 'SafeParcel', price: 'from KES 15 a parcel', text: 'Theft, loss or damage on the way', color: '#2a6ff3' },
+    { icon: 'bicycle', name: 'RiderShield', price: 'from KES 10 a day', text: 'Accident, hospital and medical cover for riders', color: '#f97316' },
+    { icon: 'storefront', name: 'DukaCover', price: 'from KES 99 a month', text: 'Stock and cash: fire, burglary, robbery', color: '#10b981' },
+    { icon: 'cash', name: 'TradeGuard', price: 'per credit sale', text: '80% back when a credit customer doesn’t pay', color: '#8b5cf6' },
+    { icon: 'shield-checkmark', name: 'TillGuard', price: 'from KES 129 a month', text: 'Staff theft, SIM swap and fake M-Pesa', color: '#ec4899' },
 ];
 
 const MORE_SERVICES: { icon: IconName; title: string; text: string; colors: [string, string] }[] = [
@@ -319,7 +399,11 @@ export default function WelcomeScreen() {
     const current = STAKEHOLDERS.find((s) => s.key === active) ?? STAKEHOLDERS[0];
     const NAV: { key: string; label: string }[] = [
         { key: 'chain', label: 'Supply chain' },
+        { key: 'industries', label: 'Industries' },
         { key: 'stakeholders', label: 'For businesses' },
+        { key: 'credit', label: 'Credit' },
+        { key: 'cover', label: 'Insurance' },
+        { key: 'jobs', label: 'Jobs' },
         { key: 'payments', label: 'Payments' },
         { key: 'delivery', label: 'Delivery' },
         { key: 'services', label: 'More services' },
@@ -378,7 +462,7 @@ export default function WelcomeScreen() {
                                 {' '}and their clients.
                             </Text>
                             <Text style={[muted, { fontSize: 17.5, lineHeight: 28, maxWidth: 590, textAlign: wide ? 'left' : 'center' }]}>
-                                Turn your shop into an online store, sell with live discounts across the chain, get paid securely by mobile money, and deliver anywhere in the country — with your own riders or our partners.
+                                Turn your shop into an online store, sell with live discounts across the chain, get paid securely by mobile money, deliver anywhere in the country, buy stock now and pay later, insure what you move — and hire the people you need. Built for FMCG, pharmaceuticals, food & catering, and electricals & electronics.
                             </Text>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: wide ? 'flex-start' : 'center' }}>
                                 {isAuthed ? (
@@ -425,10 +509,41 @@ export default function WelcomeScreen() {
                             { icon: 'navigate-outline' as IconName, t: 'Live delivery tracking' },
                             { icon: 'shield-checkmark-outline' as IconName, t: 'Paid out on release' },
                             { icon: 'people-outline' as IconName, t: 'Agents in your town' },
+                            { icon: 'briefcase-outline' as IconName, t: 'Jobs board' },
+                            { icon: 'time-outline' as IconName, t: 'Lipa Baadaye' },
+                            { icon: 'umbrella-outline' as IconName, t: 'Micro-insurance' },
                         ].map((c) => (
                             <View key={c.t} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                 <Ionicons name={c.icon} size={18} color={theme.primary} />
                                 <Text style={{ color: theme.text, fontFamily: theme.font.semibold, fontSize: 13.5 }}>{c.t}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+
+                {/* ================= industries */}
+                <View {...anchor('industries')} style={[section, { paddingTop: wide ? 50 : 30, paddingBottom: wide ? 80 : 50 }]}>
+                    <Title eyebrow="Industries" title="Built for the way your" accent="industry trades." sub="FMCG, pharmaceuticals, food & catering, and electricals & electronics — from the factory floor to the customer’s door." />
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+                        {INDUSTRIES.map((ind) => (
+                            <View key={ind.title} style={[{ flexGrow: 1, flexBasis: wide ? 250 : mid ? 300 : 280, borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: border, backgroundColor: theme.panel }, shadow(0.06)]}>
+                                <View style={[{ padding: 20, gap: 12, minHeight: 150, justifyContent: 'flex-end', overflow: 'hidden' }, gradient(ind.colors[0], ind.colors[1])]}>
+                                    <View style={{ position: 'absolute', right: -14, top: -16, opacity: 0.18 }}>
+                                        <Ionicons name={ind.icon} size={140} color="#fff" />
+                                    </View>
+                                    <View style={{ width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.22)' }}>
+                                        <Ionicons name={ind.icon} size={23} color="#fff" />
+                                    </View>
+                                    <View>
+                                        <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 20, letterSpacing: -0.4 }}>{ind.title}</Text>
+                                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontFamily: theme.font.medium, fontSize: 12.5, marginTop: 2 }}>{ind.examples}</Text>
+                                    </View>
+                                </View>
+                                <View style={{ padding: 20, gap: 10 }}>
+                                    {ind.points.map((pt) => (
+                                        <Check key={pt} text={pt} color={ind.colors[0]} />
+                                    ))}
+                                </View>
                             </View>
                         ))}
                     </View>
@@ -628,7 +743,7 @@ export default function WelcomeScreen() {
                             </Text>
                             <View style={{ gap: 10 }}>
                                 <Check dark color="#7cc4ff" text="Agents register businesses, capture their location and set up their payout accounts" />
-                                <Check dark color="#7cc4ff" text="Negotiated subscriptions with a free first month — agents earn commission" />
+                                <Check dark color="#7cc4ff" text="Free first month, then pay per order with WaziPOS Tokens — no monthly fee" />
                                 <Check dark color="#7cc4ff" text="Stocktakers help count opening stock and run independent stock takes" />
                             </View>
                             {!isAuthed ? (
@@ -664,6 +779,176 @@ export default function WelcomeScreen() {
                                     </View>
                                 </View>
                             ))}
+                        </View>
+                    </View>
+                </View>
+
+                {/* ================= WaziPOS Credit (Lipa Baadaye) */}
+                <View {...anchor('credit')} style={[{ paddingVertical: wide ? 90 : 56, overflow: 'hidden' }, gradient('#2e1065', '#6d28d9', 150)]}>
+                    <View style={[{ position: 'absolute', width: 520, height: 520, borderRadius: 260, top: -220, right: -140, opacity: 0.3 }, gradient('#a78bfa', '#22b8f0')]} />
+                    <View style={[section, { flexDirection: wide ? 'row' : 'column', gap: wide ? 48 : 28, alignItems: wide ? 'center' : 'stretch' }]}>
+                        <View style={{ flex: wide ? 1.05 : undefined }}>
+                            <Title dark center={!wide} eyebrow="WaziPOS Credit" title="Lipa Baadaye —" accent="stock now, pay later." sub="A licensed lender pays your supplier the moment you order. You repay in 7, 14 or 28 days by M-Pesa — early, or in parts." />
+                            <View style={{ gap: 11, marginTop: -8 }}>
+                                {CREDIT_POINTS.map((pt) => (
+                                    <Check key={pt} text={pt} color="#c4b5fd" dark />
+                                ))}
+                            </View>
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
+                                {CREDIT_SEGMENTS.map((c) => (
+                                    <View key={c.t} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 38, paddingHorizontal: 14, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                                        <Ionicons name={c.icon} size={16} color="#c4b5fd" />
+                                        <Text style={{ color: '#ede9fe', fontFamily: theme.font.semibold, fontSize: 13 }}>{c.t}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 28, justifyContent: wide ? 'flex-start' : 'center' }}>
+                                {isAuthed ? (
+                                    <PrimaryButton label="My credit" icon="time-outline" onPress={() => router.push('/credit' as any)} light />
+                                ) : (
+                                    <>
+                                        <PrimaryButton label="Buy now, pay later" onPress={() => register('retailer')} light />
+                                        <GhostButton label="Lend on WaziPOS" icon="business-outline" onPress={() => register('lenders')} dark />
+                                    </>
+                                )}
+                            </View>
+                        </View>
+
+                        {/* the offer card a trader sees at checkout */}
+                        <View style={[{ flex: wide ? 0.95 : undefined, maxWidth: 480, width: '100%', alignSelf: 'center', borderRadius: 28, padding: 22, gap: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' }, isWeb ? ({ backdropFilter: 'blur(14px)' } as any) : null]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                <View style={{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#8b5cf6' }}>
+                                    <Ionicons name="time" size={22} color="#fff" />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 16 }}>Restock order · KES 20,000</Text>
+                                    <Text style={{ color: '#c4b5fd', fontFamily: theme.font.medium, fontSize: 12.5 }}>Paid now by your lender</Text>
+                                </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                {[{ d: 7, x: '+KES 540' }, { d: 14, x: '+KES 840' }, { d: 28, x: '+KES 1,240' }].map((t, i) => (
+                                    <View key={t.d} style={{ flex: 1, paddingVertical: 12, borderRadius: 16, alignItems: 'center', backgroundColor: i === 1 ? '#8b5cf6' : 'rgba(255,255,255,0.1)' }}>
+                                        <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 18 }}>{t.d} days</Text>
+                                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontFamily: theme.font.semibold, fontSize: 11.5 }}>{t.x}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                            <View style={{ gap: 6, padding: 14, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.18)' }}>
+                                {[['Interest (3% · 14 days)', 'KES 600'], ['Admin fee (1%)', 'KES 200'], ['Excise duty (20% of the fee)', 'KES 40']].map(([k, v]) => (
+                                    <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                        <Text style={{ color: '#ddd6fe', fontFamily: theme.font.medium, fontSize: 13 }}>{k}</Text>
+                                        <Text style={{ color: '#fff', fontFamily: theme.font.semibold, fontSize: 13 }}>{v}</Text>
+                                    </View>
+                                ))}
+                                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 4 }} />
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                    <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 14 }}>You repay in 14 days</Text>
+                                    <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 16 }}>KES 20,840</Text>
+                                </View>
+                            </View>
+                            <Text style={{ color: '#c4b5fd', fontFamily: theme.font.medium, fontSize: 12, lineHeight: 18 }}>
+                                Example with a lender's sample rates. Loans come from CBK- and SASRA-licensed lenders; repayments go straight to them by M-Pesa.
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* ================= WaziPOS Cover (micro-insurance) */}
+                <View {...anchor('cover')} style={[section, { paddingVertical: wide ? 90 : 56 }]}>
+                    <Title eyebrow="WaziPOS Cover" title="Insurance that costs less" accent="than a soda." sub="Five micro-policies made for small businesses and riders. Opt in with one tap at checkout, when you go on duty or at the till — and see exactly what you'd get back before you pay." />
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+                        {COVER_PLANS.map((c) => (
+                            <View key={c.name} style={[{ flexGrow: 1, flexBasis: wide ? 200 : mid ? 260 : 280, borderRadius: 26, overflow: 'hidden', borderWidth: 1, borderColor: border, backgroundColor: theme.panel }, shadow(0.06)]}>
+                                <View style={[{ padding: 18, gap: 10, minHeight: 120, justifyContent: 'flex-end', overflow: 'hidden' }, gradient(c.color, `${c.color}cc`, 140)]}>
+                                    <View style={{ position: 'absolute', right: -12, top: -12, opacity: 0.18 }}>
+                                        <Ionicons name={c.icon} size={110} color="#fff" />
+                                    </View>
+                                    <View style={{ width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.22)' }}>
+                                        <Ionicons name={c.icon} size={21} color="#fff" />
+                                    </View>
+                                    <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 19, letterSpacing: -0.3 }}>{c.name}</Text>
+                                </View>
+                                <View style={{ padding: 16, gap: 8 }}>
+                                    <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 14, lineHeight: 20 }}>{c.text}</Text>
+                                    <Text style={{ color: c.color, fontFamily: theme.font.bold, fontSize: 13.5 }}>{c.price}</Text>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 24 }}>
+                        {[
+                            { icon: 'flash-outline' as IconName, t: 'Opt in where the risk is' },
+                            { icon: 'calculator-outline' as IconName, t: 'Live price & payout' },
+                            { icon: 'pricetag-outline' as IconName, t: 'Cheaper with Shop guard' },
+                            { icon: 'phone-portrait-outline' as IconName, t: 'Pay by M-Pesa' },
+                            { icon: 'document-text-outline' as IconName, t: 'Claim in the app' },
+                        ].map((x) => (
+                            <View key={x.t} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 38, paddingHorizontal: 14, borderRadius: 999, backgroundColor: theme.colors.surfaceAlt }}>
+                                <Ionicons name={x.icon} size={16} color={theme.primary} />
+                                <Text style={{ color: theme.text, fontFamily: theme.font.semibold, fontSize: 13 }}>{x.t}</Text>
+                            </View>
+                        ))}
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 26 }}>
+                        {isAuthed ? (
+                            <PrimaryButton label="Get covered" icon="shield-checkmark-outline" onPress={() => router.push('/insurance' as any)} />
+                        ) : (
+                            <PrimaryButton label="Get covered" icon="shield-checkmark-outline" onPress={() => register('customer')} />
+                        )}
+                    </View>
+                    <Text style={[muted, { fontSize: 12, textAlign: 'center', marginTop: 12 }]}>Arranged with a licensed insurance partner. Opt in now to lock your quote.</Text>
+                </View>
+
+                {/* ================= jobs board */}
+                <View {...anchor('jobs')} style={[{ paddingVertical: wide ? 90 : 56, overflow: 'hidden' }, gradient('#0b1733', '#14306e', 150)]}>
+                    <View style={[{ position: 'absolute', width: 480, height: 480, borderRadius: 240, bottom: -220, right: -120, opacity: 0.28 }, gradient(G2, '#8b5cf6')]} />
+                    <View style={section}>
+                        <Title dark eyebrow="WaziPOS Jobs" title="Hire the right people." accent="Find the right job." sub="A jobs board built into WaziPOS: businesses advertise permanent posts and locum cover, and every member can apply — from pharmacists and technologists to cashiers, chefs, riders and sales staff." />
+                        <View style={{ flexDirection: wide ? 'row' : 'column', gap: 16 }}>
+                            {[
+                                { icon: 'person' as IconName, title: 'For job seekers', points: JOBS_SEEKERS },
+                                { icon: 'business' as IconName, title: 'For employers', points: JOBS_EMPLOYERS },
+                            ].map((col) => (
+                                <View key={col.title} style={{ flex: wide ? 1 : undefined, padding: wide ? 28 : 20, gap: 16, borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                        <View style={[{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, gradient(G1, G2)]}>
+                                            <Ionicons name={col.icon} size={21} color="#fff" />
+                                        </View>
+                                        <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 20 }}>{col.title}</Text>
+                                    </View>
+                                    <View style={{ gap: 11 }}>
+                                        {col.points.map((pt) => (
+                                            <Check key={pt} text={pt} color="#7cc4ff" dark />
+                                        ))}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 28 }}>
+                            {[
+                                { icon: 'briefcase-outline' as IconName, t: 'Permanent & locum' },
+                                { icon: 'shield-checkmark-outline' as IconName, t: 'Licence-ready (PPB, KMPDC, NCK)' },
+                                { icon: 'share-social-outline' as IconName, t: 'Share jobs anywhere' },
+                                { icon: 'notifications-outline' as IconName, t: 'Applicants kept in the loop' },
+                            ].map((c) => (
+                                <View key={c.t} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 38, paddingHorizontal: 14, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                                    <Ionicons name={c.icon} size={16} color="#7cc4ff" />
+                                    <Text style={{ color: '#dbe4f8', fontFamily: theme.font.semibold, fontSize: 13 }}>{c.t}</Text>
+                                </View>
+                            ))}
+                        </View>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 28 }}>
+                            {isAuthed ? (
+                                <>
+                                    <PrimaryButton label="Browse jobs" icon="search" onPress={() => router.push('/jobs' as any)} light />
+                                    <GhostButton label="Post a job" icon="megaphone-outline" onPress={() => router.push('/jobAdverts' as any)} dark />
+                                </>
+                            ) : (
+                                <>
+                                    <PrimaryButton label="Find a job" icon="search" onPress={() => register('jobs')} light />
+                                    <GhostButton label="Hire with WaziPOS" icon="megaphone-outline" onPress={() => register('retailer')} dark />
+                                </>
+                            )}
                         </View>
                     </View>
                 </View>
@@ -723,7 +1008,7 @@ export default function WelcomeScreen() {
                                 <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 18 }}>WaziPOS</Text>
                             </View>
                             <Text style={{ color: '#9fb0d6', fontFamily: theme.font.medium, fontSize: 13, lineHeight: 20 }}>
-                                Commerce from the manufacturer to the client — stock, sell, get paid and deliver, all in one place.
+                                Commerce from the manufacturer to the client — stock, sell, get paid, deliver, finance, insure and hire, all in one place. For FMCG, pharmaceuticals, food & catering, and electricals & electronics.
                             </Text>
                         </View>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 22 }}>

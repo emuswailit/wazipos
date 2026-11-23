@@ -6,7 +6,8 @@ import RecordPaymentModal from '@/components/common/RecordPaymentModal';
 import { StaffDeliveryPlanner } from '@/components/deliveries/StaffDeliveryPlanner';
 import { useRetailerOrdersSync } from '@/context/RetailerOrdersSyncContext';
 import { WHOLESALER_RETAILER_ORDER_PAYMENT_CONFIG } from '@/hooks/useRecordPayment';
-import { Text, View } from 'react-native';
+import { OfflineNotice, PosCard, SectionTitle } from '@/components/ui/pos';
+import { Platform, Text, useWindowDimensions, View } from 'react-native';
 import OrderActionBar from './OrderActionBar';
 import OrderFormBusinessLogic from './OrderFormBusinessLogic';
 import OrderManifestFooter from './OrderManifestFooter';
@@ -30,6 +31,8 @@ export default function OrderFormContainer(
     props: OrderFormContainerProps
 ) {
     const { applyServerOrder, forceManualRefresh } = useRetailerOrdersSync();
+    const { width } = useWindowDimensions();
+    const isWideLayout = width >= 1024;
     return (
         <OrderFormBusinessLogic
             user={props.user}
@@ -52,173 +55,96 @@ export default function OrderFormContainer(
                             onScanSuccess={state.processBarcodeScanResult}
                             onCloseScanner={() => state.setIsScanningOpen(false)}
                         />
-                        <View
-                            className="rounded-xl p-6 w-full max-w-5xl shadow-md relative"
-                            style={{
-                                backgroundColor:
-                                    props.theme.panel,
-                            }}
-                        >
+
+                        <View className="w-full max-w-6xl">
                             {/* -------- Orders saved offline, not yet on the server -------- */}
                             <PendingSyncBanner kind="wholesale" />
 
-                            {/* -------- Toast -------- */}
-                            {state.submitToast && (
-                                <View
-                                    style={{
-                                        backgroundColor:
-                                            state.submitToast.includes(
-                                                'Success'
-                                            )
-                                                ? '#10b981'
-                                                : props.theme
-                                                    .primary,
-                                        zIndex: 99999,
-                                    }}
-                                    className="absolute -top-4 left-6 right-6 p-3.5 rounded-xl shadow-xl border border-white/20 items-center justify-center animate-bounce"
-                                >
-                                    <Text className="text-white text-xs font-black tracking-wide uppercase text-center">
-                                        {state.submitToast}
-                                    </Text>
-                                </View>
-                            )}
-
-                            {/* -------- Header -------- */}
                             <OrderManifestHeader
                                 theme={props.theme}
                                 user={props.user}
                                 syncStatus={state.syncStatus}
-                                isNetworkLoading={
-                                    state.isSyncLoading ||
-                                    state.isSubmitting
-                                }
-                                onResetWorkspaceTrigger={
-                                    handleManualFormWipeReset
-                                }
+                                isNetworkLoading={state.isSyncLoading || state.isSubmitting}
+                                onResetWorkspaceTrigger={handleManualFormWipeReset}
                             />
 
-                            {/* -------- Retailer entity picker -------- */}
-                            <EntityAutocomplete
-                                entities={state.retailers}
-                                value={state.selectedRetailer}
-                                onSelect={
-                                    state.setSelectedRetailer
-                                }
-                                entityTypes={[
-                                    'GeneralRetailer',
-                                    'PharmaceuticalRetailer',
-                                ]}
-                                label="1. Select Retailer / Customer Profile"
-                                placeholder="Type retail shop name to search (e.g. Lael)..."
-                                helperText="You must search and assign a verified retail shop outlet before building the product manifest ledger."
-                                required
-                            />
+                            {!state.isOnline ? (
+                                <OfflineNotice message="The order is saved on this device as paid in cash (the retailer collects it) and sent to the server as soon as you're back online." />
+                            ) : null}
 
-                            {/* -------- Top ActionBar (1 row only) -------- */}
-                            {state.formRows.length === 1 && (
-                                <OrderActionBar
-                                    theme={props.theme}
-                                    onScanTrigger={() =>
-                                        state.setIsScanningOpen(
-                                            true
-                                        )
-                                    }
-                                    onAddRowTrigger={
-                                        state.addFormRow
-                                    }
-                                />
-                            )}
+                            <View className="w-full flex-col lg:flex-row items-start" style={{ gap: 16 }}>
+                                {/* ======== Left: retailer + items ======== */}
+                                <View className="w-full lg:flex-1" style={{ minWidth: 0 }}>
+                                    <PosCard style={{ zIndex: 60 }}>
+                                        <SectionTitle step={1} title="Retailer" hint="Search a verified retail shop to sell to" />
+                                        <EntityAutocomplete
+                                            entities={state.retailers}
+                                            value={state.selectedRetailer}
+                                            onSelect={state.setSelectedRetailer}
+                                            entityTypes={['GeneralRetailer', 'PharmaceuticalRetailer']}
+                                            label="Retailer"
+                                            placeholder="Type the shop name…"
+                                            required
+                                        />
+                                    </PosCard>
 
-                            {/* -------- Manifest -------- */}
-                            <View
-                                onLayout={(e) => {
-                                    if (
-                                        props.onTableLayoutCapture
-                                    )
-                                        props.onTableLayoutCapture(
-                                            e.nativeEvent
-                                                .layout.y
-                                        );
-                                }}
-                                className="w-full"
-                            >
-                                <ProductManifestTable
-                                    theme={props.theme}
-                                    formRows={state.formRows}
-                                    onRemoveRow={
-                                        state.removeFormRow
-                                    }
-                                    onUpdateRow={
-                                        state.updateRowState
-                                    }
-                                    onTriggerScanner={() =>
-                                        state.setIsScanningOpen(
-                                            true
-                                        )
-                                    }
-                                />
-                            </View>
-
-                            {/* -------- Bottom ActionBar (2+ rows) -------- */}
-                            {state.formRows.length > 1 && (
-                                <OrderActionBar
-                                    theme={props.theme}
-                                    onScanTrigger={() =>
-                                        state.setIsScanningOpen(
-                                            true
-                                        )
-                                    }
-                                    onAddRowTrigger={
-                                        state.addFormRow
-                                    }
-                                />
-                            )}
-
-                            {/* -------- Fulfilment: pickup, or delivery (person / company / courier) -------- */}
-                            <View className="w-full my-3" style={{ gap: 6 }}>
-                                <Text
-                                    style={{ color: props.theme.text, fontFamily: props.theme.font?.bold, fontSize: 13 }}
-                                >
-                                    2. Fulfilment
-                                </Text>
-                                <StaffDeliveryPlanner
-                                    state={state.delivery}
-                                    loadOptions={state.loadDeliveryOptions}
-                                    optionsKey={state.deliveryOptionsKey}
-                                    notReadyHint={state.deliveryNotReadyHint}
-                                    pickupLabel="Retailer collects"
-                                />
-                                {state.isOnline ? (
-                                    <Text style={{ color: props.theme.textDark, fontFamily: props.theme.font?.medium, fontSize: 11.5 }}>
-                                        3. Payment is taken right after the order is created — mobile money prompts the retailer's phone; cash or credit is recorded.
-                                    </Text>
-                                ) : (
-                                    <View className="rounded-xl px-3 py-2.5" style={{ backgroundColor: '#d9770618', borderWidth: 1.5, borderColor: '#d97706' }}>
-                                        <Text style={{ color: '#d97706', fontFamily: props.theme.font?.bold, fontSize: 13 }}>
-                                            📴 Offline — CASH sales only
-                                        </Text>
-                                        <Text style={{ color: props.theme.text, fontFamily: props.theme.font?.medium, fontSize: 12 }}>
-                                            The order is saved on this device as paid in cash (the retailer collects it) and sent to the server as soon as you're back online.
-                                        </Text>
+                                    <View
+                                        onLayout={(e) => {
+                                            if (props.onTableLayoutCapture) props.onTableLayoutCapture(e.nativeEvent.layout.y);
+                                        }}
+                                        className="w-full"
+                                    >
+                                        <ProductManifestTable
+                                            theme={props.theme}
+                                            formRows={state.formRows}
+                                            onRemoveRow={state.removeFormRow}
+                                            onUpdateRow={state.updateRowState}
+                                            onTriggerScanner={() => state.setIsScanningOpen(true)}
+                                        />
                                     </View>
-                                )}
-                            </View>
 
-                            {/* -------- Footer -------- */}
-                            <OrderManifestFooter
-                                theme={props.theme}
-                                notes={state.notes}
-                                onNotesChange={state.setNotes}
-                                grandTotalCost={
-                                    state.grandTotalCost
-                                }
-                                deliveryFee={state.delivery.fee}
-                                submitLabel={state.isOnline ? undefined : 'Save offline (cash sale)'}
-                                isButtonLoading={
-                                    state.isSubmitting
-                                }
-                                onSubmit={state.handleSubmit}
-                            />
+                                    <OrderActionBar
+                                        theme={props.theme}
+                                        onScanTrigger={() => state.setIsScanningOpen(true)}
+                                        onAddRowTrigger={state.addFormRow}
+                                    />
+                                </View>
+
+                                {/* ======== Right: fulfilment + checkout (sticky on web) ======== */}
+                                <PosCard
+                                    style={[
+                                        { width: '100%', padding: 18, borderRadius: 20 },
+                                        isWideLayout ? { width: 380, ...(Platform.OS === 'web' ? ({ position: 'sticky', top: 12 } as any) : null) } : null,
+                                    ]}
+                                >
+                                    <SectionTitle step={3} title="Fulfilment" />
+                                    <StaffDeliveryPlanner
+                                        state={state.delivery}
+                                        loadOptions={state.loadDeliveryOptions}
+                                        optionsKey={state.deliveryOptionsKey}
+                                        notReadyHint={state.deliveryNotReadyHint}
+                                        pickupLabel="Retailer collects"
+                                    />
+                                    {state.isOnline ? (
+                                        <Text style={{ color: props.theme.textMuted, fontFamily: props.theme.font?.regular, fontSize: 12, lineHeight: 17, marginTop: 10, marginBottom: 6 }}>
+                                            Payment is taken right after the order is created — mobile money prompts the retailer's phone; cash or credit is recorded.
+                                        </Text>
+                                    ) : null}
+
+                                    <View style={{ height: 1, backgroundColor: props.theme.border, marginVertical: 14 }} />
+
+                                    <OrderManifestFooter
+                                        theme={props.theme}
+                                        notes={state.notes}
+                                        onNotesChange={state.setNotes}
+                                        grandTotalCost={state.grandTotalCost}
+                                        deliveryFee={state.delivery.fee}
+                                        submitLabel={state.isOnline ? undefined : 'Save offline (cash sale)'}
+                                        isButtonLoading={state.isSubmitting}
+                                        onSubmit={state.handleSubmit}
+                                    />
+                                </PosCard>
+                            </View>
                         </View>
 
                         {/* Payment for the order just created */}

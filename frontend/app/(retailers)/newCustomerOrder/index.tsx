@@ -5,7 +5,10 @@ import PendingSyncBanner from '@/components/common/PendingSyncBanner';
 import { useNetworkStatus } from '@/context/NetworkMonitorContext';
 import PaymentStatusModal from '@/components/common/PaymentStatusModal';
 import { UniversalScannerModal } from '@/components/common/UniversalScannerModal';
-import { FulfillmentControls, FulfillmentModal } from '@/components/retailers/newCustomerOrder/FulfillmentModal';
+import { FulfillmentControls, FulfillmentModal, saveButtonStyle } from '@/components/retailers/newCustomerOrder/FulfillmentModal';
+import { ChevronRight, ScanLine, ShoppingBag } from 'lucide-react-native';
+import { OfflineNotice } from '@/components/ui/pos';
+import { toast } from '@/components/common/Toast';
 import { OrderMainSection } from '@/components/retailers/newCustomerOrder/OrderMainSection';
 import { useAuth } from '@/context/AuthContext';
 import { useCreateOrder } from '@/hooks/useCreateOrder';
@@ -45,6 +48,11 @@ export default function CreateOrderScreen() {
 
     const lastRowId = lineItems[lineItems.length - 1]?.id;
 
+    // Success notices slide in as a toast (payment progress has its own dialog).
+    useEffect(() => {
+        if (successMessage && !wsStatus) toast.success('Done', successMessage);
+    }, [successMessage, wsStatus]);
+
     useEffect(() => {
         if (successMessage && !wsStatus) {
             const timer = setTimeout(() => setSuccessMessage(null), 4000);
@@ -68,23 +76,11 @@ export default function CreateOrderScreen() {
         setIsBottomSheetVisible(true);
     }, [setIsBottomSheetVisible]);
 
-    const grandTotal = Number(totals?.total ?? 0).toFixed(2);
+    const grandTotalLabel = Number(totals?.total ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const itemCount = lineItems.filter((l: any) => !!l.selectedProduct).length;
 
     return (
         <SafeAreaView style={{ backgroundColor: theme.background }} className="flex-1 w-full relative" edges={[]}>
-
-            {/* !! so an empty string never renders as a bare text node inside the View */}
-            {!!successMessage && !wsStatus && (
-                <View style={{ backgroundColor: theme.panel, borderColor: '#10b981' }} className="absolute top-4 left-4 right-4 p-3 rounded-xl border-2 shadow-2xl flex-row items-center space-x-3 z-50">
-                    <View style={{ backgroundColor: 'rgba(16,185,129,0.1)' }} className="w-8 h-8 rounded-full items-center justify-center">
-                        <Text style={{ fontFamily: theme.font.bold, color: '#10b981' }}>✓</Text>
-                    </View>
-                    <View className="flex-1 flex-col">
-                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }}>Success</Text>
-                        <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.textDark }}>{successMessage}</Text>
-                    </View>
-                </View>
-            )}
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
                 <View className="flex-1 relative">
@@ -98,19 +94,25 @@ export default function CreateOrderScreen() {
                         {/* Cash sales saved offline and not yet on the server */}
                         <PendingSyncBanner kind="customer" />
                         {!isOnline ? (
-                            <View className="w-full rounded-xl px-3 py-2.5 mb-3" style={{ backgroundColor: '#d9770618', borderWidth: 1.5, borderColor: '#d97706' }}>
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: '#d97706' }}>📴 Offline — CASH sales only</Text>
-                                <Text style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.text }}>
-                                    Sales are saved on this device (stock is taken off locally) and sent to the server as soon as the connection is back.
-                                </Text>
-                            </View>
+                            <OfflineNotice message="Sales are saved on this device (stock is taken off locally) and sent to the server as soon as the connection is back." />
                         ) : null}
-                        <View className="w-full flex flex-col md:flex-row justify-between items-start md:items-center pb-3 mb-4 border-b border-slate-200 gap-y-2 relative z-40">
-                            <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.lg, color: theme.text }}>
-                                New Customer Order
-                            </Text>
-                            <TouchableOpacity onPress={() => setIsScannerOpen(true)} style={{ backgroundColor: theme.primary }} className="hidden lg:flex px-4 py-2 rounded-lg shadow-sm active:scale-95 flex-row items-center">
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm }} className="text-white">📷 Scan Barcodes</Text>
+                        <View className="w-full flex-row justify-between items-center mb-4 relative z-40" style={{ gap: 12 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                                <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: theme.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                                    <ShoppingBag size={20} color={theme.primary} strokeWidth={2.2} />
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text numberOfLines={1} style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.lg, color: theme.text, letterSpacing: -0.2 }}>
+                                        New sale
+                                    </Text>
+                                    <Text numberOfLines={1} style={{ fontFamily: theme.font.medium, fontSize: theme.fontSize.xs, color: theme.textMuted }}>
+                                        {itemCount} {itemCount === 1 ? 'item' : 'items'} · KES {grandTotalLabel}
+                                    </Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity onPress={() => setIsScannerOpen(true)} style={{ backgroundColor: theme.navy, gap: 8 }} className="hidden lg:flex px-4 h-11 rounded-xl active:opacity-90 flex-row items-center">
+                                <ScanLine size={16} color="#fff" strokeWidth={2.4} />
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: '#fff' }}>Scan barcodes</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -126,28 +128,56 @@ export default function CreateOrderScreen() {
                                 />
                             </View>
 
-                            <View style={{ backgroundColor: theme.panel }} className="hidden lg:flex w-[340px] z-20 p-4 rounded-xl border border-slate-200 shadow-xs">
+                            <View
+                                style={{
+                                    backgroundColor: theme.panel, borderColor: theme.border, borderWidth: 1, borderRadius: 20,
+                                    shadowColor: '#0b1733', shadowOpacity: 0.07, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 3,
+                                    ...(Platform.OS === 'web' ? ({ position: 'sticky', top: 12 } as any) : null),
+                                }}
+                                className="hidden lg:flex w-[360px] z-20 p-5"
+                            >
                                 <FulfillmentControls
                                     {...fulfilmentProps}
                                     paymentMethodsList={paymentMethodsList} selectedPaymentMethodId={selectedPaymentMethodId}
                                     setSelectedPaymentMethodId={setSelectedPaymentMethodId} isPaymentSyncing={isPaymentSyncing}
                                     paymentDetails={paymentDetails} setPaymentDetails={setPaymentDetails} totals={totals}
                                 />
-                                <TouchableOpacity onPress={handleSaveOrder} disabled={isSaving || !selectedPaymentMethodId} style={{ backgroundColor: theme.primary, opacity: (isSaving || !selectedPaymentMethodId) ? 0.5 : 1 }} className="mt-4 w-full py-2.5 rounded-lg flex-row items-center justify-center shadow-sm">
-                                    {isSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base }} className="text-white">{isRetryingPayment ? 'Retry Payment' : 'Save Order'}</Text>}
+                                <TouchableOpacity onPress={handleSaveOrder} disabled={isSaving || !selectedPaymentMethodId} style={[saveButtonStyle(theme), { opacity: (isSaving || !selectedPaymentMethodId) ? 0.5 : 1 }]} className="mt-5 w-full h-[52px] rounded-2xl flex-row items-center justify-center">
+                                    {isSaving ? <ActivityIndicator size="small" color="#fff" /> : (
+                                        <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: '#fff' }}>
+                                            {isRetryingPayment ? 'Retry payment' : `Save order · KES ${grandTotalLabel}`}
+                                        </Text>
+                                    )}
                                 </TouchableOpacity>
+                                {!selectedPaymentMethodId ? (
+                                    <Text style={{ fontFamily: theme.font.medium, fontSize: 11, color: theme.textMuted, textAlign: 'center', marginTop: 8 }}>
+                                        Pick a payment method to continue
+                                    </Text>
+                                ) : null}
                             </View>
                         </View>
                     </ScrollView>
 
-                    <View className="lg:hidden absolute bottom-0 left-0 right-0 px-3 pt-2 pb-3 border-t border-slate-200" style={{ backgroundColor: theme.panel }}>
+                    <View
+                        className="lg:hidden absolute bottom-0 left-0 right-0 px-4 pt-3 pb-4"
+                        style={{
+                            backgroundColor: theme.panel, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+                            borderTopWidth: 1, borderColor: theme.border,
+                            shadowColor: '#0b1733', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 12,
+                        }}
+                    >
                         <View className="flex-row items-center justify-between">
                             <View className="flex-col flex-1 mr-3">
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: 10, color: theme.textDark }} className="uppercase">Order Total</Text>
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.base, color: theme.text }}>KES {grandTotal}</Text>
+                                <Text style={{ fontFamily: theme.font.semibold, fontSize: 11, color: theme.textMuted }}>
+                                    {itemCount} {itemCount === 1 ? 'item' : 'items'} · Total
+                                </Text>
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: 20, color: theme.text, letterSpacing: -0.3 }}>
+                                    <Text style={{ fontSize: 12, color: theme.textMuted }}>KES </Text>{grandTotalLabel}
+                                </Text>
                             </View>
-                            <TouchableOpacity onPress={openFulfillmentSheet} style={{ backgroundColor: theme.primary, minWidth: 130 }} className="py-2.5 px-4 rounded-lg items-center justify-center shadow-sm">
-                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm }} className="text-white">Review & Save</Text>
+                            <TouchableOpacity onPress={openFulfillmentSheet} style={[saveButtonStyle(theme), { minWidth: 150, gap: 6 }]} className="h-12 px-5 rounded-2xl flex-row items-center justify-center">
+                                <Text style={{ fontFamily: theme.font.bold, fontSize: theme.fontSize.sm, color: '#fff' }}>Review & pay</Text>
+                                <ChevronRight size={16} color="#fff" strokeWidth={2.6} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -162,7 +192,15 @@ export default function CreateOrderScreen() {
                         isRetryingPayment={isRetryingPayment}
                     />
 
-                    <UniversalScannerModal visible={isScannerOpen} onClose={() => setIsScannerOpen(false)} onBarcodeScanned={handleBarcodeScannedContinuously} />
+                    <UniversalScannerModal
+                        visible={isScannerOpen}
+                        onClose={() => setIsScannerOpen(false)}
+                        onBarcodeScanned={handleBarcodeScannedContinuously}
+                        lookup={(code) => {
+                            const hit = retailerReceipts.find((r: any) => r.bar_code === code);
+                            return hit ? { title: String(hit.title || code) } : null;
+                        }}
+                    />
                     <ApiErrorModal visible={!!errorMessage} message={errorMessage} errors={[]} onClose={() => setErrorMessage(null)} />
 
                     <PaymentStatusModal

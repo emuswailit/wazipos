@@ -21,14 +21,10 @@ import { useAuth } from '@/context/AuthContext';
 
 import AgentFormSheet, { type AgentFormValues } from './AgentFormSheet';
 import { agentDetailsConfig, agentsConfig } from './agentsConfig';
+import { errorText } from '@/utils/apiFeedback';
 
 type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'OWED' | 'BLACKLISTED';
 
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
-};
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
 
 export default function AgentsList() {

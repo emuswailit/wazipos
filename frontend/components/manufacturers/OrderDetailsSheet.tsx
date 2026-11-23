@@ -1,3 +1,5 @@
+import { errorText } from '@/utils/apiFeedback';
+import InsuranceOffer from '@/components/insurance/InsuranceOffer';
 // components/manufacturers/OrderDetailsSheet.tsx
 //
 // One distributor order on a manufacturer, for either side:
@@ -17,12 +19,7 @@ import React, { useEffect, useState } from 'react';
 import { Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 export const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
-export const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join('\n');
-    if (errs && typeof errs === 'object') return Object.values(errs).flat().join('\n');
-    return res?.data?.response_message || res?.problem || fallback;
-};
+export { errorText } from '@/utils/apiFeedback';
 
 export default function OrderDetailsSheet({
     order: initial,
@@ -163,6 +160,17 @@ export default function OrderDetailsSheet({
                     </View>
                 </View>
 
+                {/* WaziPOS Cover: the buyer can insure goods on their way (until delivered). */}
+                {role === 'buyer' && order.delivery_method === 'COURIER' && !arrived && s !== 'REJECTED' && s !== 'CANCELLED' ? (
+                    <InsuranceOffer
+                        product="SAFE_PARCEL"
+                        source="b2b_order"
+                        variant="strip"
+                        context={{ subject_kind: 'manufacturer', subject_id: String(order.id), inputs: { value: Math.max(100, Math.round(Number(order.final_price_total) || 0)) } }}
+                        subjectLabel={`Delivery of order ${order.reference_number ?? ''}`.trim()}
+                        locked={['value']}
+                    />
+                ) : null}
                 {s === 'REJECTED' ? note(`Rejected: ${order.rejected_reason}`) : null}
 
                 {/* ---- payment */}

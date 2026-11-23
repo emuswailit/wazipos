@@ -1,3 +1,4 @@
+import { errorText } from '@/utils/apiFeedback';
 // api/deliveriesApi.ts
 //
 // Deliveries — POST /logistics/deliveries (backend logistics/views.py
@@ -339,25 +340,7 @@ const PROBLEM_TEXT: Record<string, string> = {
  * {field: [msgs]}), and finally the HTTP status — never a bare "CLIENT_ERROR".
  */
 export function apiError(res: any, fallback: string): string {
-    const data = res?.data;
-    const errs = data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    if (typeof errs === 'string' && errs) return errs;
-    if (data?.response_message) return String(data.response_message);
-    if (data?.detail) return String(data.detail);
-    if (Array.isArray(data) && data.length) return data.map(String).join(' ');
-    if (data && typeof data === 'object') {
-        const msgs = Object.values(data).flat().filter((v) => typeof v === 'string') as string[];
-        if (msgs.length) return msgs.join(' ');
-    }
-    const status = Number(res?.status);
-    if (status === 401) return 'Your session has expired. Sign in again.';
-    if (status === 403) return "You don't have access to this.";
-    if (status === 404) return 'This feature is not on the server yet.';
-    if (status === 429) return 'Too many requests. Wait a moment and try again.';
-    const problem = PROBLEM_TEXT[res?.problem];
-    if (problem) return status ? `${problem} (${status})` : problem;
-    return status ? `${fallback} (${status})` : fallback;
+    return errorText(res, fallback);
 }
 
 export const isOk = (res: any) => !!res?.ok && String(res?.data?.response_code) === '0';

@@ -23,14 +23,9 @@ import { Formik } from 'formik';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import * as Yup from 'yup';
+import { errorText } from '@/utils/apiFeedback';
 
 const ok = (res: any) => res?.ok && String(res.data?.response_code) === '0';
-const errorText = (res: any, fallback: string) => {
-    const errs = res?.data?.errors;
-    if (Array.isArray(errs) && errs.length) return errs.join(' ');
-    if (errs && typeof errs === 'object') return Object.values(errs).flat().join(' ');
-    return res?.data?.response_message || res?.data?.detail || res?.problem || fallback;
-};
 const newDraftId = () => `ob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 const UNITS: Record<'RETAILER' | 'WHOLESALER', string[]> = {

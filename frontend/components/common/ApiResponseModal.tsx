@@ -29,15 +29,11 @@
 //
 // Delete `PaymentErrorModal.tsx` — this replaces it.
 
-import { useAuth, type ThemeShape } from '@/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
+import { fieldErrors, prettyField } from '@/utils/apiFeedback';
+import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react-native';
 import React from 'react';
-import {
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
-} from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 /* =========================================================
  * Envelope
@@ -140,282 +136,61 @@ export default function ApiResponseModal({
     closeLabel = 'Close',
 }: ApiResponseModalProps) {
     const { theme, isDarkMode } = useAuth();
-    const borderColor = isDarkMode ? '#334155' : '#e2e8f0';
-
-    if (!isOpen) return null;
-
+    const { width } = useWindowDimensions();
     const isError = variant === 'error';
-    const accent = isError ? '#f43f5e' : '#10b981';
-    const accentBg = isError
-        ? 'rgba(244,63,94,0.08)'
-        : 'rgba(16,185,129,0.08)';
-    const accentBorder = isError
-        ? 'rgba(244,63,94,0.20)'
-        : 'rgba(16,185,129,0.20)';
-
-    const defaultTitle = isError
-        ? 'Something went wrong'
-        : 'Success';
-
-    const message =
-        envelope?.response_message ?? fallbackMessage ?? null;
-
-    const code = envelope?.response_code ?? null;
-    const errors = envelope?.errors ?? null;
-    const hasErrorList = hasErrors(errors);
-
-    const showRetry = !!onRetry;
+    const color = isError ? theme.danger : theme.success;
+    const Icon = isError ? XCircle : CheckCircle2;
+    const message = envelope?.response_message || fallbackMessage || (isError ? 'Something went wrong. Please try again.' : 'Done.');
+    const list = fieldErrors({ errors: envelope?.errors });
+    const pointer = Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : null;
 
     return (
-        <Modal
-            visible={isOpen}
-            animationType="fade"
-            transparent
-            onRequestClose={onClose}
-        >
-            <View className="flex-1 justify-center items-center p-4 bg-black/60">
+        <Modal visible={isOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: isDarkMode ? 'rgba(2,6,23,0.72)' : 'rgba(11,23,51,0.45)' }}>
                 <View
-                    className="w-full max-w-sm rounded-2xl p-6 border items-center flex-col"
+                    accessibilityRole="alert"
                     style={{
-                        backgroundColor: theme.panel,
-                        borderColor,
+                        width: '100%', maxWidth: Math.min(460, width - 40), backgroundColor: theme.panel,
+                        borderRadius: 24, borderWidth: 1, borderColor: theme.border, overflow: 'hidden',
+                        shadowColor: '#0b1733', shadowOpacity: 0.25, shadowRadius: 40, shadowOffset: { width: 0, height: 20 }, elevation: 24,
                     }}
                 >
-                    {/* ---------- Icon ---------- */}
-                    <View
-                        className="w-14 h-14 rounded-full items-center justify-center mb-4"
-                        style={{
-                            backgroundColor: `${accent}1a`,
-                            borderWidth: 1,
-                            borderColor: `${accent}33`,
-                        }}
-                    >
-                        <Text
-                            style={{
-                                color: accent,
-                                fontFamily: theme.font.bold,
-                                fontSize: theme.fontSize.xl,
-                            }}
-                        >
-                            {isError ? '✕' : '✓'}
+                    <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ padding: 22, paddingBottom: 8, alignItems: 'center' }}>
+                        <View style={{ width: 52, height: 52, borderRadius: 18, backgroundColor: `${color}1c`, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                            <Icon size={26} color={color} strokeWidth={2.2} />
+                        </View>
+                        <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 17, textAlign: 'center', letterSpacing: -0.2 }}>
+                            {title ?? (isError ? 'Request failed' : 'Success')}
                         </Text>
-                    </View>
-
-                    {/* ---------- Title ---------- */}
-                    <Text
-                        className="uppercase tracking-wide text-center"
-                        style={{
-                            color: theme.text,
-                            fontFamily: theme.font.bold,
-                            fontSize: theme.fontSize.lg,
-                        }}
-                    >
-                        {title ?? defaultTitle}
-                    </Text>
-
-                    {subtitle ? (
-                        <Text
-                            className="mt-2 uppercase tracking-widest"
-                            style={{
-                                color: theme.textDark,
-                                fontFamily: theme.font.mono,
-                                fontSize: theme.fontSize.xs,
-                                opacity: 0.7,
-                            }}
-                            numberOfLines={1}
-                        >
-                            {subtitle}
-                        </Text>
-                    ) : null}
-
-                    {/* ---------- Details card ---------- */}
-                    <View
-                        className="w-full p-3 rounded-xl mt-3.5"
-                        style={{
-                            backgroundColor: accentBg,
-                            borderWidth: 1,
-                            borderColor: accentBorder,
-                        }}
-                    >
-                        {message ? (
-                            <Text
-                                className="text-center"
-                                style={{
-                                    color: accent,
-                                    fontFamily: theme.font.semibold,
-                                    fontSize: theme.fontSize.sm,
-                                }}
-                            >
-                                {message}
-                            </Text>
-                        ) : null}
-
-                        {code ? (
-                            <Text
-                                className="text-center mt-1"
-                                style={{
-                                    color: accent,
-                                    fontFamily: theme.font.mono,
-                                    fontSize: theme.fontSize.xs,
-                                    opacity: 0.75,
-                                }}
-                            >
-                                code: {code}
-                            </Text>
-                        ) : null}
-
-                        {hasErrorList ? (
-                            <View className="mt-2.5">
-                                <Text
-                                    className="uppercase tracking-widest mb-1"
-                                    style={{
-                                        color: accent,
-                                        fontFamily: theme.font.bold,
-                                        fontSize: 9,
-                                        opacity: 0.8,
-                                    }}
-                                >
-                                    Details
-                                </Text>
-                                <ScrollView
-                                    style={{ maxHeight: 140 }}
-                                    showsVerticalScrollIndicator={false}
-                                >
-                                    <ErrorList
-                                        errors={errors}
-                                        theme={theme}
-                                        accent={accent}
-                                    />
-                                </ScrollView>
+                        {subtitle ? <Text style={{ color: theme.textMuted, fontFamily: theme.font.mono ?? theme.font.medium, fontSize: 12, marginTop: 4 }}>{subtitle}</Text> : null}
+                        <Text style={{ color: theme.textMuted, fontFamily: theme.font.regular, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 8 }}>{message}</Text>
+                        {list.length ? (
+                            <View style={{ alignSelf: 'stretch', marginTop: 16, borderRadius: 16, backgroundColor: `${color}12`, padding: 14, gap: 10 }}>
+                                {list.map((e, i) => (
+                                    <View key={`${e.field}-${i}`} style={{ flexDirection: 'row', gap: 8 }}>
+                                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginTop: 7 }} />
+                                        <View style={{ flex: 1 }}>
+                                            {e.field ? <Text style={{ color, fontFamily: theme.font.bold, fontSize: 11, letterSpacing: 0.4, textTransform: 'uppercase' }}>{prettyField(e.field)}</Text> : null}
+                                            <Text style={{ color: theme.text, fontFamily: theme.font.medium, fontSize: 13.5, lineHeight: 19 }}>{e.message}</Text>
+                                        </View>
+                                    </View>
+                                ))}
                             </View>
                         ) : null}
-
-                        {!message && !hasErrorList ? (
-                            <Text
-                                className="text-center"
-                                style={{
-                                    color: accent,
-                                    fontFamily: theme.font.mono,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                            >
-                                {isError
-                                    ? 'The request could not be completed.'
-                                    : 'Operation completed successfully.'}
-                            </Text>
-                        ) : null}
-                    </View>
-
-                    {/* ---------- Actions ---------- */}
-                    <View className="w-full flex-row gap-2 mt-5">
-                        <Pressable
-                            onPress={onClose}
-                            accessibilityRole="button"
-                            accessibilityLabel={closeLabel}
-                            className="flex-1 h-11 rounded-xl border items-center justify-center"
-                            style={{ borderColor }}
-                        >
-                            <Text
-                                className="uppercase tracking-wide"
-                                style={{
-                                    color: theme.textDark,
-                                    fontFamily: theme.font.bold,
-                                    fontSize: theme.fontSize.xs,
-                                }}
-                            >
-                                {closeLabel}
-                            </Text>
-                        </Pressable>
-
-                        {showRetry ? (
-                            <Pressable
-                                onPress={onRetry}
-                                accessibilityRole="button"
-                                accessibilityLabel={retryLabel}
-                                className="flex-1 h-11 rounded-xl items-center justify-center"
-                                style={{
-                                    backgroundColor: theme.primary,
-                                }}
-                            >
-                                <Text
-                                    className="uppercase tracking-wide text-white"
-                                    style={{
-                                        fontFamily: theme.font.bold,
-                                        fontSize: theme.fontSize.xs,
-                                    }}
-                                >
-                                    {retryLabel}
-                                </Text>
+                    </ScrollView>
+                    <View style={{ flexDirection: 'row', gap: 8, padding: 16, paddingTop: 12 }}>
+                        {onRetry ? (
+                            <Pressable onPress={onRetry} accessibilityRole="button" style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: theme.surfaceAlt, ...pointer }}>
+                                <RefreshCw size={15} color={theme.text} strokeWidth={2.3} />
+                                <Text style={{ color: theme.text, fontFamily: theme.font.bold, fontSize: 14.5 }}>{retryLabel}</Text>
                             </Pressable>
                         ) : null}
+                        <Pressable onPress={onClose} accessibilityRole="button" style={{ flex: 1, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.primary, ...pointer }}>
+                            <Text style={{ color: '#fff', fontFamily: theme.font.bold, fontSize: 14.5 }}>{closeLabel}</Text>
+                        </Pressable>
                     </View>
                 </View>
             </View>
         </Modal>
-    );
-}
-
-/* =========================================================
- * Errors
- * ======================================================= */
-
-function hasErrors(errors: any): boolean {
-    if (!errors) return false;
-    if (Array.isArray(errors)) return errors.length > 0;
-    if (typeof errors === 'object') {
-        return Object.keys(errors).length > 0;
-    }
-    return false;
-}
-
-function ErrorList({
-    errors,
-    theme,
-    accent,
-}: {
-    errors: any;
-    theme: ThemeShape;
-    accent: string;
-}) {
-    const rows: { key: string; text: string }[] = [];
-
-    if (Array.isArray(errors)) {
-        errors.forEach((e, i) => {
-            rows.push({
-                key: `arr-${i}`,
-                text: typeof e === 'string' ? e : JSON.stringify(e),
-            });
-        });
-    } else if (errors && typeof errors === 'object') {
-        Object.entries(errors).forEach(([field, val]) => {
-            const text = Array.isArray(val)
-                ? val.join(' · ')
-                : String(val);
-            rows.push({
-                key: `field-${field}`,
-                text: `${field}: ${text}`,
-            });
-        });
-    }
-
-    if (rows.length === 0) return null;
-
-    return (
-        <View>
-            {rows.map((r) => (
-                <Text
-                    key={r.key}
-                    style={{
-                        color: accent,
-                        fontFamily: theme.font.regular,
-                        fontSize: theme.fontSize.xs,
-                        lineHeight: 16,
-                        marginBottom: 3,
-                    }}
-                >
-                    • {r.text}
-                </Text>
-            ))}
-        </View>
     );
 }

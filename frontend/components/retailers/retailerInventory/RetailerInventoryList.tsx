@@ -7,6 +7,7 @@
 import { InventorySyncStrip } from '@/components/common/inventory/InventorySyncStrip';
 import { INVENTORY_FILTER_ICONS, INVENTORY_FILTER_LABELS, INVENTORY_FILTERS, formatKES, type InventoryFilter } from '@/components/common/inventory/inventoryHelpers';
 import { buildInventoryConfig } from '@/components/common/inventory/inventoryListConfig';
+import { useForecastHints } from '@/components/common/inventory/useForecastHints';
 import { useInventoryList } from '@/components/common/inventory/useInventoryList';
 import { AdminListView, DetailsDock } from '@/components/common/listScreen';
 import PendingSyncBanner from '@/components/common/PendingSyncBanner';
@@ -18,14 +19,16 @@ import { useWindowDimensions, View } from 'react-native';
 import { InventoryDetailsModal } from './InventoryDetailsModal';
 import RetailerInventoryAddModal from './RetailerInventoryAddModal';
 
-const config = buildInventoryConfig({
+const configArgs = {
     title: 'Inventory',
     addLabel: 'Receive stock',
     emptyMessage: 'Stock you receive (or receive from wholesaler orders) shows here.',
     showBuyingPrice: true,
-});
+};
 
 export default function RetailerInventoryList() {
+    const forecastHints = useForecastHints();
+    const config = useMemo(() => buildInventoryConfig({ ...configArgs, forecast: forecastHints }), [forecastHints]);
     const {
         retailerReceipts,
         forceManualRefresh,

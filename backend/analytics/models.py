@@ -880,3 +880,38 @@ class ForecastAccuracy(EntityRelatedModel):
 
     def __str__(self):
         return f"{self.period_end} {self.product_id} WAPE={self.wape:.3f}"
+
+
+# =====================================================================
+# ForecastAdjustment — context the history can't see
+# =====================================================================
+
+class ForecastAdjustment(EntityRelatedModel):
+    """
+    "Demand for this product will be +20% from 5 to 19 Jan (school opening)."
+
+    Proposed by the AI analyst from what the owner tells it (or entered by the owner),
+    and applied only once the owner accepts it. The forecast engine multiplies the
+    product's daily forecast by (1 + pct/100) inside the window and tags those rows
+    "+adj", so the backtest shows whether adjusted forecasts beat plain ones.
+    """
+
+    TIER_CHOICES = (("WHOLESALER", "WHOLESALER"), ("RETAILER", "RETAILER"))
+    SOURCES = (("AI", "AI analyst"), ("USER", "Owner"))
+
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, db_index=True)
+    product = models.ForeignKey(Products, on_delete=models.CASCADE, related_name="forecast_adjustments")
+    pct = models.FloatField(help_text="Change to daily demand, e.g. 20 = +20%, -15 = -15%.")
+    starts_on = models.DateField()
+    ends_on = models.DateField()
+    reason = models.CharField(max_length=300)
+    source = models.CharField(max_length=10, choices=SOURCES, default="AI")
+    is_active = models.BooleanField(default=True, db_index=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+        indexes = [models.Index(fields=["entity", "tier", "is_active", "ends_on"])]
+
+    def __str__(self):
+        return f"{self.product_id} {self.pct:+.0f}% {self.starts_on}..{self.ends_on}"

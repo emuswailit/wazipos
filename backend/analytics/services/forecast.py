@@ -75,10 +75,21 @@ def build_forecasts(
     # All history for the window in ONE query (was one query per product).
     histories = _load_histories(run_date)
 
+    # v2 corrections, each learned from the business's own data:
+    calendar = _calendar_factors(histories)             # payday week / public holidays per entity
+    bias = _bias_factors(run_date)                      # last backtest: forecasts ran high / low
+    adjustments = _active_adjustments(run_date, horizon_days)  # owner-approved context (AI analyst)
+
     all_forecasts = []
     for profile in profiles.iterator(chunk_size=200):
-        history = histories.get((profile.entity_id, profile.product_id, profile.tier), [])
-        forecasts = _forecast_for_profile(profile, run_date, horizon_days, history)
+        key = (profile.entity_id, profile.product_id, profile.tier)
+        history = histories.get(key, [])
+        context = {
+            "calendar": calendar.get(profile.entity_id),
+            "bias": bias.get(key, 1.0),
+            "adjustments": adjustments.get(key, []),
+        }
+        forecasts = _forecast_for_profile(profile, run_date, horizon_days, history, context)
         all_forecasts.extend(forecasts)
 
     with transaction.atomic():
@@ -103,7 +114,7 @@ def build_forecasts(
 # Per-product forecast
 # =====================================================================
 
-def _forecast_for_profile(profile, run_date, horizon_days, history=None):
+def _forecast_for_profile(profile, run_date, horizon_days, history=None, context=None):
     """
     Produce DemandForecast rows for one product profile.
     """
@@ -117,15 +128,23 @@ def _forecast_for_profile(profile, run_date, horizon_days, history=None):
 
     series = _to_series(history, run_date)
 
-    model_name, predict_fn = _select_model(profile.demand_pattern, series)
+    model_name, predict_fn = _select_champion(profile.demand_pattern, series)
+    context = context or {}
+    bias = float(context.get("bias") or 1.0)
+    calendar = context.get("calendar")
+    adjustments = context.get("adjustments") or []
 
     forecasts = []
     for h in range(1, horizon_days + 1):
         forecast_date = run_date + timedelta(days=h)
         point, p10, p90 = predict_fn(h)
-        point = max(0.0, point)   # demand can't be negative
-        p10 = max(0.0, p10)
-        p90 = max(0.0, p90)
+        factor = bias * _calendar_factor(calendar, forecast_date)
+        adj = _adjustment_factor(adjustments, forecast_date)
+        factor *= adj
+        point = max(0.0, point * factor)   # demand can't be negative
+        p10 = max(0.0, p10 * factor)
+        p90 = max(0.0, p90 * factor)
+        name = f"{model_name}+adj" if adj != 1.0 else model_name
 
         forecasts.append(DemandForecast(
             entity_id=profile.entity_id,
@@ -138,7 +157,8 @@ def _forecast_for_profile(profile, run_date, horizon_days, history=None):
             p10=p10,
             p50=point,
             p90=p90,
-            model_name=model_name,
+            model_name=name,
+            model_version=MODEL_VERSION,
             segment=profile.demand_pattern or "unknown",
         ))
     return forecasts
@@ -200,6 +220,180 @@ def _to_series(history, run_date):
         if 0 <= idx < n_days:
             series[idx] = v
     return series
+
+
+# =====================================================================
+# v2: champion selection, Kenyan calendar, bias correction, adjustments
+# =====================================================================
+
+MODEL_VERSION = "2.0"
+
+# Champion selection: every candidate forecasts the last CHAMPION_HOLDOUT days from
+# the history before them; the lowest error wins — but it must beat the
+# pattern-routed model by CHAMPION_MARGIN, so a lucky fortnight doesn't flip models.
+CHAMPION_HOLDOUT = 14
+CHAMPION_MIN_HISTORY = 42
+CHAMPION_MARGIN = 0.05
+
+# Fixed-date Kenyan public holidays (Easter and Idd move; they're left to the history).
+KE_HOLIDAYS = {(1, 1), (5, 1), (6, 1), (10, 10), (10, 20), (12, 12), (12, 25), (12, 26)}
+
+
+def _is_payday(d):
+    """End-of-month / start-of-month salary window, when many Kenyan shops sell more."""
+    return d.day >= 25 or d.day <= 3
+
+
+def _candidates():
+    return {
+        "ses": lambda s: _ses(s),
+        "ses_fast": lambda s: _ses(s, alpha=0.5),
+        "holt": lambda s: _holt(s),
+        "holt_winters": lambda s: _holt_winters(s, season_length=7),
+        "croston": lambda s: _croston(s),
+        "wma": lambda s: _wma(s, window=14),
+        "seasonal_naive": lambda s: _seasonal_naive(s),
+    }
+
+
+def _holdout_error(predict_fn, actual):
+    preds = [max(0.0, float(predict_fn(h)[0])) for h in range(1, len(actual) + 1)]
+    abs_err = sum(abs(f - a) for f, a in zip(preds, actual))
+    total = float(sum(actual))
+    # WAPE where there were sales; mean absolute error on an all-zero window.
+    return abs_err / total if total > 0 else abs_err / max(1, len(actual))
+
+
+def _select_champion(pattern, series):
+    """The pattern-routed model, unless another candidate is clearly more accurate on recent days."""
+    routed_name, routed_fn = _select_model(pattern, series)
+    if len(series) < CHAMPION_MIN_HISTORY:
+        return routed_name, routed_fn
+    train, test = series[:-CHAMPION_HOLDOUT], series[-CHAMPION_HOLDOUT:]
+    scores = {}
+    for name, build in _candidates().items():
+        try:
+            scores[name] = _holdout_error(build(train), test)
+        except Exception:  # a model that can't fit this series just doesn't compete
+            continue
+    if not scores:
+        return routed_name, routed_fn
+    best = min(scores, key=scores.get)
+    base = scores.get(routed_name)
+    if best != routed_name and (base is None or scores[best] < base * (1 - CHAMPION_MARGIN)):
+        return best, _candidates()[best](series)
+    return routed_name, routed_fn
+
+
+def _seasonal_naive(series, season_length=7, weeks=4):
+    """Average of the same weekday over the last few weeks."""
+    n = len(series)
+
+    def predict(h):
+        start_k = -(-h // season_length)  # ceil(h / 7): the first week back that's in the past
+        idx = [n - 1 + h - season_length * k for k in range(start_k, start_k + weeks)]
+        vals = [float(series[i]) for i in idx if 0 <= i < n]
+        if not vals:
+            return 0.0, 0.0, 0.0
+        point = float(np.mean(vals))
+        sigma = float(np.std(vals)) if len(vals) > 1 else point * 0.3
+        return point, max(0.0, point - 1.28 * sigma), point + 1.28 * sigma
+
+    return predict
+
+
+def _calendar_factors(histories, min_days=90):
+    """
+    Per entity: how much busier payday week and public holidays are than ordinary days,
+    from the entity's total daily demand. Shrunk toward 1 and normalised so the
+    month's average demand is unchanged (the models already learned the average).
+    """
+    totals = defaultdict(lambda: defaultdict(float))
+    for (entity_id, _p, _t), rows in histories.items():
+        for d, q in rows:
+            totals[entity_id][d] += q
+    out = {}
+    for entity_id, by_date in totals.items():
+        if not by_date:
+            continue
+        start, end = min(by_date), max(by_date)
+        days = (end - start).days + 1
+        if days < min_days:
+            continue
+        pay, normal, hol = [], [], []
+        for i in range(days):
+            d = start + timedelta(days=i)
+            v = by_date.get(d, 0.0)
+            if (d.month, d.day) in KE_HOLIDAYS:
+                hol.append(v)
+            elif _is_payday(d):
+                pay.append(v)
+            else:
+                normal.append(v)
+        base = float(np.mean(normal)) if normal else 0.0
+        if base <= 0:
+            continue
+        f_pay = min(1.3, max(0.85, float(np.mean(pay)) / base)) if pay else 1.0
+        f_pay = 1 + 0.7 * (f_pay - 1)
+        f_hol = min(1.5, max(0.6, float(np.mean(hol)) / base)) if len(hol) >= 2 else 1.0
+        f_hol = 1 + 0.5 * (f_hol - 1)
+        share = 10 / 30.4  # payday-window days in an average month
+        mean_f = share * f_pay + (1 - share)
+        out[entity_id] = {"payday": f_pay / mean_f, "normal": 1 / mean_f, "holiday": f_hol / mean_f}
+    return out
+
+
+def _calendar_factor(calendar, d):
+    if not calendar:
+        return 1.0
+    if (d.month, d.day) in KE_HOLIDAYS:
+        return calendar["holiday"]
+    return calendar["payday"] if _is_payday(d) else calendar["normal"]
+
+
+def _bias_factors(run_date):
+    """
+    Products whose last backtest ran consistently high or low get nudged back —
+    half the measured gap, capped at ±25%, and only with two weeks of evidence.
+    """
+    from analytics.models import ForecastAccuracy
+
+    latest = (
+        ForecastAccuracy.objects.filter(period_end__lte=run_date)
+        .order_by("entity_id", "product_id", "tier", "-period_end")
+        .distinct("entity_id", "product_id", "tier")
+        .values("entity_id", "product_id", "tier", "actual_total", "forecast_total", "n_observations")
+    )
+    out = {}
+    for r in latest.iterator(chunk_size=2000):
+        f_total, a_total = float(r["forecast_total"] or 0), float(r["actual_total"] or 0)
+        if (r["n_observations"] or 0) < 14 or f_total <= 0:
+            continue
+        ratio = a_total / f_total
+        out[(r["entity_id"], r["product_id"], r["tier"])] = min(1.25, max(0.75, 1 + 0.5 * (ratio - 1)))
+    return out
+
+
+def _active_adjustments(run_date, horizon_days):
+    from analytics.models import ForecastAdjustment
+
+    out = defaultdict(list)
+    rows = ForecastAdjustment.objects.filter(
+        is_active=True,
+        ends_on__gte=run_date + timedelta(days=1),
+        starts_on__lte=run_date + timedelta(days=horizon_days),
+    ).values("entity_id", "product_id", "tier", "starts_on", "ends_on", "pct")
+    for r in rows:
+        out[(r["entity_id"], r["product_id"], r["tier"])].append((r["starts_on"], r["ends_on"], float(r["pct"])))
+    return out
+
+
+def _adjustment_factor(adjustments, d):
+    factor = 1.0
+    for start, end, pct in adjustments:
+        if start <= d <= end:
+            factor *= max(0.2, 1 + pct / 100)
+    return factor
 
 
 # =====================================================================

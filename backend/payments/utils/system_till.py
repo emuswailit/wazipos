@@ -62,6 +62,18 @@ def push_to_system_till(order_id, amount, phone, description="TOPUP"):
         system_till = collection_account()
     except Exception as e:
         return [str(e)], None, None
+    return push_to_account(system_till, order_id, amount, phone, description)
+
+
+def push_to_account(account_to, order_id, amount, phone, description="TOPUP"):
+    """
+    STK push of `amount` from `phone` straight into `account_to` (a JamboPay wallet).
+    Used where money must not pass through WaziPOS, e.g. loan repayments that go
+    directly to the lender's own wallet. Same return shape as push_to_system_till.
+    """
+    system_till = str(account_to or "").strip()
+    if not system_till:
+        return ["No account to pay into"], None, None
 
     try:
         telco, formatted_phone = get_telco_by_phone_number(phone)
