@@ -3,7 +3,6 @@
 import json
 
 from asgiref.sync import sync_to_async
-from core.ws_access import ws_access  # who may open each socket
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from retailers.models import RetailerProductRequest
@@ -16,7 +15,6 @@ from wholesalers.serializers import (
 )
 
 
-@ws_access(entity_types=("Wholesaler",))
 class WholesalerInventoryConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -69,7 +67,6 @@ class WholesalerInventoryConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
-@ws_access(entity_types=("Wholesaler",))
 class RetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -127,7 +124,6 @@ class RetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
-@ws_access(entity_types=("Wholesaler",))
 class FilteredRetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
@@ -190,7 +186,6 @@ class FilteredRetailerOrdersConsumer(AsyncJsonWebsocketConsumer):
         })
 
 
-@ws_access(entity_types=("Wholesaler",))
 class WholesalerProductRequestsConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):

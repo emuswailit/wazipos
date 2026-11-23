@@ -22,12 +22,10 @@ class UUIDEncoder(json.JSONEncoder):
 import asyncio
 import json
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from core.ws_access import ws_access  # who may open each socket
 
 
 
 
-@ws_access(roles=("Agent",), platform_admin=True)
 class AgentUsersConsumer(AsyncJsonWebsocketConsumer):
     
     async def connect(self):
@@ -84,7 +82,6 @@ class AgentUsersConsumer(AsyncJsonWebsocketConsumer):
         
 
 
-@ws_access(roles=("Agent",), platform_admin=True)
 class AgentEntitiesConsumer(AsyncJsonWebsocketConsumer):
     
     async def connect(self):
@@ -137,7 +134,6 @@ class AgentEntitiesConsumer(AsyncJsonWebsocketConsumer):
                 })
 
 
-@ws_access()
 class ClientEntitiesConsumer(AsyncJsonWebsocketConsumer):
     
     async def connect(self):
@@ -181,7 +177,6 @@ class ClientEntitiesConsumer(AsyncJsonWebsocketConsumer):
                     
                 })
 
-@ws_access(platform_admin=True)
 class AccessLogsConsumer(AsyncJsonWebsocketConsumer):
     """
     ws/authentication/access-logs/ — platform admins only. Sends
