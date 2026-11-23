@@ -23,9 +23,78 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 
 
 # Create your views here.
+import logging
+import traceback
+
+from utils.logging import create_log
+
+wifi_log = logging.getLogger("wifi.api")
+
+
+def _log(level, msg):
+    """Both the app log (utils.logging) and the server console."""
+    getattr(wifi_log, level, wifi_log.info)(msg)
+    try:
+        create_log(level, msg)
+    except Exception:
+        pass
+
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def wifiAPIView(request):
+    """Logs every call (who, which business, what came back) and any crash with its traceback."""
+    user = request.user
+    action = request.data.get("action") if hasattr(request.data, "get") else None
+    entity = getattr(user, "entity", None)
+    who = f"user={user.pk} staff={user.is_staff} entity={getattr(entity, 'pk', None)} ({getattr(entity, 'title', None)}, {getattr(entity, 'entity_type', None)})"
+    _log("info", f"[wifi] {action} <- {who}")
+    try:
+        response = _wifi_dispatch(request)
+    except exceptions.APIException:
+        raise
+    except Exception as e:
+        _log("error", f"[wifi] {action} CRASHED for {who}: {e} | {traceback.format_exc()}")
+        from django.http import JsonResponse
+
+        return JsonResponse(
+            {"response_code": 1, "response_message": "Server problem", "errors": [f"{type(e).__name__}: {e}"], "action": action},
+            status=500,
+        )
+    data = getattr(response, "data", None)
+    if isinstance(data, dict):
+        rows = data.get("results")
+        detail = f"count={data.get('count')} returned={len(rows)}" if isinstance(rows, list) else f"response_code={data.get('response_code')} message={data.get('response_message')}"
+    else:
+        detail = f"type={type(data).__name__}"
+    _log("info", f"[wifi] {action} -> HTTP {getattr(response, 'status_code', '?')} {detail}")
+    if isinstance(data, dict) and data.get("count") == 0 and action in _LIST_MODELS:
+        _explain_empty(action, entity)
+    return response
+
+
+_LIST_MODELS = {
+    "GetWifiRouters": "WifiRouters",
+    "GetWifiTariffs": "WifiTarrifs",
+    "GetWifiSubscriptions": "WifiSubscriptions",
+    "GetWifiPayments": "WifiSubscriptionPayments",
+}
+
+
+def _explain_empty(action, entity):
+    """An empty list: say where the rows actually are (usually another business)."""
+    try:
+        from django.db.models import Count
+
+        model = getattr(models, _LIST_MODELS[action])
+        total = model.objects.count()
+        owners = list(model.objects.values("entity_id", "entity__title").annotate(n=Count("id")).order_by("-n")[:5])
+        _log("warning", f"[wifi] {action} empty for entity={getattr(entity, 'pk', None)}; {total} rows in all. Held by: {owners}")
+    except Exception as e:
+        _log("error", f"[wifi] {action} empty-list diagnosis failed: {e}")
+
+
+def _wifi_dispatch(request):
     customer_orders = []
     try:
         action = request.data["action"]
