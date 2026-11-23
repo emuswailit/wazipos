@@ -56,6 +56,7 @@ from retailers.serializers import (
     RetailerReceiptsSerializer,
 )
 from utils.UUIDEncoder import UUIDEncoder
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 logger = logging.getLogger("retailers.consumers")
 
@@ -617,14 +618,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
         if should_poll:
             try:
-                the_data = {
-                    "client_id": config("JAMBOPAY_CLIENT_ID"),
-                    "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                    "grant_type": config("JAMBOPA_GRANT_TYPE"),
-                }
-                headers = {"Content-Type": "application/x-www-form-urlencoded"}
-                auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-                token = auth_res.json().get("access_token") if auth_res.json() else None
+                _auth_error, token = get_jambopay_token()
                 
                 if not token:
                     create_log("error", "❌ Failed to authenticate with JamboPay.")
@@ -1275,14 +1269,7 @@ class CustomerOrderPaymentConsumer(AsyncJsonWebsocketConsumer):
 
         if should_poll:
             try:
-                the_data = {
-                    "client_id": config("JAMBOPAY_CLIENT_ID"),
-                    "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                    "grant_type": config("JAMBOPA_GRANT_TYPE"),
-                }
-                headers = {"Content-Type": "application/x-www-form-urlencoded"}
-                auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-                token = auth_res.json().get("access_token") if auth_res.json() else None
+                _auth_error, token = get_jambopay_token()
                 
                 if not token:
                     create_log("error", "❌ Failed to authenticate with JamboPay.")

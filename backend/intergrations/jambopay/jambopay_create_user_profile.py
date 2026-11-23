@@ -1,12 +1,11 @@
 from decouple import config
 import requests
 
-# from intergrations.jambopay.jambopay_generate_token import get_auth_token
+from intergrations.jambopay.get_jp_token import get_auth_token  # the one cached JamboPay token
 
 def create_jambopay_profile(profile_data):
     errors =[]
-    # token = get_auth_token()
-    token =""
+    token = get_auth_token()
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Authorization": "Bearer " + token,

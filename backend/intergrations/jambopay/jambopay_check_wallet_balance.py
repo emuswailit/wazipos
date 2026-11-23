@@ -1,12 +1,11 @@
 from email import errors
-# from intergrations.jambopay.jambopay_generate_token import get_auth_token
+from intergrations.jambopay.get_jp_token import get_auth_token  # the one cached JamboPay token
 from decouple import config
 import requests
 import asyncio
 def check_wallet_balance(data):
     errors=[]
-    token=None
-    # token = get_auth_token()
+    token = get_auth_token()
 
     headers = {
                 "Authorization": "Bearer " + token,

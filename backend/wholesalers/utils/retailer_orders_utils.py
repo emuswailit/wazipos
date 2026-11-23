@@ -37,6 +37,7 @@ from utils.logging import create_log
 from intergrations.mpesa import mpesa_express_api,  transaction_status_api,c2b_register_url
 from intergrations.jambopay.jambopay_wallet import  jambopay_wallet_checkout, get_wallet_balance
 from core.utils import random_string_generator
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 from payments.validators.payments_models_validators import (
     validate_payment_method_exists,
 )
@@ -126,25 +127,9 @@ def process_customer_order_payment(retailer_order, payment_method, user, mobile_
             errors.append(f"Unsupported mobile network operator: {telco}")
             return errors, retailer_order
 
-        the_data = {
-            "client_id": config("JAMBOPAY_CLIENT_ID"),
-            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE"),
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        
-        try:
-            result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-            result_json = result.json()
-        except Exception as e:
-            errors.append(f"Auth network request failed: {str(e)}")
-            return errors, retailer_order
-
-        token = None
-        if result_json and "access_token" in result_json:
-            token = result_json["access_token"]
-        else:
-            errors.append("Invalid response format received from auth provider")
+        auth_error, token = get_jambopay_token()
+        if not token:
+            errors.append(f"Auth network request failed: {auth_error}")
             return errors, retailer_order
             
         if token:

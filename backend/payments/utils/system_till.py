@@ -30,25 +30,120 @@ _CALLBACK_URLS = {
 }
 
 
-def get_jambopay_token():
-    """Returns (error, token)."""
+# ---------------------------------------------------------------- JamboPay token (cached)
+#
+# One JamboPay sign-in serves every caller until shortly before it expires, instead
+# of a sign-in per request / poll / payout. Shared by all processes (gunicorn,
+# Daphne, Celery) through Redis; an in-process copy covers Redis being down.
+# Callers that get HTTP 401 call invalidate_jambopay_token() and ask again.
+
+import threading
+import time
+
+_TOKEN_KEY = "wazipos:jambopay:token"
+_TOKEN_MARGIN = 120          # renew this many seconds before JamboPay's expiry
+_TOKEN_DEFAULT_TTL = 25 * 60  # when JamboPay doesn't say how long it lasts
+_token_lock = threading.Lock()
+_local = {"token": None, "until": 0.0}
+_redis_client = None
+
+
+def _redis():
+    """The Redis already used by Celery / Channels, or None."""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis
+
+            url = config("JAMBOPAY_TOKEN_REDIS_URL", default=config("CELERY_BROKER_URL", default="redis://127.0.0.1:6379/0"))
+            _redis_client = redis.Redis.from_url(url, socket_timeout=2, socket_connect_timeout=2)
+        except Exception:
+            _redis_client = False
+    return _redis_client or None
+
+
+def _cached_token():
+    now = time.time()
+    if _local["token"] and _local["until"] > now:
+        return _local["token"]
+    r = _redis()
+    if r is not None:
+        try:
+            raw = r.get(_TOKEN_KEY)
+            ttl = r.ttl(_TOKEN_KEY)
+            if raw:
+                token = raw.decode() if isinstance(raw, bytes) else str(raw)
+                _local["token"], _local["until"] = token, now + max(30, ttl if ttl and ttl > 0 else 60)
+                return token
+        except Exception:
+            pass
+    return None
+
+
+def _store_token(token, expires_in):
     try:
-        res = requests.post(
-            config("JAMBOPAY_AUTH_URL1"),
-            data={
-                "client_id": config("JAMBOPAY_CLIENT_ID"),
-                "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                "grant_type": config("JAMBOPA_GRANT_TYPE"),
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=20,
-        )
-        token = (res.json() or {}).get("access_token")
-    except Exception as e:
-        return f"JamboPay sign-in failed: {e}", None
-    if not token:
-        return "JamboPay did not issue a token", None
-    return None, token
+        life = int(expires_in) if expires_in else _TOKEN_DEFAULT_TTL
+    except (TypeError, ValueError):
+        life = _TOKEN_DEFAULT_TTL
+    ttl = max(60, life - _TOKEN_MARGIN)
+    _local["token"], _local["until"] = token, time.time() + ttl
+    r = _redis()
+    if r is not None:
+        try:
+            r.set(_TOKEN_KEY, token, ex=ttl)
+        except Exception:
+            pass
+
+
+def invalidate_jambopay_token():
+    """JamboPay rejected the token (HTTP 401): forget it everywhere."""
+    _local["token"], _local["until"] = None, 0.0
+    r = _redis()
+    if r is not None:
+        try:
+            r.delete(_TOKEN_KEY)
+        except Exception:
+            pass
+
+
+def get_jambopay_token(force=False):
+    """Returns (error, token). Cached; signs in to JamboPay only when needed."""
+    if not force:
+        token = _cached_token()
+        if token:
+            return None, token
+    with _token_lock:
+        if not force:
+            token = _cached_token()  # another thread may have just signed in
+            if token:
+                return None, token
+        try:
+            res = requests.post(
+                config("JAMBOPAY_AUTH_URL1"),
+                data={
+                    "client_id": config("JAMBOPAY_CLIENT_ID"),
+                    "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
+                    "grant_type": config("JAMBOPA_GRANT_TYPE"),
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=20,
+            )
+            body = res.json() or {}
+            token = body.get("access_token")
+        except Exception as e:
+            return f"JamboPay sign-in failed: {e}", None
+        if not token:
+            return "JamboPay did not issue a token", None
+        _store_token(token, body.get("expires_in"))
+        return None, token
+
+
+def jambopay_token_or_none(context=""):
+    """The cached token, or None (logged) — for code that only needs the token."""
+    error, token = get_jambopay_token()
+    if error:
+        create_log("error", f"{context + ': ' if context else ''}{error}")
+    return token
 
 
 def push_to_system_till(order_id, amount, phone, description="TOPUP"):
@@ -133,6 +228,18 @@ def fetch_transaction(order_id, token=None):
             headers={"Authorization": f"Bearer {token}", "Accept": "*/*"},
             timeout=20,
         )
+        if res.status_code == 401:
+            # Token expired early / revoked: sign in again once.
+            invalidate_jambopay_token()
+            error, token = get_jambopay_token(force=True)
+            if error:
+                create_log("error", error)
+                return None
+            res = requests.get(
+                config("JAMBOPAY_BASE_URL") + f"/wallet/transaction/{order_id}",
+                headers={"Authorization": f"Bearer {token}", "Accept": "*/*"},
+                timeout=20,
+            )
         if res.status_code != 200:
             return None
         data = res.json() or {}

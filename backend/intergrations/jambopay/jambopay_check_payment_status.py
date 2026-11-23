@@ -1,12 +1,11 @@
 import requests
 from decouple import config
 
-# from intergrations.jambopay.jambopay_wallet import get_auth_token
+from intergrations.jambopay.get_jp_token import get_auth_token  # the one cached JamboPay token
 
 def jambopay_check_payment_status(ref):
     errors =[]
-    # token = get_auth_token()
-    token =""
+    token = get_auth_token() or ""
 
     headers = {
                 "Authorization": "Bearer " + token,
@@ -59,8 +58,7 @@ def check_payment_status(ref,token):
         return ["No result json"], None
 def jambopay_check_payment_status(ref):
     errors =[]
-    # token = get_auth_token()
-    token =""
+    token = get_auth_token() or ""
 
     headers = {
                 "Authorization": "Bearer " + token,

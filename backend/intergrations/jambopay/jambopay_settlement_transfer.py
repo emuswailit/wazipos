@@ -1,4 +1,5 @@
-# from intergrations.jambopay.jambopay_generate_token import get_auth_token
+from intergrations.jambopay.get_jp_token import get_auth_token  # the one cached JamboPay token
+from intergrations.jambopay.jambopay_wallet import legacy_money_token  # money moves stay off
 from decouple import config
 import requests
 
@@ -6,8 +7,7 @@ import requests
 def jambopay_settlement_wallet_transfer(data):
     errors =[]
 
-    # token = get_auth_token()
-    token=None
+    token = legacy_money_token("jambopay_settlement_wallet_transfer")
     headers = {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + token,

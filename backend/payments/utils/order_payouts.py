@@ -284,31 +284,84 @@ def _on_paid(row):
         )
 
 
-def _poll_processing(token):
+# JamboPay's words for a payout's state (fetch_transaction upper-cases them).
+PAYOUT_PAID = {"SUCCESS", "SUCCESSFUL", "COMPLETED", "COMPLETE", "PAID"}
+PAYOUT_FAILED = {"FAILED", "FAILURE", "CANCELLED", "CANCELED", "REVERSED", "DECLINED", "REJECTED", "EXPIRED"}
+
+
+def payout_lookup(row, token):
+    """
+    Ask JamboPay about one payout. JamboPay's own reference (row.psp_reference, from
+    the /payout reply) is tried first, then our orderId (row.reference_number).
+    Returns (state, tx, looked_up_by) with state PAID | FAILED | PENDING | UNKNOWN.
+    """
     from payments.utils.system_till import fetch_transaction
 
-    stale = timezone.now() - timedelta(minutes=2)
-    lost = timezone.now() - timedelta(minutes=15)
-    for row in OrderPayouts.objects.filter(status=OrderPayouts.Status.PROCESSING, updated__lte=stale)[:200]:
-        tx = fetch_transaction(row.reference_number, token)
-        status = (tx or {}).get("status")
-        if tx is None and not row.psp_reference and row.updated <= lost:
-            # JamboPay never registered it: send again under a new reference.
-            row.status = OrderPayouts.Status.DUE if row.attempts < MAX_ATTEMPTS else OrderPayouts.Status.FAILED
-            row.reference_number, row.note = None, "Payout not registered; retrying"
-            row.save(update_fields=["status", "reference_number", "note", "updated"])
+    for label, ref in (("JamboPay ref", row.psp_reference), ("orderId", row.reference_number)):
+        if not ref:
             continue
-        if status == "SUCCESS":
-            row.status, row.paid_at = OrderPayouts.Status.PAID, timezone.now()
-            row.psp_reference = str(tx.get("providerRef") or tx.get("ref") or row.psp_reference or "")[:120]
-            row.save(update_fields=["status", "paid_at", "psp_reference", "updated"])
-            _on_paid(row)
-        elif status in ("FAILED", "CANCELLED", "REVERSED"):
-            # Confirmed failure: a retry gets a fresh reference.
-            row.status = OrderPayouts.Status.DUE if row.attempts < MAX_ATTEMPTS else OrderPayouts.Status.FAILED
-            row.note = str(tx.get("description") or "Payout failed")[:300]
-            row.reference_number, row.psp_reference = None, None
-            row.save(update_fields=["status", "note", "reference_number", "psp_reference", "updated"])
+        tx = fetch_transaction(ref, token)
+        raw = str((tx or {}).get("status") or "").upper()
+        if not raw:
+            continue
+        if raw in PAYOUT_PAID:
+            return "PAID", tx, f"{label} {ref}"
+        if raw in PAYOUT_FAILED:
+            return "FAILED", tx, f"{label} {ref}"
+        return "PENDING", tx, f"{label} {ref}"
+    return "UNKNOWN", None, None
+
+
+def apply_payout_status(row, token):
+    """
+    Bring a PROCESSING payout up to date from JamboPay (the payouts job and the
+    "Check payout status" button both use this). Returns the state found.
+      PAID     -> PAID, source marked settled
+      FAILED   -> DUE again under a fresh reference (FAILED after MAX_ATTEMPTS)
+      PENDING  -> stays PROCESSING; JamboPay's own status kept in the note
+                  (e.g. "awaiting authorization")
+      UNKNOWN  -> after 15 min with no JamboPay reference: never registered, resend
+    """
+    state, tx, by = payout_lookup(row, token)
+    raw = str((tx or {}).get("status") or "").upper()
+    desc = str((tx or {}).get("description") or (tx or {}).get("message") or "")[:200]
+    create_log(
+        "info",
+        f"Payout {row.reference_number} ({row.order_kind} {row.order_reference}) at JamboPay "
+        f"via {by or 'orderId/ref'}: {raw or 'not found'}{(' - ' + desc) if desc else ''}",
+    )
+    if state == "PAID":
+        row.status, row.paid_at = OrderPayouts.Status.PAID, timezone.now()
+        row.psp_reference = str(tx.get("providerRef") or tx.get("ref") or row.psp_reference or "")[:120]
+        row.note = ""
+        row.save(update_fields=["status", "paid_at", "psp_reference", "note", "updated"])
+        _on_paid(row)
+    elif state == "FAILED":
+        # Confirmed failure: a retry gets a fresh reference.
+        row.status = OrderPayouts.Status.DUE if row.attempts < MAX_ATTEMPTS else OrderPayouts.Status.FAILED
+        row.note = (f"JamboPay: {raw}" + (f" - {desc}" if desc else ""))[:300]
+        row.reference_number, row.psp_reference = None, None
+        row.save(update_fields=["status", "note", "reference_number", "psp_reference", "updated"])
+    elif state == "PENDING":
+        note = (f"JamboPay: {raw}" + (f" - {desc}" if desc else ""))[:300]
+        if note != row.note:
+            row.note = note
+            row.save(update_fields=["note", "updated"])
+    elif not row.psp_reference and row.updated <= timezone.now() - timedelta(minutes=15):
+        # JamboPay never registered it: send again under a new reference.
+        row.status = OrderPayouts.Status.DUE if row.attempts < MAX_ATTEMPTS else OrderPayouts.Status.FAILED
+        row.reference_number, row.note = None, "Payout not registered at JamboPay; retrying"
+        row.save(update_fields=["status", "reference_number", "note", "updated"])
+    return state
+
+
+def _poll_processing(token):
+    stale = timezone.now() - timedelta(minutes=2)
+    for row in OrderPayouts.objects.filter(status=OrderPayouts.Status.PROCESSING, updated__lte=stale)[:200]:
+        try:
+            apply_payout_status(row, token)
+        except Exception as e:  # one bad row never stops the others
+            create_log("error", f"Payout status check {row.reference_number}: {e}")
 
 
 def _send_due(token):
@@ -336,6 +389,11 @@ def _send_due(token):
                 config("JAMBOPAY_BASE_URL") + "/payout", data=json.dumps(payload),
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}", "Accept": "*/*"}, timeout=30,
             )
+            if res.status_code == 401:
+                # Token rejected: drop the cached one so the next run signs in afresh.
+                from payments.utils.system_till import invalidate_jambopay_token
+
+                invalidate_jambopay_token()
             body = res.json() if res.content else {}
         except Exception as e:
             # Unknown outcome (timeout…): stays PROCESSING under the same reference;

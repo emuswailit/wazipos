@@ -65,12 +65,32 @@ def payout_of(payment):
     return OrderPayouts.objects.filter(order_kind="wifi_payment", order_id=str(payment.pk)).select_related("entity_account").first()
 
 
+def payout_stage(row):
+    """What the owner should read: the ledger status, plus the cases it doesn't spell out."""
+    from payments.utils.order_payouts import MIN_PAYOUT
+
+    if row is None:
+        return None
+    if row.status == "DUE" and row.amount < MIN_PAYOUT:
+        return "BELOW_MINIMUM"  # JamboPay pays KES 10+; never sent automatically
+    if row.status == "PROCESSING" and not row.psp_reference:
+        return "SENDING"  # handed to JamboPay, no reference back yet
+    return row.status
+
+
 def payout_out(row):
+    from payments.utils.order_payouts import MIN_PAYOUT
+
     if row is None:
         return None
     return {
         "id": str(row.id),
         "status": row.status,
+        "stage": payout_stage(row),
+        "min_payout": str(MIN_PAYOUT),
+        "attempts": row.attempts,
+        "reference_number": row.reference_number,
+        "updated": row.updated.isoformat() if row.updated else None,
         "status_label": row.get_status_display(),
         "amount": str(row.amount),
         "fee": str(row.commission_amount),
@@ -439,12 +459,56 @@ def monitor():
     return summary
 
 
+def refresh_payout(payment, token=None):
+    """
+    Ask JamboPay where this payment's payout is, now (instead of waiting for the
+    2-minute payouts job), and update the ledger the same way the job does:
+      SUCCESS            -> PAID (and the payment is marked settled)
+      FAILED / CANCELLED -> DUE again with a fresh reference (retried), or FAILED after 3 tries
+      not found & no ref after 15 min -> DUE again (never reached JamboPay)
+      DUE / NO_ACCOUNT / FAILED -> the payouts job is kicked to send it now
+    Returns the payout row (or None).
+    """
+    from payments.models import OrderPayouts
+    from payments.utils.order_payouts import apply_payout_status
+    from payments.utils.system_till import get_jambopay_token
+
+    row = payout_of(payment)
+    if row is None:
+        return None
+    ref = payment.reference_number or payment.pk
+    if row.status == OrderPayouts.Status.PROCESSING and (row.reference_number or row.psp_reference):
+        if token is None:
+            error, token = get_jambopay_token()
+            if error:
+                create_log("error", f"[wifi-payout] {ref}: cannot check payout: {error}")
+                return row
+        state = apply_payout_status(row, token)
+        create_log("info", f"[wifi-payout] {ref}: payout check -> {state}")
+        row.refresh_from_db()
+    if row.status in (OrderPayouts.Status.DUE, OrderPayouts.Status.NO_ACCOUNT, OrderPayouts.Status.FAILED):
+        try:
+            from payments.tasks import process_order_payouts
+
+            process_order_payouts.delay()
+        except Exception as e:
+            log.warning("could not queue payouts now: %s", e)
+    row.refresh_from_db()
+    broadcast(payment.pk)
+    return row
+
+
 def recheck(user, payment_id):
-    """An owner's admin (or a WaziPOS admin) asks for a payment to be checked now."""
+    """An owner's admin (or a WaziPOS admin) asks for a payment and its payout to be checked now."""
     p = WifiSubscriptionPayments.objects.select_related("entity", "tariff").filter(pk=payment_id).first()
     if p is None or not can_watch(user, p.entity):
         return None
     resolve(p)
+    p.refresh_from_db()
+    try:
+        refresh_payout(p)
+    except Exception as e:
+        create_log("error", f"[wifi-payout] {p.reference_number}: payout check failed: {e}")
     p.refresh_from_db()
     return payment_out(p)
 

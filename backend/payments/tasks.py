@@ -27,6 +27,7 @@ from wifi.models import WifiSubscriptionPayments
 from wholesalers.models import RetailerOrderPayments
 from rest_framework import status
 import json
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 # from datetime import datetime
 # from apscheduler.schedulers.background import BackgroundScheduler
@@ -457,17 +458,7 @@ def _legacy_process_wifi_payments():
     if WifiSubscriptionPayments.objects.filter(is_settled="false",status="SUCCESS",amount__gte=10).exists():
         unsettled_payments = WifiSubscriptionPayments.objects.filter(is_settled="false",status="SUCCESS",amount__gte=10).all()
         #Generate token here
-        the_data = {
-                "client_id": config("JAMBOPAY_CLIENT_ID"),
-                "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                "grant_type": config("JAMBOPA_GRANT_TYPE"),
-            }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            # Execute the post
-        result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-        result_json = result.json()
-
-        token = result_json['access_token']
+        _auth_error, token = get_jambopay_token()
         for payment in unsettled_payments:
             if  models.PayoutAccounts.objects.filter(entity=payment.entity).exists():
                 payout_account = models.PayoutAccounts.objects.get(entity=payment.entity)
@@ -533,17 +524,7 @@ def _legacy_process_retailer_order_payments():
     if RetailerOrderPayments.objects.filter(is_settled="false",status="SUCCESS",amount__gte=10).exists():
         unsettled_payments = RetailerOrderPayments.objects.filter(is_settled="false",status="SUCCESS",amount__gte=10).all()
         #Generate token here
-        the_data = {
-                "client_id": config("JAMBOPAY_CLIENT_ID"),
-                "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                "grant_type": config("JAMBOPA_GRANT_TYPE"),
-            }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            # Execute the post
-        result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-        result_json = result.json()
-
-        token = result_json['access_token']
+        _auth_error, token = get_jambopay_token()
         for payment in unsettled_payments:
             if  models.PayoutAccounts.objects.filter(entity=payment.entity).exists():
                 payout_account = models.PayoutAccounts.objects.get(entity=payment.entity)

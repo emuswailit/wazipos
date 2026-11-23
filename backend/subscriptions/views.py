@@ -15,6 +15,7 @@ from payments.models import PaymentMethods, UserAccounts
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer, SubscriptionPaymentsSerializer
 from .summary import build_subscription_summary
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 # Longest period a single mobile money renewal can cover.
 MAX_RENEWAL_MONTHS = 12
@@ -183,19 +184,9 @@ def start_subscription_payment(entity, payer, phone, months=1, amount=None, purp
         return custom_error_response(1, f"Unsupported telco: {telco}")
 
     # 6. Authenticate with JamboPay
-    the_data = {
-        "client_id": config("JAMBOPAY_CLIENT_ID"),
-        "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-        "grant_type": config("JAMBOPA_GRANT_TYPE"),
-    }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    
-    try:
-        result = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-        result_json = result.json()
-        token = result_json.get("access_token") if result_json else None
-    except Exception as e:
-        return custom_error_response(1, f"JamboPay Auth failed: {str(e)}")
+    auth_error, token = get_jambopay_token()
+    if auth_error and not token:
+        return custom_error_response(1, f"JamboPay Auth failed: {auth_error}")
 
     if not token:
         return custom_error_response(1, "Token not generated from JamboPay")

@@ -7,6 +7,7 @@ import json
 from utils.logging import create_log
 
 from intergrations.jambopay.jambopay_wallet import get_wallet_balance
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 def retrieve_user_account_status(data,user):
     errors=[]
     user_account=None
@@ -21,13 +22,7 @@ def retrieve_user_account_status(data,user):
         user_account= UserAccounts.objects.filter(owner=user.entity.administrator).first()
 
     if user_account:
-        auth_data = {
-            "client_id": config("JAMBOPAY_CLIENT_ID"),
-            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE"),
-        }
-        auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=auth_data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-        token = auth_res.json().get("access_token")
+        _auth_error, token = get_jambopay_token()
         
         data=json.dumps({
             "accountNo": user_account.account_number

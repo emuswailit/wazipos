@@ -21,9 +21,29 @@ from payments.validators import payments_models_validators
 # from authentication.utils.utils import use_reference_number
 token =None
 
-def get_auth_token():
-    token =None
-    return token
+from intergrations.jambopay.get_jp_token import get_auth_token  # the one cached JamboPay token
+
+
+def legacy_money_token(fn_name):
+    """
+    Token for the OLD wallet-to-wallet / direct payout helpers in this module.
+    They were inactive (their token was None) and money now moves only through the
+    payout ledger (payments/utils/order_payouts.py). Turning them back on would pay
+    people twice, so they stay off unless JAMBOPAY_LEGACY_MONEY_MOVES=true in .env.
+    """
+    from decouple import config as _config
+
+    if not _config("JAMBOPAY_LEGACY_MONEY_MOVES", default=False, cast=bool):
+        try:
+            from utils.logging import create_log
+
+            create_log("warning", f"Legacy JamboPay money move {fn_name}() refused: payouts go through the payout ledger "
+                                  "(set JAMBOPAY_LEGACY_MONEY_MOVES=true only if you really need it)")
+        except Exception:
+            pass
+        raise RuntimeError(f"{fn_name}: legacy JamboPay money moves are disabled; use the payout ledger")
+    return get_auth_token()
+
 
 # def get_auth_token():
 #     the_data = {
@@ -655,7 +675,7 @@ def initiate_jambopay_settlement(data):
     errors =[]
     settlement=None
 
-    token = get_auth_token()
+    token = legacy_money_token("initiate_jambopay_settlement")
     headers = {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + token,
@@ -733,7 +753,7 @@ def jambopay_wallet_checkout(data):
     return result_json
   
 def jambopay_authorize_transaction(otp, ref):
-    token = get_auth_token()
+    token = legacy_money_token("jambopay_authorize_transaction")
     data = {
         "otp": otp,
         "ref": ref,  
@@ -759,7 +779,7 @@ def jambopay_authorize_transaction(otp, ref):
 def jambopay_authorize_wallet_payout(otp, ref):
     
     errors = []
-    token = get_auth_token()
+    token = legacy_money_token("jambopay_authorize_wallet_payout")
     payload = json.dumps({
         "otp": otp,
         "ref": ref,
@@ -913,7 +933,7 @@ def get_user_jambopay_wallet_by_phone(phoneNUmber):
 
 def payout_from_wallet_to_mpesa(account_from, account_ref, account_number, amount, reference_number,user,pin):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_mpesa")
 
     errors=[]
     headers = {
@@ -954,7 +974,7 @@ def payout_from_wallet_to_mpesa(account_from, account_ref, account_number, amoun
     
 def payout_from_wallet_to_mpesa_2(data):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_mpesa_2")
 
     errors=[]
     headers = {
@@ -982,7 +1002,7 @@ def payout_from_wallet_to_mpesa_2(data):
 
 def payout_from_wallet_to_bank(account_from, account_number, account_ref, amount, bank_code, reference_number):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_bank")
     payload = json.dumps({
         "amount": amount,
         "accountFrom": account_from,
@@ -1021,7 +1041,7 @@ def payout_from_wallet_to_bank(account_from, account_number, account_ref, amount
         return [],result_json
 def payout_from_wallet_to_bank_2(payload):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_bank_2")
 
     errors=[]
     headers = {
@@ -1047,7 +1067,7 @@ def payout_from_wallet_to_bank_2(payload):
     
 def payout_from_wallet_to_till(account_from, account_number, amount, reference_number):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_till")
     errors=[]
     headers = {
         "Content-Type": "application/json",
@@ -1085,7 +1105,7 @@ def payout_from_wallet_to_till(account_from, account_number, amount, reference_n
     
 def payout_from_wallet_to_paybill(payload):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_paybill")
 
     # payload = json.dumps({
     #         "amount": amount,
@@ -1125,7 +1145,7 @@ def payout_from_wallet_to_paybill(payload):
 
 def payout_from_wallet_to_airtel(payload):
     
-    token = get_auth_token()
+    token = legacy_money_token("payout_from_wallet_to_airtel")
     # payload = json.dumps({
     #     "amount": amount,
     #     "accountFrom": account_from,

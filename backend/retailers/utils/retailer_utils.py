@@ -115,6 +115,7 @@ from ..serializers import RetailerIndentItemsSerializer
 from ..validators import model_validators
 from .inventory_utils import update_stock
 from .process_mpesa_utils import process_mpesa
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 
 # ===========================================================================
@@ -3129,24 +3130,10 @@ def process_customer_order_payment(
 
         create_log("info", f"JAMBOPAY CHECKOUT PAYLOAD for {reference_number}: {payload}")
 
-        the_data = {
-            "client_id": config("JAMBOPAY_CLIENT_ID"),
-            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE"),
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        
-        # 🟢 AUTHENTICATION
-        try:
-            auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-            token = auth_res.json().get("access_token") if auth_res.json() else None
-        except ValueError:
-            create_log("error", f"JAMBOPAY AUTH NON-JSON RESPONSE. HTTP Status: {auth_res.status_code} | Raw Text: {auth_res.text}")
-            errors.append("Payment gateway authentication failed (Invalid response).")
-            return errors, None
-
+        # 🟢 AUTHENTICATION (cached JamboPay token)
+        auth_error, token = get_jambopay_token()
         if not token:
-            create_log("error", f"JAMBOPAY AUTH FAILED for {reference_number}. Response: {auth_res.text}")
+            create_log("error", f"JAMBOPAY AUTH FAILED for {reference_number}: {auth_error}")
             errors.append("Token not generated")
             return errors, None
 

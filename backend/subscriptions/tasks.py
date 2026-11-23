@@ -16,6 +16,7 @@ from utils.logging import create_log
 from .models import Subscription, SubscriptionPayment
 from .periods import next_period_start, period_end
 from authentication.models import Entities
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 
 @shared_task
@@ -66,17 +67,9 @@ def check_pending_subscription_payments():
         return
 
     # 2. Authenticate with JamboPay (Once per task run)
-    try:
-        the_data = {
-            "client_id": config("JAMBOPAY_CLIENT_ID"),
-            "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-            "grant_type": config("JAMBOPA_GRANT_TYPE"),
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-        token = auth_res.json().get("access_token") if auth_res.json() else None
-    except Exception as e:
-        create_log("error", f"JamboPay Auth failed in background task: {str(e)}")
+    auth_error, token = get_jambopay_token()
+    if auth_error:
+        create_log("error", f"JamboPay Auth failed in background task: {auth_error}")
         return
 
     if not token:

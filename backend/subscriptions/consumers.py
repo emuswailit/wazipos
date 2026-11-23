@@ -12,6 +12,7 @@ from utils.logging import create_log
 from .models import Subscription, SubscriptionPayment
 from .serializers import SubscriptionSerializer
 from .summary import build_subscription_summary
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 
 class SubscriptionConsumer(AsyncJsonWebsocketConsumer):
@@ -194,14 +195,7 @@ class SubscriptionPaymentConsumer(AsyncJsonWebsocketConsumer):
             if payment.status == "PENDING":
                 try:
                     # 1. Authenticate with JamboPay
-                    the_data = {
-                        "client_id": config("JAMBOPAY_CLIENT_ID"),
-                        "client_secret": config("JAMBOPAY_CLIENT_SECRET"),
-                        "grant_type": config("JAMBOPA_GRANT_TYPE"),
-                    }
-                    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-                    auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=the_data, headers=headers)
-                    token = auth_res.json().get("access_token") if auth_res.json() else None
+                    _auth_error, token = get_jambopay_token()
                     
                     if token:
                         # 2. Check the transaction status

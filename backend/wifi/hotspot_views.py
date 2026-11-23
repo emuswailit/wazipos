@@ -30,6 +30,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 import urllib.parse
+from payments.utils.system_till import get_jambopay_token  # cached JamboPay token
 
 
 @xframe_options_exempt
@@ -162,9 +163,9 @@ def hotspot_login_view(request):
             payload_data["currency"] = "KES"
 
         try:
-            auth_data = {"client_id": config("JAMBOPAY_CLIENT_ID"), "client_secret": config("JAMBOPAY_CLIENT_SECRET"), "grant_type": config("JAMBOPA_GRANT_TYPE")}
-            auth_res = requests.post(config("JAMBOPAY_AUTH_URL1"), data=auth_data, timeout=8)
-            token = auth_res.json().get("access_token")
+            auth_error, token = get_jambopay_token()
+            if not token:
+                raise RuntimeError(auth_error or "JamboPay did not issue a token")
             
             checkout_res = requests.post(config("JAMBOPAY_BASE_URL") + "/checkout/express", data=json.dumps(payload_data), headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}", "Accept": "*/*"}, timeout=10)
             result_json = checkout_res.json()
