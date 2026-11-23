@@ -10,7 +10,7 @@
 #   restaurant order, no delivery     the restaurant (entity)                paid
 #   bar tab payment                   the bar / restaurant (entity)          paid
 #   hotel stay payment                the hotel (entity)                     paid
-#   WiFi package                      the hotspot owner (entity), less fee   paid
+#   WiFi package                      the hotspot owner (entity), in full    confirmed (wifi/payments.py)
 #   rent                              the landlord / property (entity)       paid
 #   matatu / boda fare                the vehicle's administrator (user)     paid
 #   sacco subscription                the sacco (entity)                     paid
@@ -187,13 +187,8 @@ def sweep_collections():
                                          lambda p: (p.booking.entity, p.booking.entity) if p.booking_id else (None, None), note="Stay paid"))
     except ImportError:
         pass
-    try:
-        from wifi.models import WifiSubscriptionPayments
-
-        add("wifi", lambda: _per_payment(WifiSubscriptionPayments, "wifi_payment", since, lambda p: (p.entity, p.entity),
-                                         method_field=None, settled=("is_settled", "false"), commission=True, note="WiFi package sold"))
-    except ImportError:
-        pass
+    # WiFi packages are paid out by wifi/payments.py (monitor_wifi_payments): the full
+    # amount JamboPay confirms it received, no commission. Not swept here.
     try:
         from properties.models import PropertyUnitPayments
 

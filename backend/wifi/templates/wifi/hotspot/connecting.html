@@ -1,146 +1,191 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wazi Wifi - Authorizing Network Access</title>
-    <style>
-        body { background-color: #0056b3; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 12px; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box; }
-        @media (prefers-color-scheme: dark) {
-            body { background-color: #0f172a; }
-            .card { background-color: #1e293b !important; border-color: rgba(255, 255, 255, 0.1) !important; }
-            .btn-connect { background-color: #3b82f6 !important; color: #ffffff !important; }
-        }
-        .card { width: 100%; max-width: 400px; background-color: #0056b3; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); padding: 24px 16px; box-sizing: border-box; text-align: center; }
-        .success-checkmark { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); display: flex; justify-content: center; align-items: center; font-size: 28px; margin: 0 auto 16px auto; color: #ffffff; animation: pulse 1.8s infinite ease-in-out; }
-        @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); } 70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); } }
-        .header h1 { font-size: 22px; font-weight: 900; letter-spacing: 1px; margin: 0 0 8px 0; }
-        .header p { font-size: 13px; font-weight: 500; margin: 0 0 24px 0; opacity: 0.9; line-height: 1.4; }
-        .btn-connect { display: inline-block; width: 100%; background-color: #ffffff; color: #0056b3; border: none; border-radius: 8px; padding: 14px; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); text-decoration: none; box-sizing: border-box; margin-bottom: 8px; }
-        .btn-connect:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-retry { display: inline-block; width: 100%; background-color: rgba(255, 255, 255, 0.15); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; cursor: pointer; text-decoration: none; box-sizing: border-box; margin-top: 10px; }
-        .loading-text { font-size: 11px; opacity: 0.7; margin-top: 16px; letter-spacing: 0.5px; text-transform: uppercase; }
-        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-top: 10px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="success-checkmark">✓</div>
-        <div class="header">
-            <h1 id="statusHeader">Access Approved!</h1>
-            <p id="statusDesc">{{ message|default:"Activating your access session. Please keep this screen open while we connect your device..." }}</p>
-        </div>
+{% extends "wifi/hotspot/_base.html" %}
+{% comment %}
+  wifi/hotspot/connecting.html — after the customer picks a package (or has a live one / a free trial).
 
-        <form id="routerAuthForm" action="{{ login_url }}" method="POST" style="display:none;">
-            <input type="hidden" name="username" value="{{ username }}">
-            <input type="hidden" name="password" value="{{ password }}">
-            <input type="hidden" name="dst" value="https://google.com">
-        </form>
+  Two modes:
+    no psp_ref   already entitled (active subscription / free trial): log the device in now.
+    psp_ref      a mobile money prompt was sent: wait for the payment, then log in.
 
-        <button type="button" id="connectBtn" onclick="triggerManualSubmit()" class="btn-connect">Connect Now</button>
-        
-        <button type="button" id="retryVerificationBtn" onclick="forceVerificationCheck()" class="btn-retry" style="display: none;">Verify Payment Manually 🔁</button>
-        
-        <div class="loading-text">Handshaking with Router Node...</div>
-        <div id="loaderSpinner" class="spinner" style="display: none;"></div>
+  Waiting polls /hotspots/check-payment/ (wifi/hotspot_views.check_payment_status_api),
+  which replies SUCCESS only once the subscription and the RADIUS entry are saved —
+  so the router login can follow straight away. The server also confirms the payment
+  on its own (wifi/payments.monitor), so closing this page never loses a paid package.
+
+  Login: POST username/password (both the MAC) to the router's $(link-login-only).
+  Old captive-portal web views: ES5 only, XMLHttpRequest (no fetch / arrow functions).
+{% endcomment %}
+{% block title %}WaziPOS WiFi · Connecting{% endblock %}
+
+{% block style %}
+    .steps { text-align: left; margin: 1.1rem 0 0.25rem; padding: 0.4rem 0.9rem; border-radius: 14px; background: rgba(255, 255, 255, 0.05);
+             border: 1px solid var(--line); }
+    .steps div { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0; color: var(--faint); font-size: 0.92rem; }
+    .steps div + div { border-top: 1px solid var(--line); }
+    .steps i { width: 1.5rem; height: 1.5rem; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+               font-style: normal; font-size: 0.75rem; font-weight: 800; background: rgba(255, 255, 255, 0.08); color: var(--faint); }
+    .steps div.on { color: var(--text); font-weight: 700; }
+    .steps div.on i { background: var(--primary); color: #fff; }
+    .steps div.done { color: var(--ok); }
+    .steps div.done i { background: rgba(52, 211, 153, 0.2); color: var(--ok); }
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="badge" id="badge"><div class="ring"></div></div>
+    <h1 id="title">{% if psp_ref %}Check your phone{% else %}Connecting you{% endif %}</h1>
+    <p id="desc">{{ message|default:"Connecting your device…" }}</p>
+
+    {% if psp_ref %}
+    <div class="steps" id="steps">
+        <div id="s1" class="on"><i>1</i>Enter your M-Pesa / Airtel PIN</div>
+        <div id="s2"><i>2</i>Payment confirmed</div>
+        <div id="s3"><i>3</i>You're online</div>
     </div>
+    {% endif %}
 
-    <script type="text/javascript">
-        var pspRef = "{{ psp_ref|default:'' }}";
-        var maxAttempts = 60; 
-        var attemptCount = 0; 
-        var pollingTimer = null;
+    <form id="routerLogin" action="{{ login_url }}" method="post">
+        <input type="hidden" name="username" value="{{ username }}">
+        <input type="hidden" name="password" value="{{ password }}">
+        <input type="hidden" name="dst" value="http://www.google.com/">
+        <button type="submit" class="btn btn-primary hidden" id="connectBtn">Connect now</button>
+        <noscript><button type="submit" class="btn btn-primary">Connect now</button></noscript>
+    </form>
 
-        function triggerManualSubmit() {
-            var form = document.getElementById('routerAuthForm');
-            if (form) {
-                document.querySelector('.loading-text').innerText = "Routing Internet Session Tickets...";
-                form.submit();
-            }
+    <button type="button" class="btn btn-ghost hidden" id="checkBtn">I've paid &mdash; check again</button>
+    <div class="hint" id="hint"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var PSP_REF = "{{ psp_ref|default:''|escapejs }}";
+    var CHECK_URL = "/hotspots/check-payment/?ref=" + encodeURIComponent(PSP_REF) +
+        "&nas_id=" + encodeURIComponent("{{ nas_id|default:''|escapejs }}") +
+        "&mac=" + encodeURIComponent("{{ username|default:''|escapejs }}") +
+        "&tariff_id=" + encodeURIComponent("{{ tariff_id|default:''|escapejs }}");
+    var FAILED_URL = "/hotspots/payment-failed/?" + [
+        "login_url=" + encodeURIComponent("{{ login_url|default:''|escapejs }}"),
+        "mac=" + encodeURIComponent("{{ username|default:''|escapejs }}"),
+        "nas_id=" + encodeURIComponent("{{ nas_id|default:''|escapejs }}"),
+        "router_ip=" + encodeURIComponent("{{ router_ip|default:''|escapejs }}")
+    ].join("&");
+
+    var WAIT_LIMIT_MS = 3 * 60 * 1000;   // an STK prompt expires well before this
+    var started = new Date().getTime();
+    var timer = null;
+    var done = false;
+    var checkLabel = "I've paid &mdash; check again";
+
+    function $(id) { return document.getElementById(id); }
+    function text(id, value) { var el = $(id); if (el) el.innerHTML = value; }
+    function show(id, on) {
+        var el = $(id);
+        if (!el) return;
+        el.className = el.className.replace(/\s*\bhidden\b/g, "") + (on ? "" : " hidden");
+    }
+    function step(n) {
+        for (var i = 1; i <= 3; i++) {
+            var el = $("s" + i);
+            if (el) el.className = i < n ? "done" : (i === n ? "on" : "");
         }
+    }
+    function badge(kind, symbol) {
+        var b = $("badge");
+        b.className = "badge" + (kind ? " " + kind : "");
+        b.innerHTML = symbol || '<div class="ring"></div>';
+    }
 
-        document.addEventListener("DOMContentLoaded", function () {
-            if (!pspRef || pspRef.trim() === "") {
-                // User has an active subscription layout: wait 1.5 seconds to settle database locks, then authorize
-                setTimeout(function () {
-                    triggerManualSubmit();
-                }, 1500);
-            } else {
-                document.getElementById('statusHeader').innerText = "Verifying Payment...";
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('loaderSpinner').style.display = "inline-block";
-                
-                setTimeout(function() {
-                    document.getElementById('retryVerificationBtn').style.display = "inline-block";
-                }, 15000);
+    function login() {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        badge("ok", "&#10003;");
+        text("title", "You're online");
+        text("hint", "Opening the internet&hellip;");
+        step(4);
+        show("checkBtn", false);
+        $("routerLogin").submit();
+        // If the router is slow to answer, let them press it themselves.
+        setTimeout(function () { show("connectBtn", true); }, 4000);
+    }
 
-                pollPaymentStatus();
-            }
-        });
+    function failed(reason) {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        var why = reason || "The payment was cancelled or did not go through.";
+        badge("bad", "&#10005;");
+        text("title", "Payment not completed");
+        text("desc", why);
+        window.location.replace(FAILED_URL + "&message=" + encodeURIComponent(why));
+    }
 
-        function pollPaymentStatus() {
-            if (attemptCount >= maxAttempts) {
-                document.querySelector('.loading-text').innerText = "Verification timed out. Check your phone prompt.";
-                document.getElementById('loaderSpinner').style.display = "none";
+    function resetCheckBtn() {
+        var b = $("checkBtn");
+        b.disabled = false;
+        b.innerHTML = checkLabel;
+    }
+
+    function check(manual) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", CHECK_URL + "&_=" + new Date().getTime(), true);
+        xhr.timeout = 15000;
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4 || done) return;
+            if (xhr.status === 0) return;   // timed out / no network: ontimeout or onerror reschedules
+            var data = null;
+            try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+            if (manual) resetCheckBtn();
+            if (data && data.status === "SUCCESS") {
+                step(3);
+                text("desc", "Payment confirmed.");
+                login();
                 return;
             }
-            attemptCount++;
-            
-            var statusUrl = '/hotspots/check-payment/?ref=' + pspRef + '&nas_id={{ nas_id }}&mac={{ username }}&tariff_id={{ tariff_id }}';
-            
-            fetch(statusUrl)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === "SUCCESS") {
-                        if (pollingTimer) clearTimeout(pollingTimer);
-                        document.querySelector('.loading-text').innerText = "Payment confirmed! Allocating bandwidth profiles...";
-                        
-                        // 🛠️ THE FIX: Introduce a 1500ms (1.5 second) safety delay.
-                        // This prevents the router from hitting FreeRADIUS before the background transaction commits.
-                        setTimeout(function() {
-                            triggerManualSubmit();
-                        }, 1500);
-                        
-                    } else if (data.status === "FAILED") {
-                        window.location.href = "/hotspots/payment-failed/?message=Payment transaction was rejected or failed.";
-                    } else {
-                        pollingTimer = setTimeout(pollPaymentStatus, 1500);
-                    }
-                })
-                .catch(err => {
-                    pollingTimer = setTimeout(pollPaymentStatus, 2000);
-                });
-        }
+            if (data && data.status === "FAILED") { failed(); return; }
+            if (data && data.error) text("hint", data.error);   // e.g. paid, device still being set up
+            else if (manual) text("hint", "Not confirmed yet. If you entered your PIN, it can take a moment.");
+            schedule();
+        };
+        xhr.ontimeout = xhr.onerror = function () {
+            if (manual) resetCheckBtn();
+            text("hint", "Weak connection &mdash; still checking&hellip;");
+            schedule();
+        };
+        xhr.send();
+    }
 
-        function forceVerificationCheck() {
-            var retryBtn = document.getElementById('retryVerificationBtn');
-            retryBtn.innerText = "Checking Status...";
-            retryBtn.disabled = true;
-            
-            var checkUrl = '/hotspots/check-payment/?ref=' + pspRef + '&nas_id={{ nas_id }}&mac={{ username }}&tariff_id={{ tariff_id }}';
-            
-            fetch(checkUrl)
-                .then(response => response.json())
-                .then(data => {
-                    retryBtn.innerText = "Verify Payment Manually 🔁";
-                    retryBtn.disabled = false;
-                    if (data.status === "SUCCESS") {
-                        document.querySelector('.loading-text').innerText = "Payment found! Allocating bandwidth profiles...";
-                        
-                        // 🛠️ THE FIX: Apply the same 1.5-second safety delay to the manual override button
-                        setTimeout(function() {
-                            triggerManualSubmit();
-                        }, 1500);
-                    } else {
-                        document.querySelector('.loading-text').innerText = "Status still tracking as PENDING. Try entering your PIN.";
-                    }
-                })
-                .catch(err => {
-                    retryBtn.innerText = "Verify Payment Manually 🔁";
-                    retryBtn.disabled = false;
-                });
+    function schedule() {
+        if (done) return;
+        var waited = new Date().getTime() - started;
+        if (waited > WAIT_LIMIT_MS) {
+            badge("warn", "&#8987;");
+            text("title", "Still waiting for the payment");
+            text("desc", "If you paid, you'll be connected automatically within a minute. Tap below to check.");
+            show("checkBtn", true);
+            return;
         }
-    </script>
-</body>
-</html>
+        // Quick while they enter the PIN, gentler after a minute.
+        timer = setTimeout(function () { check(false); }, waited < 60000 ? 2000 : 4000);
+    }
+
+    $("checkBtn").onclick = function () {
+        this.disabled = true;
+        this.innerHTML = "Checking&hellip;";
+        started = new Date().getTime();   // a fresh waiting window
+        if (timer) clearTimeout(timer);
+        check(true);
+    };
+
+    if (!PSP_REF) {
+        // Already entitled (active package / free trial): the RADIUS entry was saved before this page.
+        setTimeout(login, 600);
+        return;
+    }
+    // After 20 s, let them nudge it.
+    setTimeout(function () { if (!done) show("checkBtn", true); }, 20000);
+    timer = setTimeout(function () { check(false); }, 3000);
+})();
+</script>
+{% endblock %}

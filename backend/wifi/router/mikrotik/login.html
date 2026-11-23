@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+  WaziPOS hotspot — MikroTik login.html (upload to the router's hotspot folder, e.g. flash/hotspot/).
+
+  The router serves this page to every device that isn't logged in yet. It hands the
+  device straight to the WaziPOS captive portal, which sells packages and logs the
+  device in:  https://api.wazipos.co.ke/hotspots/login/  (wifi/hotspot_views.py)
+
+  Parameters sent (names must not change — the portal reads them):
+    mac        $(mac)               the device's MAC address (its WiFi username)
+    router_ip  $(server-address)    this hotspot's address
+    login_url  $(link-login-only)   where the portal posts the device's login back to
+    nas_id     $(identity)          this router's identity = WifiRouters.nas_id in WaziPOS
+
+  Walled garden: allow api.wazipos.co.ke so devices that aren't logged in can reach the
+  portal. Nothing else is needed: the M-Pesa / Airtel prompt is sent from the server.
+
+  Look: same colours, type scale and components as the portal pages
+  (wifi/templates/wifi/hotspot/_base.html) — keep the two in step.
+
+  Notes
+  - A real GET form carries the values: the browser does the URL encoding, and the
+    page still works with JavaScript off (the button) and in old captive-portal
+    web views (ES5 only, no external files).
+  - location.replace() so "Back" doesn't bounce the user into a redirect loop.
+  - If the page is opened outside the router, the $(...) variables are not filled
+    in: it says so instead of sending junk to the portal.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0b1733">
+    <meta http-equiv="pragma" content="no-cache">
+    <meta http-equiv="expires" content="-1">
+    <title>WaziPOS WiFi</title>
+    <style>
+        :root {
+            --bg: #0b1733; --line: rgba(255, 255, 255, 0.12); --text: #ffffff; --muted: rgba(255, 255, 255, 0.72);
+            --faint: rgba(255, 255, 255, 0.5); --primary: #2a6ff3; --primary-2: #4f8bff; --accent: #7cc4ff; --bad: #f87171;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { font-size: 15px; font-size: clamp(15px, 0.85rem + 0.35vw, 18px); -webkit-text-size-adjust: 100%; }
+        body {
+            margin: 0; min-height: 100vh; color: #fff; line-height: 1.5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #0b1733;
+            background-image: radial-gradient(circle at 15% 0%, rgba(42, 111, 243, 0.35), transparent 45%),
+                              radial-gradient(circle at 100% 100%, rgba(124, 196, 255, 0.18), transparent 40%);
+            background-attachment: fixed;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 16px;
+        }
+        .shell { width: 100%; max-width: 30rem; }
+        .brand { display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; font-weight: 800;
+                 letter-spacing: 0.04em; font-size: 0.85rem; color: rgba(255, 255, 255, 0.72); text-transform: uppercase; }
+        .brand .dot { width: 0.6rem; height: 0.6rem; margin-right: 0.5rem; border-radius: 50%; background: #7cc4ff; box-shadow: 0 0 12px #7cc4ff; }
+        .card { width: 100%; background: rgba(18, 34, 74, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px;
+                padding: 1.75rem 1.15rem; text-align: center; box-shadow: 0 1.25rem 2.5rem rgba(0, 0, 0, 0.35); }
+        @media (min-width: 600px) { .card { padding: 2.25rem 1.75rem; } }
+        .badge { width: 4rem; height: 4rem; margin: 0 auto 1rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                 background: rgba(42, 111, 243, 0.18); }
+        .ring { width: 2.1rem; height: 2.1rem; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.18); border-top-color: #7cc4ff;
+                animation: spin 0.9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        h1 { font-size: 1.4rem; font-size: clamp(1.3rem, 1.05rem + 1.6vw, 1.85rem); line-height: 1.2; margin: 0 0 0.4rem; font-weight: 800; }
+        p { margin: 0; color: rgba(255, 255, 255, 0.72); font-size: 0.95rem; }
+        p.error { color: #fecaca; }
+        .btn { display: block; width: 100%; margin-top: 1.1rem; padding: 0.95rem 1rem; border: 0; border-radius: 14px; cursor: pointer;
+               font-family: inherit; font-size: 1rem; font-weight: 700; color: #fff;
+               background: #2a6ff3; background-image: linear-gradient(135deg, #2a6ff3, #4f8bff); box-shadow: 0 0.5rem 1.25rem rgba(42, 111, 243, 0.35); }
+        .btn:active { transform: scale(0.985); }
+        .foot { margin-top: 1rem; text-align: center; font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <div class="brand"><span class="dot"></span>WaziPOS WiFi</div>
+    <div class="card">
+        <div class="badge" id="badge"><div class="ring" id="loader"></div></div>
+        <h1>Connecting to WiFi</h1>
+        <p id="status">Taking you to the packages&hellip;</p>
+
+        <form id="portal" method="get" action="https://api.wazipos.co.ke/hotspots/login/">
+            <input type="hidden" name="mac" value="$(mac)">
+            <input type="hidden" name="router_ip" value="$(server-address)">
+            <input type="hidden" name="login_url" value="$(link-login-only)">
+            <input type="hidden" name="nas_id" value="$(identity)">
+            <!-- Shown if the redirect hasn't happened after a few seconds, or with JavaScript off. -->
+            <button type="submit" id="go" class="btn hidden">Continue</button>
+            <noscript><button type="submit" class="btn">Continue</button></noscript>
+        </form>
+    </div>
+    <div class="foot">Pay with M-Pesa or Airtel Money &middot; Powered by WaziPOS</div>
+</div>
+<script>
+    (function () {
+        var form = document.getElementById("portal");
+        var status = document.getElementById("status");
+        var badge = document.getElementById("badge");
+        var go = document.getElementById("go");
+
+        function field(name) {
+            var el = form.elements[name];
+            return el ? String(el.value || "") : "";
+        }
+
+        // Opened outside the router: MikroTik didn't fill in $(...).
+        var mac = field("mac");
+        if (!mac || mac.indexOf("$(") === 0) {
+            status.innerHTML = "This page only works on a WaziPOS WiFi hotspot.";
+            status.className = "error";
+            badge.innerHTML = "&#9888;";
+            return;
+        }
+
+        // Build the URL from the form (browser-safe encoding) and replace this page,
+        // so Back doesn't return here and redirect again.
+        var parts = [];
+        for (var i = 0; i < form.elements.length; i++) {
+            var el = form.elements[i];
+            if (el.name) parts.push(encodeURIComponent(el.name) + "=" + encodeURIComponent(el.value || ""));
+        }
+        var target = form.action + "?" + parts.join("&");
+        try {
+            window.location.replace(target);
+        } catch (e) {
+            form.submit();
+        }
+
+        // Still here (slow network, blocked redirect): let the user continue by hand.
+        setTimeout(function () {
+            status.innerHTML = "Taking longer than usual. Tap below to continue.";
+            go.className = "btn";
+        }, 5000);
+    })();
+</script>
+</body>
+</html>

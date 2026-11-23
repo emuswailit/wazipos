@@ -7,8 +7,9 @@
 #   resolve(payment)   asks JamboPay; SUCCESS -> activate() + queue_payout()
 #   activate(payment)  WifiSubscriptions row + FreeRADIUS radcheck/radreply (once)
 #   queue_payout(p)    an OrderPayouts row (order_kind "wifi_payment") to the
-#                      hotspot owner's active entity PayoutAccounts, less the
-#                      entity's commission %, sent straight away by
+#                      hotspot owner's active entity PayoutAccounts for the FULL
+#                      amount JamboPay confirms it received (no commission on
+#                      WiFi), sent straight away by
 #                      payments.tasks.process_order_payouts (once per payment)
 #   monitor()          Celery, every 30 s: every pending payment of the last
 #                      30 min is resolved; older ones expire; paid ones that were
@@ -28,7 +29,7 @@ from django.db import connections, transaction
 from django.utils import timezone
 
 from utils.logging import create_log
-from wifi.models import WifiSubscriptionPayments, WifiSubscriptions, WifiTarrifs
+from wifi.models import WifiSubscriptionPayments, WifiSubscriptions
 
 log = logging.getLogger(__name__)
 
@@ -215,53 +216,96 @@ def activate(payment, mac=None, tariff=None):
 
 # ---------------------------------------------------------------- pay the hotspot owner
 
-def queue_payout(payment):
-    """The owner's share of a paid package -> payout ledger (once), sent right away."""
-    from payments.utils.collection_payouts import _pay, _pct
-    from payments.utils.order_payouts import _q
+def _confirmed_amount(payment, token=None):
+    """
+    What JamboPay says it actually received for this payment (SUCCESS only), or None
+    when it cannot confirm right now (the payout then waits for the next run).
+    """
+    if token is None:
+        from payments.utils.system_till import get_jambopay_token
+
+        error, token = get_jambopay_token()
+        if error:
+            create_log("error", f"[wifi-payout] {payment.reference_number}: cannot confirm amount: {error}")
+            return None
+    tx = _gateway_status(payment, token)
+    if not tx or str(tx.get("status") or "").upper() != "SUCCESS":
+        create_log("error", f"[wifi-payout] {payment.reference_number}: JamboPay did not confirm SUCCESS ({(tx or {}).get('status')})")
+        return None
+    for key in ("amount", "transactionAmount", "amountPaid"):
+        raw = tx.get(key)
+        if raw not in (None, ""):
+            try:
+                value = Decimal(str(raw))
+            except Exception:
+                continue
+            if value > 0:
+                return value
+    create_log("error", f"[wifi-payout] {payment.reference_number}: JamboPay SUCCESS without an amount: {tx}")
+    return None
+
+
+def queue_payout(payment, token=None):
+    """
+    Pay the hotspot owner the FULL amount JamboPay confirms it received (no WaziPOS
+    commission on WiFi) -> payout ledger (once), sent right away.
+    """
+    from payments.models import OrderPayouts
+    from payments.utils.collection_payouts import _pay
+    from payments.utils.order_payouts import MIN_PAYOUT, _q
 
     ref = payment.reference_number or payment.pk
     if payment.status != "SUCCESS":
-        create_log("info", f"[wifi-payout] {ref}: not queued — payment is {payment.status}, not SUCCESS")
+        create_log("info", f"[wifi-payout] {ref}: not queued, payment is {payment.status}")
         return None
     if payment.entity_id is None:
-        create_log("error", f"[wifi-payout] {ref}: not queued — payment has no entity (hotspot owner)")
+        create_log("error", f"[wifi-payout] {ref}: not queued, payment has no entity (hotspot owner)")
         return None
+
     existing = payout_of(payment)
-    if existing:
-        return existing
+    if existing and existing.status in (OrderPayouts.Status.PAID, OrderPayouts.Status.PROCESSING):
+        return existing  # money already on its way: never touched
+
+    confirmed = _confirmed_amount(payment, token)
+    if confirmed is None:
+        return existing  # retried by the monitor every 30 s
+    confirmed = _q(confirmed)
+    if confirmed != _q(payment.amount):
+        create_log("warning", f"[wifi-payout] {ref}: recorded KES {payment.amount}, JamboPay confirmed KES {confirmed}; paying the confirmed amount")
+        WifiSubscriptionPayments.objects.filter(pk=payment.pk).update(amount=confirmed, updated=timezone.now())
+        payment.amount = confirmed
+
     entity = payment.entity
-    gross = Decimal(str(payment.amount or 0))
-    if gross <= 0:
-        create_log("error", f"[wifi-payout] {ref}: not queued — amount is {gross}")
-        return None
-    pct = _pct(entity)
-    row = _pay(
-        "wifi_payment", payment.pk, payment.reference_number, entity, gross=gross, payee_entity=entity,
-        commission=_q(gross * pct / Decimal("100")), note="WiFi package sold",
-    )
-    if row is None:
-        create_log("error", f"[wifi-payout] {ref}: _pay created no row (entity={entity.pk} gross={gross})")
-        return payout_of(payment)
-    from payments.utils.order_payouts import MIN_PAYOUT
+    if existing:
+        # Not sent yet (DUE / NO_ACCOUNT / FAILED): the full confirmed amount, no commission.
+        if existing.gross_amount != confirmed or existing.commission_amount or existing.amount != confirmed:
+            existing.gross_amount, existing.commission_amount, existing.amount = confirmed, Decimal("0"), confirmed
+            existing.save(update_fields=["gross_amount", "commission_amount", "amount", "updated"])
+            create_log("info", f"[wifi-payout] {ref}: corrected unsent payout to KES {confirmed} (no commission)")
+        row = existing
+    else:
+        row = _pay("wifi_payment", payment.pk, payment.reference_number, entity, gross=confirmed, payee_entity=entity,
+                   commission=Decimal("0"), note="WiFi package sold")
+        if row is None:
+            create_log("error", f"[wifi-payout] {ref}: no payout row created (entity={entity.pk} amount={confirmed})")
+            return payout_of(payment)
 
     create_log(
         "info",
-        f"[wifi-payout] {ref}: queued {row.amount} to {entity.title} "
-        f"(gross {gross}, fee {row.commission_amount} at {pct}%) status={row.status}"
-        + (f" — below JamboPay's KES {MIN_PAYOUT} minimum, waits for manual payment" if row.amount < MIN_PAYOUT else "")
-        + (" — the business has no active payout account" if row.status == "NO_ACCOUNT" else ""),
+        f"[wifi-payout] {ref}: KES {row.amount} to {entity.title} (confirmed received, no commission) status={row.status}"
+        + (f"; below the KES {MIN_PAYOUT} JamboPay minimum, waits for manual payment" if row.amount < MIN_PAYOUT else "")
+        + ("; the business has no active payout account" if row.status == OrderPayouts.Status.NO_ACCOUNT else ""),
     )
-    if row is not None:
-        def kick():
-            try:
-                from payments.tasks import process_order_payouts
 
-                process_order_payouts.delay()
-            except Exception as e:  # beat sends it within 2 minutes anyway
-                log.warning("could not queue payouts now: %s", e)
+    def kick():
+        try:
+            from payments.tasks import process_order_payouts
 
-        transaction.on_commit(kick)
+            process_order_payouts.delay()
+        except Exception as e:  # beat sends it within 2 minutes anyway
+            log.warning("could not queue payouts now: %s", e)
+
+    transaction.on_commit(kick)
     return row
 
 
@@ -298,6 +342,14 @@ def resolve(payment, token=None, mac=None, tariff=None):
         fields = {"checks": payment.checks + 1, "last_checked_at": timezone.now()}
         if status == "SUCCESS":
             fields["status"] = "SUCCESS"
+            for key in ("amount", "transactionAmount", "amountPaid"):
+                try:
+                    confirmed = Decimal(str(tx.get(key)))
+                except Exception:
+                    continue
+                if confirmed > 0:
+                    fields["amount"] = confirmed  # what was actually received
+                    break
         elif status in GATEWAY_FAILED:
             fields["status"] = "CANCELLED" if status == "CANCELLED" else "FAILED"
             fields["description"] = str(tx.get("description") or payment.description or "")[:256]
@@ -317,7 +369,7 @@ def resolve(payment, token=None, mac=None, tariff=None):
         ok, _ = activate(payment, mac=mac, tariff=tariff)
         if ok:
             broadcast(payment.pk)
-        queue_payout(payment)
+        queue_payout(payment, token)
     return payment.status
 
 
@@ -356,12 +408,32 @@ def monitor():
         if activate(p)[0]:
             summary["connected"] += 1
             broadcast(p.pk)
+    # Paid packages whose owner payout is not on its way yet: create / correct it.
+    # (This module owns WiFi payouts; the generic collection sweep skips them.)
     from payments.models import OrderPayouts
 
-    queued = set(OrderPayouts.objects.filter(order_kind="wifi_payment", created__gte=since - timedelta(days=1)).values_list("order_id", flat=True))
-    for p in WifiSubscriptionPayments.objects.filter(status="SUCCESS", is_settled="false", created__gte=since).select_related("entity")[:200]:
-        if str(p.pk) not in queued and queue_payout(p):
-            summary["queued"] += 1
+    sent = set(
+        OrderPayouts.objects.filter(order_kind="wifi_payment", status__in=[OrderPayouts.Status.PAID, OrderPayouts.Status.PROCESSING])
+        .values_list("order_id", flat=True)
+    )
+    todo = [
+        p for p in WifiSubscriptionPayments.objects.filter(status="SUCCESS", is_settled="false", created__gte=now - timedelta(days=45))
+        .select_related("entity").order_by("created")[:200]
+        if str(p.pk) not in sent
+    ]
+    if todo:
+        if token is None:
+            error, token = get_jambopay_token()
+            if error:
+                create_log("error", f"WiFi payout monitor: {error}")
+                token = None
+        if token:
+            for p in todo:
+                row = payout_of(p)
+                if row and row.status in (OrderPayouts.Status.DUE, OrderPayouts.Status.NO_ACCOUNT) and not row.commission_amount and row.amount == p.amount:
+                    continue  # already right, waiting to be sent / for an account
+                if queue_payout(p, token):
+                    summary["queued"] += 1
     if any(summary.values()):
         create_log("info", f"[wifi-monitor] {summary}")
     return summary

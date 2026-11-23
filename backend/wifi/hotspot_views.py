@@ -193,7 +193,7 @@ def hotspot_login_view(request):
 
             return render(request, 'wifi/hotspot/connecting.html', {
                 'login_url': login_url, 'username': mac, 'password': mac, 'psp_ref': psp_ref,
-                'nas_id': nas_id, 'tariff_id': tariff_id,
+                'nas_id': nas_id, 'tariff_id': tariff_id, 'router_ip': router_ip,
                 'message': 'STK Push prompt dispatched! Enter your PIN on your phone to connect.'
             })
         query_params = urllib.parse.urlencode({
