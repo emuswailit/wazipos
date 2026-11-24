@@ -176,10 +176,14 @@ def request_email_verification(user):
         f"Please confirm that {user.email} is your email address for WaziPOS:\n\n{link}\n\n"
         f"The link works for {EMAIL_TOKEN_TTL.days} days. If you did not expect this, ignore this email."
     )
-    html = (
-        f"<p>Hello {name},</p><p>Please confirm that <b>{user.email}</b> is your email address for WaziPOS.</p>"
-        f'<p><a href="{link}" style="background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Confirm my email</a></p>'
-        f"<p>The link works for {EMAIL_TOKEN_TTL.days} days. If you did not expect this, ignore this email.</p>"
+    from core.email_layout import branded_html, button, paragraph
+
+    html = branded_html(
+        "Confirm your email",
+        paragraph(f"Hello {name},")
+        + paragraph(f"Please confirm that {user.email} is your email address for WaziPOS.")
+        + button("Confirm my email", link)
+        + paragraph(f"The link works for {EMAIL_TOKEN_TTL.days} days. If you did not expect this, ignore this email."),
     )
     try:
         errors, sent = send_email(to=user.email, subject="Confirm your email for WaziPOS", body=body, html_body=html)

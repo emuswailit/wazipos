@@ -2,6 +2,7 @@
 #   Business staff:   GetBilling · GetLedger {kind?: IN|OUT, page?} · GetPricing
 #   Business admins:  BuyTokens {pack | amount, phone} · RefreshTopUp {payment_id}
 #   WaziPOS admins:   AdminWallets {q?} · AdminAdjustTokens {entity, tokens, note}
+#                     AdminTrialTokens {entity} · AdminSendTrialTokens {entity, tokens (max 100 per business), note?}
 
 import logging
 
@@ -41,6 +42,8 @@ def billingAPIView(request):
         "RefreshTopUp": (lambda: billing.refresh_topup(user, data), "Top-up", "topup"),
         "AdminWallets": (lambda: billing.admin_overview(user, data), "Wallets", "overview"),
         "AdminAdjustTokens": (lambda: billing.adjust(user, data), "Tokens adjusted", "wallet"),
+        "AdminTrialTokens": (lambda: billing.trial_gift_status(user, data), "Trial tokens", "trial"),
+        "AdminSendTrialTokens": (lambda: billing.send_trial_tokens(user, data), "Trial tokens sent", "wallet"),
     }
     route = routes.get(str(action))
     if not route:

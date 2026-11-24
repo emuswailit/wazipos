@@ -24,7 +24,6 @@ import threading
 from decimal import Decimal
 
 from django.db import close_old_connections, transaction
-from django.utils.html import escape
 
 from utils.logging import create_log
 
@@ -60,14 +59,9 @@ def _real_email(user):
 
 
 def _html(subject, lines, footer):
-    rows = "".join(f"<p style='margin:0 0 10px'>{escape(str(l))}</p>" for l in lines if l)
-    return (
-        "<div style='font-family:Inter,Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0b1733'>"
-        "<div style='background:linear-gradient(100deg,#2a6ff3,#22b8f0);color:#fff;padding:18px 22px;border-radius:14px 14px 0 0'>"
-        f"<div style='font-size:13px;opacity:.9'>WaziPOS</div><div style='font-size:19px;font-weight:700'>{escape(subject)}</div></div>"
-        f"<div style='padding:20px 22px;border:1px solid #e1e8f5;border-top:0;border-radius:0 0 14px 14px;font-size:14px;line-height:1.55'>{rows}"
-        f"<p style='margin:18px 0 0;color:#6b7a99;font-size:12px'>{escape(footer)}</p></div></div>"
-    )
+    from core.email_layout import branded_html, lines_to_html
+
+    return branded_html(subject, lines_to_html(lines), footer)
 
 
 def _broadcast(people, subject, lines, data):

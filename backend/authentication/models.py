@@ -1937,6 +1937,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
         decodeJTW["email"] = f"{self.email}"
         decodeJTW["phone"] = f"{self.phone}"
         decodeJTW["is_staff"] = f"{my_is_staff}"
+        # System super user (e.g. may send trial tokens from Entity details).
+        decodeJTW["is_superuser"] = "true" if self.is_superuser else "false"
         decodeJTW["is_bodaboda"] = is_bodaboda
         decodeJTW["is_agent"] = f"false"
         decodeJTW["is_active"] = f"{self.is_active}"

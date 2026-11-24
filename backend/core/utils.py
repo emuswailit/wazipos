@@ -355,6 +355,15 @@ def send_email(data=None, *, to=None, subject=None, body=None, html_body=None,
     if not subject:
         return ["Email subject is required"], False
 
+    # Every WaziPOS email carries the branded layout (core/email_layout.py):
+    # plain text is laid out as paragraphs, unbranded HTML is wrapped.
+    try:
+        from core.email_layout import brand
+
+        html_body = brand(subject, body, html_body)
+    except Exception as e:  # never lose an email over its styling
+        create_log("error", f"Email branding for '{subject}' failed: {e}")
+
     try:
         email = EmailMultiAlternatives(
             subject=subject,

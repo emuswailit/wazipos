@@ -394,6 +394,76 @@ def adjust(user, data):
     return _wallet_row(w)
 
 
+TRIAL_GIFT_MAX = Decimal("100")  # trial tokens a WaziPOS admin may give one business, in total
+TRIAL_GIFT_REF = "TRIAL_GIFT"
+
+
+def _trial_gifted(entity):
+    return TokenLedger.objects.filter(entity=entity, kind=TokenLedger.Kind.BONUS, reference=TRIAL_GIFT_REF).aggregate(t=Sum("tokens"))["t"] or Decimal("0")
+
+
+def trial_gift_status(user, data):
+    """Super users: how many trial tokens a business has had and can still get {entity}."""
+    from authentication.models import Entities
+
+    if not _trial_admin(user):
+        raise BillingError("Not allowed", ["Only system super users can send trial tokens"])
+    entity = Entities.objects.filter(pk=data.get("entity")).first()
+    if not entity:
+        raise BillingError("Not found", ["Pick the business"])
+    given = pricing.q(_trial_gifted(entity))
+    w = TokenWallet.objects.filter(entity=entity).first()
+    return {"entity": str(entity.id), "given": _s(given), "left": _s(max(TRIAL_GIFT_MAX - given, 0)),
+            "max": _s(TRIAL_GIFT_MAX), "balance": _s(w.balance if w else 0)}
+
+
+def _trial_admin(user):
+    """Trial tokens: system super users only (not staff or the "Admin" role)."""
+    return bool(user and getattr(user, "is_authenticated", False) and user.is_superuser)
+
+
+def send_trial_tokens(user, data):
+    """Super users: give a business tokens to try WaziPOS {entity, tokens, note?}.
+    At most TRIAL_GIFT_MAX per business across all gifts."""
+    from authentication.models import Entities
+
+    if not _trial_admin(user):
+        raise BillingError("Not allowed", ["Only system super users can send trial tokens"])
+    entity = Entities.objects.filter(pk=data.get("entity")).first()
+    if not entity:
+        raise BillingError("Not found", ["Pick the business"])
+    try:
+        tokens = pricing.q(data.get("tokens"))
+    except Exception:
+        raise BillingError("Check the details", ["Enter the number of tokens"])
+    if tokens <= 0:
+        raise BillingError("Check the details", ["Enter how many tokens to send (1 to 100)"])
+    note = str(data.get("note") or "").strip() or "Trial tokens from WaziPOS"
+    with transaction.atomic():
+        w = wallet_for(entity, lock=True)  # the lock also serialises concurrent gifts
+        left = TRIAL_GIFT_MAX - _trial_gifted(entity)
+        if left <= 0:
+            raise BillingError("Limit reached", [f"{entity.title} has already had the {TRIAL_GIFT_MAX:.0f} trial tokens allowed"])
+        if tokens > left:
+            raise BillingError("Too many tokens", [f"{entity.title} can get at most {_s(left)} more trial tokens (limit {TRIAL_GIFT_MAX:.0f})"])
+        w.balance = pricing.q(w.balance + tokens)
+        w.save(update_fields=["balance", "updated"])
+        TokenLedger.objects.create(wallet=w, entity=entity, kind=TokenLedger.Kind.BONUS, tokens=tokens, balance_after=w.balance,
+                                   reference=TRIAL_GIFT_REF, note=note[:255], created_by=user)
+    try:
+        from core.notify import deliver_to_entity, later
+
+        later(lambda: deliver_to_entity(entity, f"{_s(tokens)} trial tokens for {entity.title}",
+                                        [f"WaziPOS has added {_s(tokens)} tokens to {entity.title} so you can try it out.",
+                                         f"Your balance is now {_s(w.balance)} tokens.", note]))
+    except Exception:
+        pass
+    row = _wallet_row(w)
+    given = pricing.q(_trial_gifted(entity))
+    row.update({"trial_given": _s(given), "trial_left": _s(max(TRIAL_GIFT_MAX - given, 0))})
+    return row
+
+
 # ---------------------------------------------------------------- reading
 
 def _entry(e):
