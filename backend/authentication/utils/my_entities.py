@@ -144,6 +144,25 @@ def send_switch_code(user, data):
     return {"sent_to": _mask(user.phone), "expires_in": SWITCH_CODE_SECONDS}
 
 
+def _ensure_owner_role(user, entity):
+    """
+    The owner must hold the business's super admin role (menus come from roles).
+    Found by business + value only: Roles.save() upper-cases titles, so matching on
+    the title (as create_super_admin_role does) misses the existing role and tries to
+    create a duplicate, which the unique (entity, title, value) rule refuses.
+    """
+    value = f"{entity.entity_type}SuperAdmin"
+    role = models.Roles.objects.filter(entity=entity, value=value).order_by("created").first()
+    if role is None:
+        from authentication.utils.utils import create_super_admin_role
+
+        create_super_admin_role(entity)  # none yet: safe to create
+        role = models.Roles.objects.filter(entity=entity, value=value).first()
+    if role is not None and not user.roles.filter(pk=role.pk).exists():
+        user.roles.add(role)
+    return role
+
+
 def switch_my_entity(user, data):
     entity = _entity_for(user, data)
     _check_lock(user)
@@ -166,13 +185,7 @@ def switch_my_entity(user, data):
     with transaction.atomic():
         user.entity = entity
         user.save(update_fields=["entity"])
-        # The owner must hold the business's super admin role (menus come from roles).
-        from authentication.utils.utils import create_super_admin_role
-
-        create_super_admin_role(entity)
-        role = models.Roles.objects.filter(entity=entity, value=f"{entity.entity_type}SuperAdmin").first()
-        if role is not None and not user.roles.filter(pk=role.pk).exists():
-            user.roles.add(role)
+        _ensure_owner_role(user, entity)
 
     try:
         from utils.logging import create_log

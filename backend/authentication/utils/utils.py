@@ -169,9 +169,14 @@ def create_super_admin_role(instance):
         cluster= Clusters.objects.filter(value="SuperAdmin").first()
         role_value= f"{instance.entity_type}{cluster.value}"
         role_title= str(re.sub(r'([A-Z])', r' \1', instance.entity_type).strip()+" "+ re.sub(r'([A-Z])', r' \1', cluster.title).strip())
-        if not Roles.objects.filter(value=role_value,cluster=cluster,title=role_title, entity=instance, owner=instance.owner).exists():
+        # Match on business + value only: Roles.save() upper-cases titles, so a title match
+        # never found the existing role and tried to create a duplicate (unique entity/title/value).
+        existing = Roles.objects.filter(value=role_value, entity=instance).first()
+        if existing is None:
             admin_role= Roles.objects.create(value=role_value,cluster=cluster,title=role_title, entity=instance, owner=instance.owner)   
             instance.owner.roles.add(admin_role)
+        elif instance.owner_id and not instance.owner.roles.filter(pk=existing.pk).exists():
+            instance.owner.roles.add(existing)
             
         return instance
     else:
