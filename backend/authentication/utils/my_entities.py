@@ -21,7 +21,15 @@ from authentication import models
 SWITCH_CODE_SECONDS = 300
 MAX_TRIES = 5
 LOCK_SECONDS = 15 * 60
-HIDDEN_TYPES = ("Default",)
+# Not listed (nor switchable) in My businesses.
+HIDDEN_TYPES = (
+    "Default",
+    "Bank",
+    "GeneralManufacturer",
+    "PharmaceuticalManufacturer",
+    "GeneralDistributor",
+    "PharmaceuticalDistributor",
+)
 
 
 class SwitchError(Exception):
