@@ -735,6 +735,20 @@ def usersAPIView(request):
             me.refresh_from_db()
         return custom_success_message(0, "Verification", au.my_verification(me), "verification")
 
+    # ---- my businesses: strictly the user's own entities; switching needs signing in again ----
+    if action in ("GetMyEntities", "SendSwitchCode", "SwitchMyEntity"):
+        from authentication.utils import my_entities as me
+
+        try:
+            if action == "GetMyEntities":
+                return custom_success_message(0, "My businesses", me.my_entities(request.user, request), "my_entities")
+            if action == "SendSwitchCode":
+                return custom_success_message(0, "Code sent", me.send_switch_code(request.user, request.data), "code")
+            out = me.switch_my_entity(request.user, request.data)
+            return custom_success_message(0, f"You're now working in {out['entity']['title']}", out, "switch")
+        except me.SwitchError as e:
+            return custom_errors_response(1, e.message, e.errors)
+
     # ---- becoming a seller: complete profile, then open a shop ----
     if action in ("GetSellerReadiness", "CompleteSellerProfile", "CreateMyBusiness"):
         from authentication.utils import seller_onboarding as so
