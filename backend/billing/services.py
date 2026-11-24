@@ -104,6 +104,8 @@ def can_operate(entity):
     """The access gate (retail_permissions.EntitySubscriptionPermission). Returns (ok, reason)."""
     if entity is None:
         return False, "You are not working in any business"
+    if getattr(entity, "is_active", True) is False:
+        return False, f"{entity.title} has been deactivated by WaziPOS. Contact WaziPOS support."
     wallet = wallet_for(entity)
     m = mode_of(entity, wallet)
     if m in ("LEGACY", "TRIAL", "SETUP"):

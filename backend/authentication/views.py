@@ -744,7 +744,7 @@ def usersAPIView(request):
                 return custom_success_message(0, "My businesses", me.my_entities(request.user, request), "my_entities")
             if action == "SendSwitchCode":
                 return custom_success_message(0, "Code sent", me.send_switch_code(request.user, request.data), "code")
-            out = me.switch_my_entity(request.user, request.data)
+            out = me.switch_my_entity(request.user, request.data, request)
             return custom_success_message(0, f"You're now working in {out['entity']['title']}", out, "switch")
         except me.SwitchError as e:
             return custom_errors_response(1, e.message, e.errors)
@@ -1528,6 +1528,22 @@ def entitiesAdminAPIView(request):
             )
         else:
             return custom_errors_response(1, "Entity could not be verified",errors)
+
+    elif request.data["action"] == "SetEntityActive":
+        # Activate / deactivate a business {entity, active: true|false, reason?}.
+        from authentication.utils.my_entities import set_entity_active
+
+        entity = models.Entities.objects.filter(pk=request.data.get("entity")).first()
+        if entity is None:
+            return custom_errors_response(1, "Not found", ["That entity does not exist"])
+        raw = request.data.get("active")
+        active = raw is True or str(raw).lower() in ("true", "1", "yes")
+        set_entity_active(entity, active, by=request.user, reason=str(request.data.get("reason") or "").strip()[:300])
+        entity.refresh_from_db()
+        serializer = EntitySerializer(entity, many=False, context={"request": request})
+        return custom_success_message(
+            0, f"{entity.title} {'activated' if active else 'deactivated'}", serializer.data, "entity"
+        )
 
     elif request.data["action"] == "VerifyEntityBranch":
         errors, branch = utils.verify_entity_branch(request.data, request.user)
@@ -5226,6 +5242,88 @@ a{{display:inline-block;margin-top:16px;background:#2563eb;color:#fff;padding:10
 </head><body><div class="card"><h1>{title}</h1><p>{message}</p><p class="hint">{hint}</p>
 <a href="{escape(au.APP_URL)}">Open WaziPOS</a></div></body></html>"""
     return HttpResponse(page, status=code, content_type="text/html; charset=utf-8")
+
+
+from django.views.decorators.csrf import csrf_exempt as _csrf_exempt
+
+
+@_csrf_exempt  # the signed, single-switch token in the form is the proof; no session involved
+def reportSwitchView(request):
+    """
+    "This wasn't me" from the business-switch email:
+    /api/v1/authentication/users/report-switch?t=<signed token>
+      GET   confirmation page (nothing happens yet: email scanners open links)
+      POST  files the report (authentication/utils/my_entities.file_report)
+    """
+    from django.http import HttpResponse, HttpResponseNotAllowed
+    from django.utils.html import escape
+
+    from authentication.utils import admin_users as au
+    from authentication.utils import my_entities as me
+
+    token = request.POST.get("t") if request.method == "POST" else request.GET.get("t")
+    reset_url = escape(f"{au.APP_URL}/passwordReset")
+    app_url = escape(au.APP_URL)
+
+    def page(title, body, tone, code=200, form=False, payload=None):
+        accent = {"danger": "#dc2626", "ok": "#059669", "warn": "#d97706"}.get(tone, "#2563eb")
+        details = ""
+        if payload:
+            details = (
+                '<div class="box">'
+                f"<div><span>Switched to</span><b>{escape(payload.get('to_title') or '')}</b></div>"
+                f"<div><span>When</span><b>{escape((payload.get('at') or '')[:16].replace('T', ' '))}</b></div>"
+                f"<div><span>Device</span><b>{escape(payload.get('dev') or 'Unknown')}</b></div>"
+                f"<div><span>IP</span><b>{escape(payload.get('ip') or 'Unknown')}</b></div>"
+                "</div>"
+            )
+        action = (
+            f'<form method="post"><input type="hidden" name="t" value="{escape(token or "")}">'
+            '<button type="submit" class="btn danger">Yes, report it &mdash; this wasn&rsquo;t me</button></form>'
+            f'<a class="btn ghost" href="{app_url}">It was me</a>'
+            if form else
+            f'<a class="btn" href="{reset_url}">Change my password</a><a class="btn ghost" href="{app_url}">Open WaziPOS</a>'
+        )
+        html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)} · WaziPOS</title>
+<style>
+*{{box-sizing:border-box}}html{{font-size:clamp(15px,.85rem + .35vw,18px)}}
+body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#fff;background:#0b1733;
+background-image:radial-gradient(circle at 15% 0%,rgba(42,111,243,.35),transparent 45%)}}
+.card{{width:100%;max-width:30rem;background:rgba(18,34,74,.94);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:1.6rem 1.2rem;text-align:center}}
+.badge{{width:3.6rem;height:3.6rem;margin:0 auto 1rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;
+background:{accent}22;color:{accent}}}
+h1{{font-size:clamp(1.25rem,1rem + 1.4vw,1.7rem);margin:0 0 .5rem}}p{{color:rgba(255,255,255,.78);margin:.3rem 0 .8rem;line-height:1.5}}
+.box{{text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:.4rem .9rem;margin:1rem 0}}
+.box div{{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;font-size:.9rem}}.box div+div{{border-top:1px solid rgba(255,255,255,.1)}}
+.box span{{color:rgba(255,255,255,.6)}}.box b{{text-align:right;word-break:break-word}}
+.btn{{display:block;width:100%;margin-top:.7rem;padding:.9rem 1rem;border-radius:12px;border:0;font:inherit;font-weight:700;
+color:#fff;text-decoration:none;cursor:pointer;background:linear-gradient(135deg,#2a6ff3,#4f8bff)}}
+.btn.danger{{background:linear-gradient(135deg,#dc2626,#ef4444)}}.btn.ghost{{background:transparent;border:1px solid rgba(255,255,255,.25)}}
+</style></head><body><div class="card"><div class="badge">{'&#9888;' if tone in ('danger','warn') else '&#10003;'}</div>
+<h1>{escape(title)}</h1><p>{body}</p>{details}{action}</div></body></html>"""
+        return HttpResponse(html, status=code, content_type="text/html; charset=utf-8")
+
+    if request.method not in ("GET", "POST"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+    payload, error = me.read_report(token)
+    if error:
+        return page("Link not valid", escape(error), "warn", 400)
+    to = models.Entities.objects.filter(pk=payload.get("to")).only("title").first()
+    payload["to_title"] = to.title if to else "a business"
+
+    if request.method == "GET":
+        return page(
+            "Wasn't you?",
+            "Someone switched your WaziPOS account to another business. If it wasn't you, report it: we'll move your "
+            "account back, block switching for 24 hours and alert WaziPOS.",
+            "danger", form=True, payload=payload,
+        )
+    ok, message = me.file_report(token, request)
+    if not ok:
+        return page("Couldn't report", escape(message), "warn", 400)
+    return page("Account secured", escape(message), "ok")
 
 
 def get_or_create_social_user(email, first_name, last_name, method):
