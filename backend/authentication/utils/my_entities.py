@@ -27,6 +27,7 @@ HIDDEN_TYPES = (
     "Bank",
     "GeneralManufacturer",
     "PharmaceuticalManufacturer",
+    "Publisher",
     "GeneralDistributor",
     "PharmaceuticalDistributor",
 )

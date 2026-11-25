@@ -4,14 +4,15 @@ from rest_framework import exceptions, permissions
 
 from distributors.services.access import DISTRIBUTOR_TYPES, employee_of, works_at  # noqa: F401
 
-MANUFACTURER_TYPES = {"GeneralManufacturer", "PharmaceuticalManufacturer"}
+# Publishers (book publishers) sell their titles like a general manufacturer.
+MANUFACTURER_TYPES = {"GeneralManufacturer", "PharmaceuticalManufacturer", "Publisher"}
 
 
 def manufacturer_types_for(distributor):
     """Which manufacturers a distributor may buy from: pharmaceutical distributors buy medicines and general goods."""
     if distributor.entity_type == "PharmaceuticalDistributor":
-        return {"PharmaceuticalManufacturer", "GeneralManufacturer"}
-    return {"GeneralManufacturer"}
+        return {"PharmaceuticalManufacturer", "GeneralManufacturer", "Publisher"}
+    return {"GeneralManufacturer", "Publisher"}
 
 
 def distributor_types_for(manufacturer):

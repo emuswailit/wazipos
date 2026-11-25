@@ -40,6 +40,7 @@ STOCK = {
     "PharmaceuticalDistributor": ("distributors.DistributorReceipts", "products in stock", "/(distributors)/distributorStock", True),
     "GeneralManufacturer": ("manufacturers.ManufacturerVariations", "products", "/(manufacturers)/manufacturerProducts", False),
     "PharmaceuticalManufacturer": ("manufacturers.ManufacturerVariations", "products", "/(manufacturers)/manufacturerProducts", False),
+    "Publisher": ("manufacturers.ManufacturerVariations", "titles", "/(manufacturers)/manufacturerProducts", False),
     "Restaurant": ("restaurants.MenuItem", "menu items", "/(dining)/restaurantMenu", False),
     "Hotel": ("restaurants.MenuItem", "menu items", "/(hotel)/hotelMenu", False),
 }

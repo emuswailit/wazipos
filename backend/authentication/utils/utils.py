@@ -509,6 +509,7 @@ def get_manufacturer_entities(user):
         entity_type__in=[
             "GeneralManufacturer",
             "PharmaceuticalManufacturer",
+            "Publisher",
         ]
     )
     return entities

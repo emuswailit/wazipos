@@ -21,7 +21,7 @@ PHARMA_ENTITY_TYPES = [
 ]
 # Who may stock a general product unless the manufacturer narrows it.
 GENERAL_ENTITY_TYPES = [
-    "GeneralManufacturer", "GeneralDistributor", "PharmaceuticalDistributor", "GeneralWholesaler",
+    "GeneralManufacturer", "Publisher", "GeneralDistributor", "PharmaceuticalDistributor", "GeneralWholesaler",
     "PharmaceuticalWholesaler", "GeneralRetailer", "PharmaceuticalRetailer", "Grocery", "Restaurant",
     "Hotel", "Bar",
 ]

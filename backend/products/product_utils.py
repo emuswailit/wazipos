@@ -85,7 +85,7 @@ def validate_product_data(data):
             # 🌟 Check if the entity is EITHER a General or Pharmaceutical Manufacturer
             if Entities.objects.filter(
                 id=manufacturer, 
-                entity_type__in=["GeneralManufacturer", "PharmaceuticalManufacturer"]
+                entity_type__in=["GeneralManufacturer", "PharmaceuticalManufacturer", "Publisher"]
             ).exists():
                 pass
             else:

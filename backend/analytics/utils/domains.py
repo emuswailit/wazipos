@@ -67,6 +67,7 @@ GENERAL_ENTITY_TYPES = {
     EntityType.GENERAL_RETAILER.value,
     EntityType.GENERAL_DISTRIBUTOR.value,
     EntityType.GENERAL_MANUFACTURER.value,
+    EntityType.PUBLISHER.value,
 }
 
 

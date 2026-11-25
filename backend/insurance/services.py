@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 SELLER_TYPES = {
     "GeneralRetailer", "PharmaceuticalRetailer", "GeneralWholesaler", "PharmaceuticalWholesaler",
     "GeneralDistributor", "PharmaceuticalDistributor", "GeneralManufacturer", "PharmaceuticalManufacturer",
+    "Publisher",
 }
 PREMISES_TYPES = SELLER_TYPES | {"Restaurant", "Hotel", "Bar", "Grocery", "Dispensary", "Clinic"}
 ORDER_LINK = {

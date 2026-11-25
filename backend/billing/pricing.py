@@ -63,6 +63,9 @@ MONTHLY_CAP = {
 }
 DEFAULT_CAP = Decimal("3000")
 
+# Kinds of business WaziPOS does not bill: never charged tokens, never blocked by the gate.
+BILLING_EXEMPT = {"Publisher"}
+
 # Packs: (code, label, KES paid, bonus tokens)
 PACKS = (
     ("KIANZIO", "Kianzio", Decimal("300"), Decimal("0")),

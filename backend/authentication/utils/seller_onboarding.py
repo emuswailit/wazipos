@@ -27,6 +27,7 @@ SELF_SERVICE_TYPES = {
     "PharmaceuticalDistributor": "Pharmaceutical distributor",
     "GeneralManufacturer": "Manufacturer",
     "PharmaceuticalManufacturer": "Pharmaceutical manufacturer",
+    "Publisher": "Book publisher",
     "Courier": "Courier / delivery company",
     "Facilitator": "Lender / credit facilitator (licensed)",
 }

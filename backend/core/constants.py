@@ -63,6 +63,9 @@ class EntityType(Enum):
     PHARMACEUTICAL_MANUFACTURER = "PharmaceuticalManufacturer"
     PARK = "Park"
     PARKING = "Parking"
+    # Book publishers: own their titles in the product master and sell them like a
+    # general manufacturer (to distributors). Not billed (no WaziPOS Tokens).
+    PUBLISHER = "Publisher"
     GENERAL_RETAILER = "GeneralRetailer"
     PHARMACEUTICAL_RETAILER = "PharmaceuticalRetailer"
     REALTY = "Realty"
@@ -128,6 +131,7 @@ class EntityType(Enum):
             cls.GENERAL_RETAILER.value,
             cls.GENERAL_DISTRIBUTOR.value,
             cls.GENERAL_MANUFACTURER.value,
+            cls.PUBLISHER.value,
         }
 
 

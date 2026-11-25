@@ -88,6 +88,8 @@ def approval_status(entity):
 
 
 def mode_of(entity, wallet=None):
+    if getattr(entity, "entity_type", None) in pricing.BILLING_EXEMPT:
+        return "EXEMPT"
     if _subscription(entity, "PAID"):
         return "LEGACY"
     wallet = wallet or wallet_for(entity)
@@ -108,7 +110,7 @@ def can_operate(entity):
         return False, f"{entity.title} has been deactivated by WaziPOS. Contact WaziPOS support."
     wallet = wallet_for(entity)
     m = mode_of(entity, wallet)
-    if m in ("LEGACY", "TRIAL", "SETUP"):
+    if m in ("LEGACY", "TRIAL", "SETUP", "EXEMPT"):
         return True, ""
     if wallet.balance > 0:
         return True, ""
@@ -138,6 +140,8 @@ def meter(entity, meter_code, value, reference, order_ref="", note=""):
     Never raises into the payment flow — returns the ledger row or None."""
     if entity is None or meter_code not in pricing.METERS:
         return None
+    if entity.entity_type in pricing.BILLING_EXEMPT:
+        return None  # not billed: nothing recorded, nothing charged
     key = f"USE:{meter_code}:{reference}"
     if TokenLedger.objects.filter(idem_key=key).exists():
         return None
