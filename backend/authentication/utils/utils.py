@@ -271,10 +271,11 @@ def get_all_plans():
 
 def get_user_entities(user):
     entities = []
-    # Retrieve user's own entities
-    if Entities.objects.filter(owner=user).exists():
+    # Retrieve user's own entities (Publisher businesses are not listed here)
+    own = Entities.objects.filter(owner=user).exclude(entity_type="Publisher")
+    if own.exists():
         entities = (
-            Entities.objects.filter(owner=user)
+            own
             .select_related(*ENTITY_LIST_SELECT)
             .prefetch_related(*ENTITY_LIST_PREFETCH)
             .order_by("-created")
