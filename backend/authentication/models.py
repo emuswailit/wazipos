@@ -1787,6 +1787,16 @@ class Users(AbstractBaseUser, PermissionsMixin):
     is_agent = models.BooleanField(default=False)
     # Menu sections this person chose to hide (keys such as "church"); see utils/navigationData.ts.
     hidden_menus = models.JSONField(default=list, blank=True)
+    # Marriage, optional: a spouse points at the main user (household head), so the main
+    # user's spouses are `user.spouses.all()` (one to many; several where customary).
+    # Children and other dependants are authentication.Dependants of the main user.
+    married_to = models.ForeignKey(
+        "self",
+        related_name="spouses",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
     roles_string = models.TextField(null=True, blank=True)
     key = models.CharField(max_length=100, blank=True)
     notification_token = models.CharField(max_length=200, null=True, blank=True)

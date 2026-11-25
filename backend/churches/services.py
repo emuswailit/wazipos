@@ -1242,6 +1242,8 @@ def find_churches(user, data):
         )
     if _s(data.get("denomination_id")):
         qs = qs.filter(organization_id=_s(data.get("denomination_id")))
+    if _s(data.get("region_id")):
+        qs = qs.filter(division_id=_s(data.get("region_id")))
     here = None
     try:
         lat, lng = float(data.get("latitude")), float(data.get("longitude"))
