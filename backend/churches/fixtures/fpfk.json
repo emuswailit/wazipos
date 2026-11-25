@@ -1,6 +1,6 @@
 [
   {
-    "model": "authentication.organizations",
+    "model": "authentication.Organizations",
     "pk": "558a39c0-45a1-5861-a479-516881247cb8",
     "fields": {
       "title": "FREE PENTECOSTAL FELLOWSHIP IN KENYA",
