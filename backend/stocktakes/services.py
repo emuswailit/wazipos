@@ -756,7 +756,7 @@ def request_stock_take(entity, user, data):
     if agent is not None and getattr(agent, "is_active", True) and agent.user_id:
         people, sent_to = [agent.user], "your agent"
     else:
-        people = list(Users.objects.filter(Q(is_staff=True) | Q(roles__value="Admin")).distinct()[:10])
+        people = list(Users.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).distinct()[:10])
         sent_to = "WaziPOS"
     if not people:
         return ["Nobody to send the request to yet. Contact WaziPOS support."], None

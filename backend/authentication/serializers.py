@@ -2700,10 +2700,15 @@ class EntitySerializer(serializers.ModelSerializer):
     # ========================================================
 
     def get_categories_array(self, obj):
-        categories = obj.categories.all()
-        if categories.count() > 0:
-            return CategoriesSerializer(categories, context=self.context, many=True).data
-        return []
+        # Many entities share the same few categories, and each serialized category
+        # queries its subcategories; serialize each category once per response.
+        cache = self.context.setdefault("_categories_cache", {})
+        out = []
+        for category in obj.categories.all():
+            if category.pk not in cache:
+                cache[category.pk] = CategoriesSerializer(category, context=self.context).data
+            out.append(cache[category.pk])
+        return out
 
     def get_owner_details(self, obj):
         if obj.owner:
@@ -2721,8 +2726,8 @@ class EntitySerializer(serializers.ModelSerializer):
 
     def get_images(self, obj):
         # Assuming EntityImagesSerializer is imported
-        images = obj.images.all()
-        if images.count() > 0:
+        images = list(obj.images.all())  # uses the prefetch when present
+        if images:
             return EntityImagesSerializer(images, context=self.context, many=True).data
         return []
 

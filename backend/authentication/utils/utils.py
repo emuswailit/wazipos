@@ -244,9 +244,20 @@ def get_all_users(user):
 
 # Entities
 
+ENTITY_LIST_SELECT = ("locations", "owner", "country", "county", "constituency")
+ENTITY_LIST_PREFETCH = ("categories", "images", "logos", "licences")
+
+
 def get_all_entities(user):
     entities = []
-    entities = Entities.objects.all().exclude(entity_type="DEFAULT")
+    # EntitySerializer reads these relations for every row; without eager loading the
+    # list ran ~15 queries per entity and timed out the clients once entities grew.
+    entities = (
+        Entities.objects.exclude(entity_type="DEFAULT")
+        .select_related(*ENTITY_LIST_SELECT)
+        .prefetch_related(*ENTITY_LIST_PREFETCH)
+        .order_by("-created")
+    )
     # entities = Entities.objects.all().exclude(
     #     entity_type='DEFAULT').order_by("-created")[:10]
     return entities
@@ -262,7 +273,12 @@ def get_user_entities(user):
     entities = []
     # Retrieve user's own entities
     if Entities.objects.filter(owner=user).exists():
-        entities = Entities.objects.filter(owner=user)
+        entities = (
+            Entities.objects.filter(owner=user)
+            .select_related(*ENTITY_LIST_SELECT)
+            .prefetch_related(*ENTITY_LIST_PREFETCH)
+            .order_by("-created")
+        )
 
     # else:
 

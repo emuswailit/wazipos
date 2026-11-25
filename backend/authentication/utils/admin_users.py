@@ -46,7 +46,8 @@ DEFAULT_ENTITY_TITLE = "WAZIPOS"
 def is_platform_admin(user) -> bool:
     if not user or not user.is_authenticated:
         return False
-    return bool(user.is_staff or user.is_superuser or user.roles.filter(value="Admin").exists())
+    # Platform admins are WaziPOS staff: is_staff or is_superuser (the "Admin" role alone does not count).
+    return bool(user.is_staff or user.is_superuser)
 
 
 def can_add_employees(user, entity) -> bool:

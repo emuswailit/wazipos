@@ -36,9 +36,7 @@ DESTINATION_FIELDS = ("account_type", "account_number", "business_number", "acco
 def is_platform_admin(user):
     if not user or not user.is_authenticated:
         return False
-    if user.is_staff or user.is_superuser:
-        return True
-    return user.roles.filter(value="Admin").exists()
+    return bool(user.is_staff or user.is_superuser)
 
 
 def _bool_str(value, default="false"):

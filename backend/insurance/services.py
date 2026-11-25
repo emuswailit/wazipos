@@ -760,7 +760,7 @@ def _tell_desk(subject, lines):
         from authentication.models import Users
         from core.notify import notify_users
 
-        desk = list(Users.objects.filter(Q(is_staff=True) | Q(roles__value="Admin")).distinct()[:20])
+        desk = list(Users.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).distinct()[:20])
         notify_users(desk, subject, lines, email=True, push=False)
     except Exception as e:
         log.warning("claims desk notice failed: %s", e)

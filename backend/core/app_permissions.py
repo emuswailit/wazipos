@@ -656,8 +656,9 @@ class PharmacySuperintendentPermission(permissions.BasePermission):
 
 class AdminRoleOnly(permissions.BasePermission):
     """
-    Platform administrators only: staff / superusers, or users holding the
-    "Admin" role — the same rule as authentication.utils.admin_users.is_platform_admin.
+    WaziPOS platform administrators only: is_staff or is_superuser. The "Admin"
+    role alone does not count. Same rule as
+    authentication.utils.admin_users.is_platform_admin.
     """
 
     message = "Only administrators can do this."
@@ -666,6 +667,6 @@ class AdminRoleOnly(permissions.BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             raise exceptions.ValidationError("Please log in")
-        if user.is_staff or user.is_superuser or user.roles.filter(value="Admin").exists():
+        if user.is_staff or user.is_superuser:
             return True
         raise exceptions.ValidationError(["Only administrators can do this."])
