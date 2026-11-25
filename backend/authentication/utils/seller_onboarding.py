@@ -28,6 +28,7 @@ SELF_SERVICE_TYPES = {
     "GeneralManufacturer": "Manufacturer",
     "PharmaceuticalManufacturer": "Pharmaceutical manufacturer",
     "Publisher": "Book publisher",
+    "Church": "Church / place of worship",
     "Courier": "Courier / delivery company",
     "Facilitator": "Lender / credit facilitator (licensed)",
 }

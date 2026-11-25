@@ -1740,6 +1740,8 @@ class Users(AbstractBaseUser, PermissionsMixin):
     )
     is_staff = models.BooleanField(default=False)
     is_agent = models.BooleanField(default=False)
+    # Menu sections this person chose to hide (keys such as "church"); see utils/navigationData.ts.
+    hidden_menus = models.JSONField(default=list, blank=True)
     roles_string = models.TextField(null=True, blank=True)
     key = models.CharField(max_length=100, blank=True)
     notification_token = models.CharField(max_length=200, null=True, blank=True)
@@ -2015,7 +2017,30 @@ class Users(AbstractBaseUser, PermissionsMixin):
             decodeJTW["is_onboarder"] = "true"
         else:
             decodeJTW["is_onboarder"] = "false"
+
+        # Church officials (pastor, secretary, group leader…) see the Church admin menu.
+        try:
+            from churches.services import is_official
+
+            if is_official(self):
+                from authentication.utils.agents import _system_role
+
+                role = _system_role("ChurchOfficial", "CHURCH OFFICIAL", "Helps run a church on WaziPOS")
+                if role and not any(r.get("value") == role.value for r in roles):
+                    roles.append(dict(
+                        id=str(role.id),
+                        cluster=str(role.cluster_id),
+                        owner=str(role.owner_id),
+                        entity=str(role.entity_id),
+                        entity_title=str(role.entity.title),
+                        level=role.level,
+                        title=role.title,
+                        value=role.value,
+                    ))
+        except Exception:  # noqa: BLE001 — never block signing in
+            pass
         decodeJTW["roles"] = roles
+        decodeJTW["hidden_menus"] = list(self.hidden_menus or [])
 
         if Employees.objects.filter(user=self, entity=self.entity).exists():
             employee = Employees.objects.filter(user=self, entity=self.entity).first()

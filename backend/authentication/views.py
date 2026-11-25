@@ -735,6 +735,18 @@ def usersAPIView(request):
             me.refresh_from_db()
         return custom_success_message(0, "Verification", au.my_verification(me), "verification")
 
+    # ---- menu sections the person hid (e.g. the Church menu); kept on the account, all devices ----
+    if action in ("GetMenuPrefs", "SetHiddenMenus"):
+        me = request.user
+        if action == "SetHiddenMenus":
+            raw = request.data.get("hidden_menus")
+            if not isinstance(raw, list):
+                return custom_errors_response(1, "Check the details", ["hidden_menus must be a list"])
+            keys = sorted({str(k).strip()[:40] for k in raw if str(k).strip()})[:30]
+            me.hidden_menus = keys
+            me.save(update_fields=["hidden_menus"])
+        return custom_success_message(0, "Menu preferences", {"hidden_menus": list(me.hidden_menus or [])}, "prefs")
+
     # ---- my businesses: strictly the user's own entities; switching needs signing in again ----
     if action in ("GetMyEntities", "SendSwitchCode", "SwitchMyEntity"):
         from authentication.utils import my_entities as me

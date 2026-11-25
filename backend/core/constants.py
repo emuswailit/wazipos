@@ -66,6 +66,8 @@ class EntityType(Enum):
     # Book publishers: own their titles in the product master and sell them like a
     # general manufacturer (to distributors). Not billed (no WaziPOS Tokens).
     PUBLISHER = "Publisher"
+    # Churches: family register, groups, notices, weekly programme, SMS (churches app). Not billed.
+    CHURCH = "Church"
     GENERAL_RETAILER = "GeneralRetailer"
     PHARMACEUTICAL_RETAILER = "PharmaceuticalRetailer"
     REALTY = "Realty"

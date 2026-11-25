@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     "insurance",
     "credit",
     "billing",
+    "churches",
     "onboarding",
     # Email / SMS / push on orders, pay-ins and payouts (notifications/signals.py)
     "notifications",
