@@ -1,5 +1,5 @@
 // components/admin/entities/AdminEntitiesList.tsx
-import { DetailsDock } from '@/components/common/listScreen';
+import { DetailsDock, SheetButton } from '@/components/common/listScreen';
 import entitiesApi from '@/api/entitiesApi';
 import { useAlert } from '@/components/common/AlertProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -13,6 +13,8 @@ import AdminEntitiesMobileView from './AdminEntitiesMobileView';
 import AdminEntitiesWebView from './AdminEntitiesWebView';
 import AdminEntityDetailsModal from './AdminEntityDetailsModal'; // 🟢 Import Details
 import AdminEntityEditModal, { toEntityDetails } from './AdminEntityEditModal';
+import TrialTokensSheet from './TrialTokensSheet';
+import { isSuperUser } from '@/utils/platformAdmin';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
@@ -55,7 +57,10 @@ function formatHumanDate(dateString?: string | null): string {
 }
 
 export default function AdminEntitiesList() {
-    const { theme, isDarkMode } = useAuth();
+    const { theme, isDarkMode, user } = useAuth();
+    // System super users only: send a business up to 100 trial tokens (TrialTokensSheet).
+    const canSendTrialTokens = isSuperUser(user);
+    const [trialFor, setTrialFor] = useState<{ id: string; title: string } | null>(null);
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 768;
 
@@ -68,6 +73,8 @@ export default function AdminEntitiesList() {
         forceEntitiesRefresh,
     } = useEntitiesSync();
 
+    // Activate / deactivate from the details sheet (backend SetEntityActive).
+    const [togglingActive, setTogglingActive] = useState(false);
     // 🟢 Modals state
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<EntityItem | null>(null);
@@ -157,6 +164,40 @@ export default function AdminEntitiesList() {
         );
     }
 
+    const toggleActive = (item: EntityItem) => {
+        const activate = item.is_active === false;
+        const id = String((item as any).remote_id || item.id);
+        const go = async () => {
+            setTogglingActive(true);
+            try {
+                const res: any = await entitiesApi.setEntityActive(id, activate);
+                if (res?.ok && String(res.data?.response_code) === '0') {
+                    setViewingItem({ ...item, is_active: activate });
+                    alert(activate ? 'Activated' : 'Deactivated', res.data?.response_message || '', undefined, activate ? 'success' : 'warning');
+                    forceEntitiesRefresh();
+                } else {
+                    const errs = res?.data?.errors;
+                    alert('Not changed', (Array.isArray(errs) && errs.join(' ')) || res?.data?.response_message || 'Please try again.', undefined, 'danger');
+                }
+            } catch (e: any) {
+                alert('Error', e?.message || 'Please try again.', undefined, 'danger');
+            } finally {
+                setTogglingActive(false);
+            }
+        };
+        alert(
+            activate ? `Activate ${item.title}?` : `Deactivate ${item.title}?`,
+            activate
+                ? 'Its owner and staff can work in it again, and its admins are emailed.'
+                : 'Nobody can work in it (sales, stock, staff screens close) until you activate it again. Its admins get an email and SMS.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: activate ? 'Activate' : 'Deactivate', style: activate ? 'default' : 'destructive', onPress: () => void go() },
+            ],
+            activate ? 'default' : 'danger',
+        );
+    };
+
     const isRefreshing = isEntitiesSyncing || isEntitiesRefreshing;
 
     const sharedProps: AdminEntitiesSharedProps = {
@@ -195,11 +236,33 @@ export default function AdminEntitiesList() {
                     }}
                     item={viewingItem}
                     formatDateHandler={formatHumanDate}
+                    actions={viewingItem ? (
+                        <>
+                        {canSendTrialTokens ? (
+                            <SheetButton
+                                label="Send trial tokens"
+                                icon="gift-outline"
+                                variant="secondary"
+                                onPress={() => setTrialFor({ id: String((viewingItem as any).remote_id || viewingItem.id), title: viewingItem.title || 'this business' })}
+                            />
+                        ) : null}
+                        <SheetButton
+                            label={viewingItem.is_active === false ? 'Activate' : 'Deactivate'}
+                            icon={viewingItem.is_active === false ? 'checkmark-circle-outline' : 'ban-outline'}
+                            variant={viewingItem.is_active === false ? 'primary' : 'danger'}
+                            loading={togglingActive}
+                            loadingLabel={viewingItem.is_active === false ? 'Activating…' : 'Deactivating…'}
+                            onPress={() => toggleActive(viewingItem)}
+                        />
+                        </>
+                    ) : null}
                 />
                 }
             >
                 {isLargeScreen ? <AdminEntitiesWebView {...sharedProps} /> : <AdminEntitiesMobileView {...sharedProps} />}
             </DetailsDock>
+
+            <TrialTokensSheet entity={trialFor} onClose={() => setTrialFor(null)} />
 
             {/* Edit Modal */}
             <AdminEntityEditModal

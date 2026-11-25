@@ -11,6 +11,7 @@ import {
     View,
 } from "react-native";
 import { Pressable } from '@/components/common/StablePressable';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 interface AutocompleteOption {
     id: string;
@@ -159,7 +160,8 @@ export default function LiveSearchAutocompletePicker({
                         color: theme.text,
                         minHeight: MIN_INPUT_HEIGHT,
                         paddingHorizontal: HORIZONTAL_PADDING,
-                        paddingRight: loading && dropdownOpen ? 34 : HORIZONTAL_PADDING,
+                        // room for the loading spinner and the clear "x"
+                        paddingRight: (loading && dropdownOpen ? 34 : HORIZONTAL_PADDING) + (search ? 28 : 0),
                         paddingVertical: 0,
                         textAlign: "left",
                         textAlignVertical: "center",
@@ -168,6 +170,10 @@ export default function LiveSearchAutocompletePicker({
                         ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
                     }}
                 />
+                {/* the x empties the search box */}
+                <View pointerEvents="box-none" style={{ position: "absolute", right: loading && dropdownOpen ? 34 : 10, top: 0, height: MIN_INPUT_HEIGHT, justifyContent: "center" }}>
+                    <ClearInputButton value={search} onClear={() => { setSearch(""); setDropdownOpen(true); }} />
+                </View>
 
                 {loading && dropdownOpen && (
                     <View

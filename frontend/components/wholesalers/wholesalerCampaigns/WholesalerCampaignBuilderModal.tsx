@@ -48,6 +48,7 @@ import {
     View,
 } from "react-native";
 import * as Yup from "yup";
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 /* =========================================================
  * Debug logging — remove once the campaign flow is stable.
@@ -432,6 +433,7 @@ function InventoryCheckboxList({
                         borderColor,
                         backgroundColor: subBg,
                         paddingHorizontal: 12,
+                        paddingRight: 38,
                         color: theme.text,
                         fontFamily: theme.font.medium,
                         fontSize: 13,
@@ -440,6 +442,10 @@ function InventoryCheckboxList({
                             : null),
                     }}
                 />
+                {/* the x sits inside the right end of the 40px search box (container padding 12) */}
+                <View pointerEvents="box-none" style={{ position: 'absolute', right: 20, top: 12, height: 40, justifyContent: 'center' }}>
+                    <ClearInputButton value={search} onClear={() => setSearch('')} disabled={disabled} />
+                </View>
 
                 <View
                     style={{
@@ -820,6 +826,7 @@ function RetailerCheckboxList({
                         borderColor,
                         backgroundColor: subBg,
                         paddingHorizontal: 12,
+                        paddingRight: 38,
                         color: theme.text,
                         fontFamily: theme.font.medium,
                         fontSize: 13,
@@ -828,6 +835,10 @@ function RetailerCheckboxList({
                             : null),
                     }}
                 />
+                {/* the x sits inside the right end of the 40px search box (container padding 12) */}
+                <View pointerEvents="box-none" style={{ position: 'absolute', right: 20, top: 12, height: 40, justifyContent: 'center' }}>
+                    <ClearInputButton value={search} onClear={() => setSearch('')} disabled={disabled} />
+                </View>
 
                 <View
                     style={{

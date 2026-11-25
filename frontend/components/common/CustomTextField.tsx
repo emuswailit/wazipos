@@ -2,8 +2,10 @@
 import { useAuth } from "@/context/AuthContext";
 import { useFormikContext } from "formik";
 import { forwardRef, useState } from "react";
+import { X } from "lucide-react-native";
 import {
     Platform,
+    Pressable,
     Text,
     TextInput,
     TextInputProps,
@@ -23,6 +25,11 @@ interface CustomTextFieldProps extends TextInputProps {
     transform?: (raw: string) => any;
     /** Formik mode: renders the stored value as text when the field isn't focused. */
     format?: (value: any) => string;
+    /**
+     * Shows an "x" that empties the field. Default: on for single-line search fields
+     * (placeholder mentions "search" or returnKeyType "search"), off otherwise.
+     */
+    clearable?: boolean;
 }
 
 type Props = CustomTextFieldProps;
@@ -82,6 +89,7 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
         numberOfLines,
         style,
         placeholderTextColor,
+        clearable,
         ...rest
     },
     ref
@@ -93,6 +101,9 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
 
     const hasError = !!error;
     const isMultiline = !!multiline;
+    const looksLikeSearch = /search/i.test(String(rest.placeholder ?? "")) || rest.returnKeyType === "search";
+    const canClear = !isMultiline && rest.editable !== false && (clearable ?? looksLikeSearch);
+    const showClear = canClear && String(rest.value ?? "").length > 0 && !!rest.onChangeText;
 
     const borderColor = hasError
         ? theme.danger
@@ -119,6 +130,7 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
         fontSize: FONT_SIZE,
         lineHeight: LINE_HEIGHT,
         minHeight: isMultiline ? MIN_HEIGHT_MULTI : MIN_HEIGHT,
+        ...(canClear ? { paddingRight: HORIZONTAL_PADDING + 26 } : {}),
         ...(focused && !hasError
             ? isWebPlatform
                 ? ({ boxShadow: `0 0 0 4px ${theme.primary}22` } as any)
@@ -145,22 +157,38 @@ const PlainField = forwardRef<TextInput, Props>(function PlainField(
                 </Text>
             ) : null}
 
-            <TextInput
-                ref={ref}
-                multiline={isMultiline}
-                scrollEnabled={isMultiline ? false : undefined}
-                placeholderTextColor={placeholderTextColor ?? (isDarkMode ? "#64748b" : "#94a3b8")}
-                style={[baseStyle, style]}
-                {...rest}
-                onFocus={(e) => {
-                    setFocused(true);
-                    rest.onFocus?.(e);
-                }}
-                onBlur={(e) => {
-                    setFocused(false);
-                    rest.onBlur?.(e);
-                }}
-            />
+            <View style={{ position: "relative", justifyContent: "center" }}>
+                <TextInput
+                    ref={ref}
+                    multiline={isMultiline}
+                    scrollEnabled={isMultiline ? false : undefined}
+                    placeholderTextColor={placeholderTextColor ?? (isDarkMode ? "#64748b" : "#94a3b8")}
+                    style={[baseStyle, style]}
+                    {...rest}
+                    onFocus={(e) => {
+                        setFocused(true);
+                        rest.onFocus?.(e);
+                    }}
+                    onBlur={(e) => {
+                        setFocused(false);
+                        rest.onBlur?.(e);
+                    }}
+                />
+                {showClear ? (
+                    <Pressable
+                        onPress={() => rest.onChangeText?.("")}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear"
+                        style={[
+                            { position: "absolute", right: 10, width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: isDarkMode ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.07)" },
+                            isWebPlatform ? ({ cursor: "pointer" } as any) : null,
+                        ]}
+                    >
+                        <X size={14} color={theme.textDark} strokeWidth={2.4} />
+                    </Pressable>
+                ) : null}
+            </View>
 
             {hasError ? (
                 <Text style={{ color: theme.danger, fontFamily: theme.font.medium, fontSize: 12, paddingHorizontal: 2 }}>

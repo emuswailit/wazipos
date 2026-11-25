@@ -75,11 +75,11 @@ export function toEntityDetails(values: any, editingRemoteId?: string | null) {
 }
 
 const RAW_ENTITY_TYPES = [
-    'Bar', 'Bank', 'Clinic', 'Courier', 'Default', 'Delivery', 'Dispensary', 'Facilitator',
+    'Bar', 'Bank', 'Church', 'Clinic', 'Courier', 'Default', 'Delivery', 'Dispensary', 'Facilitator',
     'GeneralDistributor', 'PharmaceuticalDistributor', 'Farm', 'Grocery',
     'Hospital', 'Hotel', 'InternetServiceProvider', 'Insurance',
     'GeneralManufacturer', 'PharmaceuticalManufacturer', 'Park', 'Parking',
-    'GeneralRetailer', 'PharmaceuticalRetailer', 'Realty', 'Restaurant',
+    'GeneralRetailer', 'PharmaceuticalRetailer', 'Publisher', 'Realty', 'Restaurant',
     'Sacco', 'TransportCompany', 'Telco', 'GeneralWholesaler', 'PharmaceuticalWholesaler',
 ];
 

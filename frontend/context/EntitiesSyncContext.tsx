@@ -138,6 +138,8 @@ export function normalizeEntity(item: any): EntityItem {
         // Subscriptions & Plans
         is_subscribed: Boolean(item.is_subscribed),
         is_verified: String(item.is_verified || 'false'),
+        // Missing from older payloads = active.
+        is_active: item.is_active === undefined || item.is_active === null ? true : item.is_active === true || String(item.is_active).toLowerCase() === 'true',
         trial_from: item.trial_from ? String(item.trial_from) : null,
         trial_to: item.trial_to ? String(item.trial_to) : null,
         registration_fee: String(item.registration_fee || '0.00'),

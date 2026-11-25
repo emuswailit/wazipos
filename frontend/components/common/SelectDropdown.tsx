@@ -1,13 +1,15 @@
 // components/common/SelectDropdown.tsx
 import { useAuth } from '@/context/AuthContext';
 import { useFormikContext } from 'formik';
-import { ChevronDown } from 'lucide-react-native';
+import ClearInputButton from '@/components/common/ClearInputButton';
+import { ChevronDown, Search } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Platform,
     Pressable,
     ScrollView,
     Text,
+    TextInput,
     useWindowDimensions,
     View,
     type StyleProp,
@@ -39,13 +41,15 @@ interface SelectDropdownProps {
     required?: boolean;
     disabled?: boolean;
     maxHeight?: number;
+    /** A filter box at the top of the menu. Default: on when there are more than 8 options. */
+    searchable?: boolean;
     style?: StyleProp<ViewStyle>;
     testID?: string;
 }
 
 export function SelectDropdown({
     options, name, transform, value: controlledValue, onChange: controlledOnChange, error: controlledError,
-    label, placeholder = 'Select…', helperText, required, disabled, maxHeight = 200, style, testID,
+    label, placeholder = 'Select…', helperText, required, disabled, maxHeight = 200, style, testID, searchable,
 }: SelectDropdownProps) {
     const { theme, isDarkMode } = useAuth();
     const formik = useFormikContext<any>();
@@ -66,6 +70,17 @@ export function SelectDropdown({
     const dividerColor = isDarkMode ? 'rgba(51,65,85,0.6)' : '#e2e8f0';
 
     const [open, setOpen] = useState(false);
+    // Long lists (regions, parishes, denominations…) get a filter box.
+    const withSearch = searchable ?? options.length > 8;
+    const [filter, setFilter] = useState('');
+    useEffect(() => {
+        if (!open) setFilter('');
+    }, [open]);
+    const shown = useMemo(() => {
+        const t = filter.trim().toLowerCase();
+        if (!t) return options;
+        return options.filter((o) => `${o.label ?? ''} ${o.value} ${o.description ?? ''}`.toLowerCase().includes(t));
+    }, [options, filter]);
     const { width: winWidth } = useWindowDimensions();
     // Same filled look as CustomTextField; cobalt ring while the menu is open.
     const borderColor = fieldError ? danger : open ? theme.primary : isDarkMode ? 'rgba(148,163,184,0.16)' : 'rgba(15,23,42,0.08)';
@@ -148,21 +163,38 @@ export function SelectDropdown({
         <View
             className="rounded-lg border overflow-hidden"
             style={{
-                maxHeight, backgroundColor: dropdownBg, borderColor: dropdownBorder,
+                maxHeight: withSearch ? maxHeight + 52 : maxHeight, backgroundColor: dropdownBg, borderColor: dropdownBorder,
                 ...(Platform.OS === 'web'
                     ? ({ boxShadow: '0 12px 32px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.1)' } as any)
                     : { elevation: 24, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }),
             }}
         >
+            {withSearch ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 44, borderBottomWidth: 1, borderBottomColor: dividerColor, backgroundColor: dropdownBg }}>
+                    <Search size={15} color={theme.textDark} />
+                    <TextInput
+                        value={filter}
+                        onChangeText={setFilter}
+                        placeholder="Search…"
+                        placeholderTextColor="#94a3b8"
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        autoFocus={Platform.OS === 'web'}
+                        accessibilityLabel={label ? `Search ${label}` : 'Search options'}
+                        style={{ flex: 1, height: '100%', color: theme.text, fontFamily: theme.font.medium, fontSize: fieldFont, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : null) }}
+                    />
+                    <ClearInputButton value={filter} onClear={() => setFilter('')} size={12} />
+                </View>
+            ) : null}
             <ScrollView keyboardShouldPersistTaps="handled" style={{ backgroundColor: dropdownBg }}>
-                {options.length === 0 ? (
+                {shown.length === 0 ? (
                     <View className="py-4 px-3 items-center">
                         <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
-                            No options available
+                            {options.length === 0 ? 'No options available' : `Nothing matches "${filter.trim()}"`}
                         </Text>
                     </View>
                 ) : (
-                    options.map((opt) => (
+                    shown.map((opt) => (
                         <OptionRow
                             key={opt.value}
                             option={opt}

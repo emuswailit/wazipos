@@ -5,6 +5,7 @@ import { SaleUnit, partLabel, plural, sellsInParts, stockLabel, totalParts } fro
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, PackageSearch, Plus, ScanLine, Search, Trash2 } from 'lucide-react-native';
 import { Dimensions, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {};
 const money = (n: number) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -182,6 +183,7 @@ const LineItemRow: React.FC<OrderMainSectionProps & { item: any; index: number }
                         onBlur={() => setFocused(false)}
                         style={{ flex: 1, height: '100%', fontFamily: theme.font.medium, fontSize: theme.fontSize.sm, color: theme.text, ...webNoOutline }}
                     />
+                    <ClearInputButton value={item.searchQuery} onClear={() => onUpdate({ searchQuery: '' })} />
                     {receipt ? (
                         <Text numberOfLines={1} style={{ fontFamily: theme.font.medium, fontSize: 11, color: theme.textMuted }}>
                             @ KES {money(item.price)}{inParts ? ` / ${part}` : ''}

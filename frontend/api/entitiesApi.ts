@@ -24,6 +24,9 @@ const deleteEntityPicture = (data: any) => {
 const verifyEntity = (data: any) => {
   return client.post("/authentication/entities/admin", data);
 };
+/** WaziPOS admins: turn a business on / off (deactivated = nobody can work in it). */
+const setEntityActive = (entity: string, active: boolean, reason?: string) =>
+  client.post("/authentication/entities/admin", { action: "SetEntityActive", entity, active, reason });
 
 const addEntity = (switchEntity: any, onUploadProgress: any) => {
   const data = new FormData();
@@ -311,6 +314,7 @@ const createUserEntity = (data: any) => {
 };
 
 export default {
+  setEntityActive,
   entitiesAction,
   getBanks,
   searchWholesalers,

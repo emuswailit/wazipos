@@ -203,6 +203,8 @@ interface AuthContextType {
     login: (token: string) => Promise<void>;
     logout: () => Promise<void>;
     toggleTheme: () => void;
+    /** Changes on every sign-in / business switch; the app tree is keyed on it so it remounts fresh. */
+    sessionKey: number;
 }
 
 const AuthContext = createContext<
@@ -243,6 +245,7 @@ export function AuthProvider({
     const [token, setToken] = useState('');
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [sessionKey, setSessionKey] = useState(0);
 
     const theme = useMemo<ThemeShape>(() => {
         const colors: ThemeColors = {
@@ -354,20 +357,34 @@ export function AuthProvider({
 
             const decodedUser = jwtDecode<UserProfile>(rawToken);
 
+            // A session already exists (switching business, or a stale one): drop the
+            // previous business's cached data first, so nothing of it leaks into the new
+            // session. Must run before the new token is stored (it clears localStorage).
+            let previous: string | null = null;
+            if (Platform.OS === 'web') previous = localStorage.getItem(TOKEN_KEY);
+            else if (SecureStore) previous = await SecureStore.getItemAsync(TOKEN_KEY);
+            if (previous) await wipeLocalData();
+
             if (Platform.OS === 'web') {
                 localStorage.setItem(TOKEN_KEY, rawToken);
             } else if (SecureStore) {
                 await SecureStore.setItemAsync(TOKEN_KEY, rawToken);
             }
 
-            setUser(decodedUser);
-            setToken(rawToken);
-
             console.log('Authentication profile session initialized successfully for:', decodedUser.name);
 
             if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                window.location.reload();
+                // Full page load on the dashboard: every screen and store starts afresh
+                // from the new token (a plain reload would stay on /login or the switch screen).
+                window.location.replace('/');
+                return;
             }
+
+            // Native: remount the whole app tree (see SessionScope in app/_layout.tsx) so
+            // providers and screens refetch for the new entity; callers then go to /(tabs).
+            setUser(decodedUser);
+            setToken(rawToken);
+            setSessionKey((k) => k + 1);
         } catch (error) {
             console.error('Login Engine Decode Processing Failure:', error);
             throw error;
@@ -422,8 +439,9 @@ export function AuthProvider({
             login,
             logout,
             toggleTheme,
+            sessionKey,
         }),
-        [user, token, isDarkMode, isLoading, theme, login, logout, toggleTheme]
+        [user, token, isDarkMode, isLoading, theme, login, logout, toggleTheme, sessionKey]
     );
 
     return (

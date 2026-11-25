@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 const isWeb = Platform.OS === 'web';
 const webPointer = isWeb ? ({ cursor: 'pointer' } as any) : {};
@@ -203,6 +204,7 @@ export function DeliveryLogisticsSelector({
                                         ...webNoOutline,
                                     }}
                                 />
+                                <ClearInputButton value={courierSearch} onClear={() => setCourierSearch('')} size={12} />
                             </View>
 
                             {showCourierList && (
@@ -311,6 +313,7 @@ export function DeliveryLogisticsSelector({
                                                 ...webNoOutline,
                                             }}
                                         />
+                                        <ClearInputButton value={pointSearch} onClear={() => setPointSearch('')} size={12} />
                                     </View>
 
                                     {showPointList && (

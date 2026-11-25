@@ -11,6 +11,7 @@ import {
     View,
 } from "react-native";
 import { Pressable } from '@/components/common/StablePressable';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 /* =========================================================
  * Types
@@ -178,6 +179,7 @@ export default function CustomAutocompletePicker({
                         color: theme.text,
                         minHeight: MIN_INPUT_HEIGHT,
                         paddingHorizontal: HORIZONTAL_PADDING,
+                        paddingRight: HORIZONTAL_PADDING + 28,
                         paddingVertical: 0, // Let height dictate
                         textAlign: "left",
                         textAlignVertical: "center",
@@ -190,6 +192,10 @@ export default function CustomAutocompletePicker({
                             : {}),
                     }}
                 />
+                {/* the x empties the search box */}
+                <View pointerEvents="box-none" style={{ position: "absolute", right: 10, top: 0, height: MIN_INPUT_HEIGHT, justifyContent: "center" }}>
+                    <ClearInputButton value={search} onClear={() => { setSearch(""); setDropdownOpen(true); }} />
+                </View>
 
                 {dropdownOpen && (
                     <View

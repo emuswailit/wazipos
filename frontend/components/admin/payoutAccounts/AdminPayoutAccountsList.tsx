@@ -18,6 +18,7 @@ import { useWindowDimensions } from 'react-native';
 import AdminPayoutAccountEditModal from './AdminPayoutAccountEditModal';
 import { ACCOUNT_TYPE_META, isActiveAccount, payoutAccountsConfig } from './payoutAccountsConfig';
 import { errorText } from '@/utils/apiFeedback';
+import { isPlatformAdmin as isPlatformAdminUser } from '@/utils/platformAdmin';
 
 type Filter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'UNVERIFIED' | PayoutAccountType;
 
@@ -30,8 +31,7 @@ export default function AdminPayoutAccountsList() {
     const u = user as any;
     // Mirrors the backend: platform admins see every entity; entity admins
     // only their own entity's accounts, and can't verify them.
-    const isPlatformAdmin =
-        String(u?.is_staff).toLowerCase() === 'true' || (Array.isArray(u?.roles) && u.roles.some((r: any) => r?.value === 'Admin'));
+    const isPlatformAdmin = isPlatformAdminUser(u);
     const ownEntity = useMemo(
         () => (u?.entity_id ? { id: String(u.entity_id), title: String(u.entity_title || 'Your entity') } : null),
         [u?.entity_id, u?.entity_title],

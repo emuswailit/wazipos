@@ -6,6 +6,7 @@
 // Empty fields are left out rather than shown as "—".
 
 import VerifyContactsCard from '@/components/auth/VerifyContactsCard';
+import MenuSectionsCard from '@/components/common/MenuSectionsCard';
 import { useAuth, type UserRole } from '@/context/AuthContext';
 import { isTrueFlag } from '@/utils/flags';
 import {
@@ -127,7 +128,7 @@ const PERSONAL_FIELDS: Array<{ key: string; label: string; icon: any }> = [
 
 const HANDLED_KEYS = new Set<string>([
     ...PERSONAL_FIELDS.map((f) => f.key),
-    'name', 'id', 'user_id', 'roles',
+    'name', 'id', 'user_id', 'roles', 'hidden_menus',
     'entity', 'entity_id', 'entity_type', 'entity_title',
     'monthly_subscription', 'entity_registration_fee', 'entity_trial_done', 'documents_uploaded',
     // JWT internals, shown under "Session"
@@ -444,6 +445,9 @@ export default function ProfileScreen() {
     const right = (
         <>
             {rolesSection}
+            <Section title="Menu sections" subtitle="Saved to your account" theme={theme} colors={colors}>
+                <MenuSectionsCard borderColor={colors.divider} />
+            </Section>
             {otherRows.length > 0 ? (
                 <Section title="Other details" theme={theme} colors={colors}>
                     <RowList rows={otherRows} theme={theme} colors={colors} />

@@ -17,7 +17,7 @@ import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 
 const WS_URL = 'wss://api.wazipos.co.ke/ws/notifications/alerts/';
-const STOP_CODES = new Set([4001, 4002, 4003]);
+const STOP_CODES = new Set([4001, 4002, 4003, 4403]);
 const MAX_BACKOFF_MS = 60_000;
 const PING_MS = 30_000;
 const NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';

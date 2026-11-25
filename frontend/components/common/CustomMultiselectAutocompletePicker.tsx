@@ -45,6 +45,7 @@ import {
     View,
 } from "react-native";
 import { Pressable } from '@/components/common/StablePressable';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 /** Room kept clear at the bottom (sheet action footers) and top (headers) when choosing a side. */
 const BOTTOM_RESERVE = 96;
@@ -404,6 +405,7 @@ export default function CustomMultiselectAutocompletePicker({
                         ...({ outlineStyle: "none" } as any),
                     }}
                 />
+                <ClearInputButton value={search} onClear={() => { setSearch(""); setDropdownOpen(true); }} size={12} />
             </Pressable>
 
             {hasError && errorText && (

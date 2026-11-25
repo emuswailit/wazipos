@@ -24,6 +24,7 @@ import { Formik } from 'formik';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import * as Yup from 'yup';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 const STATUS: Record<ProviderStatus, { label: string; color: string }> = {
     PENDING: { label: 'Pending review', color: '#f59e0b' },
@@ -106,6 +107,7 @@ export default function AdminDeliveryProviders() {
                         placeholderTextColor={theme.textDark}
                         style={{ flexGrow: 1, minWidth: 180, height: 38, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: border, color: theme.text, fontFamily: theme.font.medium }}
                     />
+                    <ClearInputButton value={search} onClear={() => setSearch('')} />
                 </View>
                 <Text style={{ color: theme.textDark, fontFamily: theme.font.medium, fontSize: 12 }}>
                     Add a company first as a business of type Delivery or Courier (Admin Panel → Entities), with its location; it then appears here as pending.

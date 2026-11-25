@@ -76,7 +76,32 @@ export interface WifiPayment {
     status: 'PENDING' | 'SUCCESS' | 'CANCELLED' | 'FAILED' | string;
     amount: string;
     is_settled?: TrueFalse;
+    /** Live monitor (backend wifi/payments.py). */
+    mac_address?: string | null;
+    connected?: boolean;
+    activation_error?: string | null;
+    payout?: WifiPayout | null;
     created: string;
+}
+
+/** The hotspot owner's share of a paid package, paid to the business's payout account. */
+export interface WifiPayout {
+    id: string;
+    status: 'DUE' | 'PROCESSING' | 'PAID' | 'FAILED' | 'NO_ACCOUNT' | string;
+    /** What to show: status, or BELOW_MINIMUM (under KES 10) / SENDING (no JamboPay reference yet). */
+    stage?: 'DUE' | 'PROCESSING' | 'SENDING' | 'PAID' | 'FAILED' | 'NO_ACCOUNT' | 'BELOW_MINIMUM' | string;
+    min_payout?: string;
+    attempts?: number;
+    reference_number?: string | null;
+    updated?: string | null;
+    status_label: string;
+    amount: string;
+    fee: string;
+    account: string | null;
+    account_type: string | null;
+    note: string | null;
+    paid_at: string | null;
+    psp_reference: string | null;
 }
 
 export const DURATION_LABELS: Record<Duration, [string, string]> = {
@@ -92,7 +117,43 @@ export const lengthLabel = (t: Pick<WifiTariff, 'length' | 'duration'>) => {
     return `${n} ${n === 1 ? one : many}`;
 };
 
-const call = (action: string, data: Record<string, any> = {}): Promise<ApiResponse<any>> => client.post('/wifi/', { action, ...data });
+/**
+ * Every Wi-Fi call is logged to the console as "[wifi] …": the action, HTTP status,
+ * apisauce problem (NETWORK_ERROR, TIMEOUT_ERROR, SERVER_ERROR…), response_code,
+ * row count and any errors — so an empty screen says why.
+ */
+const call = async (action: string, data: Record<string, any> = {}): Promise<ApiResponse<any>> => {
+    const started = Date.now();
+    console.log(`[wifi] → ${action}`, Object.keys(data).length ? data : '');
+    let res: ApiResponse<any>;
+    try {
+        res = await client.post('/wifi/', { action, ...data });
+    } catch (e) {
+        console.error(`[wifi] ✗ ${action} threw before a response`, e);
+        throw e;
+    }
+    const body: any = res.data;
+    const rows = Array.isArray(body) ? body : body?.results;
+    const summary = {
+        ms: Date.now() - started,
+        ok: res.ok,
+        status: res.status ?? null,
+        problem: res.problem ?? null,
+        url: (res.config?.baseURL ?? '') + (res.config?.url ?? ''),
+        response_code: body?.response_code ?? null,
+        message: body?.response_message ?? body?.detail ?? null,
+        count: body?.count ?? (Array.isArray(rows) ? rows.length : null),
+        returned: Array.isArray(rows) ? rows.length : null,
+        errors: body?.errors ?? null,
+    };
+    if (!res.ok || (summary.response_code != null && String(summary.response_code) !== '0')) {
+        console.warn(`[wifi] ✗ ${action}`, summary, typeof body === 'string' ? body.slice(0, 500) : body);
+    } else {
+        console.log(`[wifi] ✓ ${action}`, summary);
+        if (Array.isArray(rows) && rows.length === 0) console.log(`[wifi] ${action}: the server returned no rows for this business (check which business you are working in).`);
+    }
+    return res;
+};
 
 const wifiApi = {
     routers: () => call('GetWifiRouters'),
@@ -108,6 +169,8 @@ const wifiApi = {
     subscriptions: () => call('GetWifiSubscriptions'),
     /** Customers' package payments: read only. */
     payments: () => call('GetWifiPayments'),
+    /** Check one payment with the gateway now (connects the device and queues the payout if paid). */
+    recheckPayment: (id: string) => call('RecheckWifiPayment', { id }),
 };
 
 export default wifiApi;

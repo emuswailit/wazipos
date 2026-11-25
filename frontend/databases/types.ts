@@ -594,6 +594,8 @@ export interface EntityItem {
 
     is_subscribed: boolean;
     is_verified: string; // "true" | "false"
+    /** false = deactivated by a WaziPOS admin (nobody can work in it). */
+    is_active?: boolean;
 
     trial_from: string | null;
     trial_to: string | null;

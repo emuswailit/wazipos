@@ -32,6 +32,7 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 /* =========================================================
  * Types
@@ -438,7 +439,7 @@ export function EntitiesMultiselectPicker({
                             autoCorrect={false}
                             autoCapitalize="none"
                             editable={!disabled}
-                            className="h-10 rounded-xl border px-3"
+                            className="h-10 rounded-xl border pl-3 pr-10"
                             style={{
                                 borderColor,
                                 backgroundColor: subBg,
@@ -451,6 +452,10 @@ export function EntitiesMultiselectPicker({
                                     : null),
                             }}
                         />
+                        {/* the x sits inside the right end of the 40px search box (container padding 12) */}
+                        <View pointerEvents="box-none" style={{ position: 'absolute', right: 20, top: 12, height: 40, justifyContent: 'center' }}>
+                            <ClearInputButton value={search} onClear={() => setSearch('')} disabled={disabled} />
+                        </View>
                     </View>
 
                     {/* List */}
@@ -672,7 +677,7 @@ export function EntitiesMultiselectPicker({
                                 autoCorrect={false}
                                 autoCapitalize="none"
                                 autoFocus={Platform.OS === 'web'}
-                                className="h-10 rounded-xl border px-3"
+                                className="h-10 rounded-xl border pl-3 pr-10"
                                 style={{
                                     borderColor,
                                     backgroundColor: subBg,
@@ -684,6 +689,10 @@ export function EntitiesMultiselectPicker({
                                         : null),
                                 }}
                             />
+                            {/* the x sits inside the right end of the 40px search box (container padding 12) */}
+                            <View pointerEvents="box-none" style={{ position: 'absolute', right: 20, top: 12, height: 40, justifyContent: 'center' }}>
+                                <ClearInputButton value={search} onClear={() => setSearch('')} />
+                            </View>
                             {maxSelected !== undefined ? (
                                 <Text
                                     className="mt-2"

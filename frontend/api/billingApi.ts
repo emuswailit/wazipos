@@ -8,7 +8,8 @@ import { ApiResponse } from 'apisauce';
 
 import client from './client';
 
-export type BillingMode = 'SETUP' | 'TRIAL' | 'LEGACY' | 'TOKENS';
+/** EXEMPT = a kind of business WaziPOS does not bill (Publisher). */
+export type BillingMode = 'SETUP' | 'TRIAL' | 'LEGACY' | 'TOKENS' | 'EXEMPT';
 export type LedgerKind = 'TOPUP' | 'BONUS' | 'USAGE' | 'TRIAL' | 'COVERED' | 'ADJUST';
 
 export interface LedgerEntry {
@@ -110,4 +111,7 @@ export default {
     refreshTopUp: (payment_id: string) => call('RefreshTopUp', { payment_id }),
     adminWallets: (q?: string) => call('AdminWallets', q ? { q } : {}),
     adminAdjust: (entity: string, tokens: number, note: string) => call('AdminAdjustTokens', { entity, tokens, note }),
+    /** WaziPOS admins: trial tokens a business has had / can still get (max 100 in total). */
+    adminTrialTokens: (entity: string) => call('AdminTrialTokens', { entity }),
+    adminSendTrialTokens: (entity: string, tokens: number, note?: string) => call('AdminSendTrialTokens', { entity, tokens, note }),
 };

@@ -36,7 +36,7 @@ const ENTITY_TYPES: readonly string[] = [
     'GeneralDistributor', 'PharmaceuticalDistributor', 'Farm',
     'Grocery', 'Hospital', 'Hotel', 'InternetServiceProvider',
     'Insurance', 'GeneralManufacturer', 'PharmaceuticalManufacturer',
-    'Park', 'Parking', 'GeneralRetailer', 'PharmaceuticalRetailer',
+    'Park', 'Parking', 'GeneralRetailer', 'PharmaceuticalRetailer', 'Publisher',
     'Realty', 'Restaurant', 'Sacco', 'TransportCompany', 'Telco',
     'GeneralWholesaler', 'PharmaceuticalWholesaler',
 ];
@@ -46,7 +46,8 @@ const ENTITY_TYPE_OPTIONS = ENTITY_TYPES.map((v) => ({ id: v, title: v.replace(/
 const DEFAULT_CATEGORY_ID = '4cadab9a-a116-44b4-b25a-3aea006119f9';
 
 const normalizeType = (v: any) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const MANUFACTURER_TYPES = new Set(['GeneralManufacturer', 'PharmaceuticalManufacturer'].map(normalizeType));
+// Who can own a product in the master: manufacturers and book publishers.
+const MANUFACTURER_TYPES = new Set(['GeneralManufacturer', 'PharmaceuticalManufacturer', 'Publisher'].map(normalizeType));
 
 const schema = Yup.object({
     title: Yup.string().trim().min(2, 'At least 2 characters').required('Enter the brand name'),

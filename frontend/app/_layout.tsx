@@ -72,6 +72,7 @@ import '../global.css';
 import { SubscriptionSyncProvider } from '@/context/SubscriptionSyncContext';
 import { attachApiToasts, ToastHost } from '@/components/common/Toast';
 import OfflinePill from '@/components/common/OfflinePill';
+import ScreenErrorBoundary from '@/components/common/ScreenErrorBoundary';
 import { usePendingJobRedirect } from '@/components/jobs/jobsShared';
 import apiClientForToasts from '@/api/client';
 import cachedClientForToasts from '@/api/clientWithCache';
@@ -163,7 +164,8 @@ function GlobalAppShellLayout() {
     // A restaurant's QR menu (/menu/<restaurant>) and the email confirmation link
     // (/verify-email) are open to everyone, signed in or not.
     // A shared job link (/job/<code>) too: a public teaser that invites sign-up.
-    if (segments[0] === 'menu' || segments[0] === 'verify-email' || segments[0] === 'job') return;
+    // And a shared church link (/church/<code>): public notices and programme.
+    if (segments[0] === 'menu' || segments[0] === 'verify-email' || segments[0] === 'job' || segments[0] === 'church') return;
 
     if (!user && !inAuthGroup && !inWelcome) {
       router.replace('/welcome');
@@ -178,9 +180,10 @@ function GlobalAppShellLayout() {
   const inWelcome = segments.includes('welcome');
   const inPublicMenu = segments[0] === 'menu';
   const inPublicJob = segments[0] === 'job';
+  const inPublicChurch = segments[0] === 'church';
   const inVerifyEmail = segments[0] === 'verify-email';
 
-  if (inAuthGroup || inWelcome || inPublicMenu || inVerifyEmail || inPublicJob) {
+  if (inAuthGroup || inWelcome || inPublicMenu || inVerifyEmail || inPublicJob || inPublicChurch) {
     // Login / register / password reset / welcome: keep content clear of the status bar
     // and the system navigation bar (Android draws edge-to-edge).
     return (
@@ -204,6 +207,7 @@ function GlobalAppShellLayout() {
           {inWelcome && <Stack.Screen name="welcome" />}
           {inPublicMenu && <Stack.Screen name="menu/[entity]" />}
           {inPublicJob && <Stack.Screen name="job/[code]" />}
+          {inPublicChurch && <Stack.Screen name="church/[code]" />}
           {inVerifyEmail && <Stack.Screen name="verify-email/index" />}
         </Stack>
       </View>
@@ -567,6 +571,19 @@ function GlobalAppShellLayout() {
   );
 }
 
+// A screen that fails (crash, or on web its on-demand bundle can't be downloaded:
+// "NetworkError when attempting to fetch resource") shows ScreenErrorBoundary with
+// Try again / Reload instead of taking the whole app down. Screens and nested
+// layouts inherit it; the navigator (sidebar, tabs) stays mounted.
+export const unstable_settings = { screenErrorBoundary: ScreenErrorBoundary };
+export { ScreenErrorBoundary as ErrorBoundary };
+
+/** Remounts everything below it on each sign-in / business switch (native; web does a full page load). */
+function SessionScope({ children }: { children: React.ReactNode }) {
+  const { sessionKey } = useAuth();
+  return <React.Fragment key={sessionKey}>{children}</React.Fragment>;
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Light': require('@/assets/fonts/Inter-Light.ttf'),
@@ -598,6 +615,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView className="flex-1">
       <AuthProvider>
+        <SessionScope>
         <NetworkMonitorProvider>
           <RetailerIndentsSyncProvider>
             <EntitiesSyncProvider>
@@ -655,6 +673,7 @@ export default function RootLayout() {
             </EntitiesSyncProvider>
           </RetailerIndentsSyncProvider>
         </NetworkMonitorProvider>
+        </SessionScope>
       </AuthProvider>
     </GestureHandlerRootView>
   );

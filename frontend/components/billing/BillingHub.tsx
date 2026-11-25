@@ -20,6 +20,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Coins, Gift, Plus, Search, Sparkles, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 const CACHE = 'wazipos_billing_v1';
 const n = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
@@ -129,6 +130,9 @@ function modeInfo(s: BillingStatus): { tone: 'success' | 'warning' | 'danger' | 
     }
     if (s.mode === 'TRIAL') {
         return { tone: 'success', label: 'Free month', line: `${s.trial_days_left ?? 0} day${s.trial_days_left === 1 ? '' : 's'} left, until ${day(s.trial_ends_at)}. Orders are free; we show what they would cost.` };
+    }
+    if (s.mode === 'EXEMPT') {
+        return { tone: 'success', label: 'Not billed', line: 'WaziPOS does not charge tokens for this kind of business.' };
     }
     if (s.mode === 'LEGACY') {
         return { tone: 'success', label: 'Monthly plan', line: `Your monthly subscription covers orders until ${day(s.legacy_until)}. Then you move to tokens.` };
@@ -512,6 +516,7 @@ function AdminWallets() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.surfaceAlt, borderRadius: 12, paddingHorizontal: 12, height: 46 }}>
                 <Search size={16} color={theme.textMuted} />
                 <TextInput value={q} onChangeText={setQ} placeholder="Search businesses" placeholderTextColor={theme.textMuted} style={{ flex: 1, color: theme.text, fontFamily: theme.font.medium, fontSize: 15 }} />
+                <ClearInputButton value={q} onClear={() => setQ('')} />
             </View>
             {error ? <InlineNotice message={error} /> : null}
             {!data && !error ? <ActivityIndicator color={theme.primary} /> : null}

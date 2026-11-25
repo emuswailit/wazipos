@@ -31,6 +31,7 @@ import {
 import { SelectDropdown } from '@/components/common/SelectDropdown';
 import { SwitchField } from '@/components/common/SwitchField';
 import { useCachedList, usePaged } from '@/hooks/useCachedList';
+import { useWifiPaymentsLive } from '@/hooks/useWifiPaymentsLive';
 import { Formik } from 'formik';
 import React, { useMemo, useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
@@ -46,6 +47,36 @@ const rows = (d: any) => (Array.isArray(d) ? d : d?.results ?? []);
 
 const PAY_TONE: Record<string, BadgeTone> = { SUCCESS: 'success', PENDING: 'warning', FAILED: 'danger', CANCELLED: 'neutral' };
 const PAY_LABEL: Record<string, string> = { SUCCESS: 'Received', PENDING: 'Pending', FAILED: 'Failed', CANCELLED: 'Cancelled' };
+// The owner's share of a paid package, on its way to the business's payout account.
+// Payout stage from the server (wifi/payments.payout_stage): the ledger status plus
+// BELOW_MINIMUM (under JamboPay's KES 10, never sent automatically) and SENDING (handed over, no reference yet).
+const PAYOUT_TONE: Record<string, BadgeTone> = {
+    PAID: 'success', PROCESSING: 'info', SENDING: 'info', DUE: 'info', NO_ACCOUNT: 'warning', BELOW_MINIMUM: 'warning', FAILED: 'danger',
+};
+const PAYOUT_LABEL: Record<string, string> = {
+    PAID: 'Paid out', PROCESSING: 'Paying out', SENDING: 'Sending payout', DUE: 'Payout queued', NO_ACCOUNT: 'Add payout account',
+    BELOW_MINIMUM: 'Below KES 10 minimum', FAILED: 'Payout failed',
+};
+const shortWhen = (iso: string) => new Date(iso).toLocaleString('en-KE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+type PayFilter = 'ALL' | 'SUCCESS' | 'PENDING' | 'FAILED' | 'PAID_OUT' | 'NOT_PAID_OUT';
+const PAY_FILTERS: { key: PayFilter; label: string; test: (p: WifiPayment) => boolean }[] = [
+    { key: 'ALL', label: 'All', test: () => true },
+    { key: 'SUCCESS', label: 'Received', test: (p) => p.status === 'SUCCESS' },
+    { key: 'PENDING', label: 'Pending', test: (p) => p.status === 'PENDING' },
+    { key: 'FAILED', label: 'Failed', test: (p) => p.status === 'FAILED' || p.status === 'CANCELLED' },
+    { key: 'PAID_OUT', label: 'Paid out', test: (p) => p.payout?.status === 'PAID' },
+    { key: 'NOT_PAID_OUT', label: 'Not paid out', test: (p) => p.status === 'SUCCESS' && p.payout?.status !== 'PAID' },
+];
+const stageOf = (po: NonNullable<WifiPayment['payout']>) => po.stage || po.status;
+const payoutLabel = (po: NonNullable<WifiPayment['payout']>) => PAYOUT_LABEL[stageOf(po)] ?? po.status_label;
+const payoutText = (p: WifiPayment) => {
+    if (!p.payout) return p.status === 'SUCCESS' ? 'Not paid out yet' : '—';
+    const st = stageOf(p.payout);
+    const paidAt = st === 'PAID' && p.payout.paid_at ? ` · ${shortWhen(p.payout.paid_at)}` : '';
+    // In flight: what JamboPay itself last said (e.g. "JamboPay: PENDING").
+    const jp = (st === 'PROCESSING' || st === 'SENDING') && p.payout.note?.startsWith('JamboPay:') ? ` · ${p.payout.note}` : '';
+    return ['PAID', 'PROCESSING', 'SENDING', 'DUE', 'BELOW_MINIMUM'].includes(st) ? `${payoutLabel(p.payout)} · ${kes(p.payout.amount)}${paidAt}${jp}` : payoutLabel(p.payout);
+};
 
 const routersConfig: AdminListConfig<WifiRouter> = {
     title: 'Routers',
@@ -123,17 +154,22 @@ const paymentsConfig: AdminListConfig<WifiPayment> = {
     emptyMessage: 'Customers’ package payments appear here.',
     keyOf: (p) => p.id,
     titleOf: (p) => p.tariff_title || 'Package',
-    subtitleOf: (p) => [p.account, p.provider_reference_number || p.reference_number].filter(Boolean).join(' · '),
+    subtitleOf: (p) => [p.mac_address, p.provider_reference_number || p.reference_number].filter(Boolean).join(' · '),
     avatarOf: () => ({ icon: 'phone-portrait-outline' }),
-    badgesOf: (p) => [{ label: PAY_LABEL[p.status] ?? p.status, tone: PAY_TONE[p.status] ?? 'neutral' }],
+    badgesOf: (p) => [
+        { label: PAY_LABEL[p.status] ?? p.status, tone: PAY_TONE[p.status] ?? 'neutral' },
+        ...(p.status === 'SUCCESS' && p.connected === false ? [{ label: 'Not connected yet', tone: 'warning' as BadgeTone }] : []),
+        ...(p.payout ? [{ label: payoutLabel(p.payout), tone: PAYOUT_TONE[stageOf(p.payout)] ?? ('neutral' as BadgeTone) }] : []),
+    ],
     metaOf: (p) => when(p.created),
     metaIcon: 'time-outline',
     metricOf: (p) => ({ value: kes(p.amount), label: p.telco || 'Mobile money', color: p.status === 'SUCCESS' ? '#10b981' : undefined }),
     primaryColumn: { label: 'Package', flex: 1.4 },
     columns: [
-        { key: 'account', label: 'Paid from', flex: 1.1, render: (p) => p.account || '—' },
+        { key: 'device', label: 'Device', flex: 1.1, render: (p) => p.mac_address || '—' },
         { key: 'ref', label: 'Reference', flex: 1.3, render: (p) => p.provider_reference_number || p.reference_number || '—' },
         { key: 'status', label: 'Status', flex: 0.8, render: (p) => PAY_LABEL[p.status] ?? p.status },
+        { key: 'payout', label: 'Payout', flex: 1.2, render: payoutText },
         { key: 'when', label: 'When', flex: 1.2, render: (p) => when(p.created) },
         { key: 'amount', label: 'Amount', flex: 0.9, align: 'right', render: (p) => kes(p.amount) },
     ],
@@ -148,22 +184,72 @@ export default function WifiManager({ tab }: { tab: Tab }) {
     const [formOpen, setFormOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const [rechecking, setRechecking] = useState(false);
 
     // Only what this screen needs: its own list, plus routers (for packages) or packages (for subscriptions / payments).
     const routers = useCachedList<WifiRouter>({ key: 'wifi_routers', fetch: wifiApi.routers, pick: rows, enabled: tab === 'ROUTERS' || tab === 'PACKAGES' });
     const tariffs = useCachedList<WifiTariff>({ key: 'wifi_tariffs', fetch: wifiApi.tariffs, pick: rows, enabled: tab !== 'ROUTERS' });
     const subs = useCachedList<WifiSubscription>({ key: 'wifi_subscriptions', fetch: wifiApi.subscriptions, pick: rows, pollMs: 60000, enabled: tab === 'SUBSCRIPTIONS' });
-    const pays = useCachedList<WifiPayment>({ key: 'wifi_payments', fetch: wifiApi.payments, pick: rows, pollMs: 60000, enabled: tab === 'PAYMENTS' });
+    const paysCached = useCachedList<WifiPayment>({ key: 'wifi_payments', fetch: wifiApi.payments, pick: rows, pollMs: 60000, enabled: tab === 'PAYMENTS' });
+    // Live: every status, connection and payout change is pushed (ws/wifi/payments/).
+    const paysLive = useWifiPaymentsLive(paysCached.items, tab === 'PAYMENTS');
+    const pays = { ...paysCached, items: paysLive.items };
+
+    /** Ask the server to confirm a payment, connect the device and queue the owner's payout now. */
+    const recheck = async (p: WifiPayment) => {
+        setRechecking(true);
+        try {
+            const res: any = await wifiApi.recheckPayment(p.id).catch(() => null);
+            if (res?.ok && String(res.data?.response_code) === '0') {
+                const fresh: WifiPayment = res.data.payment;
+                setViewing(fresh);
+                const po = fresh.payout;
+                alert(
+                    'Payment checked',
+                    fresh.status !== 'SUCCESS'
+                        ? `Status: ${PAY_LABEL[fresh.status] ?? fresh.status}.`
+                        : !po
+                          ? 'Paid, but the payout could not be queued. Check the server log for [wifi-payout].'
+                          : stageOf(po) === 'NO_ACCOUNT'
+                            ? 'Paid. Add an active payout account for this business — the payout is sent as soon as you do.'
+                            : stageOf(po) === 'BELOW_MINIMUM'
+                              ? `Received ${kes(po.amount)}, below JamboPay's KES ${Number(po.min_payout || 10)} minimum payout, so it can't be sent automatically. Pay it by hand, or it waits.`
+                              : stageOf(po) === 'PAID'
+                                ? `Paid out ${kes(po.amount)}${po.account ? ` to ${po.account}` : ''}${po.psp_reference ? ` (ref ${po.psp_reference})` : ''}.`
+                                : `Payout ${payoutLabel(po).toLowerCase()}: ${kes(po.amount)}${po.account ? ` to ${po.account}` : ''}.${po.note ? ` ${po.note}` : ''}`,
+                );
+                void paysCached.refresh();
+            } else {
+                alert('Could not check the payment', apiError(res, 'Please try again.'));
+            }
+        } finally {
+            setRechecking(false);
+        }
+    };
 
     const list: any = tab === 'ROUTERS' ? routers : tab === 'PACKAGES' ? tariffs : tab === 'SUBSCRIPTIONS' ? subs : pays;
     const config: AdminListConfig<any> = tab === 'ROUTERS' ? routersConfig : tab === 'PACKAGES' ? packagesConfig : tab === 'SUBSCRIPTIONS' ? subsConfig : paymentsConfig;
 
+    // Payments: filter by payment / payout status (filters sheet on phones, chips on web).
+    const [payFilter, setPayFilter] = useState<PayFilter>('ALL');
+    const payFilterOptions = useMemo(
+        () =>
+            tab === 'PAYMENTS'
+                ? PAY_FILTERS.map((f) => ({ key: f.key, label: f.label, count: f.key === 'ALL' ? pays.items.length : pays.items.filter(f.test).length }))
+                : [],
+        [tab, pays.items],
+    );
+
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
-        const items: any[] = list.items;
+        let items: any[] = list.items;
+        if (tab === 'PAYMENTS' && payFilter !== 'ALL') {
+            const f = PAY_FILTERS.find((x) => x.key === payFilter);
+            if (f) items = items.filter(f.test);
+        }
         return q ? items.filter((x) => [config.titleOf(x), config.subtitleOf?.(x)].filter(Boolean).join(' ').toLowerCase().includes(q)) : items;
-    }, [list.items, query, config]);
-    const paged = usePaged(filtered, `${tab}|${query}`);
+    }, [list.items, query, config, tab, payFilter]);
+    const paged = usePaged(filtered, `${tab}|${query}|${payFilter}`);
 
     // Payments and the subscriptions they create come from customers: view only.
     const readOnly = tab === 'SUBSCRIPTIONS' || tab === 'PAYMENTS';
@@ -236,6 +322,8 @@ export default function WifiManager({ tab }: { tab: Tab }) {
                 : [
                       { label: 'Today', value: kes(received.filter((p) => new Date(p.created).toDateString() === today).reduce((s, p) => s + Number(p.amount || 0), 0)), color: '#10b981' },
                       { label: 'All received', value: kes(received.reduce((s, p) => s + Number(p.amount || 0), 0)) },
+                      { label: 'Paid out', value: kes(received.filter((p) => p.payout?.status === 'PAID').reduce((s, p) => s + Number(p.payout?.amount || 0), 0)) },
+                      { label: paysLive.connected ? 'Live' : 'Offline', value: paysLive.connected ? '●' : '○', color: paysLive.connected ? '#10b981' : undefined },
                   ];
 
     return (
@@ -248,11 +336,29 @@ export default function WifiManager({ tab }: { tab: Tab }) {
                         item={viewing}
                         onClose={() => setViewing(null)}
                         onEdit={viewing && editable(viewing) ? (x) => openForm(x) : undefined}
-                        actions={viewing && editable(viewing) ? <DeleteButton onPress={() => remove(viewing)} /> : null}
+                        actions={
+                            viewing && editable(viewing) ? (
+                                <DeleteButton onPress={() => remove(viewing)} />
+                            ) : tab === 'PAYMENTS' && viewing && (viewing.status === 'PENDING' || (viewing.status === 'SUCCESS' && (!viewing.payout || viewing.connected === false || viewing.payout.status !== 'PAID'))) ? (
+                                <SheetButton
+                                    label={
+                                        viewing.status === 'PENDING'
+                                            ? 'Check payment now'
+                                            : viewing.payout && ['PROCESSING', 'DUE'].includes(viewing.payout.status)
+                                              ? 'Check payout status'
+                                              : 'Pay out now'
+                                    }
+                                    icon="cash-outline"
+                                    loading={rechecking}
+                                    loadingLabel="Checking…"
+                                    onPress={() => void recheck(viewing)}
+                                />
+                            ) : null
+                        }
                     />
                 }
             >
-                <AdminListView<any, Tab>
+                <AdminListView<any, PayFilter>
                     variant={width >= 768 ? 'web' : 'mobile'}
                     config={config}
                     query={query}
@@ -277,6 +383,7 @@ export default function WifiManager({ tab }: { tab: Tab }) {
                             : []),
                     ]}
                     stats={stats}
+                    filters={tab === 'PAYMENTS' ? { options: payFilterOptions, value: payFilter, onChange: setPayFilter, allKey: 'ALL' } : undefined}
                 />
             </DetailsDock>
             {tab === 'ROUTERS' ? (

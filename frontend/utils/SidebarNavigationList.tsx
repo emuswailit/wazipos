@@ -1,6 +1,7 @@
 // components/navigation/SidebarNavigationList.tsx
 
 import { useAuth } from "@/context/AuthContext";
+import { useHiddenMenus } from "@/utils/menuPrefs";
 import { SIDEBAR_NAV_MANIFEST } from "@/utils/navigationData";
 import { usePathname, useRouter } from "expo-router";
 import {
@@ -13,10 +14,11 @@ import {
     UserCircle, Users, Wallet, Warehouse, Truck, Bike, PackageCheck, UtensilsCrossed, Wifi,
     AlertCircle, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, CircleDollarSign, ClipboardPlus,
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
-    Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, Briefcase, Bookmark, Search, type LucideIcon,
+    Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket, Briefcase, Bookmark, Search, X,
+    Church, MapPin, HouseHeart, EyeOff, HeartHandshake, UsersRound, MessageSquare, UserCog, Landmark, Map, type LucideIcon,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
-import { Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 interface NavListProps {
     themePrimaryColor?: string;
@@ -41,7 +43,15 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
     FileEdit, FileSearch, Gauge, HandCoins, LineChart, ListOrdered, Package2, PackageOpen, PackagePlus,
     Factory, Radio, ReceiptText, Repeat2, RotateCcw, RotateCw, ShoppingBasket,
     Briefcase, Bookmark, Search,
+    Church, MapPin, HouseHeart, EyeOff, HeartHandshake, UsersRound, MessageSquare, UserCog, Landmark, Map,
 };
+
+/** Every search word must appear in the title, the parent's title or the route (so "billing" finds "Tokens & usage"). */
+function matches(item: any, terms: string[], parentTitle = ""): boolean {
+    const route = String(item.route ?? "").replace(/[/?=&_-]+/g, " ");
+    const hay = `${item.title ?? ""} ${parentTitle} ${route}`.toLowerCase();
+    return terms.every((t) => hay.includes(t));
+}
 
 function initials(title: string): string {
     const parts = title.replace(/[^a-zA-Z ]/g, "").trim().split(/\s+/);
@@ -100,6 +110,10 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
     const router = useRouter();
     const pathname = usePathname();
     const [activeMenu, setActiveMenu] = useState<string>("");
+    // Keyword filter for the menu: all typed words must match (title or route words).
+    const [query, setQuery] = useState("");
+    const terms = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query]);
+    const searching = terms.length > 0;
 
     const userRolesArray: string[] = useMemo(
         () => user?.roles?.map((r: any) => r?.value).filter(Boolean) || ["Client"],
@@ -109,13 +123,48 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
     const hasAccessPermission = (routeAllowedRoles: string[]) =>
         routeAllowedRoles.some((role) => userRolesArray.includes(role));
 
+    // Sections the person hid (e.g. Church) stay out of the menu; see utils/menuPrefs.
+    const { hidden } = useHiddenMenus();
+
     const authorizedRoutes = useMemo(
         () =>
             SIDEBAR_NAV_MANIFEST.filter(
-                (item) => item.showInSidebar && hasAccessPermission(item.allowedRoles)
+                (item) => item.showInSidebar && hasAccessPermission(item.allowedRoles) && !(item.hideKey && hidden.includes(item.hideKey))
             ),
-        [userRolesArray]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [userRolesArray, hidden]
     );
+
+    const visibleSubs = (link: any): any[] =>
+        (link.subRoutes ?? []).filter((sub: any) => sub.showInSidebar && hasAccessPermission(sub.allowedRoles));
+
+    /* While searching: a parent whose own title matches keeps all its items; otherwise it shows
+       only the items that match (hidden when none do). Results are shown opened. */
+    const shownRoutes = useMemo(() => {
+        if (!searching) return authorizedRoutes.map((link) => ({ link, subs: visibleSubs(link) }));
+        const out: { link: any; subs: any[] }[] = [];
+        for (const link of authorizedRoutes) {
+            const subs = visibleSubs(link);
+            if (matches(link, terms)) {
+                out.push({ link, subs });
+                continue;
+            }
+            const hits = subs.filter((sub) => matches(sub, terms, link.title));
+            if (hits.length) out.push({ link, subs: hits });
+        }
+        return out;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authorizedRoutes, terms, searching]);
+
+    /** Enter in the search box opens the first result. */
+    const openFirstResult = () => {
+        const first = shownRoutes[0];
+        if (!first) return;
+        const target = first.subs.length ? first.subs[0] : first.link;
+        setQuery("");
+        router.push(target.route as any);
+        if (onCloseSidebarTrigger) onCloseSidebarTrigger();
+    };
 
     const cleanCurrentPath = cleanPath(pathname);
 
@@ -130,10 +179,15 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
 
     const handleMenuClick = (link: any) => {
         const hasSubroutes = link.subRoutes && link.subRoutes.length > 0;
-        if (hasSubroutes) {
+        if (hasSubroutes && searching) {
+            // Tapping a parent in the results clears the search and leaves that menu open.
+            setQuery("");
+            setActiveMenu(link.title);
+        } else if (hasSubroutes) {
             setActiveMenu(activeMenu === link.title ? "" : link.title);
         } else {
             setActiveMenu("");
+            setQuery("");
             router.push(link.route as any);
             if (onCloseSidebarTrigger) onCloseSidebarTrigger();
         }
@@ -174,20 +228,75 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
                 </View>
             )}
 
+            {/* Search the menu */}
+            <View
+                style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    borderWidth: 1,
+                    borderColor: searching ? theme.primary : dividerColor,
+                    backgroundColor: isDarkMode ? "rgba(255,255,255,0.04)" : "#f8fafc",
+                    borderRadius: 10,
+                    paddingHorizontal: 10,
+                    marginBottom: 8,
+                    marginHorizontal: 2,
+                }}
+            >
+                <Search size={14} color={searching ? theme.primary : inactiveLabel} />
+                <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Search menu..."
+                    placeholderTextColor={inactiveLabel}
+                    returnKeyType="go"
+                    onSubmitEditing={openFirstResult}
+                    onKeyPress={(e: any) => {
+                        if (e?.nativeEvent?.key === "Escape") setQuery("");
+                    }}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    accessibilityLabel="Search menu"
+                    style={[
+                        {
+                            flex: 1,
+                            minWidth: 0,
+                            paddingVertical: 8,
+                            fontSize: 13,
+                            fontFamily: theme.font.medium,
+                            color: inactiveLabelStrong,
+                        },
+                        Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null,
+                    ]}
+                />
+                {searching ? (
+                    <TouchableOpacity onPress={() => setQuery("")} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+                        <X size={14} color={inactiveLabel} />
+                    </TouchableOpacity>
+                ) : null}
+            </View>
+
             <ScrollView
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
                 style={{ flex: 1 }}
                 contentContainerStyle={{ paddingBottom: 16, flexGrow: 1 }}
             >
-                {authorizedRoutes.map((link) => {
+                {searching && shownRoutes.length === 0 ? (
+                    <Text style={{ color: inactiveLabel, fontFamily: theme.font.medium, fontSize: 12, paddingHorizontal: 8, paddingVertical: 12 }}>
+                        Nothing in the menu matches "{query.trim()}".
+                    </Text>
+                ) : null}
+                {shownRoutes.map(({ link, subs }) => {
                     const hasSubroutes = link.subRoutes && link.subRoutes.length > 0;
                     const isRouteActive = cleanCurrentPath === cleanPath(link.route);
                     const childIsActive =
-                        link.subRoutes?.some((sub) =>
+                        link.subRoutes?.some((sub: any) =>
                             cleanCurrentPath.startsWith(cleanPath(sub.route.split("?")[0]))
                         ) ?? false;
                     const parentIsActive = isRouteActive || childIsActive;
                     const isMenuOpen =
+                        searching ||
                         activeMenu === link.title ||
                         (childIsActive && activeMenu !== link.title && activeMenu === "");
 
@@ -238,11 +347,7 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
                                     className="ml-5 pl-4 mt-0.5 mb-1"
                                     style={{ borderLeftWidth: 1, borderLeftColor: dividerColor }}
                                 >
-                                    {link.subRoutes!
-                                        .filter(
-                                            (sub) => sub.showInSidebar && hasAccessPermission(sub.allowedRoles)
-                                        )
-                                        .map((subItem) => {
+                                    {subs.map((subItem: any) => {
                                             const isSubActive = cleanCurrentPath.startsWith(
                                                 cleanPath(subItem.route.split("?")[0])
                                             );
@@ -259,6 +364,7 @@ export default function SidebarNavigationList({ onCloseSidebarTrigger }: NavList
                                                     accessibilityRole="button"
                                                     accessibilityState={{ selected: isSubActive }}
                                                     onPress={() => {
+                                                        if (searching) setQuery("");
                                                         router.push(subItem.route as any);
                                                         if (onCloseSidebarTrigger) onCloseSidebarTrigger();
                                                     }}

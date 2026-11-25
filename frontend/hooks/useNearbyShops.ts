@@ -90,7 +90,7 @@ function normalize(x: any): NearbyShop {
 
 /* ---------------------------------------------------------------- location */
 
-type Fix = { ok: true; coords: Coords } | { ok: false; state: LocationState; message: string };
+export type Fix = { ok: true; coords: Coords } | { ok: false; state: LocationState; message: string };
 
 async function webLocation(): Promise<Fix> {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -236,4 +236,9 @@ export function useNearbyShops() {
         error,
         refresh: () => setRefreshTick((t) => t + 1),
     };
+}
+
+/** The device's location (asks permission; web uses the browser). Used by "Find a church". */
+export function readDeviceLocation(): Promise<Fix> {
+    return Platform.OS === 'web' ? webLocation() : nativeLocation();
 }

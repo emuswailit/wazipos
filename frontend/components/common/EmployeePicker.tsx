@@ -12,6 +12,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import ClearInputButton from '@/components/common/ClearInputButton';
 
 interface Props {
     employees: EmployeeNormalized[];
@@ -107,6 +108,7 @@ export function EmployeePicker({
                         fontSize: 13,
                     }}
                 />
+                <ClearInputButton value={search} onClear={() => setSearch('')} disabled={disabled} />
             </View>
 
             {isOpen && (

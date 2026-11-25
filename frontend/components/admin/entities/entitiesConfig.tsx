@@ -21,6 +21,7 @@ function entityPlace(e: EntityItem | null | undefined): string {
 
 export function entityBadges(e: EntityItem): AdminBadge[] {
     const badges: AdminBadge[] = [];
+    if ((e as any).is_active === false) badges.push({ label: 'Deactivated', tone: 'danger', icon: 'ban' });
     if (yes(e.is_verified)) badges.push({ label: 'Verified', tone: 'success', icon: 'checkmark-circle' });
     else badges.push({ label: 'Unverified', tone: 'warning' });
     if (yes(e.is_subscribed)) badges.push({ label: e.plan_title || 'Subscribed', tone: 'violet' });

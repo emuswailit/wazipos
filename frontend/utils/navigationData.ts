@@ -21,7 +21,18 @@ interface SidebarRoute {
     tint?: string;
 
     subRoutes?: SidebarRoute[];
+
+    /**
+     * Sections people may hide from their menu (Profile -> Menu sections, or the
+     * section's own "Hide this menu" item). Saved on the account: Users.hidden_menus.
+     */
+    hideKey?: string;
 }
+
+/** Menu sections a person can hide (key -> what it is called in Preferences). */
+export const HIDEABLE_SECTIONS: { key: string; title: string; description: string }[] = [
+    { key: 'church', title: 'Church', description: 'Find a church, your church’s notices and programme, your family register.' },
+];
 
 /* Section tints — one hue per top-level entry, sub-routes inherit. */
 const TINTS = {
@@ -39,8 +50,15 @@ const TINTS = {
 } as const;
 
 /* Jobs board: every signed-in user browses and applies; only a business's own admins post adverts for it. */
-const JOB_EMPLOYERS: string[] = ['GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin', 'GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'InternetServiceProviderSuperAdmin'];
+const JOB_EMPLOYERS: string[] = ['GeneralRetailerSuperAdmin', 'PharmaceuticalRetailerSuperAdmin', 'GeneralWholesalerSuperAdmin', 'PharmaceuticalWholesalerSuperAdmin', 'GeneralDistributorSuperAdmin', 'PharmaceuticalDistributorSuperAdmin', 'GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'PublisherSuperAdmin', 'RestaurantSuperAdmin', 'HotelSuperAdmin', 'DeliverySuperAdmin', 'CourierSuperAdmin', 'InternetServiceProviderSuperAdmin'];
+/* Businesses on WaziPOS Tokens (Publishers are not billed: backend billing.pricing.BILLING_EXEMPT). */
+const BILLED_ADMINS: string[] = JOB_EMPLOYERS.filter((r) => r !== 'PublisherSuperAdmin');
 const JOB_SEEKERS: string[] = ['Client', 'Admin', 'Agent', 'Onboarder', ...JOB_EMPLOYERS];
+/* Churches: everyone signed in (Client / Admin are in every token); officials run their church. */
+const CHURCH_EVERYONE: string[] = ['Client', 'Admin', 'Agent', 'Onboarder', 'ChurchSuperAdmin', 'ChurchOfficial'];
+const CHURCH_ADMINS: string[] = ['ChurchSuperAdmin', 'ChurchOfficial'];
+/* Denomination head office (overseer, admins, communications); WaziPOS admins can open any. */
+const DENOMINATION_ADMINS: string[] = ['DenominationAdmin', 'RegionAdmin', 'Admin'];
 
 export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
     {
@@ -150,6 +168,63 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         ],
     },
     {
+        // Open to everyone, like Shopping; anyone can hide it (hideKey). Backend churches app.
+        id: 28,
+        title: 'Church',
+        route: '/churches',
+        allowedRoles: CHURCH_EVERYONE,
+        showInSidebar: true,
+        icon: 'Church',
+        tint: TINTS.teal,
+        hideKey: 'church',
+        subRoutes: [
+            { id: 1, title: 'My church', route: '/churches', allowedRoles: CHURCH_EVERYONE, showInSidebar: true, icon: 'Church', tint: TINTS.teal },
+            { id: 2, title: 'Find a church', route: '/churchFind', allowedRoles: CHURCH_EVERYONE, showInSidebar: true, icon: 'MapPin', tint: TINTS.teal },
+            { id: 3, title: 'My family', route: '/churchFamily', allowedRoles: CHURCH_EVERYONE, showInSidebar: true, icon: 'HouseHeart', tint: TINTS.teal },
+            { id: 4, title: 'Hide this menu', route: '/churches?hide=1', allowedRoles: CHURCH_EVERYONE, showInSidebar: true, icon: 'EyeOff', tint: TINTS.teal },
+        ],
+    },
+    {
+        // People who help run a church: its owner / super admin, and officials it appointed
+        // (pastor, secretary, treasurer, welfare, group leaders). What each may do is checked by the backend.
+        id: 29,
+        title: 'Church admin',
+        route: '/churchDashboard',
+        allowedRoles: CHURCH_ADMINS,
+        showInSidebar: true,
+        icon: 'HeartHandshake',
+        tint: TINTS.teal,
+        subRoutes: [
+            { id: 1, title: 'Dashboard', route: '/churchDashboard', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'LayoutDashboard', tint: TINTS.teal },
+            { id: 2, title: 'Families', route: '/churchFamilies', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'HouseHeart', tint: TINTS.teal },
+            { id: 3, title: 'Members', route: '/churchMembers', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'Users', tint: TINTS.teal },
+            { id: 4, title: 'Groups', route: '/churchGroups', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'UsersRound', tint: TINTS.teal },
+            { id: 5, title: 'Send SMS', route: '/churchMessages', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'MessageSquare', tint: TINTS.teal },
+            { id: 6, title: 'Announcements', route: '/churchAnnouncements', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'Megaphone', tint: TINTS.teal },
+            { id: 7, title: 'Programme & events', route: '/churchSchedule', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'CalendarDays', tint: TINTS.teal },
+            { id: 8, title: 'Officials & settings', route: '/churchOfficials', allowedRoles: CHURCH_ADMINS, showInSidebar: true, icon: 'UserCog', tint: TINTS.teal },
+        ],
+    },
+    {
+        // A denomination's head office (e.g. Free Pentecostal Fellowship in Kenya) and its region
+        // admins (scoped to their region): regions, parishes, join requests, parish officials,
+        // notices / events. Roles flow down: WaziPOS -> denomination -> region -> parish -> group.
+        id: 30,
+        title: 'Denomination',
+        route: '/denomination',
+        allowedRoles: DENOMINATION_ADMINS,
+        showInSidebar: true,
+        icon: 'Landmark',
+        tint: TINTS.teal,
+        subRoutes: [
+            { id: 1, title: 'Overview', route: '/denomination', allowedRoles: DENOMINATION_ADMINS, showInSidebar: true, icon: 'LayoutDashboard', tint: TINTS.teal },
+            { id: 5, title: 'Regions', route: '/denominationRegions', allowedRoles: DENOMINATION_ADMINS, showInSidebar: true, icon: 'Map', tint: TINTS.teal },
+            { id: 2, title: 'Parishes', route: '/denominationParishes', allowedRoles: DENOMINATION_ADMINS, showInSidebar: true, icon: 'Church', tint: TINTS.teal },
+            { id: 3, title: 'Notices & events', route: '/denominationNotices', allowedRoles: DENOMINATION_ADMINS, showInSidebar: true, icon: 'Megaphone', tint: TINTS.teal },
+            { id: 4, title: 'Head office', route: '/denominationAdmins', allowedRoles: ['DenominationAdmin', 'Admin'], showInSidebar: true, icon: 'UserCog', tint: TINTS.teal },
+        ],
+    },
+    {
         id: 25,
         title: 'Insurance',
         route: '/insurance',
@@ -185,13 +260,13 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         title: 'Billing',
         route: '/billing',
         // WaziPOS Tokens: every business's staff see the balance; its admins top up. WaziPOS admins see all wallets.
-        allowedRoles: ['Admin', ...JOB_EMPLOYERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'],
+        allowedRoles: ['Admin', ...BILLED_ADMINS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'],
         showInSidebar: true,
         icon: 'Coins',
         tint: TINTS.amber,
         subRoutes: [
-            { id: 1, title: 'Tokens & usage', route: '/billing', allowedRoles: ['Admin', ...JOB_EMPLOYERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'Coins', tint: TINTS.amber },
-            { id: 2, title: 'History', route: '/billing?tab=history', allowedRoles: ['Admin', ...JOB_EMPLOYERS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'History', tint: TINTS.amber },
+            { id: 1, title: 'Tokens & usage', route: '/billing', allowedRoles: ['Admin', ...BILLED_ADMINS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'Coins', tint: TINTS.amber },
+            { id: 2, title: 'History', route: '/billing?tab=history', allowedRoles: ['Admin', ...BILLED_ADMINS, 'BankSuperAdmin', 'FacilitatorSuperAdmin'], showInSidebar: true, icon: 'History', tint: TINTS.amber },
             { id: 3, title: 'All wallets', route: '/billing?tab=wallets', allowedRoles: ['Admin'], showInSidebar: true, icon: 'Wallet', tint: TINTS.amber },
         ],
     },
@@ -213,6 +288,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 allowedRoles: ['Admin'],
                 showInSidebar: true,
                 icon: 'UserPlus',
+                tint: TINTS.violet,
+            },
+            {
+                // Church denominations / fellowships above parishes (churches app).
+                id: 31,
+                title: 'Denominations',
+                route: '/denominationsDesk',
+                allowedRoles: ['Admin'],
+                showInSidebar: true,
+                icon: 'Landmark',
                 tint: TINTS.violet,
             },
             {
@@ -575,20 +660,21 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         ],
     },
     {
-        // Manufacturers: the product master (the source of every product on WaziPOS),
-        // production batches, discounts and distributors' orders (backend manufacturers/api.py).
+        // Manufacturers (and book publishers, who sell their titles the same way): the product
+        // master (the source of every product on WaziPOS), production batches, discounts and
+        // distributors' orders (backend manufacturers/api.py).
         id: 23,
         title: 'Manufacturers',
         route: '/manufacturerProducts',
-        allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'],
+        allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'PublisherSuperAdmin'],
         showInSidebar: true,
         icon: 'Factory',
         tint: TINTS.amber,
         subRoutes: [
-            { id: 1, title: 'Products', route: '/manufacturerProducts?tab=manufacturerProducts', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.amber },
-            { id: 2, title: 'Batches', route: '/manufacturerBatches?tab=manufacturerBatches', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.amber },
-            { id: 3, title: 'Discounts', route: '/manufacturerDiscounts?tab=manufacturerDiscounts', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'BadgePercent', tint: TINTS.amber },
-            { id: 4, title: 'Distributor orders', route: '/manufacturerOrders?tab=manufacturerOrders', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin'], showInSidebar: true, icon: 'ClipboardList', tint: TINTS.amber },
+            { id: 1, title: 'Products', route: '/manufacturerProducts?tab=manufacturerProducts', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'PublisherSuperAdmin'], showInSidebar: true, icon: 'Package', tint: TINTS.amber },
+            { id: 2, title: 'Batches', route: '/manufacturerBatches?tab=manufacturerBatches', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'PublisherSuperAdmin'], showInSidebar: true, icon: 'Boxes', tint: TINTS.amber },
+            { id: 3, title: 'Discounts', route: '/manufacturerDiscounts?tab=manufacturerDiscounts', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'PublisherSuperAdmin'], showInSidebar: true, icon: 'BadgePercent', tint: TINTS.amber },
+            { id: 4, title: 'Distributor orders', route: '/manufacturerOrders?tab=manufacturerOrders', allowedRoles: ['GeneralManufacturerSuperAdmin', 'PharmaceuticalManufacturerSuperAdmin', 'PublisherSuperAdmin'], showInSidebar: true, icon: 'ClipboardList', tint: TINTS.amber },
         ],
     },
     {
@@ -975,7 +1061,8 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
         id: 8,
         title: 'Account',
         route: '/(tabs)/account',
-        allowedRoles: ['Admin', 'GeneralWholesalerSuperAdmin'],
+        // Shown to everyone signed in (My businesses / My Profile); each item keeps its own roles.
+        allowedRoles: JOB_SEEKERS,
         showInSidebar: true,
         icon: 'UserCircle',
         tint: TINTS.indigo,
@@ -996,6 +1083,16 @@ export const SIDEBAR_NAV_MANIFEST: SidebarRoute[] = [
                 allowedRoles: ['Admin'],
                 showInSidebar: true,
                 icon: 'CreditCard',
+                tint: TINTS.indigo,
+            },
+            {
+                id: 4,
+                title: 'My businesses',
+                // Strictly the businesses the signed-in user owns; switching asks them to sign in again.
+                route: '/accounts',
+                allowedRoles: JOB_SEEKERS,
+                showInSidebar: true,
+                icon: 'Building2',
                 tint: TINTS.indigo,
             },
             {
