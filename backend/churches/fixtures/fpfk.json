@@ -1,0 +1,462 @@
+[
+  {
+    "model": "authentication.organizations",
+    "pk": "558a39c0-45a1-5861-a479-516881247cb8",
+    "fields": {
+      "title": "FREE PENTECOSTAL FELLOWSHIP IN KENYA",
+      "description": "FPFK - Headquarters, Kindaruma Road off Menelik Road, Nairobi",
+      "organization_type": "DENOMINATION",
+      "division_label": "Region",
+      "email": "info@fpfk.or.ke",
+      "country": null,
+      "owner": null,
+      "contact1": null,
+      "contact2": null,
+      "contact3": null,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9d467595-1188-5fac-84e8-d7ef22ecfe8b",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Aberdare North",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "a2ec59e2-85a6-5c16-9843-ebd1ebe0388a",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Aberdare South",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "d2a302be-4900-5adb-a1e6-07df8b24ce3b",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Aberdare Central",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "521ec169-0c2a-590a-944e-89c85aabffd5",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Burreti Bomet",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "9f3db36e-298a-5850-b270-76ffd435acf3",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Coast",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "8765a6d2-58d8-51fd-8b8e-0603f4340736",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Central Rift",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6dc76f78-891c-500f-871f-ce33206c4fb5",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Emali",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "82b575cd-d09d-5760-8386-4917a7013553",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Gusii Borabu",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b0e763a8-caf4-503b-a5a1-98d0ed829da1",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Gusii Chache",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2bf08104-1864-55ad-87cd-80079d6e2086",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Gusii Eastern",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "35e07176-6d8a-50fa-a736-8f10763cd4ce",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kisii Central",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "acaacbcd-d04e-51bd-a88c-715b633a19f0",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kajiado Central",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "93ceeb03-661c-5fbd-adc9-42f3fc704686",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kakamega",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c0328048-d33d-5518-9b4d-c81bc386dd93",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kericho",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "cf3b0320-798b-5021-8e67-014cd03a2988",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kericho North",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c0dbee4d-3791-5882-9fa8-de0b28670be6",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kisumu",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "1a9dcfe2-f744-565d-989d-dba310347204",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kitale",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "503dd555-5b54-5a97-a54a-2ee6f519021d",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Loitokitok",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "97628b55-3b05-5201-9e37-f9705c6225e6",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Loitokitok East",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "b2b23d1a-00ce-52f1-9018-c2e08bbb1b08",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Machakos",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "83805c37-2a28-5c42-9d16-f6b1d94180c9",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Meru/Isiolo",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "799dfb1b-55fc-5fb5-b1c3-756993caebe7",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Mt. Kenya",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "4b87205c-fc11-5207-bb36-c2d5ab4c3c3e",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Nairobi",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "dd2309a0-0047-59bb-bbbb-a7f9dffe9594",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Nakuru",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "6da863c6-329a-5a46-8b7a-571417a4786f",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Narok North",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "122cced3-aba0-56fa-a377-8de0bc0ce638",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Narok South",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e3b98b47-2bce-546c-a3f7-5d1d0be6370f",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "North Rift",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "949fc199-6dbd-5746-b403-4ebed1ee06bb",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Nyambare",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "2df453c4-f09c-5641-a4a8-5876019f2f93",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "South Nyanza",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e2c3e599-7923-5092-be5d-f2c9fba4573f",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Southern",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "1b7c266a-a528-50d9-b941-0498f57ada43",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Teso",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "c971e2ee-447d-54fd-af1d-09972e8de2c0",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Amboseli",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "7f952cf6-e8ed-536e-8acd-e90d857aada1",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Kilimanjaro",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  },
+  {
+    "model": "authentication.Divisions",
+    "pk": "e670d285-e8c7-52c8-ac24-5c2b439af30f",
+    "fields": {
+      "organization": "558a39c0-45a1-5861-a479-516881247cb8",
+      "name": "Turkana",
+      "code": "",
+      "description": "",
+      "is_active": true,
+      "created": "2026-11-25T00:00:00Z",
+      "updated": "2026-11-25T00:00:00Z"
+    }
+  }
+]

@@ -707,6 +707,9 @@ class Organizations(models.Model):
     ORGANIZATION_TYPE = (
         ("COUNTY", "COUNTY"),
         ("GROUP", "GROUP"),
+        # A church denomination / fellowship (e.g. Free Pentecostal Fellowship in Kenya);
+        # its parishes are Church entities with organization = this (churches app).
+        ("DENOMINATION", "DENOMINATION"),
     )
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(
@@ -716,6 +719,8 @@ class Organizations(models.Model):
         max_length=256, null=True, blank=True
     )
     organization_type = models.CharField(max_length=50, choices=ORGANIZATION_TYPE)
+    # What this organization calls its Divisions ("Region", "Diocese", "Conference"…).
+    division_label = models.CharField(max_length=40, default="Region")
     email = models.EmailField(max_length=256, null=True, blank=True)
     country = models.ForeignKey(
         Countries,
@@ -762,6 +767,32 @@ class Organizations(models.Model):
         super(Organizations, self).save(*args, **kwargs)
     class Meta:
         verbose_name_plural="Organizations"
+
+
+class Divisions(models.Model):
+    """
+    A part of an Organization that groups its Entities: Organizations -> Divisions -> Entities.
+    e.g. Free Pentecostal Fellowship in Kenya -> Teso (shown as "Teso Region", see
+    Organizations.division_label) -> Odioi Parish. Both levels are optional for an entity:
+    an entity may belong to an organization without a division, or to neither.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(Organizations, related_name="divisions", on_delete=models.CASCADE)
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=20, blank=True, default="")
+    description = models.CharField(max_length=255, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Divisions"
+        ordering = ("name",)
+        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="uniq_organization_division")]
+
+    def __str__(self):
+        return self.name
 
 
             
@@ -859,6 +890,15 @@ class Entities(models.Model):
         null=True,
         blank=True,
         on_delete=models.DO_NOTHING,
+    )
+    # Optional, like organization: the division of that organization the entity sits in
+    # (e.g. an FPFK parish in Teso). Must belong to the same organization.
+    division = models.ForeignKey(
+        Divisions,
+        related_name="entities",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
     )
     county = models.ForeignKey(
         Counties,
@@ -991,6 +1031,11 @@ class Entities(models.Model):
                 self.title = self.title.upper()
             if not self.entity_code or self.entity_code == "":
                 self.entity_code = self.generate_entity_code()
+            # Organizations -> Divisions -> Entities: a division only within its own organization.
+            if self.division_id and self.division.organization_id != self.organization_id:
+                from django.core.exceptions import ValidationError
+
+                raise ValidationError(f"{self.division} is not a division of this entity's organization.")
 
         super(Entities, self).save(*args, **kwargs)
 
@@ -2038,6 +2083,31 @@ class Users(AbstractBaseUser, PermissionsMixin):
                         value=role.value,
                     ))
         except Exception:  # noqa: BLE001 — never block signing in
+            pass
+        # Denomination head office and region admins see the Denomination menu.
+        try:
+            from churches.denominations import is_denomination_admin, is_region_admin
+            from authentication.utils.agents import _system_role
+
+            for value, title, about, holds in (
+                ("DenominationAdmin", "DENOMINATION ADMIN", "Runs a church denomination's head office on WaziPOS", is_denomination_admin),
+                ("RegionAdmin", "REGION ADMIN", "Runs a region of a church denomination on WaziPOS", is_region_admin),
+            ):
+                if not holds(self):
+                    continue
+                role = _system_role(value, title, about)
+                if role and not any(r.get("value") == role.value for r in roles):
+                    roles.append(dict(
+                        id=str(role.id),
+                        cluster=str(role.cluster_id),
+                        owner=str(role.owner_id),
+                        entity=str(role.entity_id),
+                        entity_title=str(role.entity.title),
+                        level=role.level,
+                        title=role.title,
+                        value=role.value,
+                    ))
+        except Exception:  # noqa: BLE001 - never block signing in
             pass
         decodeJTW["roles"] = roles
         decodeJTW["hidden_menus"] = list(self.hidden_menus or [])

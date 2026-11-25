@@ -8,6 +8,11 @@
 #   WELFARE      view the register and dashboard (welfare comes in phase 3)
 #   GROUP_LEADER their own group(s) only: its members, SMS to it, its events / schedule
 # Everyone signed in: find churches, open a church page; members see their own family.
+#
+# A parish may belong to a denomination (authentication.Organizations, type DENOMINATION):
+# it asks to join from its settings and head office approves (churches/denominations.py,
+# which also holds the head-office actions). Denomination-wide notices and events show
+# on every one of its parishes' pages.
 
 import logging
 from datetime import date, datetime, timedelta
@@ -36,9 +41,13 @@ from .models import (
 log = logging.getLogger(__name__)
 
 CHURCH_TYPE = "Church"
-OFFICE_ORDER = ["SUPER", "PASTOR", "SECRETARY", "TREASURER", "WELFARE", "GROUP_LEADER"]
+DENOMINATION = "DENOMINATION"  # authentication.Organizations.organization_type
+OFFICE_ORDER = ["SUPER", "ADMIN", "PASTOR", "SECRETARY", "TREASURER", "WELFARE", "GROUP_LEADER"]
 OFFICE_LABELS = {"SUPER": "Church admin", **dict(ChurchOfficials.OFFICES)}
-RUN = {"SUPER", "PASTOR", "SECRETARY"}  # run the register, groups, SMS, notices, programme
+RUN = {"SUPER", "ADMIN", "PASTOR", "SECRETARY"}  # run the register, groups, SMS, notices, programme
+# Appoint group leaders (parish offices themselves come from higher up: churches/denominations.py).
+APPOINT_LEADERS = {"SUPER", "ADMIN", "PASTOR"}
+PARISH_OFFICES = [o for o, _ in ChurchOfficials.OFFICES if o != "GROUP_LEADER"]
 VIEW_REGISTER = RUN | {"TREASURER", "WELFARE"}
 SMS_MAX_LENGTH = 459  # three SMS parts
 DAY_NAMES = dict(ScheduleItems.DAYS)
@@ -232,15 +241,46 @@ def _own(model, scope, pk, what):
 
 # ------------------------------------------------------------------ shapes
 
+def org_title(org):
+    """Organizations.save() upper-cases titles; show them in title case."""
+    t = (org.title or "") if org else ""
+    return t.title() if t.isupper() else t
+
+
+def denomination_of(church):
+    """The parish's denomination as {id, title}, or None (independent)."""
+    org = church.organization if church.organization_id else None
+    if org is None or org.organization_type != DENOMINATION:
+        return None
+    return {"id": str(org.pk), "title": org_title(org)}
+
+
+def region_of(church, profile=None):
+    """The parish's region: its division, or (pending join request) the one it asked for."""
+    if church.division_id:
+        return church.division
+    profile = profile or getattr(church, "church_profile", None)
+    if profile is not None and profile.org_status == "PENDING" and profile.requested_division_id:
+        return profile.requested_division
+    return None
+
+
 def _church_card(church, profile=None, distance=None, member=False):
     profile = profile or getattr(church, "church_profile", None)
+    denom = denomination_of(church)
     return {
         "id": str(church.pk),
         "title": church.title,
         "town": church.town or "",
         "road": church.road or "",
         "phone": church.phone or "",
-        "denomination": profile.denomination if profile else "",
+        # The denomination it belongs to (approved), else what the parish typed.
+        "denomination": denom["title"] if denom else (profile.denomination if profile else ""),
+        "denomination_id": denom["id"] if denom else None,
+        # Region = the parish's division (authentication.Divisions); while a join request is
+        # pending, the division it asked for.
+        "region": region_of(church, profile).name if region_of(church, profile) else "",
+        "region_id": str(region_of(church, profile).pk) if region_of(church, profile) else None,
         "code": profile.code if profile else None,
         "distance_km": round(distance.km, 1) if distance is not None else None,
         "is_member": member,
@@ -305,9 +345,17 @@ def _family(f, with_members=True):
     return out
 
 
+def _from(x):
+    """Label for head-office / region notices ("FPFK", "FPFK - Nairobi Region"); None for a parish's own."""
+    if not x.organization_id:
+        return None
+    return f"{org_title(x.organization)} - {x.division.name}" if x.division_id else org_title(x.organization)
+
+
 def _announcement(a):
     return {
         "id": str(a.pk), "title": a.title, "body": a.body, "audience": a.audience, "pinned": a.pinned,
+        "from_denomination": _from(a), "region_id": str(a.division_id) if a.division_id else None,
         "publish_at": _iso(a.publish_at), "expires_at": _iso(a.expires_at), "created": _iso(a.created),
     }
 
@@ -322,7 +370,8 @@ def _schedule(s):
 
 def _event(e):
     return {
-        "id": str(e.pk), "title": e.title, "starts_at": _iso(e.starts_at), "ends_at": _iso(e.ends_at), "venue": e.venue,
+        "id": str(e.pk), "title": e.title,
+        "from_denomination": _from(e), "region_id": str(e.division_id) if e.division_id else None, "starts_at": _iso(e.starts_at), "ends_at": _iso(e.ends_at), "venue": e.venue,
         "description": e.description, "leader": e.leader, "audience": e.audience, "is_cancelled": e.is_cancelled,
         "group": {"id": str(e.group_id), "name": e.group.name} if e.group_id else None,
     }
@@ -373,7 +422,13 @@ def admin_home(user, data):
 
     events = Events.objects.filter(church=church, starts_at__gte=now, starts_at__lte=now + timedelta(days=14), is_cancelled=False).select_related("group")
     return {
-        "church": {**_church_card(church, profile), "about": profile.about, "is_listed": profile.is_listed},
+        "church": {
+            **_church_card(church, profile), "about": profile.about, "is_listed": profile.is_listed,
+            # What the parish typed (independent churches) and where its denomination request stands.
+            "free_denomination": profile.denomination,
+            "org_status": profile.org_status, "org_note": profile.org_note,
+            "org_request": {"id": str(profile.org_request_id), "title": org_title(profile.org_request)} if profile.org_request_id else None,
+        },
         "office": scope.office,
         "office_label": OFFICE_LABELS.get(scope.office, scope.office),
         "my_groups": scope.groups,
@@ -394,7 +449,10 @@ def admin_home(user, data):
             "manage_groups": scope.runs,
             "send_sms": scope.runs or scope.office == "GROUP_LEADER",
             "post": scope.runs or scope.office == "GROUP_LEADER",
-            "officials": scope.office == "SUPER",
+            # Group leaders: parish admin / pastor. Other offices: only an independent church's owner
+            # (a parish in a denomination gets them from its region admins / head office).
+            "officials": scope.office in APPOINT_LEADERS,
+            "appoint_offices": scope.office == "SUPER" and not denomination_of(church),
             "settings": scope.runs,
         },
     }
@@ -410,6 +468,14 @@ def save_settings(user, data):
         profile.about = _s(data.get("about"))[:4000]
     if "is_listed" in data:
         profile.is_listed = str(data.get("is_listed")).lower() in ("true", "1", "yes")
+    if "organization_id" in data or "region_id" in data:
+        from churches.denominations import request_to_join
+
+        if "organization_id" in data:
+            org_id = _s(data.get("organization_id"))
+        else:
+            org_id = str(profile.org_request_id or "") if profile.org_status in ("PENDING", "APPROVED") else ""
+        request_to_join(user, scope.church, profile, org_id, _s(data.get("region_id")))
     profile.save()
     return admin_home(user, {"church": str(scope.church.pk)})["church"]
 
@@ -767,63 +833,88 @@ def set_group_members(user, data):
 
 # ------------------------------------------------------------------ admin: officials
 
+def official_rows(church):
+    rows = ChurchOfficials.objects.filter(church=church, is_active=True).select_related("user", "group", "added_by").order_by("office")
+    return [
+        {
+            "id": str(o.pk), "user_id": str(o.user_id), "name": _user_name(o.user), "phone": o.user.phone or "",
+            "office": o.office, "office_label": OFFICE_LABELS.get(o.office, o.office),
+            "group": {"id": str(o.group_id), "name": o.group.name} if o.group_id else None, "since": _iso(o.created),
+            "added_by": _user_name(o.added_by),
+        }
+        for o in rows
+    ]
+
+
 def officials(user, data):
     scope = scope_for(user, data)
-    scope.need({"SUPER"}, "see the church's officials")
-    rows = ChurchOfficials.objects.filter(church=scope.church, is_active=True).select_related("user", "group").order_by("office")
+    scope.need(APPOINT_LEADERS, "see the church's officials")
+    independent = not denomination_of(scope.church)
+    allowed = (PARISH_OFFICES if independent and scope.office == "SUPER" else []) + ["GROUP_LEADER"]
     return {
-        "officials": [
-            {
-                "id": str(o.pk), "user_id": str(o.user_id), "name": _user_name(o.user), "phone": o.user.phone or "",
-                "office": o.office, "office_label": OFFICE_LABELS.get(o.office, o.office),
-                "group": {"id": str(o.group_id), "name": o.group.name} if o.group_id else None, "since": _iso(o.created),
-            }
-            for o in rows
-        ],
-        "offices": [{"value": k, "label": v} for k, v in ChurchOfficials.OFFICES],
+        "officials": official_rows(scope.church),
+        "offices": [{"value": k, "label": v} for k, v in ChurchOfficials.OFFICES if k in allowed],
+        "appointed_above": not independent,
     }
 
 
-def save_official(user, data):
-    scope = scope_for(user, data)
-    scope.need({"SUPER"}, "appoint officials")
-    office = _s(data.get("office"))
+def appoint(by, church, phone, office, group=None):
+    """Make the person with this WaziPOS phone an official of the church. Callers check the right to."""
     if office not in dict(ChurchOfficials.OFFICES):
-        raise ChurchError("Check the details", ["Pick the office (pastor, secretary…)"])
-    phone = _phone(data.get("phone"))
+        raise ChurchError("Check the details", ["Pick the office"])
+    phone = _phone(phone)
     if not phone:
         raise ChurchError("Check the details", ["Enter the person's phone number"])
     person = _user_for_phone(phone)
     if person is None:
-        raise ChurchError("No WaziPOS account", [f"Nobody with {phone} is on WaziPOS yet. Ask them to sign up (it's free), then add them here."])
-    group = None
-    if office == "GROUP_LEADER":
-        group = _own(Groups, scope, data.get("group_id"), "group")
-    row = ChurchOfficials.objects.filter(church=scope.church, user=person, office=office, group=group).first()
+        raise ChurchError("No WaziPOS account", [f"Nobody with {phone} is on WaziPOS yet. Ask them to sign up (it's free), then add them."])
+    if office == "GROUP_LEADER" and group is None:
+        raise ChurchError("Check the details", ["Pick the group they lead"])
+    row = ChurchOfficials.objects.filter(church=church, user=person, office=office, group=group).first()
     if row:
-        row.is_active = True
-        row.added_by = user
+        row.is_active, row.added_by = True, by
         row.save(update_fields=["is_active", "added_by", "updated"])
     else:
-        ChurchOfficials.objects.create(church=scope.church, user=person, office=office, group=group, added_by=user)
+        ChurchOfficials.objects.create(church=church, user=person, office=office, group=group, added_by=by)
     try:
         from core.notify import notify_users
 
         notify_users(
-            [person], f"You're now {OFFICE_LABELS[office]} at {scope.church.title}",
-            [f"{_user_name(user) or 'The church admin'} added you as {OFFICE_LABELS[office]}{f' of {group.name}' if group else ''} at {scope.church.title} on WaziPOS.",
+            [person], f"You're now {OFFICE_LABELS[office]} at {church.title}",
+            [f"{_user_name(by) or 'An admin'} added you as {OFFICE_LABELS[office]}{f' of {group.name}' if group else ''} at {church.title} on WaziPOS.",
              "Sign out and sign in again to see the Church admin menu."],
             email=True,
         )
-    except Exception:  # noqa: BLE001 — a missed notice never blocks the appointment
+    except Exception:  # noqa: BLE001 - a missed notice never blocks the appointment
         log.warning("church official notice failed", exc_info=True)
+
+
+def save_official(user, data):
+    """From the parish: group leaders (parish admin / pastor); other offices only in an
+    independent church (its owner). In a denomination they come from the region / head office."""
+    scope = scope_for(user, data)
+    office = _s(data.get("office"))
+    if office == "GROUP_LEADER":
+        scope.need(APPOINT_LEADERS, "appoint group leaders")
+        appoint(user, scope.church, data.get("phone"), office, _own(Groups, scope, data.get("group_id"), "group"))
+    else:
+        denom = denomination_of(scope.church)
+        if denom:
+            raise ChurchError("Appointed from above", [f"In {denom['title']}, parish officials are appointed by your region admin or head office."])
+        scope.need({"SUPER"}, "appoint parish officials")
+        appoint(user, scope.church, data.get("phone"), office)
     return officials(user, {"church": str(scope.church.pk)})
 
 
 def remove_official(user, data):
     scope = scope_for(user, data)
-    scope.need({"SUPER"}, "remove officials")
     row = _own(ChurchOfficials, scope, data.get("official_id"), "official")
+    if row.office == "GROUP_LEADER":
+        scope.need(APPOINT_LEADERS, "remove group leaders")
+    else:
+        if denomination_of(scope.church):
+            raise ChurchError("Appointed from above", ["Parish officials are removed by your region admin or head office."])
+        scope.need({"SUPER"}, "remove parish officials")
     row.is_active = False
     row.save(update_fields=["is_active", "updated"])
     return officials(user, {"church": str(scope.church.pk)})
@@ -843,6 +934,13 @@ def save_announcement(user, data):
     scope = scope_for(user, data)
     scope.need(RUN, "post announcements")
     a = _own(Announcements, scope, data.get("announcement_id"), "announcement") if _s(data.get("announcement_id")) else Announcements(church=scope.church, created_by=user)
+    fill_announcement(a, data)
+    a.save()
+    return _announcement(a)
+
+
+def fill_announcement(a, data):
+    """Apply and check announcement fields (parish and head-office notices)."""
     for f, n in (("title", 160), ("body", 5000)):
         if f in data or not a.pk:
             setattr(a, f, _s(data.get(f))[:n])
@@ -865,8 +963,6 @@ def save_announcement(user, data):
         errors.append("It must expire after it is published")
     if errors:
         raise ChurchError("Check the details", errors)
-    a.save()
-    return _announcement(a)
 
 
 def delete_announcement(user, data):
@@ -944,6 +1040,14 @@ def save_event(user, data):
     e = _own(Events, scope, data.get("event_id"), "event") if _s(data.get("event_id")) else Events(church=scope.church, created_by=user)
     gid = _s(data.get("group_id")) if "group_id" in data else (str(e.group_id) if e.group_id else "")
     scope.need_group(gid or None, "post events")
+    fill_event(e, data)
+    e.group = _own(Groups, scope, gid, "group") if gid else None
+    e.save()
+    return _event(e)
+
+
+def fill_event(e, data):
+    """Apply and check event fields (parish and head-office events)."""
     errors = []
     for f, n in (("title", 160), ("venue", 160), ("description", 5000), ("leader", 120)):
         if f in data or not e.pk:
@@ -966,9 +1070,6 @@ def save_event(user, data):
         e.is_cancelled = str(data.get("is_cancelled")).lower() in ("true", "1", "yes")
     if errors:
         raise ChurchError("Check the details", errors)
-    e.group = _own(Groups, scope, gid, "group") if gid else None
-    e.save()
-    return _event(e)
 
 
 def delete_event(user, data):
@@ -1135,7 +1236,12 @@ def find_churches(user, data):
     qs = auth_models.Entities.objects.filter(entity_type=CHURCH_TYPE).exclude(is_active=False).exclude(church_profile__is_listed=False)
     q = _s(data.get("q"))
     if q:
-        qs = qs.filter(Q(title__icontains=q) | Q(town__icontains=q) | Q(road__icontains=q) | Q(church_profile__denomination__icontains=q))
+        qs = qs.filter(
+            Q(title__icontains=q) | Q(town__icontains=q) | Q(road__icontains=q) | Q(division__name__icontains=q)
+            | Q(church_profile__denomination__icontains=q) | Q(organization__title__icontains=q)
+        )
+    if _s(data.get("denomination_id")):
+        qs = qs.filter(organization_id=_s(data.get("denomination_id")))
     here = None
     try:
         lat, lng = float(data.get("latitude")), float(data.get("longitude"))
@@ -1151,7 +1257,7 @@ def find_churches(user, data):
         qs = qs.order_by("title")
     mine = set(_my_member_rows(user).values_list("church_id", flat=True))
     start, size, page = _page(data, default=30, cap=100)
-    rows = list(qs.select_related("church_profile")[start:start + size])
+    rows = list(qs.select_related("church_profile", "division", "organization")[start:start + size])
     services = {}
     for s in ScheduleItems.objects.filter(church__in=rows, is_active=True).order_by("day", "starts"):
         services.setdefault(s.church_id, []).append(f"{DAY_NAMES[s.day][:3]} {s.starts.strftime('%H:%M')} {s.title}")
@@ -1179,12 +1285,19 @@ def _resolve_church(data):
 def _page_payload(church, members_view):
     profile = profile_for(church)
     now = timezone.now()
-    ann = _live(Announcements.objects.filter(church=church))
-    ev = Events.objects.filter(church=church, is_cancelled=False).filter(Q(starts_at__gte=now - timedelta(hours=6)) | Q(ends_at__gte=now)).select_related("group")
+    mine = Q(church=church)
+    if denomination_of(church):
+        # Head office's notices / events for every parish, and its region's.
+        mine |= Q(organization_id=church.organization_id, division__isnull=True)
+        if church.division_id:
+            mine |= Q(organization_id=church.organization_id, division_id=church.division_id)
+    ann = _live(Announcements.objects.filter(mine)).select_related("organization", "division")
+    ev = Events.objects.filter(mine, is_cancelled=False).filter(Q(starts_at__gte=now - timedelta(hours=6)) | Q(ends_at__gte=now)).select_related("group", "organization", "division")
     if not members_view:
         ann, ev = ann.filter(audience="PUBLIC"), ev.filter(audience="PUBLIC")
     return {
         "church": {**_church_card(church, profile), "about": profile.about, "email": church.email or ""},
+        "denomination": denomination_of(church),
         "announcements": [_announcement(a) for a in ann.order_by("-pinned", "-created")[:30]],
         "schedule": [_schedule(s) for s in ScheduleItems.objects.filter(church=church, is_active=True).select_related("group")],
         "events": [_event(e) for e in ev[:30]],

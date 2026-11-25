@@ -1,4 +1,21 @@
-# churches/models.py — churches on WaziPOS (entity type "Church").
+# churches/models.py — churches on WaziPOS.
+#
+# A denomination / fellowship (e.g. Free Pentecostal Fellowship in Kenya) is an
+# authentication.Organizations row with organization_type DENOMINATION, created by
+# WaziPOS admins, run by its head-office admins (DenominationAdmins). Each parish /
+# local church is an Entities row of type "Church"; it asks to join its denomination
+# (ChurchProfiles.org_request) and head office approves, which sets
+# Entities.organization. Independent churches have no denomination.
+#
+# Hierarchy (authentication app): Organizations -> Divisions -> Entities. For churches:
+# denomination -> region (a Divisions row, shown with Organizations.division_label) ->
+# parish (a Church entity, Entities.division) -> groups. Each level has admins,
+# appointed only by an admin higher up:
+#   denomination roles (DenominationAdmins)   by WaziPOS admins
+#   region admins (DivisionAdmins)            by denomination head / admins
+#   parish offices (ChurchOfficials)          by the parish's region admins or above
+#                                             (an independent church's own owner)
+#   group leaders (ChurchOfficials)           by the parish admin / pastor
 #
 # Phase 1: the family register (families, members, promotion on marriage, life
 # events), groups and ministries, church officials, announcements, the weekly
@@ -29,6 +46,16 @@ class ChurchProfiles(models.Model):
     # Recipients the church may text per calendar month (SMS costs WaziPOS money).
     sms_monthly_quota = models.PositiveIntegerField(default=500)
     family_seq = models.PositiveIntegerField(default=0)
+    # The region (division) asked for while the join request is pending. Once approved the
+    # parish's region is Entities.division (set with Entities.organization).
+    requested_division = models.ForeignKey("authentication.Divisions", on_delete=models.SET_NULL, null=True, blank=True, related_name="parish_requests")
+    # Joining a denomination: the parish asks, head office decides.
+    ORG_STATUSES = (("NONE", "Independent"), ("PENDING", "Waiting for head office"), ("APPROVED", "Part of the denomination"), ("REJECTED", "Not accepted"))
+    org_request = models.ForeignKey("authentication.Organizations", on_delete=models.SET_NULL, null=True, blank=True, related_name="parish_requests")
+    org_status = models.CharField(max_length=10, choices=ORG_STATUSES, default="NONE")
+    org_note = models.CharField(max_length=255, blank=True, default="")
+    org_decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    org_decided_at = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -36,10 +63,47 @@ class ChurchProfiles(models.Model):
         return f"{self.entity.title} ({self.code})"
 
 
+class DenominationAdmins(models.Model):
+    """Head-office people who run a denomination on WaziPOS (appointed by WaziPOS admins)."""
+
+    ROLES = (("HEAD", "Head / overseer"), ("ADMIN", "Head-office admin"), ("COMMUNICATIONS", "Communications"))
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey("authentication.Organizations", on_delete=models.CASCADE, related_name="denomination_admins")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="denomination_roles")
+    role = models.CharField(max_length=16, choices=ROLES, default="ADMIN")
+    is_active = models.BooleanField(default=True)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization", "user"], name="uniq_denomination_admin")]
+
+
+class DivisionAdmins(models.Model):
+    """Runs a division (a denomination's region): its parishes' join requests, parish
+    officials, region notices. Appointed by the denomination's head office."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    division = models.ForeignKey("authentication.Divisions", on_delete=models.CASCADE, related_name="church_admins")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="church_division_roles")
+    is_active = models.BooleanField(default=True)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["division", "user"], name="uniq_division_admin")]
+
+
 class ChurchOfficials(models.Model):
-    """A person who helps run the church. The owner / super admins need no row."""
+    """A person who helps run a parish. The owner / super admins need no row.
+    Offices are appointed by the parish's region admins or head office (an independent
+    church's own owner); group leaders by the parish admin / pastor."""
 
     OFFICES = (
+        ("ADMIN", "Parish admin"),
         ("PASTOR", "Pastor / Priest"),
         ("SECRETARY", "Secretary"),
         ("TREASURER", "Treasurer"),
@@ -187,7 +251,11 @@ class Announcements(models.Model):
     AUDIENCES = (("PUBLIC", "Everyone (public page)"), ("MEMBERS", "Members only"))
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    church = models.ForeignKey("authentication.Entities", on_delete=models.CASCADE, related_name="church_announcements")
+    # One of the two: a parish's own notice, or a denomination-wide one (every parish page).
+    church = models.ForeignKey("authentication.Entities", on_delete=models.CASCADE, null=True, blank=True, related_name="church_announcements")
+    organization = models.ForeignKey("authentication.Organizations", on_delete=models.CASCADE, null=True, blank=True, related_name="denomination_announcements")
+    # With organization: only that division's (region's) parishes, else every parish of the denomination.
+    division = models.ForeignKey("authentication.Divisions", on_delete=models.CASCADE, null=True, blank=True, related_name="church_announcements")
     title = models.CharField(max_length=160)
     body = models.TextField()
     audience = models.CharField(max_length=8, choices=AUDIENCES, default="PUBLIC")
@@ -230,7 +298,10 @@ class Events(models.Model):
     AUDIENCES = Announcements.AUDIENCES
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    church = models.ForeignKey("authentication.Entities", on_delete=models.CASCADE, related_name="church_events")
+    # One of the two: a parish's event, or a denomination-wide one (conference, convention…).
+    church = models.ForeignKey("authentication.Entities", on_delete=models.CASCADE, null=True, blank=True, related_name="church_events")
+    organization = models.ForeignKey("authentication.Organizations", on_delete=models.CASCADE, null=True, blank=True, related_name="denomination_events")
+    division = models.ForeignKey("authentication.Divisions", on_delete=models.CASCADE, null=True, blank=True, related_name="church_events")
     title = models.CharField(max_length=160)
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)

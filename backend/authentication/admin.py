@@ -132,6 +132,13 @@ class OrganizationsAdmin(admin.ModelAdmin):
     search_fields = ("title",)
 
 
+@admin.register(models.Divisions)
+class DivisionsAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "organization", "is_active", "created")
+    list_filter = ("is_active", "organization")
+    search_fields = ("name", "code", "organization__title")
+
+
 
 @admin.register(EntityLicences)
 class EntityLicencesAdmin(admin.ModelAdmin):

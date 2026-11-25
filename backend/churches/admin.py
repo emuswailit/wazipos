@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Announcements, ChurchOfficials, ChurchProfiles, Events, Families, Groups, MemberEvents, Members, Messages, ScheduleItems
+from .models import Announcements, ChurchOfficials, DenominationAdmins, DivisionAdmins, ChurchProfiles, Events, Families, Groups, MemberEvents, Members, Messages, ScheduleItems
 
 
 @admin.register(ChurchProfiles)
@@ -29,5 +29,5 @@ class MessagesAdmin(admin.ModelAdmin):
     list_filter = ("status",)
 
 
-for m in (ChurchOfficials, Groups, MemberEvents, Announcements, ScheduleItems, Events):
+for m in (DenominationAdmins, DivisionAdmins, ChurchOfficials, Groups, MemberEvents, Announcements, ScheduleItems, Events):
     admin.site.register(m)

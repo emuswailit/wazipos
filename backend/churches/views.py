@@ -23,6 +23,25 @@
 #                    Events {when?: UPCOMING | PAST | ALL} · SaveEvent {event_id?, title, starts_at, ends_at?, venue?, description?, leader?,
 #                                audience?, group_id?, is_cancelled?} · DeleteEvent {event_id}
 #                    SmsPreview {audience, message?} · SendSms {audience, message} · SmsLog
+#   Denominations (organizations of type DENOMINATION; churches/denominations.py), optional {organization}:
+#                    Denominations {q?} (everyone, for pickers) · SaveSettings {organization_id, region} asks to join (parish)
+#                    DenominationHome · DenominationParishes {status?: APPROVED | PENDING | REJECTED, q?, region?}
+#                    DecideParish {church, decision: APPROVE | REJECT | REMOVE, note?}
+#                    DenominationAnnouncements {show?} · SaveDenominationAnnouncement {...} · DeleteDenominationAnnouncement {announcement_id}
+#                    DenominationEvents {when?} · SaveDenominationEvent {...} · DeleteDenominationEvent {event_id}
+#                    DenominationRegions {organization_id} (everyone: the parish's region picker)
+#                    Regions · SaveRegion {region_id?, name, description?, is_active?}
+#                    SaveRegionAdmin {region_id, phone} · RemoveRegionAdmin {admin_id}
+#                    MoveParish {church, region_id} · ParishOfficials {church}
+#                    CreateParish {title, region_id, latitude, longitude, town?, road?, phone?, email?, admin_phone?}
+#                      (head office anywhere; region admins in their region; no owner, the admin is appointed)
+#                    AppointParishOfficial {church, phone, office} · RemoveParishOfficial {church, official_id}
+#                    notices / events take region_id (a region's parishes only; region admins: theirs)
+#                    DenominationAdmins · SaveDenominationAdmin {phone, role: HEAD | ADMIN | COMMUNICATIONS} (WaziPOS admins)
+#                    RemoveDenominationAdmin {admin_id} (WaziPOS admins)
+#   Who appoints whom: WaziPOS admins -> denomination roles -> region admins -> parish offices
+#                      (parish admin, pastor, secretary, treasurer, welfare) -> group leaders.
+#   WaziPOS admins:  DeskDenominations {q?} · SaveDenomination {organization_id?, title, description?, email?, head_phone?}
 #   audience = {kind: ALL | HEADS | GROUP | FAMILY | AGE | GENDER, group_id?, family_id?, min_age?, max_age?, gender?, include_visitors?}
 #
 # POST /api/v1/churches/public   (no sign-in) PublicChurch {code}: a shared church link.
@@ -36,6 +55,7 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 from core.responses import custom_errors_response, custom_success_message
+from churches import denominations as denom
 from churches import services as church
 
 log = logging.getLogger(__name__)
@@ -114,6 +134,32 @@ def churchAPIView(request):
         "SmsPreview": (lambda: church.sms_preview(user, data), "Recipients", "preview"),
         "SendSms": (lambda: church.send_sms(user, data), "Sending your message", "message"),
         "SmsLog": (lambda: church.sms_log(user, data), "Sent messages", "result"),
+        # denominations: pickers (everyone) · head office · WaziPOS admins
+        "Denominations": (lambda: denom.denominations(user, data), "Denominations", "result"),
+        "DenominationHome": (lambda: denom.home(user, data), "Denomination", "home"),
+        "DenominationRegions": (lambda: denom.public_regions(user, data), "Regions", "result"),
+        "DenominationParishes": (lambda: denom.parishes(user, data), "Parishes", "result"),
+        "DecideParish": (lambda: denom.decide_parish(user, data), "Parish updated", "parish"),
+        "MoveParish": (lambda: denom.move_parish(user, data), "Parish moved", "parish"),
+        "CreateParish": (lambda: denom.create_parish(user, data), "Parish registered", "parish"),
+        "ParishOfficials": (lambda: denom.parish_officials(user, data), "Parish officials", "result"),
+        "AppointParishOfficial": (lambda: denom.appoint_parish_official(user, data), "Official appointed. They see Church admin after signing in again.", "result"),
+        "RemoveParishOfficial": (lambda: denom.remove_parish_official(user, data), "Official removed", "result"),
+        "Regions": (lambda: denom.regions(user, data), "Regions", "result"),
+        "SaveRegion": (lambda: denom.save_region(user, data), "Region saved", "region"),
+        "SaveRegionAdmin": (lambda: denom.save_region_admin(user, data), "Region admin appointed. They see the Denomination menu after signing in again.", "region"),
+        "RemoveRegionAdmin": (lambda: denom.remove_region_admin(user, data), "Region admin removed", "region"),
+        "DenominationAnnouncements": (lambda: denom.announcements(user, data), "Notices", "result"),
+        "SaveDenominationAnnouncement": (lambda: denom.save_announcement(user, data), "Notice saved", "announcement"),
+        "DeleteDenominationAnnouncement": (lambda: denom.delete_announcement(user, data), "Notice removed", "result"),
+        "DenominationEvents": (lambda: denom.events(user, data), "Events", "result"),
+        "SaveDenominationEvent": (lambda: denom.save_event(user, data), "Event saved", "event"),
+        "DeleteDenominationEvent": (lambda: denom.delete_event(user, data), "Event removed", "result"),
+        "DenominationAdmins": (lambda: denom.admins(user, data), "Head office", "result"),
+        "SaveDenominationAdmin": (lambda: denom.save_admin(user, data), "Admin added. They see the Denomination menu after signing in again.", "result"),
+        "RemoveDenominationAdmin": (lambda: denom.remove_admin(user, data), "Admin removed", "result"),
+        "DeskDenominations": (lambda: denom.desk(user, data), "Denominations", "result"),
+        "SaveDenomination": (lambda: denom.desk_save(user, data), "Denomination saved", "denomination"),
     }
     route = routes.get(str(action))
     if not route:
